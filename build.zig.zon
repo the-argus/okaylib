@@ -1,0 +1,27 @@
+.{
+    .name = "allo",
+    .version = "0.0.1",
+    .paths = .{
+        "include/",
+        "tests/",
+        "build.zig",
+        "build.zig.zon",
+        "CMakeLists.txt",
+        "flake.lock",
+        "flake.nix",
+    },
+    .dependencies = .{
+        .fmt = .{
+            .url = "https://github.com/the-argus/fmt/archive/d5ad6ce7ab711d601ffbf0706740279617b43325.tar.gz",
+            .hash = "1220727ae90b421da0d3e09aa9449a55eff672fdab47f62dd661dc1b5634ea78b56a",
+        },
+        .compile_commands = .{
+            .url = "https://github.com/the-argus/zig-compile-commands/archive/34ffa4290ca4fc060168e8eca9574ff11002fb0b.tar.gz",
+            .hash = "12209264387a67972ccebb9ff53a08b2ee8519f5f9b93b9d400a144d849528136ead",
+        },
+        .ziglike = .{
+            .url = "https://github.com/the-argus/ziglike/archive/77a86484e6da02444587c30ef3192e6534125afe.tar.gz",
+            .hash = "1220324d07fc2503d82224e0a36a7873c9cf5d9a5f7e4a19c27a8791ad220aaafcab",
+        },
+    },
+}
