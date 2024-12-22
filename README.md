@@ -21,6 +21,7 @@ an effort to organize that (not always necessary) work into one reusable product
       message, etc
 - [x] polymorphic allocator interface
 - [ ] implementations for arena, block, slab, page, and remapping page allocators
+- [ ] wrapper / import of jemalloc for the allocator interface
 - [x] "result" type: optional with enum error value. like `std::expected`, kind of
 - [x] "opt" type: optional but supports assigning in references which effectively
       become pointers. no exceptions
@@ -28,6 +29,14 @@ an effort to organize that (not always necessary) work into one reusable product
 - [x] defer statement
 - [x] stdmem: functions for checking if slices are overlapping, contained
       within, etc
+- [ ] context handle: serializable replacement for a reference which is a unique
+      index of an allocation along with a generation / magic value. when dereferencing,
+      it asks the context for the corresponding memory and compares magic number
+      to try to detect invalid allocator or use-after-free.
+- [ ] variants of context handle: explicit handle (dereferencing requires passing
+      the allocator) and unique context handle
+- [ ] context contains an "allocator allocator" so you can refer to allocators in
+      a serializable way (not by pointer)?
 - [ ] standardized SIMD vector and matrix types, explicit by default but with
       optional operator overloading. inspired by DirectXMath
 - [ ] iterator reimplementation (and maybe some redesign?)
@@ -39,6 +48,10 @@ an effort to organize that (not always necessary) work into one reusable product
 - [ ] A `std::vector` replacement with a better name (`ok::arraylist`?) which
       does not throw and supports emplace_back erroring by value. can yield its
       contents with some `slice<T> release()` function
+- [x] A collection whose items can be accessed by a stable handle, instead of
+      index, but keeps item in contiguous memory for fast iteration. Includes
+      generation information in handle for lock and key type memory saftey and
+      debugging.
 - [ ] An array type which does not store its elements contiguously but rather in
       roughly cache-line-sized blocks, then has an array of pointers to blocks.
       constant time lookup and less memory fragementation
@@ -49,6 +62,9 @@ an effort to organize that (not always necessary) work into one reusable product
       stuff like into. explicit when something turns random access -> forward
       iterator
 - [ ] fold/reduce function compatible with above views
+- [ ] reimplementation of `stable_sort`, `sort`, `copy_if`, `copy`, `find`,
+      `find_if`, potentially avoidng the need for `std::begin()` and `std::end()`
+      as two arguments?
 - [ ] reimplementation of `<thread>` and `<atomic>` ? avoid exceptions where
       possible, and implicit atomic load/stores
 - [ ] standard coroutine types: task, generator
@@ -57,3 +73,4 @@ an effort to organize that (not always necessary) work into one reusable product
       copying off Go's homework. (potentially put threadpool into context for
       submitting coroutines upon construction?)
 - [ ] fmtlib included for IO, all types mentioned above include formatters
+- [ ] all okaylib types have nlohmann json serialization defined
