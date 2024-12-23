@@ -69,6 +69,9 @@ an effort to organize that (not always necessary) work into one reusable product
       `min`, `min_element`, `minmax_element`, `clamp`, and copying vs. in-place
       variants for all algorithms. Potentially avoiding the need for `std::begin()`
       and `std::end()`? as two arguments?
+- [ ] threadpool compatibility for some views which are embarassingly parellel,
+      like `count*` or `max_element` or `unique`. Specific threadsafe container
+      iterator type?
 - [ ] reimplementation of `<thread>` and `<atomic>` ? avoid exceptions where
       possible, and implicit atomic load/stores
 - [ ] standard coroutine types: task, generator
