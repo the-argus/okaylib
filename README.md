@@ -49,7 +49,7 @@ an effort to organize that (not always necessary) work into one reusable product
       does not throw and supports emplace_back erroring by value. can yield its
       contents with some `slice<T> release()` function
 - [x] A collection whose items can be accessed by a stable handle, instead of
-      index, but keeps item in contiguous memory for fast iteration. Includes
+      index, but keeps items in contiguous memory for fast iteration. Includes
       generation information in handle for lock and key type memory saftey and
       debugging.
 - [ ] An array type which does not store its elements contiguously but rather in
@@ -61,10 +61,14 @@ an effort to organize that (not always necessary) work into one reusable product
       enumerate, zip, into, take, drop, skip_if... support for allocators for
       stuff like into. explicit when something turns random access -> forward
       iterator
-- [ ] fold/reduce function compatible with above views
-- [ ] reimplementation of `stable_sort`, `sort`, `copy_if`, `copy`, `find`,
-      `find_if`, potentially avoidng the need for `std::begin()` and `std::end()`
-      as two arguments?
+- [ ] fold/reduce function(s) compatible with above views
+- [ ] reimplementation of `<algorithm>` stuff: `stable_sort`, `sort`, `copy_if`,
+      `copy`, `move`, `count`, `count_if` `mismatch` `find`, `starts_with`, `ends_with`,
+      `contains`, `fill`, `find_if`, `any_of`, `all_of`, `is_sorted`, `unique`, `shuffle`,
+      `rotate`, `reverse`, `swap`, `binary_search`, `equal`, `max_element`, `max`,
+      `min`, `min_element`, `minmax_element`, `clamp`, and copying vs. in-place
+      variants for all algorithms. Potentially avoiding the need for `std::begin()`
+      and `std::end()`? as two arguments?
 - [ ] reimplementation of `<thread>` and `<atomic>` ? avoid exceptions where
       possible, and implicit atomic load/stores
 - [ ] standard coroutine types: task, generator
