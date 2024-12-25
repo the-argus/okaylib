@@ -1,0 +1,12 @@
+---
+AlignEscapedNewlines: Left
+AlignTrailingComments: "true"
+BreakBeforeBraces: Mozilla
+ConstructorInitializerIndentWidth: "4"
+ContinuationIndentWidth: "4"
+IncludeBlocks: Preserve
+IndentWidth: "4"
+SortIncludes: "true"
+PointerBindsToType: "true"
+TabWidth: "4"
+UseTab: Never

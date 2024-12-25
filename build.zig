@@ -13,44 +13,45 @@ const debug_flags = &[_][]const u8{
 };
 
 const testing_flags = &[_][]const u8{
-    "-DALLO_HEADER_TESTING",
-    "-DALLO_HEADER_ONLY",
+    "-DOKAYLIB_HEADER_TESTING",
 
     // use ctti (default behavior)
-    // "-DALLO_USE_RTTI",
-    // "-DALLO_DISABLE_TYPEINFO",
+    // "-DOKAYLIB_ALLOCATORS_USE_RTTI",
+    // "-DOKAYLIB_ALLOCATORS_DISABLE_TYPECHECKING",
     "-fno-rtti",
-    // exceptions needed in testing mode
-    // "-fno-exceptions",
 
     "-I./tests/",
     "-I./include/",
+    "-DOKAYLIB_NOEXCEPT=", // allow exceptions in testing mode
 
-    // ziglike options
-    // "-DZIGLIKE_HEADER_TESTING",
-    // "-DZIGLIKE_USE_FMT",
+    "-DOKAYLIB_HEADER_TESTING",
+    "-DOKAYLIB_USE_FMT",
     "-DFMT_HEADER_ONLY",
 };
 
+const okaylib_top_level_headers = &[_][]const u8{
+    "anystatus.h",
+    "context.h",
+    "defer.h",
+    "opt.h",
+    "res.h",
+    "short_arithmetic_types.h",
+    "slice.h",
+    "status.h",
+    "stdmem.h",
+};
+
 const test_source_files = &[_][]const u8{
-    "stack_allocator_t/stack_allocator_t.cpp",
-    "scratch_allocator_t/scratch_allocator_t.cpp",
-    "block_allocator_t/block_allocator_t.cpp",
-    "nonvirtual_inheritance/nonvirtual_inheritance.cpp",
-    "heap_allocator_t/heap_allocator_t.cpp",
-    "memory_map/memory_map.cpp",
-    "collection_t/collection_t.cpp",
-    "stack_t/stack_t.cpp",
-    "list_t/list_t.cpp",
-    "segmented_stack_t/segmented_stack_t.cpp",
+    "defer/defer.cpp",
+    "enumerate/enumerate.cpp",
+    "opt/opt.cpp",
+    "res/res.cpp",
+    "slice/slice.cpp",
+    "status/status.cpp",
+    "stdmem/stdmem.cpp",
 };
 
-const universal_tests_source_files = &[_][]const u8{
-    "tests/generic_allocator_tests.cpp",
-    "tests/heap_tests.cpp",
-};
-
-var ziglike: ?*std.Build.Dependency = null;
+const universal_tests_source_files = &[_][]const u8{};
 
 pub fn build(b: *std.Build) !void {
     // options
@@ -67,19 +68,19 @@ pub fn build(b: *std.Build) !void {
 
     // actual public installation step
     b.installDirectory(.{
-        .source_dir = b.path("include/allo/"),
+        .source_dir = b.path("include/okay/"),
         .install_dir = .header,
-        .install_subdir = "allo/",
+        .install_subdir = "okay/",
     });
 
-    const main_header_install = b.addInstallHeaderFile(b.path("include/allo.h"), "allo.h");
-    b.getInstallStep().dependOn(&main_header_install.step);
-
-    {
-        ziglike = b.dependency("ziglike", .{ .target = target, .optimize = optimize });
-        const ziglike_include_path = b.pathJoin(&.{ ziglike.?.builder.install_path, "include" });
-        try flags.append(b.fmt("-I{s}", .{ziglike_include_path}));
+    for (okaylib_top_level_headers) |header_filename| {
+        const install = b.addInstallHeaderFile(b.path(b.pathJoin(&.{ "include", header_filename })), header_filename);
+        b.getInstallStep().dependOn(&install.step);
     }
+
+    const fmt = b.dependency("fmt", .{});
+    const fmt_include_path = b.pathJoin(&.{ fmt.builder.install_path, "include" });
+    try flags.append(b.fmt("-I{s}", .{fmt_include_path}));
 
     const flags_owned = flags.toOwnedSlice() catch @panic("OOM");
 
@@ -98,7 +99,7 @@ pub fn build(b: *std.Build) !void {
             .flags = flags_owned,
         });
         test_exe.linkLibCpp();
-        test_exe.step.dependOn(ziglike.?.builder.getInstallStep());
+        test_exe.step.dependOn(fmt.builder.getInstallStep());
         try tests.append(test_exe);
     }
 

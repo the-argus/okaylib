@@ -25,6 +25,7 @@ an effort to organize that (not always necessary) work into one reusable product
 - [x] "result" type: optional with enum error value. like `std::expected`, kind of
 - [x] "opt" type: optional but supports assigning in references which effectively
       become pointers. no exceptions
+- [ ] conditional support for constexpr + trivial traits for opt and result
 - [x] slice type: like span but not nullable
 - [x] defer statement
 - [x] stdmem: functions for checking if slices are overlapping, contained
