@@ -125,11 +125,11 @@ template <typename viewed_t> class slice_t
 
     inline constexpr correct_iterator_t begin() OKAYLIB_NOEXCEPT
     {
-        return correct_iterator(m_data);
+        return correct_iterator_t(m_data);
     }
     inline constexpr correct_iterator_t end() OKAYLIB_NOEXCEPT
     {
-        return correct_iterator(m_data + m_elements);
+        return correct_iterator_t(m_data + m_elements);
     }
 
     // const variants of begin and end which are always const if the slice
