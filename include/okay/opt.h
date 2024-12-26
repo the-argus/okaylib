@@ -1,9 +1,10 @@
 #ifndef __OKAYLIB_OPT_H__
 #define __OKAYLIB_OPT_H__
 
-#include <cstdint>
-#include <functional>
 #include <utility>
+
+#include "okay/detail/opt.h"
+#include "okay/detail/template_util/enable_copy_move.h"
 
 #ifdef OKAYLIB_USE_FMT
 #include <fmt/core.h>
@@ -13,94 +14,271 @@
 #define OKAYLIB_NOEXCEPT noexcept
 #endif
 
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
 #include "okay/detail/traits/is_instance.h"
 #include "okay/slice.h"
-#endif
 
 namespace ok {
-template <typename payload_t> class opt_t
+
+struct nullopt_t
+{};
+
+inline constexpr nullopt_t nullopt{};
+
+namespace detail {
+template <typename T>
+using enable_copy_move_opt_for_t = detail::enable_copy_move<
+    std::is_copy_constructible_v<T>,
+    std::is_copy_constructible_v<T> && std::is_copy_assignable_v<T>,
+    std::is_move_constructible_v<T>,
+    std::is_move_constructible_v<T> && std::is_move_assignable_v<T>,
+    // this is the "tag" for enable_copy_move. it must be unique per
+    // specialization
+    opt_t<T>>;
+
+template <typename payload_t,
+          // TODO: make is_instance a bool, not a function
+          bool is_slice = detail::is_instance<payload_t, ok::slice_t>(),
+          bool is_reference = std::is_lvalue_reference_v<payload_t>>
+class opt_inner_t;
+
+// optional which is not
+template <typename payload_t>
+class opt_inner_t<payload_t, false, false>
+    : private detail::opt_base_t<payload_t>,
+      private detail::enable_copy_move_opt_for_t<payload_t>
 {
   public:
     // type constraints
-    static_assert((!std::is_reference_v<payload_t> &&
-                   std::is_nothrow_destructible_v<payload_t>) ||
-                      (std::is_reference_v<payload_t> &&
-                       std::is_lvalue_reference_v<payload_t>),
-                  "Optional type must be either nothrow destructible or an "
-                  "lvalue reference type.");
+    static_assert(std::is_nothrow_destructible_v<payload_t>,
+                  "opt_t does not support throwing destructors, mark the inner "
+                  "type's destructor as noexcept.");
+    static_assert(!std::is_rvalue_reference_v<payload_t>,
+                  "opt_t cannot store rvalue references");
 
-#ifndef OKAYLIB_OPTIONAL_ALLOW_POINTERS
-    static_assert(!std::is_pointer_v<payload_t>,
-                  "Attempt to create an optional pointer. Pointers are already "
-                  "optional. Maybe make an optional reference instead?");
-#endif
+    static_assert(!std::is_const_v<payload_t>,
+                  "Wrapped value type is marked const, this has no effect. "
+                  "Remove the const.");
 
-    static constexpr bool is_reference = std::is_lvalue_reference_v<payload_t>;
-
-    static_assert(is_reference || !std::is_const_v<payload_t>,
-                  "Attempt to create optional with const non-reference type. "
-                  "This has no effect, remove the const.");
-
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-    static constexpr bool is_slice =
-        ok::detail::is_instance<payload_t, ok::slice_t>{};
-#endif
+    static_assert(!std::is_same_v<std::remove_cv_t<payload_t>, nullopt_t>);
+    static_assert(
+        !std::is_same_v<std::remove_cv_t<payload_t>, std::in_place_t>);
+    static_assert(!std::is_array_v<payload_t>,
+                  "opt cannot contain C style array");
 
   private:
-    union raw_optional_t
-    {
-        payload_t some;
-        uint8_t none;
-        inline ~raw_optional_t() OKAYLIB_NOEXCEPT {}
-    };
+    inline constexpr static bool is_reference = false;
+    inline constexpr static bool is_slice = false;
 
-    struct members_valuetype_t
-    {
-        bool has_value = false;
-        raw_optional_t value{.none = 0};
-    };
+    using base_t = detail::opt_base_t<payload_t>;
 
-    struct members_ref_t
-    {
-        std::remove_reference_t<payload_t>* pointer = nullptr;
-    };
+    template <typename T>
+    using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
+    template <typename T>
+    inline static constexpr bool not_self =
+        !std::is_same_v<opt_inner_t, remove_cvref_t<T>>;
+    template <typename T>
+    inline static constexpr bool not_tag =
+        !std::is_same_v<std::in_place_t, remove_cvref_t<T>>;
 
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-    struct members_slice_t
-    {
-        size_t elements;
-        // propagate const-ness of slice
-        std::conditional_t<std::is_const_v<typename payload_t::type>,
-                           const typename payload_t::type*,
-                           typename payload_t::type*>
-            data = nullptr;
-    };
-
-    using members_t = std::conditional_t<
-        is_reference, members_ref_t,
-        std::conditional_t<is_slice, members_slice_t, members_valuetype_t>>;
-#else
-    using members_t = typename std::conditional<is_reference, members_ref_t,
-                                                members_valuetype_t>::type;
-#endif
-
-    members_t m;
+    template <bool condition>
+    using requires_t = std::enable_if_t<condition, bool>;
 
   public:
+    constexpr opt_inner_t() OKAYLIB_NOEXCEPT {}
+    constexpr opt_inner_t(nullopt_t) OKAYLIB_NOEXCEPT {}
+
+    // constructors which perform conversion of incoming type
+    template <
+        typename convert_from_t = payload_t,
+        requires_t<not_self<convert_from_t> && not_tag<convert_from_t> &&
+                   std::is_constructible_v<payload_t, convert_from_t> &&
+                   std::is_convertible_v<convert_from_t, payload_t>> = true>
+    inline constexpr opt_inner_t(convert_from_t&& t) OKAYLIB_NOEXCEPT
+        : base_t(std::in_place, std::forward<convert_from_t>(t))
+    {
+    }
+
+    // converting constructor for types which are non convertible. only
+    // difference is that it is marked explicit
+    template <
+        typename convert_from_t = payload_t,
+        requires_t<not_self<convert_from_t> && not_tag<convert_from_t> &&
+                   std::is_constructible_v<payload_t, convert_from_t> &&
+                   !std::is_convertible_v<convert_from_t, payload_t>> = false>
+    inline explicit constexpr opt_inner_t(convert_from_t&& t) OKAYLIB_NOEXCEPT
+        : base_t(std::in_place, std::forward<convert_from_t>(t))
+    {
+    }
+
+    // converting constructor which takes optional of another convertible type
+    template <
+        typename incoming_t,
+        requires_t<!std::is_same_v<payload_t, incoming_t> &&
+                   std::is_constructible_v<payload_t, const incoming_t&> &&
+                   std::is_convertible_v<const incoming_t&, payload_t> &&
+                   !converts_from_opt<payload_t, incoming_t>> = true>
+    inline constexpr opt_inner_t(const opt_inner_t<incoming_t>& t)
+        OKAYLIB_NOEXCEPT
+    {
+        // TODO: one (or both?) of these checks can be avoided
+        if (t)
+            emplace(t.value());
+    }
+
+    // same as above, but incoming type is not convertible, so construction
+    // should be explicit
+    template <
+        typename incoming_t,
+        requires_t<!std::is_same_v<payload_t, incoming_t> &&
+                   std::is_constructible_v<payload_t, const incoming_t&> &&
+                   !std::is_convertible_v<const incoming_t&, payload_t> &&
+                   !converts_from_opt<payload_t, incoming_t>> = false>
+    inline explicit constexpr opt_inner_t(const opt_inner_t<incoming_t>& t)
+        OKAYLIB_NOEXCEPT
+    {
+        // TODO: one (or both?) of these checks can be avoided
+        if (t)
+            emplace(t.value());
+    }
+
+    // convert an optional of a convertible type being moved into this optional
+    template <typename incoming_t,
+              requires_t<!std::is_same_v<payload_t, incoming_t> &&
+                         std::is_constructible_v<payload_t, incoming_t> &&
+                         std::is_convertible_v<incoming_t, payload_t> &&
+                         !converts_from_opt<payload_t, incoming_t>> = true>
+    inline constexpr opt_inner_t(opt_inner_t<incoming_t>&& t) OKAYLIB_NOEXCEPT
+    {
+        // TODO: one (or both?) of these checks can be avoided
+        if (t)
+            emplace(std::move(t.value()));
+    }
+
+    // also convert moved optional's contents into ours, but this time explicit
+    // because the two are not implicitly convertible
+    template <typename incoming_t,
+              requires_t<!std::is_same_v<payload_t, incoming_t> &&
+                         std::is_constructible_v<payload_t, incoming_t> &&
+                         !std::is_convertible_v<incoming_t, payload_t> &&
+                         !converts_from_opt<payload_t, incoming_t>> = false>
+    inline explicit constexpr opt_inner_t(opt_inner_t<incoming_t>&& t)
+        OKAYLIB_NOEXCEPT
+    {
+        // TODO: one (or both?) of these checks can be avoided
+        if (t)
+            emplace(std::move(t.value()));
+    }
+
+    // emplacement constructor
+    template <typename... args_t,
+              requires_t<std::is_constructible_v<payload_t, args_t...>> = false>
+    explicit constexpr opt_inner_t(std::in_place_t,
+                                   args_t&&... args) OKAYLIB_NOEXCEPT
+        : base_t(std::in_place, std::forward<args_t>(args)...)
+    {
+    }
+
+    opt_inner_t& operator=(nullopt_t) OKAYLIB_NOEXCEPT
+    {
+        this->_reset();
+        return *this;
+    }
+
+    template <typename incoming_t>
+    // TODO: _GLIBCXX20_CONSTEXPR here?
+    std::enable_if_t<
+        not_self<incoming_t> &&
+            // TODO: cant have payload and decayed incoming_t be the same, only
+            // if scalar though. why? copied this from STL implementation
+            !(std::is_scalar_v<payload_t> &&
+              std::is_same_v<payload_t, std::decay_t<incoming_t>>) &&
+            std::is_constructible_v<payload_t, incoming_t> &&
+            std::is_assignable_v<payload_t&, incoming_t>,
+        opt_inner_t&>
+    operator=(incoming_t&& incoming) OKAYLIB_NOEXCEPT
+    {
+        if (this->_has_value()) {
+            this->_get() = std::forward<incoming_t>(incoming);
+        } else {
+            this->_construct(std::forward<incoming_t>(incoming));
+        }
+        return *this;
+    }
+
+    // converting opt constructor: if the inner types of two opts can
+    // be converted, allow the opts to be converted
+    template <typename incoming_t>
+    std::enable_if_t<
+        !std::is_same_v<payload_t, incoming_t> &&
+            std::is_constructible_v<payload_t, const incoming_t&> &&
+            std::is_assignable_v<payload_t&, const incoming_t&> &&
+            !detail::converts_from_opt<payload_t, incoming_t> &&
+            !detail::assigns_from_opt<payload_t, incoming_t>,
+        opt_inner_t&>
+    operator=(const opt_inner_t<incoming_t>& incoming) OKAYLIB_NOEXCEPT
+    {
+        if (incoming) {
+            if (this->_has_value()) {
+                this->_get() = incoming.value();
+            } else {
+                this->_construct(incoming.value());
+            }
+        } else {
+            this->_reset();
+        }
+        return *this;
+    }
+
+    // variant of above converting opt constructor which performs move
+    template <typename incoming_t>
+    std::enable_if_t<!std::is_same_v<payload_t, incoming_t> &&
+                         std::is_constructible_v<payload_t, incoming_t> &&
+                         std::is_assignable_v<payload_t&, incoming_t> &&
+                         !detail::converts_from_opt<payload_t, incoming_t> &&
+                         !detail::assigns_from_opt<payload_t, incoming_t>,
+                     opt_inner_t&>
+    operator=(opt_inner_t<incoming_t>&& incoming) OKAYLIB_NOEXCEPT
+    {
+        if (incoming) {
+            if (this->_has_value()) {
+                this->_get() = std::move(incoming.value());
+            } else {
+                this->_construct(std::move(incoming.value()));
+            }
+        } else {
+            this->_reset();
+        }
+        return *this;
+    }
+
+    template <typename... args_t>
+    // TODO: _GLIBCXX20_CONSTEXPR? is enable_if here better than static-assert?
+    std::enable_if_t<std::is_constructible_v<payload_t, args_t...>, payload_t&>
+    emplace(args_t&&... args) OKAYLIB_NOEXCEPT
+    {
+        this->_reset();
+        this->_construct(std::forward<args_t>(args)...);
+        return this->_get();
+    }
+
+    // TODO: _GLIBCXX20_CONSTEXPR?
+    void swap(opt_inner_t& other) OKAYLIB_NOEXCEPT
+    {
+        using std::swap;
+        if (this->_has_value() && other._has_value())
+            swap(this->_get(), other._get());
+        else if (this->_has_value()) {
+            other._construct(std::move(this->_get()));
+            this->_destruct();
+        } else if (other._has_value()) {
+            this->_construct(std::move(other._get()));
+            other._destruct();
+        }
+    }
+
     [[nodiscard]] inline bool has_value() const OKAYLIB_NOEXCEPT
     {
-        if constexpr (is_reference) {
-            return m.pointer != nullptr;
-        } else
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-            if constexpr (is_slice) {
-            return m.data != nullptr;
-        } else
-#endif
-        {
-            return m.has_value;
-        }
+        return this->_has_value();
     }
 
     /// Extract the inner value of the optional, or abort the program. Check
@@ -110,17 +288,7 @@ template <typename payload_t> class opt_t
         if (!has_value()) [[unlikely]] {
             OK_ABORT();
         }
-        if constexpr (is_reference) {
-            return *m.pointer;
-        } else
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-            if constexpr (is_slice) {
-            return *reinterpret_cast<payload_t*>(&m);
-        } else
-#endif
-        {
-            return std::ref(m.value.some);
-        }
+        return this->_get();
     }
 
     [[nodiscard]] inline payload_t&& value() && OKAYLIB_NOEXCEPT
@@ -128,17 +296,7 @@ template <typename payload_t> class opt_t
         if (!has_value()) [[unlikely]] {
             OK_ABORT();
         }
-        if constexpr (is_reference) {
-            return *m.pointer;
-        } else
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-            if constexpr (is_slice) {
-            return std::move(*reinterpret_cast<payload_t*>(&m));
-        } else
-#endif
-        {
-            return std::move(m.value.some);
-        }
+        return std::move(this->_get());
     }
 
     inline const payload_t& value() const& OKAYLIB_NOEXCEPT
@@ -146,368 +304,353 @@ template <typename payload_t> class opt_t
         if (!has_value()) [[unlikely]] {
             OK_ABORT();
         }
-        if constexpr (is_reference) {
-            return *m.pointer;
-        } else
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-            if constexpr (is_slice) {
-            return *reinterpret_cast<const payload_t*>(&m);
-        } else
-#endif
-        {
-            return std::ref(m.value.some);
-        }
+        return this->_get();
     }
 
     /// Call destructor of internal type, or just reset it if it doesnt have one
-    inline void reset() OKAYLIB_NOEXCEPT
-    {
-        if (!has_value()) [[unlikely]] {
-            return;
-        }
-
-        if constexpr (is_reference) {
-            m.pointer = nullptr;
-        } else
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-            if constexpr (is_slice) {
-            m.data = nullptr;
-            m.elements = 0;
-        } else
-#endif
-        {
-            m.value.some.~T();
-            m.has_value = false;
-        }
-    }
-
-    /// Types can be constructed directly in to the optional
-    template <typename... args_t>
-    inline void emplace(args_t&&... args) OKAYLIB_NOEXCEPT
-    {
-        static_assert(
-            !is_reference,
-            "Reference types cannot be emplaced, assign them instead.");
-        static_assert(
-            std::is_constructible_v<payload_t, args_t...>,
-            "opt_t payload type is not constructible with given arguments");
-        if (has_value()) [[unlikely]] {
-            reset();
-        }
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-        if constexpr (is_slice) {
-            payload_t* slicelocation = reinterpret_cast<payload_t*>(&m);
-            new (slicelocation) payload_t(args...);
-        } else {
-#endif
-            new (&m.value.some)
-                payload_t(std::forward<decltype(args)>(args)...);
-            m.has_value = true;
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-        }
-#endif
-    }
-
-    inline constexpr opt_t() OKAYLIB_NOEXCEPT {}
-    inline ~opt_t() OKAYLIB_NOEXCEPT
-    {
-        if constexpr (is_reference) {
-            m.pointer = nullptr;
-        } else
-
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-            if constexpr (is_slice) {
-            m.data = nullptr;
-            m.elements = 0;
-        } else
-#endif
-        {
-            reset();
-            m.has_value = false;
-        }
-    }
-
-    /// Able to assign a moved type if the type is moveable
-    template <typename maybe_t = payload_t>
-    inline constexpr opt_t&
-    operator=(typename std::enable_if_t<
-              !is_reference &&
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-                  !is_slice &&
-#endif
-                  std::is_constructible_v<maybe_t, maybe_t&&>,
-              maybe_t>&& something) OKAYLIB_NOEXCEPT
-    {
-        static_assert(std::is_nothrow_constructible_v<maybe_t, maybe_t&&>,
-                      "Attempt to move type into an opt, but the move "
-                      "constructor of the type can throw an exception.");
-        if (m.has_value) {
-            m.value.some.~maybe_t();
-        }
-        new (&m.value.some) maybe_t(std::move(something));
-        m.has_value = true;
-        return *this;
-    }
-
-    template <typename maybe_t = payload_t>
-    inline constexpr opt_t(typename std::enable_if_t<
-                           !is_reference &&
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-                               !is_slice &&
-#endif
-                               std::is_constructible_v<maybe_t, maybe_t&&>,
-                           maybe_t>&& something) OKAYLIB_NOEXCEPT
-    {
-        static_assert(std::is_nothrow_constructible_v<maybe_t, maybe_t&&>,
-                      "Attempt to move type into an opt, but the move "
-                      "constructor of the type can throw an exception.");
-        new (&m.value.some) maybe_t(std::move(something));
-        m.has_value = true;
-    }
-
-    /// Copyable types can also be assigned into their optionals
-    template <typename maybe_t = payload_t>
-    inline constexpr opt_t&
-    operator=(const typename std::enable_if_t<
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-              is_slice ||
-#endif
-                  (!is_reference &&
-                   std::is_constructible_v<maybe_t, const maybe_t&>),
-              maybe_t>& something) OKAYLIB_NOEXCEPT
-    {
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-        if constexpr (is_slice) {
-            m.data = something.data();
-            m.elements = something.size();
-            return *this;
-        } else {
-#endif
-            if (m.has_value) {
-                m.value.some.~maybe_t();
-            }
-            new (&m.value.some) maybe_t(something);
-            m.has_value = true;
-            return *this;
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-        }
-#endif
-    }
-
-    // copy constructor
-    template <typename maybe_t = payload_t>
-    inline constexpr opt_t(
-        const typename std::enable_if_t<
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-            is_slice ||
-#endif
-                (!is_reference &&
-                 std::is_constructible_v<maybe_t, const maybe_t&>),
-            maybe_t>& something) OKAYLIB_NOEXCEPT
-    {
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-        if constexpr (is_slice) {
-            m.data = something.data();
-            m.elements = something.size();
-        } else {
-#endif
-            new (std::addressof(m.value.some)) payload_t(something);
-            m.has_value = true;
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-        }
-#endif
-    }
-
-    template <typename... args_t>
-    inline constexpr opt_t(
-        std::enable_if_t<(
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-                             !is_slice &&
-#endif
-                             !is_reference &&
-                             std::is_constructible_v<payload_t, args_t...>),
-                         std::in_place_t>,
-        args_t&&... args) OKAYLIB_NOEXCEPT
-    {
-        static_assert(std::is_nothrow_constructible_v<payload_t, args_t...>,
-                      "Attempt to construct item in-place in optional but the "
-                      "constructor invoked can throw exceptions.");
-        new (std::addressof(m.value.some))
-            payload_t(std::forward<args_t>(args)...);
-        m.has_value = true;
-    }
-
-    /// Optional containing a reference type can be directly constructed from
-    /// the reference type
-    template <typename maybe_t = payload_t>
-    inline constexpr opt_t(typename std::enable_if_t<is_reference, maybe_t>
-                               something) OKAYLIB_NOEXCEPT
-    {
-        m.pointer = std::addressof(something);
-    }
-
-    /// Reference types can be assigned to an optional to overwrite it.
-    template <typename maybe_t = payload_t>
-    inline constexpr opt_t&
-    operator=(typename std::enable_if_t<is_reference, maybe_t> something)
-        OKAYLIB_NOEXCEPT
-    {
-        m.pointer = &something;
-        return *this;
-    }
+    inline void reset() OKAYLIB_NOEXCEPT { this->_reset(); }
 
     inline constexpr explicit operator bool() noexcept { return has_value(); }
 
-    /// NOTE: References are not able to use the == overload because
-    /// it would not be clear whether it was a strict comparison or not. (ie is
-    /// it comparing the address or the contents of the thing at the address?)
-
-    /// EQUALS: Compare an optional to another optional of the same type
-    template <typename this_t>
-    inline constexpr friend bool
-    operator==(const typename std::enable_if_t<
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-                   is_slice ||
-#endif
-                       (!is_reference && std::is_same_v<this_t, opt_t>),
-                   this_t>& self,
-               const this_t& other) OKAYLIB_NOEXCEPT
+    inline constexpr friend bool operator==(const opt_inner_t& a,
+                                            const opt_inner_t& b)
     {
-        if (!self.has_value()) {
-            return !other.has_value();
-        } else {
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-            if constexpr (is_slice) {
-                return !other.has_value()
-                           ? false
-                           : *reinterpret_cast<const payload_t*>(&self.m) ==
-                                 *reinterpret_cast<const payload_t*>(&other.m);
-            } else {
-#endif
-                return !other.has_value()
-                           ? false
-                           : self.m.value.some == other.m.value.some;
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-            }
-#endif
-        }
-    }
-
-    /// EQUALS: Compare an optional to something of its contained type
-    template <typename maybe_t = payload_t>
-    inline constexpr bool
-    operator==(const std::enable_if_t<
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-               is_slice ||
-#endif
-                   (!is_reference && std::is_same_v<maybe_t, payload_t>),
-               maybe_t>& other) const OKAYLIB_NOEXCEPT
-    {
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-        if constexpr (is_slice) {
-            return !has_value() ? false
-                                : *reinterpret_cast<payload_t*>(&m) == other;
-        } else {
-#endif
-            return !has_value() ? false : m.value.some == other;
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-        }
-#endif
-    }
-
-    /// NOT EQUALS: Compare an optional to another optional of the same type
-    template <typename this_t>
-    inline constexpr friend bool
-    operator!=(const typename std::enable_if_t<
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-                   is_slice ||
-#endif
-                       (!is_reference && std::is_same_v<this_t, opt_t>),
-                   this_t>& self,
-               const this_t& other) OKAYLIB_NOEXCEPT
-    {
-        if (!self.has_value()) {
-            return other.has_value();
-        } else {
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-            if constexpr (is_slice) {
-                return !other.has_value()
-                           ? true
-                           : *reinterpret_cast<payload_t*>(&self.m) !=
-                                 *reinterpret_cast<payload_t*>(&other.m);
-            } else {
-#endif
-                return !other.has_value()
-                           ? true
-                           : self.m.value.some != other.m.value.some;
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-            }
-#endif
-        }
-    }
-
-    /// NOT EQUALS: Compare an optional to something of its contained type
-    template <typename maybe_t = payload_t>
-    inline constexpr bool
-    operator!=(const std::enable_if_t<
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-               is_slice ||
-#endif
-                   (!is_reference && std::is_same_v<maybe_t, payload_t>),
-               maybe_t>& other) const OKAYLIB_NOEXCEPT
-    {
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-        if constexpr (is_slice) {
-            return !has_value() ? true
-                                : *reinterpret_cast<payload_t*>(&m) != other;
-        } else {
-#endif
-            return !has_value() ? true : m.value.some != other;
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-        }
-#endif
-    }
-
-    // Strict comparison for an optional reference: return true if the optional
-    // reference is pointing at the item passed in.
-    /// ONLY VALID FOR REFERENCE-TYPE OPTIONALS
-    template <typename maybe_t = payload_t>
-    inline constexpr bool strict_compare(
-        const std::enable_if_t<
-            is_reference && std::is_same_v<maybe_t, payload_t>, maybe_t>& other)
-        const OKAYLIB_NOEXCEPT
-    {
-        if (!has_value())
+        if (a.has_value() != b.has_value())
             return false;
-        return std::addressof(other) == m.pointer;
+
+        return !a.has_value() || a._get() == b._get();
     }
 
-    /// Loose comparison: compare the thing the optional reference is pointing
-    /// to to the item passed in. They do not have to literally be the same
-    /// object.
-    /// ONLY VALID FOR REFERENCE-TYPE OPTIONALS
-    template <typename maybe_t = payload_t>
-    inline constexpr bool loose_compare(
-        const std::enable_if_t<is_reference &&
-                                   (std::is_same_v<maybe_t, payload_t>),
-                               maybe_t>& other) const OKAYLIB_NOEXCEPT
+    // static_assert(std::is_same_v<const opt_inner_t&, int>);
+
+    inline constexpr friend bool operator==(const opt_inner_t& a,
+                                            const payload_t& b)
     {
-        if (!has_value())
-            return false;
-        return other == *m.pointer;
+        return a.has_value() && a._get() == b;
+    }
+
+    inline constexpr friend bool operator==(const payload_t& b,
+                                            const opt_inner_t& a)
+    {
+        return a.has_value() && a._get() == b;
+    }
+
+    // TODO: does c++17 allow autogenerating this or is it just c++20
+    inline constexpr friend bool operator!=(const opt_inner_t& a,
+                                            const opt_inner_t& b)
+    {
+        return !(a == b);
     }
 
 #ifdef OKAYLIB_USE_FMT
-    friend struct fmt::formatter<opt_t>;
+    friend struct fmt::formatter<opt_inner_t>;
 #endif
 };
+
+// template specialization for lvalue references
+template <typename payload_t> class opt_inner_t<payload_t, false, true>
+{
+    inline static constexpr bool is_reference = true;
+    inline static constexpr bool is_slice = false;
+
+    using pointer_t = std::remove_reference_t<payload_t>;
+
+    pointer_t* pointer = nullptr;
+
+    template <typename T>
+    using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
+    template <typename T>
+    inline static constexpr bool not_self =
+        !std::is_same_v<opt_inner_t, remove_cvref_t<T>>;
+
+  public:
+    constexpr opt_inner_t() = default;
+    inline constexpr opt_inner_t(nullopt_t) OKAYLIB_NOEXCEPT {};
+
+    // allow pointer conversion
+    inline constexpr opt_inner_t(pointer_t* p) : OKAYLIB_NOEXCEPT pointer(p) {}
+    // allow reference construction
+    // TODO: does this cover all convertible references, like child class refs?
+    inline constexpr opt_inner_t(payload_t p) : OKAYLIB_NOEXCEPT pointer(&p) {}
+
+    inline constexpr payload_t emplace(payload_t other) OKAYLIB_NOEXCEPT
+    {
+        pointer = &other;
+    }
+
+    inline constexpr bool has_value() const OKAYLIB_NOEXCEPT
+    {
+        return pointer != nullptr;
+    }
+
+    inline constexpr operator bool() OKAYLIB_NOEXCEPT { return has_value(); }
+
+    inline constexpr opt_inner_t& operator=(pointer_t& ref) OKAYLIB_NOEXCEPT
+    {
+        pointer = &ref;
+        return *this;
+    }
+
+    inline constexpr opt_inner_t& operator=(nullopt_t) OKAYLIB_NOEXCEPT
+    {
+        pointer = nullptr;
+        return *this;
+    }
+
+    inline constexpr void reset() OKAYLIB_NOEXCEPT { pointer = nullptr; }
+
+    [[nodiscard]] inline constexpr payload_t value() OKAYLIB_NOEXCEPT
+    {
+        if (!has_value()) [[unlikely]] {
+            OK_ABORT();
+        }
+        return *pointer;
+    }
+
+    [[nodiscard]] inline constexpr payload_t value() const OKAYLIB_NOEXCEPT
+    {
+        if (!has_value()) [[unlikely]] {
+            OK_ABORT();
+        }
+        return *pointer;
+    }
+
+    [[nodiscard]] inline constexpr bool is_alias(const opt_inner_t& other)
+    {
+        return pointer == other.pointer;
+    }
+
+    [[nodiscard]] inline constexpr bool is_alias(const pointer_t& other)
+    {
+        return pointer == &other;
+    }
+
+#ifdef OKAYLIB_USE_FMT
+    friend struct fmt::formatter<opt_inner_t>;
+#endif
+};
+
+// template specialization for slices
+template <typename wrapped_slice_t>
+class opt_inner_t<wrapped_slice_t, true, false>
+{
+    inline static constexpr bool is_reference = false;
+    inline static constexpr bool is_slice = true;
+
+    using viewed_t = typename wrapped_slice_t::type;
+
+    // layout matches slice
+    size_t elements;
+    viewed_t* data = nullptr;
+
+    [[nodiscard]] inline constexpr wrapped_slice_t&
+    unchecked_value() OKAYLIB_NOEXCEPT
+    {
+        return *reinterpret_cast<wrapped_slice_t*>(this);
+    }
+    [[nodiscard]] inline constexpr const wrapped_slice_t&
+    unchecked_value() const OKAYLIB_NOEXCEPT
+    {
+        return *reinterpret_cast<const wrapped_slice_t*>(this);
+    }
+
+    template <typename T>
+    using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
+    template <typename T>
+    inline static constexpr bool not_self =
+        !std::is_same_v<opt_inner_t, remove_cvref_t<T>>;
+    template <typename T>
+    inline static constexpr bool not_tag =
+        !std::is_same_v<std::in_place_t, remove_cvref_t<T>>;
+
+    template <bool condition>
+    using requires_t = std::enable_if_t<condition, bool>;
+
+  public:
+    static_assert(!std::is_const_v<wrapped_slice_t>,
+                  "Wrapped slice type is marked const, this has no effect. "
+                  "Remove the const.");
+
+    constexpr opt_inner_t() = default;
+    inline constexpr opt_inner_t(nullopt_t) OKAYLIB_NOEXCEPT {};
+
+    inline constexpr wrapped_slice_t&
+    emplace(wrapped_slice_t other) OKAYLIB_NOEXCEPT
+    {
+        std::memcpy(this, &other, sizeof(*this));
+        // elements = other.size();
+        // data = other.data();
+        return *reinterpret_cast<wrapped_slice_t*>(this);
+    }
+
+    inline constexpr bool has_value() const OKAYLIB_NOEXCEPT
+    {
+        return data != nullptr;
+    }
+
+    inline constexpr operator bool() OKAYLIB_NOEXCEPT { return has_value(); }
+
+    inline constexpr opt_inner_t&
+    operator=(const wrapped_slice_t& ref) OKAYLIB_NOEXCEPT
+    {
+        emplace(ref);
+    }
+
+    inline constexpr opt_inner_t& operator=(nullopt_t) OKAYLIB_NOEXCEPT
+    {
+        reset();
+        return *this;
+    }
+
+    inline constexpr void reset() OKAYLIB_NOEXCEPT { data = nullptr; }
+
+    [[nodiscard]] inline constexpr wrapped_slice_t& value() OKAYLIB_NOEXCEPT
+    {
+        if (!has_value()) [[unlikely]] {
+            OK_ABORT();
+        }
+        return unchecked_value();
+    }
+
+    [[nodiscard]] inline constexpr const wrapped_slice_t&
+    value() const OKAYLIB_NOEXCEPT
+    {
+        if (!has_value()) [[unlikely]] {
+            OK_ABORT();
+        }
+        return unchecked_value();
+    }
+
+    inline constexpr friend bool operator==(const opt_inner_t& a,
+                                            const opt_inner_t& b)
+    {
+        if (a.has_value() != b.has_value())
+            return false;
+
+        return !a.has_value() || // both nullopt
+                                 // invoke slice == operator
+               a.unchecked_value() == b.unchecked_value();
+    }
+
+    inline constexpr friend bool operator==(const opt_inner_t& a,
+                                            const wrapped_slice_t& b)
+    {
+        return a.has_value() && a.unchecked_value() == b;
+    }
+
+    // TODO: does c++17 allow autogenerating this or is it just c++20
+    inline constexpr friend bool operator!=(const opt_inner_t& a,
+                                            const opt_inner_t& b)
+    {
+        return !(a == b);
+    }
+
+    template <
+        typename convert_from_t = wrapped_slice_t,
+        requires_t<not_self<convert_from_t> && not_tag<convert_from_t> &&
+                   std::is_constructible_v<wrapped_slice_t, convert_from_t> &&
+                   std::is_convertible_v<convert_from_t, wrapped_slice_t>> =
+            true>
+    inline constexpr opt_inner_t(convert_from_t&& t) OKAYLIB_NOEXCEPT
+    {
+        new (reinterpret_cast<wrapped_slice_t*>(this))
+            wrapped_slice_t(std::forward<convert_from_t>(t));
+    }
+    // TODO: factor out converting constructors into mixin/helper class
+
+    // converting constructor for types which are non convertible. only
+    // difference is that it is marked explicit
+    template <
+        typename convert_from_t = wrapped_slice_t,
+        requires_t<not_self<convert_from_t> && not_tag<convert_from_t> &&
+                   std::is_constructible_v<wrapped_slice_t, convert_from_t> &&
+                   !std::is_convertible_v<convert_from_t, wrapped_slice_t>> =
+            false>
+    inline explicit constexpr opt_inner_t(convert_from_t&& t) OKAYLIB_NOEXCEPT
+    {
+        new (reinterpret_cast<wrapped_slice_t*>(this))
+            wrapped_slice_t(std::forward<convert_from_t>(t));
+    }
+
+    // converting constructor which takes optional of another convertible type
+    template <typename incoming_t,
+              requires_t<
+                  !std::is_same_v<wrapped_slice_t, incoming_t> &&
+                  std::is_constructible_v<wrapped_slice_t, const incoming_t&> &&
+                  std::is_convertible_v<const incoming_t&, wrapped_slice_t> &&
+                  !converts_from_opt<wrapped_slice_t, incoming_t>> = true>
+    inline constexpr opt_inner_t(const opt_inner_t<incoming_t>& t)
+        OKAYLIB_NOEXCEPT
+    {
+        // TODO: one (or both?) of these checks can be avoided
+        if (t)
+            emplace(t.value());
+    }
+
+    // same as above, but incoming type is not convertible, so construction
+    // should be explicit
+    template <typename incoming_t,
+              requires_t<
+                  !std::is_same_v<wrapped_slice_t, incoming_t> &&
+                  std::is_constructible_v<wrapped_slice_t, const incoming_t&> &&
+                  !std::is_convertible_v<const incoming_t&, wrapped_slice_t> &&
+                  !converts_from_opt<wrapped_slice_t, incoming_t>> = false>
+    inline explicit constexpr opt_inner_t(const opt_inner_t<incoming_t>& t)
+        OKAYLIB_NOEXCEPT
+    {
+        // TODO: one (or both?) of these checks can be avoided
+        if (t)
+            emplace(t.value());
+    }
+
+    // convert an optional of a convertible type being moved into this optional
+    template <
+        typename incoming_t,
+        requires_t<!std::is_same_v<wrapped_slice_t, incoming_t> &&
+                   std::is_constructible_v<wrapped_slice_t, incoming_t> &&
+                   std::is_convertible_v<incoming_t, wrapped_slice_t> &&
+                   !converts_from_opt<wrapped_slice_t, incoming_t>> = true>
+    inline constexpr opt_inner_t(opt_inner_t<incoming_t>&& t) OKAYLIB_NOEXCEPT
+    {
+        // TODO: one (or both?) of these checks can be avoided
+        if (t)
+            emplace(std::move(t.value()));
+    }
+
+    // also convert moved optional's contents into ours, but this time explicit
+    // because the two are not implicitly convertible
+    template <
+        typename incoming_t,
+        requires_t<!std::is_same_v<wrapped_slice_t, incoming_t> &&
+                   std::is_constructible_v<wrapped_slice_t, incoming_t> &&
+                   !std::is_convertible_v<incoming_t, wrapped_slice_t> &&
+                   !converts_from_opt<wrapped_slice_t, incoming_t>> = false>
+    inline explicit constexpr opt_inner_t(opt_inner_t<incoming_t>&& t)
+        OKAYLIB_NOEXCEPT
+    {
+        // TODO: one (or both?) of these checks can be avoided
+        if (t)
+            emplace(std::move(t.value()));
+    }
+
+#ifdef OKAYLIB_USE_FMT
+    friend struct fmt::formatter<opt_inner_t>;
+#endif
+};
+
+} // namespace detail
+
+template <typename payload_t> using opt_t = detail::opt_inner_t<payload_t>;
+
 } // namespace ok
 
 #ifdef OKAYLIB_USE_FMT
-template <typename payload_t> struct fmt::formatter<ok::opt_t<payload_t>>
+template <typename payload_t>
+struct fmt::formatter<ok::detail::opt_inner_t<payload_t>>
 {
+    using formatted_type_t = ok::detail::opt_inner_t<payload_t>;
     static_assert(
-        fmt::is_formattable<payload_t>::value,
+        formatted_type_t::is_reference || fmt::is_formattable<payload_t>::value,
         "Attempt to format an optional whose content is not formattable.");
 
     constexpr format_parse_context::iterator parse(format_parse_context& ctx)
@@ -523,22 +666,26 @@ template <typename payload_t> struct fmt::formatter<ok::opt_t<payload_t>>
         return it;
     }
 
-    format_context::iterator format(const ok::opt_t<payload_t>& optional,
-                                    format_context& ctx) const
+    format_context::iterator
+    format(const ok::detail::opt_inner_t<payload_t>& optional,
+           format_context& ctx) const
     {
         if (optional.has_value()) {
-            if constexpr (ok::opt_t<payload_t>::is_reference) {
-                return fmt::format_to(ctx.out(), "{}", *optional.m.pointer);
-            } else
-#ifndef OKAYLIB_NO_SMALL_OPTIONAL_SLICE
-                if constexpr (ok::opt_t<payload_t>::is_slice) {
+            if constexpr (ok::detail::opt_inner_t<payload_t>::is_reference) {
+                if constexpr (fmt::is_formattable<typename formatted_type_t::
+                                                      pointer_t>::value) {
+                    return fmt::format_to(ctx.out(), "{}", optional.value());
+                } else {
+                    // just format reference as pointer, if the contents itself
+                    // can't be formatted
+                    return fmt::format_to(ctx.out(), "{:p}", optional.pointer);
+                }
+            } else if constexpr (ok::detail::opt_inner_t<payload_t>::is_slice) {
                 return fmt::format_to(
                     ctx.out(), "{}",
-                    *reinterpret_cast<const payload_t*>(&optional.m));
-            } else
-#endif
-            {
-                return fmt::format_to(ctx.out(), "{}", optional.m.value.some);
+                    *reinterpret_cast<const payload_t*>(&optional));
+            } else {
+                return fmt::format_to(ctx.out(), "{}", optional._get());
             }
         }
         return fmt::format_to(ctx.out(), "null");
