@@ -71,8 +71,11 @@ class context_switch_t
 };
 
 inline const char* context_error_message() { return context().error_message; }
-inline void set_context_error_message(const char* error) { context().error_message = error; }
+inline void set_context_error_message(const char* error)
+{
+    context().error_message = error;
+}
 
-} // namespace zl
+} // namespace ok
 
 #endif
