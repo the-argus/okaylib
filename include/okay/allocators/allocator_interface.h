@@ -129,8 +129,9 @@ class allocator_interface_t
 
         inline constexpr size_t size() const noexcept
         {
-            if (!m_data) [[unlikely]]
+            if (!m_data) [[unlikely]] {
                 OK_ABORT();
+            }
             return m_size;
         }
 
@@ -139,13 +140,10 @@ class allocator_interface_t
             return ok::raw_slice(*static_cast<uint8_t*>(m_data), m_size);
         }
 
-        // TODO: add conversion to optional slice here. opt_t needs significant
-        // refactoring to become constexpr
-        //
-        // inline constexpr operator ok::opt_t<ok::slice_t<uint8_t>>() noexcept
-        // {
-        //     return ok::raw_slice(*static_cast<uint8_t*>(m_data), m_size);
-        // }
+        inline constexpr operator ok::opt_t<ok::slice_t<uint8_t>>() noexcept
+        {
+            return ok::raw_slice(*static_cast<uint8_t*>(m_data), m_size);
+        }
 
         inline constexpr operator bool() const noexcept { return m_data; }
         // TODO: error() function here, if m_data is false error can be stored

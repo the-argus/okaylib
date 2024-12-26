@@ -1,10 +1,10 @@
 #ifndef __OKAYLIB_OPT_H__
 #define __OKAYLIB_OPT_H__
 
-#include <utility>
-
 #include "okay/detail/opt.h"
 #include "okay/detail/template_util/enable_copy_move.h"
+#include "okay/detail/traits/is_instance.h"
+#include "okay/slice.h"
 
 #ifdef OKAYLIB_USE_FMT
 #include <fmt/core.h>
@@ -13,9 +13,6 @@
 #ifndef OKAYLIB_NOEXCEPT
 #define OKAYLIB_NOEXCEPT noexcept
 #endif
-
-#include "okay/detail/traits/is_instance.h"
-#include "okay/slice.h"
 
 namespace ok {
 
@@ -64,6 +61,7 @@ class opt_inner_t<payload_t, false, false>
         !std::is_same_v<std::remove_cv_t<payload_t>, std::in_place_t>);
     static_assert(!std::is_array_v<payload_t>,
                   "opt cannot contain C style array");
+    static_assert(std::is_object_v<payload_t>);
 
   private:
     inline constexpr static bool is_reference = false;
@@ -120,7 +118,6 @@ class opt_inner_t<payload_t, false, false>
     inline constexpr opt_inner_t(const opt_inner_t<incoming_t>& t)
         OKAYLIB_NOEXCEPT
     {
-        // TODO: one (or both?) of these checks can be avoided
         if (t)
             emplace(t.value());
     }
@@ -136,7 +133,6 @@ class opt_inner_t<payload_t, false, false>
     inline explicit constexpr opt_inner_t(const opt_inner_t<incoming_t>& t)
         OKAYLIB_NOEXCEPT
     {
-        // TODO: one (or both?) of these checks can be avoided
         if (t)
             emplace(t.value());
     }
@@ -149,9 +145,12 @@ class opt_inner_t<payload_t, false, false>
                          !converts_from_opt<payload_t, incoming_t>> = true>
     inline constexpr opt_inner_t(opt_inner_t<incoming_t>&& t) OKAYLIB_NOEXCEPT
     {
-        // TODO: one (or both?) of these checks can be avoided
-        if (t)
+        if (t) {
             emplace(std::move(t.value()));
+#ifndef OKAYLIB_NO_CHECKED_MOVES
+            t = nullopt;
+#endif
+        }
     }
 
     // also convert moved optional's contents into ours, but this time explicit
@@ -164,9 +163,12 @@ class opt_inner_t<payload_t, false, false>
     inline explicit constexpr opt_inner_t(opt_inner_t<incoming_t>&& t)
         OKAYLIB_NOEXCEPT
     {
-        // TODO: one (or both?) of these checks can be avoided
-        if (t)
+        if (t) {
             emplace(std::move(t.value()));
+#ifndef OKAYLIB_NO_CHECKED_MOVES
+            t = nullopt;
+#endif
+        }
     }
 
     // emplacement constructor
@@ -270,9 +272,15 @@ class opt_inner_t<payload_t, false, false>
         else if (this->_has_value()) {
             other._construct(std::move(this->_get()));
             this->_destruct();
+#ifndef OKAYLIB_NO_CHECKED_MOVES
+            *this = nullopt;
+#endif
         } else if (other._has_value()) {
             this->_construct(std::move(other._get()));
             other._destruct();
+#ifndef OKAYLIB_NO_CHECKED_MOVES
+            other = nullopt;
+#endif
         }
     }
 
@@ -310,7 +318,10 @@ class opt_inner_t<payload_t, false, false>
     /// Call destructor of internal type, or just reset it if it doesnt have one
     inline void reset() OKAYLIB_NOEXCEPT { this->_reset(); }
 
-    inline constexpr explicit operator bool() noexcept { return has_value(); }
+    inline constexpr explicit operator bool() const noexcept
+    {
+        return has_value();
+    }
 
     inline constexpr friend bool operator==(const opt_inner_t& a,
                                             const opt_inner_t& b)
@@ -383,7 +394,10 @@ template <typename payload_t> class opt_inner_t<payload_t, false, true>
         return pointer != nullptr;
     }
 
-    inline constexpr operator bool() OKAYLIB_NOEXCEPT { return has_value(); }
+    inline constexpr operator bool() const OKAYLIB_NOEXCEPT
+    {
+        return has_value();
+    }
 
     inline constexpr opt_inner_t& operator=(pointer_t& ref) OKAYLIB_NOEXCEPT
     {
@@ -488,7 +502,10 @@ class opt_inner_t<wrapped_slice_t, true, false>
         return data != nullptr;
     }
 
-    inline constexpr operator bool() OKAYLIB_NOEXCEPT { return has_value(); }
+    inline constexpr operator bool() const OKAYLIB_NOEXCEPT
+    {
+        return has_value();
+    }
 
     inline constexpr opt_inner_t&
     operator=(const wrapped_slice_t& ref) OKAYLIB_NOEXCEPT
@@ -582,7 +599,6 @@ class opt_inner_t<wrapped_slice_t, true, false>
     inline constexpr opt_inner_t(const opt_inner_t<incoming_t>& t)
         OKAYLIB_NOEXCEPT
     {
-        // TODO: one (or both?) of these checks can be avoided
         if (t)
             emplace(t.value());
     }
@@ -598,39 +614,8 @@ class opt_inner_t<wrapped_slice_t, true, false>
     inline explicit constexpr opt_inner_t(const opt_inner_t<incoming_t>& t)
         OKAYLIB_NOEXCEPT
     {
-        // TODO: one (or both?) of these checks can be avoided
         if (t)
             emplace(t.value());
-    }
-
-    // convert an optional of a convertible type being moved into this optional
-    template <
-        typename incoming_t,
-        requires_t<!std::is_same_v<wrapped_slice_t, incoming_t> &&
-                   std::is_constructible_v<wrapped_slice_t, incoming_t> &&
-                   std::is_convertible_v<incoming_t, wrapped_slice_t> &&
-                   !converts_from_opt<wrapped_slice_t, incoming_t>> = true>
-    inline constexpr opt_inner_t(opt_inner_t<incoming_t>&& t) OKAYLIB_NOEXCEPT
-    {
-        // TODO: one (or both?) of these checks can be avoided
-        if (t)
-            emplace(std::move(t.value()));
-    }
-
-    // also convert moved optional's contents into ours, but this time explicit
-    // because the two are not implicitly convertible
-    template <
-        typename incoming_t,
-        requires_t<!std::is_same_v<wrapped_slice_t, incoming_t> &&
-                   std::is_constructible_v<wrapped_slice_t, incoming_t> &&
-                   !std::is_convertible_v<incoming_t, wrapped_slice_t> &&
-                   !converts_from_opt<wrapped_slice_t, incoming_t>> = false>
-    inline explicit constexpr opt_inner_t(opt_inner_t<incoming_t>&& t)
-        OKAYLIB_NOEXCEPT
-    {
-        // TODO: one (or both?) of these checks can be avoided
-        if (t)
-            emplace(std::move(t.value()));
     }
 
 #ifdef OKAYLIB_USE_FMT

@@ -1,6 +1,7 @@
 #ifndef __OKAYLIB_DETAIL_OPT_H__
 #define __OKAYLIB_DETAIL_OPT_H__
 
+#include "okay/detail/template_util/uninitialized_storage.h"
 #include <cassert>
 #include <type_traits>
 #include <utility>
@@ -52,7 +53,6 @@ template <typename input_contained_t> struct opt_payload_base_t
             if (other.has_value) {
                 this->construct(other.get());
             } else {
-                // TODO: not necessary? already has no value
                 this->reset();
             }
         }
@@ -67,7 +67,6 @@ template <typename input_contained_t> struct opt_payload_base_t
             if (other.has_value) {
                 this->construct(std::move(other.get()));
             } else {
-                // TODO: not necessary?
                 this->reset();
             }
         }
@@ -107,46 +106,7 @@ template <typename input_contained_t> struct opt_payload_base_t
             has_value = false;
     }
 
-    struct empty_t
-    {};
-
-    template <typename inner_input_contained_t,
-              bool = std::is_trivially_destructible_v<inner_input_contained_t>>
-    union storage_t
-    {
-        inline constexpr storage_t() OKAYLIB_NOEXCEPT : empty() {}
-
-        template <typename... args_t>
-        inline constexpr storage_t(std::in_place_t,
-                                   args_t&&... args) OKAYLIB_NOEXCEPT
-            : value(std::forward<args_t>(args)...)
-        {
-        }
-
-        empty_t empty;
-        inner_input_contained_t value;
-    };
-
-    template <typename inner_input_contained_t>
-    union storage_t<inner_input_contained_t, false>
-    {
-        inline constexpr storage_t() OKAYLIB_NOEXCEPT : empty() {}
-
-        template <typename... args_t>
-        inline constexpr storage_t(std::in_place_t,
-                                   args_t&&... args) OKAYLIB_NOEXCEPT
-            : value(std::forward<args_t>(args)...)
-        {
-        }
-
-        empty_t empty;
-        inner_input_contained_t value;
-
-        // only addition for non trivially destructible types
-        inline ~storage_t() {} // TODO: _GLIBCXX20_CONSTEXPR for this?
-    };
-
-    storage_t<contained_t> payload;
+    uninitialized_storage_t<contained_t> payload;
     bool has_value = false;
 };
 
@@ -239,7 +199,7 @@ struct opt_payload_t<contained_t, true, false, false>
     }
 };
 
-// nontrivial destructors
+// nontrivial destructors (everything else becomes nontrivial also)
 template <typename contained_t, bool copy, bool move>
 struct opt_payload_t<contained_t, false, copy, move>
     : opt_payload_t<contained_t, true, false, false>

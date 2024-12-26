@@ -90,6 +90,48 @@ TEST_SUITE("opt")
                 REQUIRE(false); // should never happen
             }
         }
+
+        SUBCASE("non owning slice")
+        {
+            std::vector<uint8_t> bytes = {20, 32, 124, 99, 1};
+            opt_t<slice_t<uint8_t>> maybe_array;
+            REQUIRE(!maybe_array.has_value());
+
+            // opt_t<std::vector<uint8_t>> optional_vector_copy(bytes);
+            // maybe_array = optional_vector_copy;
+
+            // TODO: make sure slice and opt_t<slice_t> cannot assume ownership
+            // of objects that are not trivially moveable
+        }
+
+#ifndef OKAYLIB_NO_CHECKED_MOVES
+        SUBCASE("moved type is marked as nullopt")
+        {
+            std::vector<int> nums = {1203, 12390, 12930, 430};
+
+            auto consume = [](opt_t<std::vector<int>>&& maybe_moved) {
+                if (!maybe_moved)
+                    return;
+
+                REQUIRE(!maybe_moved.value().empty());
+                std::vector<int> our_nums = std::move(maybe_moved.value());
+                REQUIRE(!maybe_moved.has_value());
+                REQUIRE(!our_nums.empty());
+                our_nums.resize(0);
+            };
+
+            opt_t<std::vector<int>> maybe_copy;
+            REQUIRE(!maybe_copy);
+            consume(std::move(maybe_copy));
+            REQUIRE(!maybe_copy); // this is defined behavior with checked moves
+
+            opt_t<std::vector<int>> maybe_moved = std::move(nums);
+            REQUIRE(maybe_moved);
+            REQUIRE(!maybe_moved.value().empty());
+            consume(std::move(maybe_moved));
+            REQUIRE(!maybe_moved);
+        }
+#endif
     }
 
     TEST_CASE("Functionality")
