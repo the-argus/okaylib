@@ -24,7 +24,7 @@ const testing_flags = &[_][]const u8{
     "-I./include/",
     "-DOKAYLIB_NOEXCEPT=", // allow exceptions in testing mode
 
-    "-DOKAYLIB_HEADER_TESTING",
+    "-DOKAYLIB_TESTING",
     "-DOKAYLIB_USE_FMT",
     "-DFMT_HEADER_ONLY",
 };
