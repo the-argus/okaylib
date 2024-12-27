@@ -376,8 +376,13 @@ struct opt_base_t<input_contained_t, true, true>
 
     opt_payload_t<input_contained_t> payload;
 };
+} // namespace ok::detail
 
-template <typename payload_t> class opt_t;
+namespace ok {
+template <typename payload_t, typename enable_t = void> class opt_t;
+}
+
+namespace ok::detail {
 
 // SFINAE to check if payload_t is instance of optional template
 template <typename T> inline constexpr bool is_optional = false;
@@ -390,7 +395,7 @@ inline constexpr bool converts_from_opt =
     std::is_constructible_v<target_t, opt_t<opt_payload_t>&> ||
     std::is_constructible_v<target_t, const opt_t<opt_payload_t>&&> ||
     std::is_constructible_v<target_t, opt_t<opt_payload_t>&&> ||
-    // check if can convert optional too target
+    // check if can convert optional to target
     std::is_convertible_v<const opt_t<opt_payload_t>&, target_t> ||
     std::is_convertible_v<opt_t<opt_payload_t>&, target_t> ||
     std::is_convertible_v<const opt_t<opt_payload_t>&&, target_t> ||

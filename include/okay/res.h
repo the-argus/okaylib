@@ -2,10 +2,10 @@
 #define __OKAYLIB_RES_H__
 
 #include "okay/detail/abort.h"
+#include "okay/detail/res.h"
+#include "okay/detail/template_util/enable_copy_move.h"
+#include "okay/detail/traits/is_nonthrowing.h"
 #include "okay/detail/traits/is_status_enum.h"
-#include <cstdint>
-#include <type_traits>
-#include <utility> // std::in_place_t
 
 #ifdef OKAYLIB_USE_FMT
 #include <fmt/core.h>
@@ -16,132 +16,119 @@
 #endif
 
 namespace ok {
-template <typename payload_t, typename enum_t> class res_t
+
+namespace detail {
+template <typename T, typename E>
+using res_enable_copy_move_for_type_t = detail::enable_copy_move<
+    std::is_copy_constructible_v<T>,
+    std::is_copy_constructible_v<T> && std::is_copy_assignable_v<T>,
+    std::is_move_constructible_v<T>,
+    std::is_move_constructible_v<T> && std::is_move_assignable_v<T>,
+    res_t<T, E>>; // unique tag
+}
+
+template <typename contained_t, typename enum_t>
+class res_t<contained_t, enum_t,
+            std::enable_if_t<!std::is_lvalue_reference_v<contained_t>>>
+    : private detail::res_base_t<contained_t, std::underlying_type_t<enum_t>>,
+      private detail::res_enable_copy_move_for_type_t<contained_t, enum_t>
 {
-  public:
-    static_assert(
-        std::is_lvalue_reference_v<payload_t> ||
-            (std::is_nothrow_destructible_v<payload_t> &&
-             // type must be either moveable or trivially copyable, otherwise it
-             // cant be returned from/moved out of a function
-             (std::is_move_constructible_v<payload_t> ||
-              std::is_trivially_copy_constructible_v<payload_t>)),
-        "Invalid type passed to res's first template argument. The type "
-        "must either be a lvalue reference, trivially copy constructible, or "
-        "nothrow move constructible.");
+    using enum_int_t = std::underlying_type_t<enum_t>;
 
-    static_assert(
-        detail::is_status_enum<enum_t>(),
-        "Bad enum errorcode type provided to res. Make sure it is only a "
-        "byte in size, and that the okay entry is = 0.");
-
-  private:
-    /// wrapper struct which just exits so that we can put reference types
-    /// inside of the union
-    struct wrapper_t
-    {
-        payload_t item;
-        wrapper_t() = delete;
-        inline constexpr wrapper_t(payload_t item) OKAYLIB_NOEXCEPT
-            : item(item) {};
-    };
-
-    static constexpr bool is_reference = std::is_lvalue_reference_v<payload_t>;
-
-    union raw_optional_t
-    {
-        std::conditional_t<is_reference, wrapper_t, payload_t> some;
-        uint8_t none;
-        ~raw_optional_t() OKAYLIB_NOEXCEPT {}
-    };
-
-    struct members_t
-    {
-        enum_t status;
-        raw_optional_t value{.none = 0};
-    };
-
-    members_t m;
+    inline static constexpr bool is_reference =
+        std::is_lvalue_reference_v<contained_t>;
 
   public:
+    using contained_type = contained_t;
+    using enum_type = enum_t;
+
+    static_assert(
+        std::is_enum_v<enum_t>,
+        "The second type parameter to res_t must be a statuscode enum.");
+    static_assert(std::is_same_v<std::decay_t<enum_t>, enum_t>,
+                  "Do not cv or ref qualify statuscode type.");
+    static_assert(!std::is_rvalue_reference_v<contained_t>,
+                  "opt_t cannot store rvalue references");
+    static_assert(std::is_object_v<contained_t> &&
+                      !std::is_array_v<contained_t>,
+                  "Results can only store objects, and not c-style arrays.");
+    static_assert(detail::is_nonthrowing<contained_t>,
+                  OKAYLIB_IS_NONTHROWING_ERRMSG);
+    static_assert(
+        !std::is_same_v<std::remove_cv_t<contained_t>,
+                        std::remove_cv_t<enum_t>>,
+        "Result cannot store an the same enum as payload as for statuscode.");
+    static_assert(detail::is_status_enum<enum_t>(),
+                  OKAYLIB_IS_STATUS_ENUM_ERRMSG);
+
     [[nodiscard]] inline constexpr bool okay() const OKAYLIB_NOEXCEPT
     {
-        return m.status == enum_t::okay;
+        return this->okay_payload();
     }
 
     [[nodiscard]] inline constexpr enum_t err() const OKAYLIB_NOEXCEPT
     {
-        return m.status;
+        return enum_t(this->get_error_payload());
     }
 
-    [[nodiscard]] inline std::conditional_t<is_reference, payload_t,
-                                            payload_t&&>
+    // if contained type is a reference, then this just returns the reference.
+    // otherwise it will perform a move.
+    [[nodiscard]] inline std::conditional_t<is_reference, contained_t,
+                                            contained_t&&>
     release() OKAYLIB_NOEXCEPT
     {
         if (!okay()) [[unlikely]] {
             OK_ABORT();
         }
 
-        m.status = enum_t::result_released;
+        this->get_error_payload() = 1;
         if constexpr (is_reference) {
-            return m.value.some.item;
+            return *this->pointer;
         } else {
-            return std::move(m.value.some);
+            return std::move(this->get_value_unchecked_payload());
         }
     }
 
-    /// Return a reference to the data inside the result. This reference
-    /// becomes invalid when the result is destroyed or moved. If the result is
-    /// an error, this aborts the program. Check okay() before calling this
-    /// function. Do not try to call release() or release_ref() again, after
-    /// calling release() or release_ref() once, the result is invalidated.
-    template <typename maybe_t = payload_t>
-        [[nodiscard]] inline typename std::enable_if_t<!is_reference, maybe_t>&
-        release_ref() &
-        OKAYLIB_NOEXCEPT
+    // if inner type is a value type, you can release an lvalue reference to the
+    // contents of the result and perform operationgs in-place.
+    template <typename maybe_t = contained_t>
+        [[nodiscard]] inline constexpr std::enable_if_t<!is_reference,
+                                                        contained_t&>
+        release_ref() & OKAYLIB_NOEXCEPT
     {
         if (!okay()) [[unlikely]] {
             OK_ABORT();
         }
-        m.status = enum_t::result_released;
-        return m.value.some;
+        this->get_error_payload() = enum_int_t(enum_t::result_released);
+        return this->get_value_unchecked_payload();
     }
 
-    template <typename maybe_t = payload_t, typename... args_t>
+    template <typename... args_t>
     inline constexpr res_t(
         std::enable_if_t<!is_reference &&
-                             std::is_constructible_v<payload_t, args_t...>,
+                             std::is_constructible_v<contained_t, args_t...>,
                          std::in_place_t>,
         args_t&&... args) noexcept
     {
-        static_assert(std::is_nothrow_constructible_v<payload_t, args_t...>,
+        static_assert(std::is_nothrow_constructible_v<contained_t, args_t...>,
                       "Attempt to construct in place but constructor invoked "
                       "can throw exceptions.");
-        m.status = enum_t::okay;
-        new (&m.value.some) payload_t(std::forward<args_t>(args)...);
-    }
-
-    /// if T is a reference type, then you can construct a result from it
-    template <typename maybe_t = payload_t>
-    inline constexpr res_t(typename std::enable_if_t<is_reference, maybe_t>
-                               success) OKAYLIB_NOEXCEPT
-    {
-        m.status = enum_t::okay;
-        new (&m.value.some) wrapper_t(success);
+        this->get_error_payload() = 0;
+        this->construct_no_destroy_payload(std::forward<args_t>(args)...);
     }
 
     /// Wrapped type can moved into a result
-    template <typename maybe_t = payload_t>
+    /// TODO: make this a converting constructor
+    template <typename maybe_t = contained_t>
     inline constexpr res_t(
         typename std::enable_if_t<!is_reference &&
-                                      std::is_move_constructible_v<payload_t>,
+                                      std::is_move_constructible_v<contained_t>,
                                   maybe_t>&& success) OKAYLIB_NOEXCEPT
     {
-        static_assert(std::is_nothrow_move_constructible_v<payload_t>,
-                      "Attempt to use move constructor, but it throws and "
-                      "function is marked noexcept.");
-        m.status = enum_t::okay;
-        new (&m.value.some) payload_t(std::move(success));
+        static_assert(std::is_nothrow_move_constructible_v<contained_t>,
+                      "Attempt to use move constructor, but it throws.");
+        this->get_error_payload() = 0;
+        this->construct_no_destroy_payload(std::move(success));
     }
 
     /// A statuscode can also be implicitly converted to a result
@@ -150,74 +137,13 @@ template <typename payload_t, typename enum_t> class res_t
         if (failure == enum_t::okay) [[unlikely]] {
             OK_ABORT();
         }
-        m.status = failure;
-    }
 
-    /// Copy constructor only available if the wrapped type is trivially
-    /// copy constructible.
-    template <typename this_t = res_t>
-    inline constexpr res_t(
-        const typename std::enable_if_t<
-            (is_reference ||
-             std::is_trivially_copy_constructible_v<payload_t>) &&
-                std::is_same_v<this_t, res_t>,
-            this_t>& other) OKAYLIB_NOEXCEPT
-    {
-        if (other.okay()) {
-            if constexpr (is_reference) {
-                m.value.some = other.m.value.some.item;
-            } else {
-                m.value.some = other.m.value.some;
-            }
-        }
-        m.status = other.m.status;
-    }
-
-    // Result cannot be assigned to, only constructed and then released.
-    res_t& operator=(const res_t& other) = delete;
-    res_t& operator=(res_t&& other) = delete;
-
-    /// Move construction of result, requires that T is a reference or that it's
-    /// move constructible.
-    template <typename this_t = res_t>
-    inline constexpr res_t(
-        typename std::enable_if_t<(is_reference ||
-                                   std::is_move_constructible_v<payload_t>) &&
-                                      std::is_same_v<this_t, res_t>,
-                                  this_t>&& other) OKAYLIB_NOEXCEPT
-    {
-        if (other.okay()) {
-            if constexpr (is_reference) {
-                m.value.some.item = other.m.value.some.item;
-            } else {
-                m.value.some = std::move(other.m.value.some);
-            }
-        }
-        m.status = other.m.status;
-        // make it an error to access a result after it has been moved into
-        // another
-        other.m.status = enum_t::result_released;
-    }
-
-    inline ~res_t() OKAYLIB_NOEXCEPT
-    {
-        if constexpr (!is_reference) {
-            if (okay()) {
-                m.value.some.~T();
-            }
-        }
-        m.status = enum_t::result_released;
+        this->get_error_payload() = failure;
     }
 
 #ifdef OKAYLIB_USE_FMT
     friend struct fmt::formatter<res_t>;
 #endif
-
-  private:
-    inline constexpr explicit res_t() OKAYLIB_NOEXCEPT
-    {
-        m.status = enum_t::okay;
-    }
 };
 } // namespace ok
 
