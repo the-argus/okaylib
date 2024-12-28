@@ -105,6 +105,7 @@ TEST_SUITE("opt")
         }
 
 #ifndef OKAYLIB_NO_CHECKED_MOVES
+#ifndef OKAYLIB_DISALLOW_EXCEPTIONS_IN_CONTAINERS
         SUBCASE("moved type is marked as nullopt")
         {
             std::vector<int> nums = {1203, 12390, 12930, 430};
@@ -114,10 +115,10 @@ TEST_SUITE("opt")
                     return;
 
                 REQUIRE(!maybe_moved.value().empty());
-                std::vector<int> our_nums = std::move(maybe_moved.value());
+                opt_t<std::vector<int>> our_nums = std::move(maybe_moved);
                 REQUIRE(!maybe_moved.has_value());
-                REQUIRE(!our_nums.empty());
-                our_nums.resize(0);
+                REQUIRE(!our_nums.value().empty());
+                our_nums.value().resize(0);
             };
 
             opt_t<std::vector<int>> maybe_copy;
@@ -132,12 +133,14 @@ TEST_SUITE("opt")
             REQUIRE(!maybe_moved);
         }
 #endif
+#endif
     }
 
     TEST_CASE("Functionality")
     {
         SUBCASE("Resetting")
         {
+#ifndef OKAYLIB_DISALLOW_EXCEPTIONS_IN_CONTAINERS
             opt_t<std::vector<int>> vec;
             // null by default
             REQUIRE(!vec.has_value());
@@ -147,6 +150,7 @@ TEST_SUITE("opt")
             REQUIRE(vec.value()[0] == 42);
             vec.reset();
             REQUIRE(!vec.has_value());
+#endif
         }
 
         SUBCASE("Aborts on null")
@@ -223,10 +227,12 @@ TEST_SUITE("opt")
 
         SUBCASE("emplace")
         {
+#ifndef OKAYLIB_DISALLOW_EXCEPTIONS_IN_CONTAINERS
             opt_t<std::vector<int>> mvec;
             REQUIRE(!mvec.has_value());
             mvec.emplace();
             REQUIRE(mvec.has_value());
+#endif
         }
 
         SUBCASE("safely return copies from value optionals")

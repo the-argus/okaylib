@@ -49,7 +49,7 @@ class opt_t<payload_t,
     static_assert(!std::is_const_v<payload_t>,
                   "Wrapped value type is marked const, this has no effect. "
                   "Remove the const.");
-    static_assert(!detail::is_nonthrowing<payload_t>,
+    static_assert(detail::is_nonthrowing<payload_t>,
                   OKAYLIB_IS_NONTHROWING_ERRMSG);
 
     static_assert(!std::is_same_v<std::remove_cv_t<payload_t>, nullopt_t>);
@@ -142,9 +142,6 @@ class opt_t<payload_t,
     {
         if (t) {
             emplace(std::move(t.value()));
-#ifndef OKAYLIB_NO_CHECKED_MOVES
-            t = nullopt;
-#endif
         }
     }
 
@@ -160,9 +157,6 @@ class opt_t<payload_t,
     {
         if (t) {
             emplace(std::move(t.value()));
-#ifndef OKAYLIB_NO_CHECKED_MOVES
-            t = nullopt;
-#endif
         }
     }
 
@@ -266,15 +260,9 @@ class opt_t<payload_t,
         else if (this->_has_value()) {
             other._construct(std::move(this->_get()));
             this->_destruct();
-#ifndef OKAYLIB_NO_CHECKED_MOVES
-            *this = nullopt;
-#endif
         } else if (other._has_value()) {
             this->_construct(std::move(other._get()));
             other._destruct();
-#ifndef OKAYLIB_NO_CHECKED_MOVES
-            other = nullopt;
-#endif
         }
     }
 

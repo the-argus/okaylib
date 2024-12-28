@@ -1,12 +1,11 @@
 #include "test_header.h"
 // test header must be first
+#include "okay/macro/try.h"
 #include "okay/res.h"
-// #include "okay/try.h"
 #include "testing_types.h"
 
 #include <array>
 #include <optional>
-#include <type_traits>
 #include <vector>
 
 using namespace ok;
@@ -44,7 +43,7 @@ TEST_SUITE("res")
                     string = instr.c_str();
                 }
             };
-            using result = res<constructed_type, StatusCodeA>;
+            using result = res_t<constructed_type, StatusCodeA>;
             auto constructed_result = [](bool cond) -> result {
                 return cond ? result(std::string("hello"))
                             : result(StatusCodeA::oom);
@@ -62,8 +61,8 @@ TEST_SUITE("res")
 #ifdef OKAYLIB_USE_FMT
         SUBCASE("formattable")
         {
-            using result_t = res<int, StatusCodeB>;
-            using refresult_t = res<int&, StatusCodeB>;
+            using result_t = res_t<int, StatusCodeB>;
+            using refresult_t = res_t<int&, StatusCodeB>;
             result_t result(10);
             int target = 10;
             refresult_t refresult(target);
@@ -78,14 +77,14 @@ TEST_SUITE("res")
 
         SUBCASE("aborts on bad access")
         {
-            using res = res<int, StatusCodeB>;
+            using res = res_t<int, StatusCodeB>;
             res result(StatusCodeB::nothing);
             REQUIREABORTS({ auto nothing = result.release(); });
         }
 
         SUBCASE("Result released code after release is called")
         {
-            using res = res<trivial_t, StatusCodeB>;
+            using res = res_t<trivial_t, StatusCodeB>;
             res result(trivial_t{
                 .whatever = 19,
                 .nothing = nullptr,
@@ -150,8 +149,8 @@ TEST_SUITE("res")
                 error
             };
 
-            auto getRes = []() -> res<Test, TestCode> {
-                return res<Test, TestCode>{std::in_place};
+            auto getRes = []() -> res_t<Test, TestCode> {
+                return res_t<Test, TestCode>{std::in_place};
             };
 
             auto myres = getRes();
@@ -169,7 +168,7 @@ TEST_SUITE("res")
                 null_reference,
             };
 
-            using res = res<std::vector<int>&, ReferenceCreationStatusCode>;
+            using res = res_t<std::vector<int>&, ReferenceCreationStatusCode>;
 
             auto makeveciftrue = [](bool cond) -> res {
                 if (cond) {
@@ -203,7 +202,7 @@ TEST_SUITE("res")
             };
 
             using res =
-                res<const std::vector<int>&, ReferenceCreationStatusCode>;
+                res_t<const std::vector<int>&, ReferenceCreationStatusCode>;
 
             auto makeveciftrue = [](bool cond) -> res {
                 if (cond) {
@@ -283,7 +282,7 @@ TEST_SUITE("res")
                 dummy_error,
             };
 
-            using res = res<increment_on_copy_or_move, dummy_status_code_e>;
+            using res = res_t<increment_on_copy_or_move, dummy_status_code_e>;
 
             // no copy, only move
             res res_1 = increment_on_copy_or_move(1, 2);
@@ -325,7 +324,7 @@ TEST_SUITE("res")
 
             auto fake_alloc =
                 [&memory](bool should_succeed,
-                          size_t bytes) -> res<uint8_t*, ExampleError> {
+                          size_t bytes) -> res_t<uint8_t*, ExampleError> {
                 if (should_succeed) {
                     return memory.data();
                 } else {
@@ -335,7 +334,7 @@ TEST_SUITE("res")
 
             auto make_zeroed_buffer =
                 [fake_alloc](bool should_succeed,
-                             size_t bytes) -> res<uint8_t*, ExampleError> {
+                             size_t bytes) -> res_t<uint8_t*, ExampleError> {
                 TRY_BLOCK(yielded_memory, fake_alloc(should_succeed, bytes), {
                     static_assert(
                         std::is_same_v<decltype(yielded_memory), uint8_t*>);
@@ -374,9 +373,9 @@ TEST_SUITE("res")
             };
 
             auto try_make_big_thing =
-                [](bool should_succeed) -> res<BigThing, ExampleError> {
+                [](bool should_succeed) -> res_t<BigThing, ExampleError> {
                 if (should_succeed)
-                    return res<BigThing, ExampleError>{std::in_place};
+                    return res_t<BigThing, ExampleError>{std::in_place};
                 else
                     return ExampleError::error;
             };
@@ -396,7 +395,7 @@ TEST_SUITE("res")
                     for (int& number : big_thing.numbers) {
                         number = 0;
                     }
-                    return ExampleError::Okay;
+                    return ExampleError::okay;
                 });
             };
 

@@ -3,25 +3,24 @@
 
 #include "okay/detail/template_util/uninitialized_storage.h"
 #include "okay/detail/traits/is_instance.h"
+#include <cassert>
 #include <type_traits>
 #include <utility>
 
 namespace ok::detail {
 template <typename input_contained_t, typename enum_int_t>
-class res_payload_base_t
+struct res_payload_base_t
 {
     using contained_t = std::remove_const_t<input_contained_t>;
 
     // default everything because special member behavior is determined by the
     // selected template specialization for our "storage" member var
+    res_payload_base_t() = default;
     ~res_payload_base_t() = default;
     res_payload_base_t(const res_payload_base_t&) = default;
     res_payload_base_t(res_payload_base_t&&) = default;
     res_payload_base_t& operator=(const res_payload_base_t&) = default;
     res_payload_base_t& operator=(res_payload_base_t&&) = default;
-
-    // result *must* me initialized with something
-    res_payload_base_t() = delete;
 
     // construct storage value in-place
     template <typename... args_t>
@@ -66,7 +65,8 @@ class res_payload_base_t
     }
 
     // copy construct contents of another payload, conditionally
-    inline constexpr res_payload_base_t(bool, const res_payload_base_t& other)
+    inline constexpr res_payload_base_t(enum_int_t,
+                                        const res_payload_base_t& other)
         OKAYLIB_NOEXCEPT : error(other.error)
     {
         if (other.error == 0)
@@ -74,11 +74,15 @@ class res_payload_base_t
     }
 
     // move construct contents of another payload, conditionally
-    inline constexpr res_payload_base_t(bool, res_payload_base_t&& other)
+    inline constexpr res_payload_base_t(enum_int_t, res_payload_base_t&& other)
         OKAYLIB_NOEXCEPT : error(other.error)
     {
-        if (other.errorr == 0)
-            this->construct_no_destroy(std::move(other.get()));
+        if (other.error == 0) {
+            this->construct_no_destroy(std::move(other.get_value_unchecked()));
+#ifndef OKAYLIB_NO_CHECKED_MOVES
+            other.error = 1;
+#endif
+        }
     }
 
     inline constexpr void
@@ -106,6 +110,9 @@ class res_payload_base_t
         if (this_okay && other_okay) {
             this->get_value_unchecked() =
                 std::move(other.get_value_unchecked());
+#ifndef OKAYLIB_NO_CHECKED_MOVES
+            other.error = 1;
+#endif
         } else {
             if (other_okay) {
                 this->construct_no_destroy(
@@ -227,7 +234,7 @@ struct res_payload_t<contained_t, enum_int_t, false, copy, move>
     res_payload_t(res_payload_t&&) = default;
     res_payload_t& operator=(res_payload_t&&) = default;
 
-    inline ~res_payload_t() { this->reset(); }
+    inline ~res_payload_t() { this->destroy_value_but_keep_error(); }
 };
 
 template <typename input_contained_t, typename enum_int_t, typename derived_t>
@@ -258,14 +265,12 @@ class res_base_common_t
     inline constexpr input_contained_t&
     get_value_unchecked_payload() OKAYLIB_NOEXCEPT
     {
-        assert(this->okay_payload());
         return static_cast<derived_t*>(this)->payload.get_value_unchecked();
     }
 
     inline constexpr const input_contained_t&
     get_value_unchecked_payload() const OKAYLIB_NOEXCEPT
     {
-        assert(this->okay_payload());
         return static_cast<const derived_t*>(this)
             ->payload.get_value_unchecked();
     }
@@ -277,7 +282,7 @@ class res_base_common_t
     }
     inline constexpr enum_int_t& get_error_payload() OKAYLIB_NOEXCEPT
     {
-        return static_cast<const derived_t*>(this)->payload.error;
+        return static_cast<derived_t*>(this)->payload.error;
     }
 };
 
@@ -300,12 +305,12 @@ struct res_base_t : res_base_common_t<input_contained_t, enum_int_t,
     }
 
     inline constexpr res_base_t(const res_base_t& other)
-        : payload(other.payload.has_value, other.payload)
+        : payload(other.payload.error, other.payload)
     {
     }
 
     inline constexpr res_base_t(res_base_t&& other)
-        : payload(other.payload.has_value, std::move(other.payload))
+        : payload(other.payload.error, std::move(other.payload))
     {
     }
 
@@ -403,6 +408,8 @@ struct res_base_t<input_contained_t, enum_int_t, true, true, false>
 };
 
 // overload for when contained type is a reference type
+// does not mark as result_released when moved, because guaranteed trivially
+// movable, same as opt
 template <typename input_contained_t, typename enum_int_t, bool move, bool copy>
 struct res_base_t<input_contained_t, enum_int_t, copy, move, true>
 {
@@ -458,15 +465,14 @@ struct res_base_t<input_contained_t, enum_int_t, copy, move, true>
     res_base_t& operator=(const res_base_t&) = default;
     res_base_t& operator=(res_base_t&&) = default;
 
-    pointer_t pointer;
+    pointer_t* pointer;
     enum_int_t error;
 };
 
 } // namespace ok::detail
 
 namespace ok {
-template <typename contained_t, typename enum_t, typename enable_t = void>
-class res_t;
+template <typename contained_t, typename enum_t> class res_t;
 }
 
 namespace ok::detail {

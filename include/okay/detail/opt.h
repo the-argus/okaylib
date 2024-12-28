@@ -33,15 +33,20 @@ template <typename input_contained_t> struct opt_payload_base_t
     inline constexpr opt_payload_base_t(bool, const opt_payload_base_t& other)
         OKAYLIB_NOEXCEPT
     {
-        if (other.has_value)
+        if (other.has_value) {
             this->construct(other.get());
+        }
     }
 
     inline constexpr opt_payload_base_t(bool, opt_payload_base_t&& other)
         OKAYLIB_NOEXCEPT
     {
-        if (other.has_value)
+        if (other.has_value) {
             this->construct(std::move(other.get()));
+#ifndef OKAYLIB_NO_CHECKED_MOVES
+            other.has_value = false;
+#endif
+        }
     }
 
     inline constexpr void
@@ -63,9 +68,15 @@ template <typename input_contained_t> struct opt_payload_base_t
     {
         if (this->has_value && other->has_value) {
             this->get() = std::move(other.get());
+#ifndef OKAYLIB_NO_CHECKED_MOVES
+            other.has_value = false;
+#endif
         } else {
             if (other.has_value) {
                 this->construct(std::move(other.get()));
+#ifndef OKAYLIB_NO_CHECKED_MOVES
+                other.has_value = false;
+#endif
             } else {
                 this->reset();
             }
