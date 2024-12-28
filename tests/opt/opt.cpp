@@ -105,7 +105,7 @@ TEST_SUITE("opt")
         }
 
 #ifndef OKAYLIB_NO_CHECKED_MOVES
-#ifndef OKAYLIB_DISALLOW_EXCEPTIONS_IN_CONTAINERS
+#ifndef OKAYLIB_DISALLOW_EXCEPTIONS
         SUBCASE("moved type is marked as nullopt")
         {
             std::vector<int> nums = {1203, 12390, 12930, 430};
@@ -140,7 +140,7 @@ TEST_SUITE("opt")
     {
         SUBCASE("Resetting")
         {
-#ifndef OKAYLIB_DISALLOW_EXCEPTIONS_IN_CONTAINERS
+#ifndef OKAYLIB_DISALLOW_EXCEPTIONS
             opt_t<std::vector<int>> vec;
             // null by default
             REQUIRE(!vec.has_value());
@@ -227,7 +227,7 @@ TEST_SUITE("opt")
 
         SUBCASE("emplace")
         {
-#ifndef OKAYLIB_DISALLOW_EXCEPTIONS_IN_CONTAINERS
+#ifndef OKAYLIB_DISALLOW_EXCEPTIONS
             opt_t<std::vector<int>> mvec;
             REQUIRE(!mvec.has_value());
             mvec.emplace();

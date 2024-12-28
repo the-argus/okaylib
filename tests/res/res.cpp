@@ -1,6 +1,6 @@
 #include "test_header.h"
 // test header must be first
-#include "okay/macro/try.h"
+#include "okay/macros/try.h"
 #include "okay/res.h"
 #include "testing_types.h"
 
