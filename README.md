@@ -40,7 +40,12 @@ an effort to organize that (not always necessary) work into one reusable product
       a serializable way (not by pointer)?
 - [ ] standardized SIMD vector and matrix types, explicit by default but with
       optional operator overloading. inspired by DirectXMath
-- [ ] iterator reimplementation (and maybe some redesign?)
+- [ ] new iterators, with lower barrier to entry. ideally these would be c++17
+      compatible, so as to vastly expand the surface of this library which can be
+      used without c++20, but I am uncertain that it is better to try this than
+      to juse use something compatible with `std::input_iterator` and `std::output_iterator`.
+- [ ] A dynamic bit array and a static bit array with boolean-like iterators, to
+      prove capability of new iterators
 - [ ] sane `std::string` replacement, inspired a bit by Godot's `String` and
       maybe `StringName` as well if that can be pulled off.
 - [ ] A low friction variant which is something like `std::variant<int, float, string>`
@@ -74,7 +79,7 @@ an effort to organize that (not always necessary) work into one reusable product
       like `count*` or `max_element` or `unique`. Specific threadsafe container
       iterator type?
 - [ ] reimplementation of `<thread>` and `<atomic>` ? avoid exceptions where
-      possible, and implicit atomic load/stores
+      possible, and avoid implicit atomic load/stores
 - [ ] standard coroutine types: task, generator
 - [ ] coroutines which can use thread's context allocator
 - [ ] coroutine-running threadpool with work queues and task stealing, for
