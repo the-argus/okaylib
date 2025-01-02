@@ -192,6 +192,30 @@ TEST_SUITE("res")
             delete &vec;
         }
 
+        SUBCASE("res::to_opt() for reference result")
+        {
+            using res = res_t<int&, StatusCodeA>;
+
+            int i = 9;
+            res test = i;
+            REQUIRE(test.okay() == test.to_opt().has_value());
+            REQUIRE(test.to_opt().is_alias_for(i));
+            res test2 = StatusCodeA::oom;
+            REQUIRE(test2.okay() == test2.to_opt().has_value());
+        }
+
+        SUBCASE("res::to_opt() for value result")
+        {
+            using res = res_t<int, StatusCodeA>;
+
+            // TODO: fix the following (more generous constructor selection
+            // needed) int i = 9; rest test = i;
+            res test = 9;
+            REQUIRE(test.okay() == test.to_opt().has_value());
+            res test2 = StatusCodeA::oom;
+            REQUIRE(test2.okay() == test2.to_opt().has_value());
+        }
+
         SUBCASE("const reference result")
         {
             enum class ReferenceCreationStatusCode : uint8_t

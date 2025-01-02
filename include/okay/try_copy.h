@@ -72,8 +72,9 @@ try_copy(const T& input) __OKAYLIB_TRY_COPY_EXCEPTION__
 /// locations where the declaration for type T is visible. Specializations may
 /// not change the arguments of the function, only its return type.
 template <typename T>
-inline constexpr void try_copy_into_uninitialized(T& output, const T& input)
-    __OKAYLIB_TRY_COPY_EXCEPTION__
+inline constexpr void
+try_copy_into_uninitialized(T& uninitialized_output,
+                            const T& input) __OKAYLIB_TRY_COPY_EXCEPTION__
 {
     // copy this one line to all specializations
     static_assert(ok::is_valid_type_for_copy<T>);
@@ -86,7 +87,7 @@ inline constexpr void try_copy_into_uninitialized(T& output, const T& input)
                   "Exceptions disallowed for okaylib, but type given to "
                   "ok::try_copy_into_uninitialized() can throw when copied.");
 
-    new (std::addressof(output)) T(input);
+    new (std::addressof(uninitialized_output)) T(input);
 }
 
 /// Copy an object over an existing object. Can be specialized to return a
@@ -156,13 +157,36 @@ struct is_okaylib_copy_assignable_t
 };
 } // namespace detail
 
+/// Whether it is valid to call `ok::try_copy(const T&)`. Does not detect
+/// specializations made for non-copyable types such as references.
 template <typename T>
 inline constexpr bool is_okaylib_copy_constructible =
+    is_valid_type_for_copy<T> &&
     detail::is_okaylib_copy_constructible_t::value<T>;
 
+/// Whether it is valid to call `ok::try_copy_assign(T&, const T&)`. Does not
+/// detect specializations made for non-copyable types such as references.
 template <typename T>
 inline constexpr bool is_okaylib_copy_assignable =
-    detail::is_okaylib_copy_assignable_t::value<T>;
+    is_valid_type_for_copy<T> && detail::is_okaylib_copy_assignable_t::value<T>;
+
+/// Whether try_copy exists and returns T by value. Will be false if the type
+/// cannot be try_copy'ied or if the try_copy returns something other than T,
+/// like a result.
+template <typename T>
+inline constexpr bool is_try_copy_nonfailing =
+    is_okaylib_copy_constructible<T> &&
+    std::is_same_v<decltype(ok::try_copy(std::declval<const T&>())), T>;
+
+/// Whether try_copy_assign exists and returns void. Will be false if the type
+/// cannot be try_copy_assign'ed or if the try_copy_assign returns something
+/// other than void.
+template <typename T>
+inline constexpr bool is_try_copy_assign_nonfailing =
+    is_okaylib_copy_assignable<T> &&
+    std::is_same_v<decltype(ok::try_copy_assign(std::declval<T&>(),
+                                                std::declval<const T&>())),
+                   void>;
 
 } // namespace ok
 

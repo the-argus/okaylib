@@ -5,8 +5,15 @@
 #include "testing_types.h"
 
 #include <array>
+#include <optional>
 
 using namespace ok;
+struct big {int i[100];};
+static_assert(!std::is_convertible_v<std::optional<big>, const int&>);
+static_assert(!std::is_convertible_v<opt_t<big>, const int&>);
+static_assert(!std::is_convertible_v<int*, const int&>);
+static_assert(!std::is_convertible_v<std::optional<int*>, const int&>);
+static_assert(!std::is_convertible_v<opt_t<int&>, const int&>);
 
 static_assert(sizeof(opt_t<slice_t<int>>) == sizeof(slice_t<int>),
               "Optional slice types are a different size than slices");
@@ -172,6 +179,67 @@ TEST_SUITE("opt")
             REQUIRE(strcmp(maybe_moveguy.value().nothing, "nope") == 0);
         }
 
+        SUBCASE("null optional references are not aliases for each other")
+        {
+            opt_t<int&> a;
+            opt_t<int&> b;
+            REQUIRE(!a.is_alias_for(b));
+        }
+
+        SUBCASE("pointer convertible to optional reference")
+        {
+            opt_t<int&> iref = nullptr;
+            REQUIRE(!iref);
+            iref = nullptr;
+            REQUIRE(!iref);
+            int i = 0;
+            iref = i;
+            REQUIRE(iref);
+            iref = &i;
+            REQUIRE(iref);
+        }
+
+        SUBCASE("constness of optional reference follows const correctness")
+        {
+            // cannot go from const to nonconst
+            static_assert(
+                !std::is_convertible_v<opt_t<const int&>, opt_t<int&>>);
+            // can go from nonconst to const
+            static_assert(
+                std::is_convertible_v<opt_t<int&>, opt_t<const int&>>);
+            int i = 10;
+            opt_t<int&> mut_iref = i;
+            opt_t<const int&> iref = i;
+
+            opt_t<const int&> iref_2 = mut_iref;
+        }
+
+        SUBCASE("optional of reference to derived can be converted to optional "
+                "of reference to base")
+        {
+            struct test_base
+            {
+                int i;
+            };
+
+            struct test_derived : public test_base
+            {
+                bool b;
+            };
+
+            test_base t{0};
+            test_derived td{0, true};
+
+            opt_t<test_base&> tref = t;
+            REQUIRE(tref.is_alias_for(t));
+            tref = td;
+            REQUIRE(tref.is_alias_for(td));
+
+            // cannot go from base to derived
+            static_assert(!std::is_convertible_v<opt_t<test_base&>,
+                                                 opt_t<test_derived&>>);
+        }
+
         SUBCASE("optional reference types")
         {
             int test = 10;
@@ -181,15 +249,18 @@ TEST_SUITE("opt")
             REQUIRE(!testref2.has_value());
             testref = test;
             REQUIRE(testref.value() == test);
-            REQUIRE(!testref.is_alias(testref2));
+            REQUIRE(testref.is_alias_for(test));
+            static_assert(std::is_same_v<opt_t<const int&>::pointer_t, const int>);
+            static_assert(!std::is_convertible_v<opt_t<int&>, const int>);
+            REQUIRE(!testref.is_alias_for(testref2));
 
             int test2 = 10;
             testref2 = test2;
             REQUIRE(testref2.value() == test2);
-            REQUIRE(testref2.is_alias(test2));
-            REQUIRE(!testref.is_alias(test2));
+            REQUIRE(testref2.is_alias_for(test2));
+            REQUIRE(!testref.is_alias_for(test2));
             REQUIRE(testref.value() == test2);
-            REQUIRE(!testref.is_alias(testref2));
+            REQUIRE(!testref.is_alias_for(testref2));
 
             testref = testref2;
         }

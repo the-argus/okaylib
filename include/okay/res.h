@@ -6,6 +6,7 @@
 #include "okay/detail/template_util/enable_copy_move.h"
 #include "okay/detail/traits/is_nonthrowing.h"
 #include "okay/detail/traits/is_status_enum.h"
+#include "okay/opt.h"
 
 #ifdef OKAYLIB_USE_FMT
 #include <fmt/core.h>
@@ -63,6 +64,20 @@ class res_t
     [[nodiscard]] inline constexpr bool okay() const OKAYLIB_NOEXCEPT
     {
         return this->okay_payload();
+    }
+
+    [[nodiscard]] inline constexpr opt_t<contained_t>
+    to_opt() const OKAYLIB_NOEXCEPT
+    {
+        if (this->okay_payload()) {
+            if constexpr (is_reference) {
+                return *this->pointer;
+            } else {
+                return this->get_value_unchecked_payload();
+            }
+        } else {
+            return nullopt;
+        }
     }
 
     [[nodiscard]] inline constexpr enum_t err() const OKAYLIB_NOEXCEPT

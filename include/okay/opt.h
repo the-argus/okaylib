@@ -3,6 +3,7 @@
 
 #include "okay/detail/opt.h"
 #include "okay/detail/template_util/enable_copy_move.h"
+#include "okay/detail/template_util/remove_cvref.h"
 #include "okay/detail/traits/is_instance.h"
 #include "okay/detail/traits/is_nonthrowing.h"
 #include "okay/slice.h"
@@ -66,13 +67,11 @@ class opt_t<payload_t,
     using base_t = detail::opt_base_t<payload_t>;
 
     template <typename T>
-    using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
-    template <typename T>
     inline static constexpr bool not_self =
-        !std::is_same_v<opt_t, remove_cvref_t<T>>;
+        !std::is_same_v<opt_t, detail::remove_cvref_t<T>>;
     template <typename T>
     inline static constexpr bool not_tag =
-        !std::is_same_v<std::in_place_t, remove_cvref_t<T>>;
+        !std::is_same_v<std::in_place_t, detail::remove_cvref_t<T>>;
 
     template <bool condition>
     using requires_t = std::enable_if_t<condition, bool>;
@@ -340,18 +339,18 @@ class opt_t<payload_t,
 template <typename payload_t>
 class opt_t<payload_t, std::enable_if_t<std::is_lvalue_reference_v<payload_t>>>
 {
+  public:
+    using pointer_t = std::remove_reference_t<payload_t>;
+
+  private:
     inline static constexpr bool is_reference = true;
     inline static constexpr bool is_slice = false;
-
-    using pointer_t = std::remove_reference_t<payload_t>;
 
     pointer_t* pointer = nullptr;
 
     template <typename T>
-    using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
-    template <typename T>
     inline static constexpr bool not_self =
-        !std::is_same_v<opt_t, remove_cvref_t<T>>;
+        !std::is_same_v<opt_t, detail::remove_cvref_t<T>>;
 
   public:
     constexpr opt_t() = default;
@@ -359,13 +358,29 @@ class opt_t<payload_t, std::enable_if_t<std::is_lvalue_reference_v<payload_t>>>
 
     // allow pointer conversion
     inline constexpr opt_t(pointer_t* p) : OKAYLIB_NOEXCEPT pointer(p) {}
-    // allow reference construction
-    // TODO: does this cover all convertible references, like child class refs?
-    inline constexpr opt_t(payload_t p) : OKAYLIB_NOEXCEPT pointer(&p) {}
+    // allow non-const reference construction
+    inline constexpr opt_t(std::remove_const_t<payload_t> p)
+        : OKAYLIB_NOEXCEPT pointer(std::addressof(p))
+    {
+    }
+
+    // implicit conversion if references are implicitly convertible
+    template <
+        typename other_t,
+        std::enable_if_t<
+            std::is_convertible_v<other_t, payload_t> &&
+                !std::is_same_v<
+                    std::remove_cv_t<std::remove_reference_t<other_t>>, opt_t>,
+            bool> = false>
+    inline constexpr opt_t(const opt_t<other_t>& other)
+        : OKAYLIB_NOEXCEPT pointer(other.as_ptr())
+    {
+    }
 
     inline constexpr payload_t emplace(payload_t other) OKAYLIB_NOEXCEPT
     {
-        pointer = &other;
+        // this function just to keep APIs of optionals as similar as possible
+        pointer = std::addressof(other);
     }
 
     inline constexpr bool has_value() const OKAYLIB_NOEXCEPT
@@ -373,14 +388,15 @@ class opt_t<payload_t, std::enable_if_t<std::is_lvalue_reference_v<payload_t>>>
         return pointer != nullptr;
     }
 
-    inline constexpr operator bool() const OKAYLIB_NOEXCEPT
+    inline constexpr explicit operator bool() const OKAYLIB_NOEXCEPT
     {
         return has_value();
     }
 
-    inline constexpr opt_t& operator=(pointer_t& ref) OKAYLIB_NOEXCEPT
+    inline constexpr opt_t& operator=(payload_t ref) OKAYLIB_NOEXCEPT
     {
-        pointer = &ref;
+        static_assert(std::is_lvalue_reference_v<decltype(ref)>);
+        pointer = std::addressof(ref);
         return *this;
     }
 
@@ -392,14 +408,6 @@ class opt_t<payload_t, std::enable_if_t<std::is_lvalue_reference_v<payload_t>>>
 
     inline constexpr void reset() OKAYLIB_NOEXCEPT { pointer = nullptr; }
 
-    [[nodiscard]] inline constexpr payload_t value() OKAYLIB_NOEXCEPT
-    {
-        if (!has_value()) [[unlikely]] {
-            OK_ABORT();
-        }
-        return *pointer;
-    }
-
     [[nodiscard]] inline constexpr payload_t value() const OKAYLIB_NOEXCEPT
     {
         if (!has_value()) [[unlikely]] {
@@ -408,14 +416,21 @@ class opt_t<payload_t, std::enable_if_t<std::is_lvalue_reference_v<payload_t>>>
         return *pointer;
     }
 
-    [[nodiscard]] inline constexpr bool is_alias(const opt_t& other)
+    [[nodiscard]] inline constexpr bool
+    is_alias_for(const pointer_t& other) OKAYLIB_NOEXCEPT
     {
-        return pointer == other.pointer;
+        return pointer == std::addressof(other);
     }
 
-    [[nodiscard]] inline constexpr bool is_alias(const pointer_t& other)
+    [[nodiscard]] inline constexpr bool
+    is_alias_for(const opt_t& other) OKAYLIB_NOEXCEPT
     {
-        return pointer == &other;
+        return pointer && pointer == other.pointer;
+    }
+
+    [[nodiscard]] inline constexpr pointer_t* as_ptr() const OKAYLIB_NOEXCEPT
+    {
+        return pointer;
     }
 
 #ifdef OKAYLIB_USE_FMT
@@ -450,13 +465,11 @@ class opt_t<
     }
 
     template <typename T>
-    using remove_cvref_t = std::remove_cv_t<std::remove_reference_t<T>>;
-    template <typename T>
     inline static constexpr bool not_self =
-        !std::is_same_v<opt_t, remove_cvref_t<T>>;
+        !std::is_same_v<opt_t, detail::remove_cvref_t<T>>;
     template <typename T>
     inline static constexpr bool not_tag =
-        !std::is_same_v<std::in_place_t, remove_cvref_t<T>>;
+        !std::is_same_v<std::in_place_t, detail::remove_cvref_t<T>>;
 
     template <bool condition>
     using requires_t = std::enable_if_t<condition, bool>;
@@ -483,7 +496,7 @@ class opt_t<
         return data != nullptr;
     }
 
-    inline constexpr operator bool() const OKAYLIB_NOEXCEPT
+    inline constexpr explicit operator bool() const OKAYLIB_NOEXCEPT
     {
         return has_value();
     }

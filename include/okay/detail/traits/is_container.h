@@ -5,7 +5,7 @@
 #include <type_traits>
 
 namespace ok::detail {
-template <typename T, typename Dummy = T> class is_container
+template <typename T, typename Dummy = T> class is_container_t
 {
   public:
     static constexpr bool value = false;
@@ -13,7 +13,7 @@ template <typename T, typename Dummy = T> class is_container
 
 // stolen from https://retroscience.net/cpp-detect-functions-template.html
 template <typename T>
-class is_container<
+class is_container_t<
     T, typename std::enable_if_t<std::is_union_v<T> || std::is_class_v<T>, T>>
 {
     /// test function which always returns false, unless the following
@@ -45,7 +45,7 @@ class is_container<
     static constexpr bool value = has_data && has_size;
 };
 
-template <typename T> constexpr bool is_container_v = is_container<T>::value;
+template <typename T> constexpr bool is_container_v = is_container_t<T>::value;
 
 } // namespace ok::detail
 
