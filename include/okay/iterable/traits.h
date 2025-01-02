@@ -39,20 +39,71 @@ class has_pre_increment_t<T, std::void_t<decltype(++std::declval<T&>())>>
 {};
 
 template <typename, typename = void>
-class has_void_returning_increment_member_t : public std::false_type
+class has_pre_decrement_t : public std::false_type
 {};
 template <typename T>
-class has_void_returning_increment_member_t<
-    T, std::enable_if_t<
-           std::is_same_v<decltype(std::declval<T&>().increment()), void>>>
+class has_pre_decrement_t<T, std::void_t<decltype(--std::declval<T&>())>>
+    : public std::true_type
+{};
+
+template <typename, typename = void>
+class has_addition_with_size_t : public std::false_type
+{};
+template <typename T>
+class has_addition_with_size_t<
+    T, std::void_t<decltype(std::declval<const T&>() + std::size_t{},
+                            std::size_t{} + std::declval<const T&>())>>
+    : public std::true_type
+{};
+
+template <typename, typename = void>
+class has_subtraction_with_size_t : public std::false_type
+{};
+template <typename T>
+class has_subtraction_with_size_t<
+    T, std::void_t<decltype(std::declval<const T&>() - std::size_t{},
+                            std::size_t{} - std::declval<const T&>())>>
+    : public std::true_type
+{};
+
+template <typename, typename = void>
+class has_inplace_addition_with_size_t : public std::false_type
+{};
+template <typename T>
+class has_inplace_addition_with_size_t<
+    T, std::void_t<decltype(std::declval<T&>() += std::size_t{})>>
+    : public std::true_type
+{};
+
+template <typename, typename = void>
+class has_inplace_subtraction_with_size_t : public std::false_type
+{};
+template <typename T>
+class has_inplace_subtraction_with_size_t<
+    T, std::void_t<decltype(std::declval<T&>() -= std::size_t{})>>
+    : public std::true_type
+{};
+
+template <typename, typename = void>
+class has_comparison_operators : public std::false_type
+{};
+template <typename T>
+class has_comparison_operators<
+    T,
+    std::enable_if_t<std::is_same_v<bool, decltype(std::declval<const T&>() <
+                                                   std::declval<const T&>())> &&
+                     std::is_same_v<bool, decltype(std::declval<const T&>() >
+                                                   std::declval<const T&>())> &&
+                     std::is_same_v<bool, decltype(std::declval<const T&>() <=
+                                                   std::declval<const T&>())> &&
+                     std::is_same_v<bool, decltype(std::declval<const T&>() >=
+                                                   std::declval<const T&>())>>>
     : public std::true_type
 {};
 
 template <typename T>
 inline constexpr bool is_potential_cursor =
-    std::is_object_v<T> && !std::is_array_v<T> &&
-    (has_void_returning_increment_member_t<T>::value ||
-     has_pre_increment_t<T>::value);
+    std::is_object_v<T> && !std::is_array_v<T> && has_pre_increment_t<T>::value;
 
 // sentinel traits ------------
 
@@ -284,8 +335,39 @@ inline constexpr bool is_output_cursor_for_iterable =
 /// if it is true then both are valid.
 template <typename maybe_iterable_t, typename maybe_cursor_t>
 inline constexpr bool is_input_or_output_cursor_for_iterable =
-    is_output_cursor_for_iterable<maybe_iterable_t, maybe_cursor_t> ||
-    is_input_cursor_for_iterable<maybe_iterable_t, maybe_cursor_t>;
+    is_input_cursor_for_iterable<maybe_iterable_t, maybe_cursor_t> ||
+    is_output_cursor_for_iterable<maybe_iterable_t, maybe_cursor_t>;
+
+// single pass iterables are by definition the minimum iterable- so any valid
+// input or output iterable is also a single pass iterable.
+template <typename maybe_iterable_t, typename maybe_cursor_t>
+inline constexpr bool is_single_pass_iterable =
+    is_input_or_output_cursor_for_iterable<maybe_iterable_t, maybe_cursor_t>;
+
+// a multi pass iterable is copyable- enabling consumers to pause and come back
+// to copies of iterables at previous positions.
+template <typename maybe_iterable_t, typename maybe_cursor_t>
+inline constexpr bool is_multi_pass_iterable =
+    is_single_pass_iterable<maybe_iterable_t, maybe_cursor_t> &&
+    std::is_copy_constructible_v<maybe_cursor_t> &&
+    std::is_copy_assignable_v<maybe_cursor_t>;
+
+template <typename maybe_iterable_t, typename maybe_cursor_t>
+inline constexpr bool is_bidirectional_iterable =
+    is_multi_pass_iterable<maybe_iterable_t, maybe_cursor_t> &&
+    // can also be decremented
+    has_pre_decrement_t<maybe_cursor_t>::value;
+
+template <typename maybe_iterable_t, typename maybe_cursor_t>
+inline constexpr bool is_random_access_iterable =
+    is_bidirectional_iterable<maybe_iterable_t, maybe_cursor_t> &&
+    // must also be able to do +, +=, -, -=, <, >, <=, >=
+    has_addition_with_size_t<maybe_cursor_t>::value &&
+    has_subtraction_with_size_t<maybe_cursor_t>::value &&
+    has_inplace_addition_with_size_t<maybe_cursor_t>::value &&
+    has_inplace_subtraction_with_size_t<maybe_cursor_t>::value &&
+    has_comparison_operators<maybe_cursor_t>::value;
+
 } // namespace detail
 
 #define OKAYLIB_ITERABLE_INVALID_MSG "Invalid type passed in as iterable."

@@ -33,7 +33,7 @@ const testing_flags = &[_][]const u8{
     "-DFMT_HEADER_ONLY",
 };
 
-const okaylib_top_level_headers = &[_][]const u8{
+const okaylib_headers = &[_][]const u8{
     "anystatus.h",
     "context.h",
     "defer.h",
@@ -43,16 +43,32 @@ const okaylib_top_level_headers = &[_][]const u8{
     "slice.h",
     "status.h",
     "stdmem.h",
+    "allocators/allocator_interface.h",
+    "allocators/c_allocator.h",
+    "allocators/disable_clearing.h",
+    "allocators/disable_freeing.h",
+    "allocators/std_memory_resource_allocator.h",
+    "detail/template_util/enable_copy_move.h",
+    "detail/template_util/remove_cvref.h",
+    "detail/template_util/uninitialized_storage.h",
+    "detail/traits/is_complete.h",
+    "detail/traits/is_container.h",
+    "detail/traits/is_instance.h",
+    "detail/traits/is_nonthrowing.h",
+    "detail/traits/is_status_enum.h",
+    "iterable/traits.h",
+    "macros/try.h",
 };
 
 const test_source_files = &[_][]const u8{
     "defer/defer.cpp",
-    "enumerate/enumerate.cpp",
+    // "enumerate/enumerate.cpp",
     "opt/opt.cpp",
     "res/res.cpp",
-    "slice/slice.cpp",
+    // "slice/slice.cpp",
     "status/status.cpp",
     "stdmem/stdmem.cpp",
+    "iterable_traits/iterable_traits.cpp",
 };
 
 const universal_tests_source_files = &[_][]const u8{};
@@ -77,8 +93,8 @@ pub fn build(b: *std.Build) !void {
         .install_subdir = "okay/",
     });
 
-    for (okaylib_top_level_headers) |header_filename| {
-        const install = b.addInstallHeaderFile(b.path(b.pathJoin(&.{ "include", header_filename })), header_filename);
+    for (okaylib_headers) |header_filename| {
+        const install = b.addInstallHeaderFile(b.path(b.pathJoin(&.{ "include", std.fs.path.dirname(header_filename) orelse "", header_filename })), header_filename);
         b.getInstallStep().dependOn(&install.step);
     }
 

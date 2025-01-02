@@ -1,10 +1,10 @@
 #include "test_header.h"
 // test header must be first
 #include "okay/iterable/traits.h"
-#include "okay/opt.h"
-#include "okay/res.h"
 #include <array>
 #include <vector>
+
+static_assert(ok::detail::is_random_access_iterable<std::vector<int>, size_t>);
 
 class example_iterable_cstyle
 {
@@ -36,6 +36,9 @@ class example_iterable_cstyle
     uint8_t* bytes;
     size_t num_bytes;
 };
+
+static_assert(
+    ok::detail::is_random_access_iterable<example_iterable_cstyle, size_t>);
 
 static_assert(!ok::detail::has_sentinel_type_meta_t<example_iterable_cstyle>{});
 static_assert(std::is_same_v<
