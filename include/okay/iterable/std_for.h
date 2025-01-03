@@ -1,7 +1,7 @@
 #ifndef __OKAYLIB_ITERABLE_FOREACH_H__
 #define __OKAYLIB_ITERABLE_FOREACH_H__
 
-#include "okay/iterable/ranges.h"
+#include "okay/iterable/range_traits.h"
 #include "okay/iterable/traits.h"
 #include <iterator>
 

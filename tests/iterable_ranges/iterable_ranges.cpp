@@ -1,7 +1,7 @@
 #include "test_header.h"
 // test header must be first
-#include "okay/iterable/foreach.h"
-#include "okay/iterable/ranges.h"
+#include "okay/iterable/range_traits.h"
+#include "okay/iterable/std_for.h"
 #include "okay/macros/foreach.h"
 #include "testing_types.h"
 
