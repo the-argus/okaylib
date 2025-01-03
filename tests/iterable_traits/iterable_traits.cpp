@@ -1,41 +1,11 @@
 #include "test_header.h"
 // test header must be first
 #include "okay/iterable/traits.h"
+#include "testing_types.h"
 #include <array>
 #include <vector>
 
 static_assert(ok::detail::is_random_access_iterable<std::vector<int>, size_t>);
-
-class example_iterable_cstyle
-{
-  public:
-    using value_type = uint8_t;
-
-    value_type& operator[](size_t index) OKAYLIB_NOEXCEPT
-    {
-        if (index >= num_bytes)
-            OK_ABORT();
-        return bytes[index];
-    }
-
-    const value_type& operator[](size_t index) const OKAYLIB_NOEXCEPT
-    {
-        return (*const_cast<example_iterable_cstyle*>(this))[index];
-    }
-
-    example_iterable_cstyle() OKAYLIB_NOEXCEPT
-    {
-        bytes = static_cast<uint8_t*>(malloc(100));
-        std::memset(bytes, 0, 100);
-        num_bytes = 100;
-    }
-
-    constexpr size_t size() OKAYLIB_NOEXCEPT { return num_bytes; }
-
-  private:
-    uint8_t* bytes;
-    size_t num_bytes;
-};
 
 static_assert(
     ok::detail::is_random_access_iterable<example_iterable_cstyle, size_t>);
@@ -107,6 +77,21 @@ TEST_SUITE("iterable traits")
                 ok::iter_get_ref(arr, i) = 0;
                 REQUIRE(arr.at(i) == 0);
             }
+        }
+
+        SUBCASE("iter_get_ref multiple cursor types")
+        {
+            example_multiple_cursor_iterable iterable;
+            auto iterator = decltype(iterable)::iterator{.actual = 0};
+            REQUIRE(ok::iter_get_ref(iterable, iterator) ==
+                    example_multiple_cursor_iterable::iterator_cursor_value);
+            // multiple cursor iterable thing should give different values for
+            // access with iterator and access with size_t
+            REQUIRE(ok::iter_get_ref(iterable, iterator) !=
+                    ok::iter_get_ref(iterable, 0));
+            REQUIRE(
+                ok::iter_get_ref(iterable, 0) ==
+                example_multiple_cursor_iterable::initial_size_t_cursor_value);
         }
 
         SUBCASE("iter_set vector")

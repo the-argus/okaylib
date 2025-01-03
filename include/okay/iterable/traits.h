@@ -23,6 +23,14 @@ struct has_value_type_member_t<T, std::void_t<typename T::value_type>>
     : public std::true_type
 {};
 
+template <typename, typename = void>
+struct has_default_cursor_type_member : public std::false_type
+{};
+template <typename T>
+struct has_default_cursor_type_member<
+    T, std::void_t<typename T::default_cursor_type>> : public std::true_type
+{};
+
 template <typename T>
 inline constexpr bool is_potential_iterable =
     std::is_object_v<T> && !std::is_array_v<T> &&
@@ -179,6 +187,46 @@ class have_sentinel_meta_t<
 template <typename T>
 inline constexpr bool is_potential_sentinel =
     std::is_object_v<T> && !std::is_array_v<T>;
+
+/// Get the default cursor type of an iterable. Its ::type member will be the
+/// type, unless no default cursor type can be determined, in which case there
+/// is no ::type member;
+template <typename T, typename = void> struct default_cursor_type_meta_t
+{};
+
+template <typename T>
+struct default_cursor_type_meta_t<
+    T, std::enable_if_t<is_potential_iterable<T> &&
+                        has_default_cursor_type_member<T>::value>>
+{
+    using type = typename T::default_cursor_type;
+    static_assert(is_potential_cursor<type>,
+                  "Default cursor type cannot be used as a cursor with the "
+                  "given iterable type.");
+    static_assert(have_sentinel_meta_t<T, type>::value,
+                  "Default cursor type does not have a corresponding sentinel "
+                  "type with the given iterable.");
+};
+
+template <typename T>
+struct default_cursor_type_meta_t<
+    T, std::enable_if_t<std::is_array_v<T> ||
+                        std::is_array_v<std::remove_reference_t<T>>>>
+{
+    using type = std::size_t;
+};
+
+/// Template to check if a given type has a default cursor type defined- either
+/// through a ::default_cursor_type member type or by being an array.
+template <typename T, typename = void>
+struct has_default_cursor_type_meta_t : public std::false_type
+{};
+
+template <typename T>
+struct has_default_cursor_type_meta_t<
+    T, std::void_t<typename default_cursor_type_meta_t<T>::type>>
+    : public std::true_type
+{};
 
 /// check if a sentinel is valid for an iterable and a cursor- does not actually
 /// check if the iterable and cursor are valid.

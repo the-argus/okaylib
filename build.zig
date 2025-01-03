@@ -69,6 +69,7 @@ const test_source_files = &[_][]const u8{
     "status/status.cpp",
     "stdmem/stdmem.cpp",
     "iterable_traits/iterable_traits.cpp",
+    "iterable_ranges/iterable_ranges.cpp",
 };
 
 const universal_tests_source_files = &[_][]const u8{};
