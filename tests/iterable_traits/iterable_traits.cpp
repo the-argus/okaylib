@@ -79,6 +79,28 @@ TEST_SUITE("iterable traits")
             }
         }
 
+        SUBCASE("iter_get_ref c style array")
+        {
+            int arr[5] = {0, 1, 2, 3, 4};
+
+            const int arr2[5] = {0, 1, 2, 3, 4};
+
+            for (size_t i = 0; i < sizeof(arr) / sizeof(arr[0]); ++i) {
+                REQUIRE(ok::iter_get_ref(arr, i) == i);
+                REQUIRE(ok::iter_get_const_ref(arr, i) == i);
+                static_assert(
+                    std::is_same_v<decltype(ok::iter_get_ref(arr, i)), int&>);
+                ok::iter_get_ref(arr, i) = 0;
+                REQUIRE(arr[i] == 0);
+            }
+
+            for (size_t i = 0; i < sizeof(arr2) / sizeof(arr2[0]); ++i) {
+                const int& iter = ok::iter_get_ref(arr2, i);
+                REQUIRE(ok::iter_get_ref(arr2, i) == i);
+                REQUIRE(ok::iter_get_ref(arr2, i) == iter);
+            }
+        }
+
         SUBCASE("iter_get_ref multiple cursor types")
         {
             example_multiple_cursor_iterable iterable;
@@ -135,6 +157,19 @@ TEST_SUITE("iterable traits")
             // is iota
             for (size_t i = 0; i < arr.size(); ++i) {
                 REQUIRE(arr.at(i) == i);
+            }
+        }
+
+        SUBCASE("iter_set c-style array")
+        {
+            int arr[50];
+            for (size_t i = 0; i < 50; ++i) {
+                ok::iter_set(arr, i, i);
+                REQUIRE(arr[i] == i);
+            }
+            // is iota
+            for (size_t i = 0; i < 50; ++i) {
+                REQUIRE(arr[i] == i);
             }
         }
 

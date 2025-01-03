@@ -95,7 +95,7 @@ class example_iterable_cstyle
         num_bytes = 100;
     }
 
-    constexpr size_t size() OKAYLIB_NOEXCEPT { return num_bytes; }
+    constexpr size_t size() const OKAYLIB_NOEXCEPT { return num_bytes; }
 
   private:
     uint8_t* bytes;

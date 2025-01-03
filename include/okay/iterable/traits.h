@@ -1,6 +1,7 @@
 #ifndef __OKAYLIB_ITERABLE_TRAITS_H__
 #define __OKAYLIB_ITERABLE_TRAITS_H__
 
+#include "okay/detail/template_util/c_array_value_type.h"
 #include <type_traits>
 #include <utility>
 
@@ -23,6 +24,41 @@ struct has_value_type_member_t<T, std::void_t<typename T::value_type>>
     : public std::true_type
 {};
 
+template <typename I, typename = void> struct iterable_value_type_meta_t
+{};
+
+template <typename I>
+struct iterable_value_type_meta_t<I, std::void_t<c_array_value_type<I>>>
+{
+    using type = c_array_value_type<I>;
+};
+
+template <typename I>
+struct iterable_value_type_meta_t<
+    I, std::enable_if_t<has_value_type_member_t<I>::value>>
+{
+    using type = typename I::value_type;
+};
+
+/// Template to check if I has ::value_type or is a cstyle array. if true,
+/// its valid to use iterable_value_type_meta_t<I>
+template <typename I, typename = void>
+struct iterable_has_any_value_type_meta_t : public std::false_type
+{};
+template <typename I>
+struct iterable_has_any_value_type_meta_t<
+    I, std::void_t<typename iterable_value_type_meta_t<I>::type>>
+    : public std::true_type
+{};
+
+template <typename I>
+inline constexpr bool iterable_has_any_value_type =
+    iterable_has_any_value_type_meta_t<I>::value;
+
+/// It is only valid to use this if iterable_has_any_value_type is true
+template <typename I>
+using iterable_value_type = typename iterable_value_type_meta_t<I>::type;
+
 template <typename, typename = void>
 struct has_default_cursor_type_member : public std::false_type
 {};
@@ -33,8 +69,8 @@ struct has_default_cursor_type_member<
 
 template <typename T>
 inline constexpr bool is_potential_iterable =
-    std::is_object_v<T> && !std::is_array_v<T> &&
-    has_value_type_member_t<T>::value;
+    (std::is_object_v<T> || std::is_array_v<T>) &&
+    iterable_has_any_value_type<T>;
 
 // cursor traits ----------------
 
@@ -251,7 +287,7 @@ class iterable_has_iter_get_member_t<
     std::enable_if_t<
         std::is_same_v<decltype(std::declval<const iterable_t&>().iter_get(
                            std::declval<const cursor_t&>())),
-                       typename iterable_t::value_type>>>
+                       typename ok::detail::iterable_value_type<iterable_t>>>>
     : public std::true_type
 {};
 
@@ -266,11 +302,12 @@ class iterable_has_iter_set_member_t : public std::false_type
 template <typename iterable_t, typename cursor_t>
 class iterable_has_iter_set_member_t<
     iterable_t, cursor_t,
-    std::enable_if_t<
-        std::is_same_v<decltype(std::declval<iterable_t&>().iter_set(
-                           std::declval<const cursor_t&>(),
-                           std::declval<typename iterable_t::value_type&&>())),
-                       void>>> : std::true_type
+    std::enable_if_t<std::is_same_v<
+        decltype(std::declval<iterable_t&>().iter_set(
+            std::declval<const cursor_t&>(),
+            std::declval<
+                typename ok::detail::iterable_value_type<iterable_t>&&>())),
+        void>>> : std::true_type
 {};
 
 // template to check if iterable has an `interable_t::value_type` member type,
@@ -287,9 +324,14 @@ class iterable_has_iter_get_ref_member_t<
     std::enable_if_t<
         std::is_same_v<decltype(std::declval<iterable_t&>().iter_get_ref(
                            std::declval<const cursor_t&>())),
-                       typename iterable_t::value_type&>>>
+                       typename ok::detail::iterable_value_type<iterable_t>&>>>
     : public std::true_type
 {};
+
+template <typename T>
+using is_nonconst_c_array_t =
+    std::conditional_t<std::is_array_v<T> && !std::is_const_v<T>,
+                       std::true_type, std::false_type>;
 
 // template to check if iterable has an `interable_t::value_type` member type,
 // and defines a `value_type& operator[](const cursor_t&);`. Functionally
@@ -297,7 +339,8 @@ class iterable_has_iter_get_ref_member_t<
 // STL containers. Precondition: iterable_t and cursor_t are valid iterable and
 // cursor pair (have a sentinel)
 template <typename iterable_t, typename cursor_t, typename = void>
-class iterable_has_iter_get_ref_array_operator_t : public std::false_type
+class iterable_has_iter_get_ref_array_operator_t
+    : public is_nonconst_c_array_t<iterable_t>
 {};
 
 template <typename iterable_t, typename cursor_t>
@@ -305,7 +348,8 @@ class iterable_has_iter_get_ref_array_operator_t<
     iterable_t, cursor_t,
     std::enable_if_t<std::is_same_v<
         decltype(std::declval<iterable_t&>()[std::declval<const cursor_t&>()]),
-        typename iterable_t::value_type&>>> : public std::true_type
+        typename ok::detail::iterable_value_type<iterable_t>&>>>
+    : public std::true_type
 {};
 
 // template to check if iterable has an `interable_t::value_type` member type,
@@ -319,10 +363,10 @@ class iterable_has_iter_get_ref_const_member_t : public std::false_type
 template <typename iterable_t, typename cursor_t>
 class iterable_has_iter_get_ref_const_member_t<
     iterable_t, cursor_t,
-    std::enable_if_t<
-        std::is_same_v<decltype(std::declval<const iterable_t&>().iter_get_ref(
-                           std::declval<const cursor_t&>())),
-                       const typename iterable_t::value_type&>>>
+    std::enable_if_t<std::is_same_v<
+        decltype(std::declval<const iterable_t&>().iter_get_ref(
+            std::declval<const cursor_t&>())),
+        const typename ok::detail::iterable_value_type<iterable_t>&>>>
     : public std::true_type
 {};
 
@@ -332,16 +376,17 @@ class iterable_has_iter_get_ref_const_member_t<
 // compatibility with STL containers. Precondition: iterable_t and cursor_t are
 // valid iterable and cursor pair (have a sentinel)
 template <typename iterable_t, typename cursor_t, typename = void>
-class iterable_has_iter_get_ref_const_array_operator_t : public std::false_type
+class iterable_has_iter_get_ref_const_array_operator_t
+    : public std::is_array<iterable_t>
 {};
 
 template <typename iterable_t, typename cursor_t>
 class iterable_has_iter_get_ref_const_array_operator_t<
     iterable_t, cursor_t,
-    std::enable_if_t<
-        std::is_same_v<decltype(std::declval<const iterable_t&>()
-                                    [std::declval<const cursor_t&>()]),
-                       const typename iterable_t::value_type&>>>
+    std::enable_if_t<std::is_same_v<
+        decltype(std::declval<
+                 const iterable_t&>()[std::declval<const cursor_t&>()]),
+        const typename ok::detail::iterable_value_type<iterable_t>&>>>
     : public std::true_type
 {};
 
@@ -522,10 +567,10 @@ struct iter_get_temporary_ref_meta_t
 template <typename iterable_t, typename cursor_t>
 struct iter_get_temporary_ref_meta_t<
     iterable_t, cursor_t,
-    std::enable_if_t<detail::has_value_type_member_t<iterable_t>::value &&
+    std::enable_if_t<detail::iterable_has_any_value_type<iterable_t> &&
                      !detail::iterable_can_get_const_ref<iterable_t, cursor_t>>>
 {
-    using type = typename iterable_t::value_type;
+    using type = typename detail::iterable_value_type<iterable_t>;
     static inline constexpr type call(const iterable_t& iterable,
                                       const cursor_t& cursor) OKAYLIB_NOEXCEPT
     {
@@ -536,10 +581,10 @@ struct iter_get_temporary_ref_meta_t<
 template <typename iterable_t, typename cursor_t>
 struct iter_get_temporary_ref_meta_t<
     iterable_t, cursor_t,
-    std::enable_if_t<detail::has_value_type_member_t<iterable_t>::value &&
+    std::enable_if_t<detail::iterable_has_any_value_type<iterable_t> &&
                      detail::iterable_can_get_const_ref<iterable_t, cursor_t>>>
 {
-    using type = const typename iterable_t::value_type&;
+    using type = const typename detail::iterable_value_type<iterable_t>&;
     static inline constexpr type call(const iterable_t& iterable,
                                       const cursor_t& cursor) OKAYLIB_NOEXCEPT
     {
@@ -583,29 +628,34 @@ template <typename iterable_t, typename cursor_t>
 inline constexpr auto& iter_get_ref(iterable_t& iterable,
                                     const cursor_t& cursor) OKAYLIB_NOEXCEPT
 {
-    static_assert(detail::is_potential_iterable<iterable_t>,
-                  OKAYLIB_ITERABLE_INVALID_MSG);
-    static_assert(detail::is_potential_cursor<cursor_t>,
-                  OKAYLIB_CURSOR_INVALID_MSG);
-    static_assert(detail::have_sentinel_meta_t<iterable_t, cursor_t>::value,
-                  OKAYLIB_IC_PAIR_INVALID_MSG);
-    static_assert(detail::iterable_can_get_mutable_ref<iterable_t, cursor_t>,
-                  "Attempt to get mutable reference from iterable and cursor "
-                  "which do not support mutable dereference.");
-    if constexpr (detail::iterable_has_iter_get_ref_member_t<iterable_t,
-                                                             cursor_t>::value) {
-        return iterable.get_ref(cursor);
+    if constexpr (std::is_const_v<iterable_t>) {
+        return iter_get_const_ref(iterable, cursor);
     } else {
-        static_assert(detail::iterable_has_iter_get_ref_array_operator_t<
-                      iterable_t, cursor_t>::value);
-        return iterable[cursor];
+        static_assert(detail::is_potential_iterable<iterable_t>,
+                      OKAYLIB_ITERABLE_INVALID_MSG);
+        static_assert(detail::is_potential_cursor<cursor_t>,
+                      OKAYLIB_CURSOR_INVALID_MSG);
+        static_assert(detail::have_sentinel_meta_t<iterable_t, cursor_t>::value,
+                      OKAYLIB_IC_PAIR_INVALID_MSG);
+        static_assert(
+            detail::iterable_can_get_mutable_ref<iterable_t, cursor_t>,
+            "Attempt to get mutable reference from iterable and cursor "
+            "which do not support mutable dereference.");
+        if constexpr (detail::iterable_has_iter_get_ref_member_t<
+                          iterable_t, cursor_t>::value) {
+            return iterable.get_ref(cursor);
+        } else {
+            static_assert(detail::iterable_has_iter_get_ref_array_operator_t<
+                          iterable_t, cursor_t>::value);
+            return iterable[cursor];
+        }
     }
 }
 
 template <typename iterable_t, typename cursor_t>
-inline constexpr void
-iter_set(iterable_t& iterable, const cursor_t& cursor,
-         typename iterable_t::value_type&& value) OKAYLIB_NOEXCEPT
+inline constexpr void iter_set(
+    iterable_t& iterable, const cursor_t& cursor,
+    typename detail::iterable_value_type<iterable_t>&& value) OKAYLIB_NOEXCEPT
 {
     static_assert(detail::is_potential_iterable<iterable_t>,
                   OKAYLIB_ITERABLE_INVALID_MSG);
