@@ -214,9 +214,9 @@ struct fmt::formatter<ok::res_t<payload_t, enum_t>>
                 return fmt::format_to(ctx.out(), "{}",
                                       result.get_error_payload());
             } else {
-                using eint = typename res_template_t::enum_int_t;
+                using enum_int_t = typename res_template_t::enum_int_t;
                 return fmt::format_to(ctx.out(), "[res_t::statuscode::{}]",
-                                      eint(result.get_error_payload()));
+                                      enum_int_t(result.get_error_payload()));
             }
         }
     }

@@ -1,38 +1,24 @@
 #include "test_header.h"
 // test header must be first
-#include "okay/iterable/traits.h"
+#include "okay/iterable/iterable.h"
 #include "testing_types.h"
 #include <array>
 #include <vector>
 
-static_assert(ok::detail::is_random_access_iterable<std::vector<int>, size_t>);
-
+static_assert(ok::detail::is_output_iterable_v<example_iterable_cstyle>);
+static_assert(ok::detail::is_output_iterable_v<example_iterable_cstyle_child>);
+static_assert(ok::detail::is_random_access_iterable_v<example_iterable_cstyle>);
+static_assert(ok::detail::is_valid_cursor_v<size_t>);
+static_assert(ok::is_iterable_v<example_iterable_cstyle>);
+static_assert(ok::detail::is_valid_sentinel_v<size_t, size_t>);
+static_assert(ok::detail::iterable_has_get_ref_v<example_iterable_cstyle>);
 static_assert(
-    ok::detail::is_random_access_iterable<example_iterable_cstyle, size_t>);
+    ok::detail::iterable_has_get_ref_const_v<example_iterable_cstyle>);
 
-static_assert(!ok::detail::has_sentinel_type_meta_t<example_iterable_cstyle>{});
-static_assert(std::is_same_v<
-              size_t, ok::detail::sentinel_type_for_iterable_and_cursor_meta_t<
-                          example_iterable_cstyle, size_t>::type>);
-static_assert(ok::detail::is_potential_cursor<size_t>);
-static_assert(ok::detail::is_potential_iterable<example_iterable_cstyle>);
+static_assert(ok::detail::is_random_access_iterable_v<std::vector<int>>);
 static_assert(
-    ok::detail::have_sentinel_meta_t<example_iterable_cstyle, size_t>::value);
-static_assert(ok::detail::iterable_has_iter_get_ref_array_operator_t<
-              example_iterable_cstyle, size_t>{});
-static_assert(!ok::detail::iterable_has_iter_get_ref_member_t<
-              example_iterable_cstyle, size_t>{});
-static_assert(ok::detail::is_input_or_output_cursor_for_iterable<
-              example_iterable_cstyle, size_t>);
-// implicitly convertible indices should work (depends on compiler options
-// though?)
-static_assert(ok::detail::is_input_or_output_cursor_for_iterable<
-              example_iterable_cstyle, int>);
-std::vector<int>::value_type test = 1;
-static_assert(std::is_same_v<decltype(test), int>);
-
-static_assert(ok::detail::is_input_or_output_cursor_for_iterable<
-              std::vector<int>, size_t>);
+    std::is_same_v<std::vector<int>::value_type,
+                   ok::iterable_definition<std::vector<int>>::value_type>);
 
 using namespace ok;
 
@@ -87,7 +73,6 @@ TEST_SUITE("iterable traits")
 
             for (size_t i = 0; i < sizeof(arr) / sizeof(arr[0]); ++i) {
                 REQUIRE(ok::iter_get_ref(arr, i) == i);
-                REQUIRE(ok::iter_get_const_ref(arr, i) == i);
                 static_assert(
                     std::is_same_v<decltype(ok::iter_get_ref(arr, i)), int&>);
                 ok::iter_get_ref(arr, i) = 0;
@@ -99,21 +84,6 @@ TEST_SUITE("iterable traits")
                 REQUIRE(ok::iter_get_ref(arr2, i) == i);
                 REQUIRE(ok::iter_get_ref(arr2, i) == iter);
             }
-        }
-
-        SUBCASE("iter_get_ref multiple cursor types")
-        {
-            example_multiple_cursor_iterable iterable;
-            auto iterator = decltype(iterable)::iterator{.actual = 0};
-            REQUIRE(ok::iter_get_ref(iterable, iterator) ==
-                    example_multiple_cursor_iterable::iterator_cursor_value);
-            // multiple cursor iterable thing should give different values for
-            // access with iterator and access with size_t
-            REQUIRE(ok::iter_get_ref(iterable, iterator) !=
-                    ok::iter_get_ref(iterable, 0));
-            REQUIRE(
-                ok::iter_get_ref(iterable, 0) ==
-                example_multiple_cursor_iterable::initial_size_t_cursor_value);
         }
 
         SUBCASE("iter_set vector")
@@ -181,8 +151,7 @@ TEST_SUITE("iterable traits")
                 const int& tref = ok::iter_get_temporary_ref(ints, i);
                 REQUIRE(tref == i);
                 static_assert(
-                    detail::iterable_can_get_const_ref<std::vector<int>,
-                                                       size_t>);
+                    detail::iterable_has_get_ref_const_v<std::vector<int>>);
                 static_assert(std::is_same_v<
                                   decltype(ok::iter_get_temporary_ref(ints, i)),
                                   const int&>,
@@ -199,9 +168,6 @@ TEST_SUITE("iterable traits")
                 const int& tref = ok::iter_get_temporary_ref(bytes, i);
                 REQUIRE(tref == 0); // example iterable inits to 0
                 static_assert(
-                    detail::iterable_can_get_const_ref<std::vector<int>,
-                                                       size_t>);
-                static_assert(
                     std::is_same_v<decltype(ok::iter_get_temporary_ref(bytes,
                                                                        i)),
                                    const uint8_t&>,
@@ -217,9 +183,6 @@ TEST_SUITE("iterable traits")
             for (size_t i = 0; i < ints.size(); ++i) {
                 const int& tref = ok::iter_get_temporary_ref(ints, i);
                 REQUIRE(tref == i);
-                static_assert(
-                    detail::iterable_can_get_const_ref<std::vector<int>,
-                                                       size_t>);
                 static_assert(std::is_same_v<
                                   decltype(ok::iter_get_temporary_ref(ints, i)),
                                   const int&>,
@@ -237,7 +200,7 @@ TEST_SUITE("iterable traits")
 
             for (size_t i = 0; i < ints.size(); ++i) {
                 int copied = ok::iter_copyout(ints, i);
-                REQUIRE(copied == ok::iter_get_const_ref(ints, i));
+                REQUIRE(copied == ok::iter_get_ref(ints, i));
                 REQUIRE(copied == i);
             }
         }
@@ -251,7 +214,7 @@ TEST_SUITE("iterable traits")
 
             for (size_t i = 0; i < bytes.size(); ++i) {
                 int copied = ok::iter_copyout(bytes, i);
-                REQUIRE(copied == ok::iter_get_const_ref(bytes, i));
+                REQUIRE(copied == ok::iter_get_ref(bytes, i));
                 REQUIRE(copied == i);
             }
         }

@@ -1,18 +1,24 @@
-#ifndef __OKAYLIB_ITERABLE_FOREACH_H__
-#define __OKAYLIB_ITERABLE_FOREACH_H__
+#ifndef __OKAYLIB_ITERABLE_STD_FOR_H__
+#define __OKAYLIB_ITERABLE_STD_FOR_H__
 
-#include "okay/iterable/range_traits.h"
-#include "okay/iterable/traits.h"
+#include "okay/iterable/iterable.h"
 #include <iterator>
 
 namespace ok {
 template <typename T> class std_for
 {
   public:
-    using cursor_t = typename detail::default_cursor_type_meta_t<T>::type;
-    using sentinel_t =
-        typename ok::detail::sentinel_type_for_iterable_and_cursor_meta_t<
-            std::decay_t<T>, cursor_t>::type;
+    static_assert(is_iterable_v<T>, "Cannot wrap given type for a standard for "
+                                    "loop- it is not a valid iterable.");
+
+    static_assert(
+        detail::iterable_has_get_ref_v<T> ||
+            detail::iterable_has_get_ref_const_v<T>,
+        "Cannot wrap type which does not provide any get_ref() functions for "
+        "standard for loop, which requires dereferencing.");
+
+    using cursor_t = detail::cursor_type_unchecked_for<T>;
+    using sentinel_t = detail::sentinel_type_unchecked_for<T>;
 
     // TODO: support this? not sure if its possible, but as long as this type
     // is only for use in foreach loops it may be possible through hacks
@@ -31,7 +37,7 @@ template <typename T> class std_for
     {
         using iterator_category = std::forward_iterator_tag;
         using difference_type = std::ptrdiff_t;
-        using value_type = detail::iterable_value_type<T>;
+        using value_type = detail::value_type_unchecked_for<T>;
         using pointer = value_type*;
         using reference = value_type&;
 
@@ -86,7 +92,7 @@ template <typename T> class std_for
     {
         using iterator_category = std::forward_iterator_tag;
         using difference_type = std::ptrdiff_t;
-        using value_type = const detail::iterable_value_type<T>;
+        using value_type = const detail::value_type_unchecked_for<T>;
         using pointer = const value_type*;
         using reference = const value_type&;
 
@@ -97,12 +103,12 @@ template <typename T> class std_for
 
         inline constexpr reference operator*() const OKAYLIB_NOEXCEPT
         {
-            return ok::iter_get_const_ref(parent, cursor);
+            return ok::iter_get_ref(parent, cursor);
         }
 
         inline constexpr pointer operator->() OKAYLIB_NOEXCEPT
         {
-            return std::addressof(ok::iter_get_const_ref(parent, cursor));
+            return std::addressof(ok::iter_get_ref(parent, cursor));
         }
 
         // Prefix increment

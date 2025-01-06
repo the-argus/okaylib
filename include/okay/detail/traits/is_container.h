@@ -5,47 +5,32 @@
 #include <type_traits>
 
 namespace ok::detail {
-template <typename T, typename Dummy = T> class is_container_t
-{
-  public:
-    static constexpr bool value = false;
-};
 
-// stolen from https://retroscience.net/cpp-detect-functions-template.html
+template <typename T, typename = void>
+struct has_size_member_meta_t : std::false_type
+{};
+
 template <typename T>
-class is_container_t<
-    T, typename std::enable_if_t<std::is_union_v<T> || std::is_class_v<T>, T>>
-{
-    /// test function which always returns false, unless the following
-    /// specialization is matched
-    template <typename> static std::false_type test(...);
+struct has_size_member_meta_t<
+    T, std::enable_if_t<
+           std::is_same_v<size_t, decltype(std::declval<const T&>().size())>>>
+    : std::true_type
+{};
 
-    /// Function signature template specialization which takes exactly one int
-    template <typename U>
-    static auto test(int) -> decltype(std::declval<U>().data(),
-                                      std::true_type());
+template <typename T, typename = void>
+struct has_data_member_meta_t : std::false_type
+{};
 
-    template <typename> static std::false_type size_test(...);
+template <typename T>
+struct has_data_member_meta_t<
+    T, std::enable_if_t<
+           std::is_pointer_v<decltype(std::declval<const T&>().data())>>>
+    : std::true_type
+{};
 
-    template <typename U>
-    static auto size_test(int) -> decltype(std::declval<U>().size(),
-                                           std::true_type());
-
-    static constexpr bool has_data =
-        std::is_same_v<decltype(test<T>(0)), std::true_type>
-        //&& std::is_pointer_v<decltype(std::declval<T>().data())>
-        ;
-
-    static constexpr bool has_size =
-        std::is_same_v<decltype(size_test<T>(0)), std::true_type>
-        //&& std::is_same_v<decltype(std::declval<T>().size()), size_t>
-        ;
-
-  public:
-    static constexpr bool value = has_data && has_size;
-};
-
-template <typename T> constexpr bool is_container_v = is_container_t<T>::value;
+template <typename T>
+inline constexpr bool is_container_v =
+    has_size_member_meta_t<T>::value && has_data_member_meta_t<T>::value;
 
 } // namespace ok::detail
 
