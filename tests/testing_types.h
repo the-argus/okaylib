@@ -75,6 +75,8 @@ class example_iterable_cstyle
 {
   public:
     using value_type = uint8_t;
+    // propagate our iterable definition to child  classes
+    using inherited_iterable_type = example_iterable_cstyle;
 
     value_type& operator[](size_t index) OKAYLIB_NOEXCEPT
     {
@@ -107,40 +109,35 @@ class example_iterable_cstyle_child : public example_iterable_cstyle
 
 // implement iterable trait for example_iterable_cstyle
 namespace ok {
-// TODO: enable_if here are a bit much to remember- can
-// there just be a macro for this? or some shorthand function
-template <typename cstyle_iterable>
-struct iterable_definition<
-    cstyle_iterable, std::enable_if_t<std::is_base_of_v<example_iterable_cstyle,
-                                                        cstyle_iterable>>>
+template <> struct iterable_definition<example_iterable_cstyle>
 {
-    using value_type = typename cstyle_iterable::value_type;
+    using value_type = typename example_iterable_cstyle::value_type;
 
-    inline static constexpr size_t size(const cstyle_iterable& i)
+    inline static constexpr size_t size(const example_iterable_cstyle& i)
     {
         return i.size();
     }
 
-    inline static constexpr value_type& get_ref(cstyle_iterable& i,
+    inline static constexpr value_type& get_ref(example_iterable_cstyle& i,
                                                 size_t c) OKAYLIB_NOEXCEPT
     {
         return i[c];
     }
 
-    inline static constexpr const value_type& get_ref(const cstyle_iterable& i,
-                                                      size_t c) OKAYLIB_NOEXCEPT
+    inline static constexpr const value_type&
+    get_ref(const example_iterable_cstyle& i, size_t c) OKAYLIB_NOEXCEPT
     {
         return i[c];
     }
 
     inline static constexpr size_t
-    begin(const cstyle_iterable&) OKAYLIB_NOEXCEPT
+    begin(const example_iterable_cstyle&) OKAYLIB_NOEXCEPT
     {
         return 0;
     }
 
     inline static constexpr size_t
-    end(const cstyle_iterable& i) OKAYLIB_NOEXCEPT
+    end(const example_iterable_cstyle& i) OKAYLIB_NOEXCEPT
     {
         return i.size();
     }
