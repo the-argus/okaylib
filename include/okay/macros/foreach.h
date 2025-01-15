@@ -39,7 +39,9 @@ get_best(qualified_iterable_t& i,
     auto&& __OK_L(__LINE__, iterable) = _iterable;                            \
     for (bool _run = true; _run; _run = false)                                \
         for (auto cursor = ok::begin(__OK_L(__LINE__, iterable));             \
-             ok::is_inbounds(__OK_L(__LINE__, iterable), cursor); ++cursor)   \
+             ok::is_inbounds(__OK_L(__LINE__, iterable), cursor,              \
+                             ok::prefer_after_bounds_check_t{});              \
+             ++cursor)                                                        \
             if (1) {                                                          \
                 _run = true;                                                  \
                 goto __OK_L(__LINE__, body);                                  \
