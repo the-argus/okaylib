@@ -584,31 +584,38 @@ class iterable_for : public detail::iterable_definition_inner<T>
 };
 
 namespace detail {
+template <typename T, typename = void> struct is_iterable : std::false_type
+{};
 /// Same as the checks performed in `iterator_for`
 template <typename T>
-constexpr bool is_iterable_impl_v =
-    is_complete<T> && has_iterable_definition<T>::value &&
-    has_value_type<iterable_definition_inner<T>>::value &&
-    is_valid_value_type_v<value_type_unchecked_for<T>> &&
-    iterable_has_begin_v<T> &&
-    is_valid_cursor_v<cursor_type_unchecked_for<T>> &&
-    (iterable_has_is_inbounds_v<T> != (iterable_has_is_after_bounds_v<T> &&
-                                       iterable_has_is_before_bounds_v<T>)) &&
-    iterable_has_is_after_bounds_v<T> == iterable_has_is_before_bounds_v<T> &&
-    (iterable_has_size_v<T> || iterable_marked_infinite_v<T> ||
-     iterable_marked_finite_v<T>) &&
-    ((int(iterable_has_size_v<T>) + int(iterable_marked_infinite_v<T>) +
-      int(iterable_marked_finite_v<T>)) == 1) &&
-    is_input_or_output_iterable_v<T> &&
-    (iterable_has_get_v<T> !=
-     (iterable_has_get_ref_v<T> || iterable_has_get_ref_const_v<T>));
+struct is_iterable<
+    T, std::enable_if_t<
+           is_complete<T> && has_iterable_definition<T>::value &&
+           has_value_type<iterable_definition_inner<T>>::value &&
+           is_valid_value_type_v<value_type_unchecked_for<T>> &&
+           iterable_has_begin_v<T> &&
+           is_valid_cursor_v<cursor_type_unchecked_for<T>> &&
+           (iterable_has_is_inbounds_v<T> !=
+            (iterable_has_is_after_bounds_v<T> &&
+             iterable_has_is_before_bounds_v<T>)) &&
+           iterable_has_is_after_bounds_v<T> ==
+               iterable_has_is_before_bounds_v<T> &&
+           (iterable_has_size_v<T> || iterable_marked_infinite_v<T> ||
+            iterable_marked_finite_v<T>) &&
+           ((int(iterable_has_size_v<T>) + int(iterable_marked_infinite_v<T>) +
+             int(iterable_marked_finite_v<T>)) == 1) &&
+           is_input_or_output_iterable_v<T> &&
+           (iterable_has_get_v<T> !=
+            (iterable_has_get_ref_v<T> || iterable_has_get_ref_const_v<T>))>>
+    : std::true_type
+{};
 } // namespace detail
 
 /// Check if a type has an iterable_definition which is valid, enabling a form
 /// of either input or output iteration.
 template <typename T>
 constexpr bool is_iterable_v =
-    detail::is_iterable_impl_v<detail::remove_cvref_t<T>>;
+    detail::is_iterable<detail::remove_cvref_t<T>>::value;
 
 template <typename T>
 using value_type_for = typename iterable_for<T>::value_type;

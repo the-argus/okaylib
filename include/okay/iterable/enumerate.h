@@ -3,6 +3,7 @@
 
 #include "okay/detail/ok_assert.h"
 #include "okay/iterable/iterable.h"
+#include "okay/iterable/ranges.h"
 
 namespace ok {
 
@@ -15,7 +16,7 @@ struct enumerated_iterable_definition_base_t;
 template <typename iterable_t> struct enumerated_ref_t
 {
     constexpr explicit enumerated_ref_t(iterable_t& iterable)
-        : m_iterable(std::forward<iterable_t&>(iterable)) {};
+        : m_iterable(iterable) {};
 
     friend class enumerated_iterable_definition_base_t<enumerated_ref_t,
                                                        iterable_t>;
@@ -39,7 +40,7 @@ template <typename iterable_t> struct enumerated_ref_t
 template <typename iterable_t> struct enumerated_owning_t
 {
     constexpr explicit enumerated_owning_t(iterable_t&& iterable)
-        : m_iterable(std::forward<iterable_t&&>(iterable)) {};
+        : m_iterable(std::forward<iterable_t>(iterable)) {};
 
     friend class enumerated_iterable_definition_base_t<enumerated_owning_t,
                                                        iterable_t>;
@@ -323,12 +324,29 @@ struct enumerate_fn_t
     constexpr decltype(auto)
     operator()(iterable_t&& item) const OKAYLIB_NOEXCEPT
     {
-        return enumerated_owning_t{std::forward<iterable_t&&>(item)};
+        return enumerated_owning_t{std::forward<iterable_t>(item)};
     }
 };
+
+struct enumerate_fn_range_adaptor_wrapper_t
+{
+    template <typename iterable_t>
+    constexpr decltype(auto)
+    operator()(iterable_t&& iterable) const OKAYLIB_NOEXCEPT
+    {
+        static_assert(is_iterable_v<iterable_t>,
+                      "Cannot enumerate given type- it is not iterable.");
+        return enumerate_fn_t{}(std::forward<iterable_t>(iterable));
+    }
+};
+
 } // namespace detail
 
-constexpr detail::enumerate_fn_t enumerate{};
+// constexpr detail::enumerate_fn_t enumerate{};
+
+constexpr detail::range_adaptor_closure_t<
+    detail::enumerate_fn_range_adaptor_wrapper_t>
+    enumerate;
 
 } // namespace ok
 

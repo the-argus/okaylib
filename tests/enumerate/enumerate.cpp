@@ -18,7 +18,7 @@ TEST_SUITE("enumerate")
             std::fill(ints.begin(), ints.end(), 0);
 
             size_t i = 0;
-            ok_foreach(ok_pair(item, index), enumerate(ints))
+            ok_foreach(ok_pair(item, index), ints | enumerate)
             {
                 static_assert(std::is_same_v<decltype(item), int&>);
                 static_assert(std::is_same_v<decltype(index), const size_t>);
@@ -39,7 +39,7 @@ TEST_SUITE("enumerate")
             }
 
             size_t i = 0;
-            ok_foreach(ok_pair(item, index), enumerate(mem))
+            ok_foreach(ok_pair(item, index), mem | enumerate)
             {
                 REQUIRE(item == 0);
                 REQUIRE(index == i);
@@ -56,7 +56,7 @@ TEST_SUITE("enumerate")
             }
 
             size_t i = 0;
-            ok_foreach(ok_pair(item, index), enumerate(std::move(mem)))
+            ok_foreach(ok_pair(item, index), std::move(mem) | enumerate)
             {
                 REQUIRE(item == 0);
                 REQUIRE(index == i);
@@ -74,7 +74,7 @@ TEST_SUITE("enumerate")
 
             size_t i = 0;
             slice_t<uint8_t> test(mem);
-            ok_foreach(ok_pair(item, index), enumerate(test))
+            ok_foreach(ok_pair(item, index), test | enumerate)
             {
                 REQUIRE(item == 0);
                 REQUIRE(index == i);
@@ -98,7 +98,7 @@ TEST_SUITE("enumerate")
             const std::vector<Test>& memref = mem;
 
             size_t i = 0;
-            ok_foreach(ok_pair(item, index), enumerate(memref))
+            ok_foreach(ok_pair(item, index), memref | enumerate)
             {
                 static_assert(std::is_same_v<decltype(item), const Test&>);
                 REQUIRE(item.i == 0);

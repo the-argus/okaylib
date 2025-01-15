@@ -39,9 +39,7 @@ template <typename callable_t> class defer_t
                   "not return void.");
 
   public:
-    explicit defer_t(callable_t&& f) : statement(std::forward<callable_t&&>(f))
-    {
-    }
+    explicit defer_t(callable_t&& f) : statement(std::forward<callable_t>(f)) {}
 
     // you cannot move or copy or really mess with a defer at all
     defer_t& operator=(const defer_t&) = delete;
