@@ -16,6 +16,11 @@ TEST_SUITE("defer")
             defer_t([] {});
         }
 
+        SUBCASE("maydefer that does nothing")
+        {
+            maydefer_t([] {});
+        }
+
         SUBCASE("defer that adds to number")
         {
             int counter = 0;
@@ -24,8 +29,22 @@ TEST_SUITE("defer")
                 defer_t set_to_zero([&counter] { counter = 0; });
                 for (size_t i = 0; i < 10; ++i) {
                     defer_t increment([&counter] { counter++; });
-                    static_assert(sizeof(increment) == sizeof(void*),
-                                  "Defer object not the same size as pointer");
+                    REQUIRE(counter == i);
+                }
+            }
+
+            REQUIRE(counter == 0);
+        }
+
+        SUBCASE("maydefer that adds to number")
+        {
+            int counter = 0;
+
+            {
+                maydefer_t set_to_zero([&counter] { counter = 0; });
+
+                for (size_t i = 0; i < 10; ++i) {
+                    maydefer_t increment([&counter] { counter++; });
                     REQUIRE(counter == i);
                 }
             }
@@ -61,13 +80,13 @@ TEST_SUITE("defer")
                 void* first_mem = fakemalloc(100);
                 if (!first_mem)
                     return {};
-                defer_t free_first_mem(
+                maydefer_t free_first_mem(
                     [first_mem, fakefree] { fakefree(first_mem); });
 
                 void* second_mem = fakemalloc(100);
                 if (!second_mem)
                     return {};
-                defer_t free_second_mem(
+                maydefer_t free_second_mem(
                     [second_mem, fakefree] { fakefree(second_mem); });
 
                 if (fail_halfway)
