@@ -1,6 +1,7 @@
 #ifndef __OKAYLIB_STDMEM_H__
 #define __OKAYLIB_STDMEM_H__
 
+#include "okay/iterable/iterable.h"
 #include "okay/slice.h"
 #include <cstdint>
 #include <cstring>
@@ -47,15 +48,16 @@ template <typename T>
 constexpr bool memoverlaps(ok::slice_t<T> a, ok::slice_t<T> b) noexcept;
 
 /// Fills a block of memory of type T by copying an instance of T into every
-/// spot in that memory. T must be nothrow copy constructible. Does not invoke
-/// destructors of any items already in the memory.
-template <typename T>
-constexpr void memfill(ok::slice_t<T> slice, T original) noexcept;
+/// spot in that memory. T must be nothrow copy constructible. Invokes
+/// destructors of any items already in that memory.
+template <typename slice_viewed_t, typename... constructor_args_t>
+constexpr void memfill(ok::slice_t<slice_viewed_t> slice,
+                       constructor_args_t&&... args) noexcept;
 } // namespace ok
 
 template <typename T>
-inline constexpr bool ok::memcopy(ok::slice_t<T> destination,
-                                  ok::slice_t<T> source) noexcept
+constexpr bool ok::memcopy(ok::slice_t<T> destination,
+                           ok::slice_t<T> source) noexcept
 {
     static_assert(std::is_trivially_copyable_v<T>,
                   "Cannot copy non-trivially copyable type.");
@@ -67,8 +69,8 @@ inline constexpr bool ok::memcopy(ok::slice_t<T> destination,
 }
 
 template <typename T>
-inline constexpr bool ok::memcopy_lenient(ok::slice_t<T> destination,
-                                          ok::slice_t<T> source) noexcept
+constexpr bool ok::memcopy_lenient(ok::slice_t<T> destination,
+                                   ok::slice_t<T> source) noexcept
 {
     if (destination.size() < source.size() ||
         memoverlaps(destination, source)) {
@@ -80,8 +82,8 @@ inline constexpr bool ok::memcopy_lenient(ok::slice_t<T> destination,
 }
 
 template <typename T>
-inline constexpr bool ok::memcompare(ok::slice_t<T> memory_1,
-                                     ok::slice_t<T> memory_2) noexcept
+constexpr bool ok::memcompare(ok::slice_t<T> memory_1,
+                              ok::slice_t<T> memory_2) noexcept
 {
     if (memory_1.size() != memory_2.size()) {
         return false;
@@ -104,43 +106,56 @@ inline constexpr bool ok::memcompare(ok::slice_t<T> memory_1,
 }
 
 template <typename T>
-inline constexpr bool ok::memcontains(ok::slice_t<T> outer,
-                                      ok::slice_t<T> inner) noexcept
+constexpr bool ok::memcontains(ok::slice_t<T> outer,
+                               ok::slice_t<T> inner) noexcept
 {
-    return outer.begin().ptr() <= inner.begin().ptr() &&
-           outer.end().ptr() >= inner.end().ptr();
+    return outer.data() <= inner.data() &&
+           outer.data() + outer.size() >= inner.data() + inner.size();
 }
 
 template <typename SliceT, typename T>
-inline constexpr bool ok::memcontains_one(ok::slice_t<SliceT> outer,
-                                          const T* inner) noexcept
+constexpr bool ok::memcontains_one(ok::slice_t<SliceT> outer,
+                                   const T* inner) noexcept
 {
-    return (uint8_t*)outer.begin().ptr() <= (uint8_t*)inner &&
-           (uint8_t*)outer.end().ptr() >= (uint8_t*)(inner + 1);
+    return (uint8_t*)outer.data() <= (uint8_t*)inner &&
+           (uint8_t*)(outer.data() + outer.size()) >= (uint8_t*)(inner + 1);
 }
 
 template <typename T>
-inline constexpr bool ok::memoverlaps(ok::slice_t<T> a,
-                                      ok::slice_t<T> b) noexcept
+constexpr bool ok::memoverlaps(ok::slice_t<T> a, ok::slice_t<T> b) noexcept
 {
-    return a.begin().ptr() < b.end().ptr() && b.begin().ptr() < a.end().ptr();
+    return a.data() < (b.data() + b.size()) && b.data() < (a.data() + a.size());
 }
 
-template <typename T>
-inline constexpr void ok::memfill(ok::slice_t<T> slice,
-                                  const T original) noexcept
+template <typename slice_viewed_t, typename... constructor_args_t>
+constexpr void ok::memfill(ok::slice_t<slice_viewed_t> slice,
+                           constructor_args_t&&... args) noexcept
 {
+    static_assert(std::is_nothrow_copy_constructible_v<slice_viewed_t> &&
+                      std::is_nothrow_destructible_v<slice_viewed_t>,
+                  "Cannot memfill a type which can throw when destructed or "
+                  "copy constructed.");
+    static_assert(!std::is_const_v<slice_viewed_t>,
+                  "Cannot memfill over a slice of const memory.");
     static_assert(
-        std::is_nothrow_copy_constructible_v<T>,
-        "Cannot memfill a type which can throw when copy constructed.");
-    for (T& item : slice) {
-        new ((void*)std::addressof(item)) T(original);
+        std::is_constructible_v<slice_viewed_t, constructor_args_t...>,
+        "Cannot construct items in this slice from the given constructor "
+        "arguments.");
+    for (auto cursor = ok::begin(slice);
+         ok::is_inbounds(slice, cursor, ok::prefer_after_bounds_check_t{});
+         ++cursor) {
+        auto& item = ok::iter_get_ref(slice, cursor);
+        if constexpr (!std::is_trivially_destructible_v<slice_viewed_t>) {
+            item.~slice_viewed_t();
+        }
+        new ((void*)std::addressof(item))
+            slice_viewed_t(std::forward<constructor_args_t>(args)...);
     }
 }
 
 template <>
-inline constexpr void ok::memfill(ok::slice_t<uint8_t> slice,
-                                  const uint8_t original) noexcept
+constexpr void ok::memfill(ok::slice_t<uint8_t> slice,
+                           const uint8_t& original) noexcept
 {
     std::memset(slice.data(), original, slice.size());
 }

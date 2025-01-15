@@ -7,16 +7,31 @@
 #include <array>
 #include <vector>
 
+#include "okay/iterable/enumerate.h"
+#include "okay/slice.h"
+
+static_assert(ok::detail::is_random_access_iterable_v<ok::slice_t<int>>);
+static_assert(ok::detail::is_input_iterable_v<ok::slice_t<int>>);
+static_assert(ok::detail::is_input_iterable_v<ok::slice_t<const int>>);
+static_assert(ok::detail::is_output_iterable_v<ok::slice_t<int>>);
+static_assert(!ok::detail::is_output_iterable_v<ok::slice_t<const int>>);
+
 static_assert(ok::detail::is_output_iterable_v<example_iterable_cstyle>);
+static_assert(ok::detail::is_output_iterable_v<example_iterable_bidirectional>);
+static_assert(ok::detail::is_input_iterable_v<example_iterable_bidirectional>);
+static_assert(
+    ok::detail::is_bidirectional_iterable_v<example_iterable_bidirectional>);
+static_assert(
+    !ok::detail::is_random_access_iterable_v<example_iterable_bidirectional>);
 static_assert(ok::detail::is_output_iterable_v<example_iterable_cstyle_child>);
 static_assert(ok::detail::is_random_access_iterable_v<example_iterable_cstyle>);
 static_assert(ok::detail::is_valid_cursor_v<size_t>);
 static_assert(ok::is_iterable_v<example_iterable_cstyle>);
-static_assert(ok::detail::is_valid_sentinel_v<size_t, size_t>);
 static_assert(ok::detail::iterable_has_get_ref_v<example_iterable_cstyle>);
 static_assert(
     ok::detail::iterable_has_get_ref_const_v<example_iterable_cstyle>);
 
+static_assert(ok::detail::has_baseline_functions_v<std::vector<int>>);
 static_assert(ok::detail::is_random_access_iterable_v<std::vector<int>>);
 static_assert(
     std::is_same_v<std::vector<int>::value_type,
@@ -257,10 +272,12 @@ TEST_SUITE("iterable traits")
         SUBCASE("ok::begin() and ok::end() on c style array")
         {
             int myints[500];
-            static_assert(ok::end(myints) == 500);
+            static_assert(ok::is_inbounds(myints, 499));
+            static_assert(!ok::is_inbounds(myints, 500));
             static_assert(ok::begin(myints) == 0);
 
-            for (size_t i = ok::begin(myints); i != ok::end(myints); ++i) {
+            for (size_t i = ok::begin(myints); ok::is_inbounds(myints, i);
+                 ++i) {
                 REQUIRE((i >= 0 && i < 500));
                 myints[i] = i;
             }
@@ -269,10 +286,11 @@ TEST_SUITE("iterable traits")
         SUBCASE("ok::begin() and ok::end() on simple iterable")
         {
             example_iterable_cstyle iterable;
-            REQUIRE(iterable.size() == ok::end(iterable));
+            REQUIRE(!ok::is_inbounds(iterable, iterable.size()));
             REQUIRE(ok::begin(iterable) == 0);
 
-            for (size_t i = ok::begin(iterable); i != ok::end(iterable); ++i) {
+            for (size_t i = ok::begin(iterable); ok::is_inbounds(iterable, i);
+                 ++i) {
                 REQUIRE((i >= 0 && i < 100)); // NOTE: 100 is size always
                 iterable[i] = i;
             }
@@ -287,7 +305,8 @@ TEST_SUITE("iterable traits")
         {
             int myints[500];
 
-            for (size_t i = ok::begin(myints); i != ok::end(myints); ++i) {
+            for (size_t i = ok::begin(myints); ok::is_inbounds(myints, i);
+                 ++i) {
                 int& iter = myints[i];
 
                 iter = i;
@@ -295,6 +314,43 @@ TEST_SUITE("iterable traits")
 
             for (size_t i = 0; i < sizeof(myints) / sizeof(int); ++i) {
                 REQUIRE(myints[i] == i);
+            }
+        }
+
+        SUBCASE("foreach loop c array no macro, prefer_after")
+        {
+            int myints[500];
+
+            for (size_t i = ok::begin(myints);
+                 ok::is_inbounds(myints, i, ok::prefer_after_bounds_check_t{});
+                 ++i) {
+                int& iter = myints[i];
+
+                iter = i;
+            }
+
+            for (size_t i = 0; i < sizeof(myints) / sizeof(int); ++i) {
+                REQUIRE(myints[i] == i);
+            }
+        }
+
+        SUBCASE("foreach loop is_before_bounds and is_after_bounds type, no "
+                "macro, prefer_after")
+        {
+            example_iterable_bidirectional bytes;
+
+            for (auto i = ok::begin(bytes);
+                 ok::is_inbounds(bytes, i, ok::prefer_after_bounds_check_t{});
+                 ++i) {
+                uint8_t& iter = bytes.get(i);
+
+                iter = i.inner();
+            }
+
+            for (auto i = ok::begin(bytes); ok::is_inbounds(bytes, i); ++i) {
+                uint8_t& iter = bytes.get(i);
+
+                REQUIRE(iter == i.inner());
             }
         }
 
@@ -324,6 +380,24 @@ TEST_SUITE("iterable traits")
 
             for (const uint8_t& i : ok::std_for(bytes)) {
                 REQUIRE(i == 20);
+            }
+        }
+
+        SUBCASE("enumerated foreach loop")
+        {
+            example_iterable_cstyle bytes;
+
+            for (uint8_t& i : ok::std_for(bytes))
+                i = 20;
+
+            // instantiated twice to make sure duplicate labels dont happen
+            ok_foreach(ok_pair(byte, index), ok::enumerate(bytes))
+            {
+                REQUIRE(byte == 20);
+            }
+            ok_foreach(ok_pair(byte, index), ok::enumerate(bytes))
+            {
+                REQUIRE(byte == 20);
             }
         }
     }

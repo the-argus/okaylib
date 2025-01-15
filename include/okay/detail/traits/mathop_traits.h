@@ -21,23 +21,23 @@ class has_pre_decrement_meta_t<T, std::void_t<decltype(--std::declval<T&>())>>
     : public std::true_type
 {};
 
+// NOTE: only rhs addition required
 template <typename, typename = void>
 class has_addition_with_size_meta_t : public std::false_type
 {};
 template <typename T>
 class has_addition_with_size_meta_t<
-    T, std::void_t<decltype(std::declval<const T&>() + std::size_t{},
-                            std::size_t{} + std::declval<const T&>())>>
+    T, std::void_t<decltype(std::declval<const T&>() + std::size_t{})>>
     : public std::true_type
 {};
 
+// NOTE: only rhs subtraction required
 template <typename, typename = void>
 class has_subtraction_with_size_meta_t : public std::false_type
 {};
 template <typename T>
 class has_subtraction_with_size_meta_t<
-    T, std::void_t<decltype(std::declval<const T&>() - std::size_t{},
-                            std::size_t{} - std::declval<const T&>())>>
+    T, std::void_t<decltype(std::declval<const T&>() - std::size_t{})>>
     : public std::true_type
 {};
 

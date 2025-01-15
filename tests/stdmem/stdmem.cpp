@@ -14,15 +14,15 @@ TEST_SUITE("stdmem")
         {
             std::array<u8, 512> bytes;
 
-            slice_t<u8> a(bytes, 0, 100);
-            slice_t<u8> b(bytes, 20, 110);
+            slice_t<u8> a = make_subslice(bytes, 0, 100);
+            slice_t<u8> b = make_subslice(bytes, 20, 110);
 
             REQUIRE(!memcopy(a, b));
             REQUIRE(!memcopy_lenient(b, a));
             // normally okay to copy into the bigger buffer, but these overlap
             REQUIRE(!memcopy_lenient(a, b));
 
-            slice_t<u8> c(bytes, 200, 250);
+            slice_t<u8> c = make_subslice(bytes, 200, 250);
             REQUIRE(memcopy_lenient(b, c));
             REQUIRE(memcopy_lenient(a, c));
             // c is smallest so you cant copy stuff into it
@@ -53,9 +53,9 @@ TEST_SUITE("stdmem")
         {
             std::array<u8, 512> bytes;
 
-            slice_t<u8> a(bytes, 0, 100);
-            slice_t<u8> b(bytes, 20, 110);
-            slice_t<u8> c(bytes, 100, 200);
+            slice_t<u8> a = make_subslice(bytes, 0, 100);
+            slice_t<u8> b = make_subslice(bytes, 20, 110);
+            slice_t<u8> c = make_subslice(bytes, 100, 200);
             REQUIRE(memoverlaps(a, b));
             REQUIRE(!memoverlaps(a, c));
             REQUIRE(memoverlaps(c, b));
@@ -64,12 +64,15 @@ TEST_SUITE("stdmem")
         SUBCASE("memfill")
         {
             std::array<u8, 512> bytes;
+            for (auto& b : bytes)
+                b = 1;
+
             memfill(slice_t<u8>(bytes), u8(0));
             for (u8 byte : bytes) {
                 REQUIRE(byte == 0);
             }
 
-            memfill(slice_t<u8>(bytes, 0, 100), u8(1));
+            memfill(make_subslice(bytes, 0, 100), u8(1));
             for (size_t i = 0; i < bytes.size(); ++i) {
                 REQUIRE(bytes[i] == (i < 100 ? 1 : 0));
             }
@@ -78,9 +81,9 @@ TEST_SUITE("stdmem")
         SUBCASE("memcontains")
         {
             std::array<u8, 512> bytes;
-            slice_t<u8> a(bytes, 0, 512);
-            slice_t<u8> b(bytes, 256, 512);
-            slice_t<u8> c(bytes, 255, 511);
+            slice_t<u8> a = make_subslice(bytes, 0, 512);
+            slice_t<u8> b = make_subslice(bytes, 256, 512);
+            slice_t<u8> c = make_subslice(bytes, 255, 511);
             REQUIRE(memcontains(a, b));
             REQUIRE(memcontains(a, c));
             // nothing can contain A!

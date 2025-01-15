@@ -447,7 +447,7 @@ class opt_t<
     inline static constexpr bool is_reference = false;
     inline static constexpr bool is_slice = true;
 
-    using viewed_t = typename wrapped_slice_t::type;
+    using viewed_t = typename wrapped_slice_t::value_type;
 
     // layout matches slice
     size_t elements;

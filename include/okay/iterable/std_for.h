@@ -2,6 +2,7 @@
 #define __OKAYLIB_ITERABLE_STD_FOR_H__
 
 #include "okay/iterable/iterable.h"
+#include "okay/opt.h"
 #include <iterator>
 
 namespace ok {
@@ -18,21 +19,18 @@ template <typename T> class std_for
         "standard for loop, which requires dereferencing.");
 
     using cursor_t = detail::cursor_type_unchecked_for<T>;
-    using sentinel_t = detail::sentinel_type_unchecked_for<T>;
 
-    // TODO: support this? not sure if its possible, but as long as this type
-    // is only for use in foreach loops it may be possible through hacks
-    static_assert(
-        std::is_same_v<cursor_t, sentinel_t>,
-        "Attempt to create std_for wrapper for a type whose sentinel is "
-        "different from cursor. This is not currently supported.");
-
-    inline constexpr std_for(T& _inner) : inner(_inner) {}
+    constexpr std_for(T& _inner) : inner(_inner) {}
 
   private:
     T& inner;
 
   public:
+    struct iterator;
+    struct const_iterator;
+    friend struct iterator;
+    friend struct const_iterator;
+
     struct iterator
     {
         using iterator_category = std::forward_iterator_tag;
@@ -41,51 +39,75 @@ template <typename T> class std_for
         using pointer = value_type*;
         using reference = value_type&;
 
-        inline constexpr iterator(T& _parent, cursor_t _cursor)
-            : parent(_parent), cursor(_cursor)
+        constexpr iterator() = default;
+
+        constexpr iterator(T& _parent, cursor_t _cursor) OKAYLIB_NOEXCEPT
+            : m(members_t{_parent, _cursor})
         {
         }
 
-        inline constexpr reference operator*() const OKAYLIB_NOEXCEPT
+        constexpr reference operator*() const OKAYLIB_NOEXCEPT
         {
-            return ok::iter_get_ref(parent, cursor);
+            auto& members = m.value();
+            return ok::iter_get_ref(members.parent, members.cursor);
         }
 
-        inline constexpr pointer operator->() OKAYLIB_NOEXCEPT
+        // TODO: should this be const?
+        constexpr pointer operator->() OKAYLIB_NOEXCEPT
         {
-            return std::addressof(ok::iter_get_ref(parent, cursor));
+            auto& members = m.value();
+            return std::addressof(
+                ok::iter_get_ref(members.parent, members.cursor));
         }
 
         // Prefix increment
-        inline constexpr iterator& operator++() OKAYLIB_NOEXCEPT
+        constexpr iterator& operator++() OKAYLIB_NOEXCEPT
         {
-            ++cursor;
+            ++(m.value().cursor);
             return *this;
         }
 
         // Postfix increment
         // NOLINTNEXTLINE
-        inline constexpr iterator operator++(int) OKAYLIB_NOEXCEPT
+        constexpr iterator operator++(int) OKAYLIB_NOEXCEPT
         {
             iterator tmp = *this;
             ++(*this);
             return tmp;
         }
 
-        inline constexpr friend bool
-        operator==(const iterator& a, const iterator& b) OKAYLIB_NOEXCEPT
+        constexpr friend bool operator==(const iterator& a,
+                                         const iterator& b) OKAYLIB_NOEXCEPT
         {
-            return a.cursor == b.cursor;
+            if (a.m.has_value() != b.m.has_value()) [[likely]] {
+                if (a.m.has_value())
+                    return !ok::is_inbounds(a.m.value().parent,
+                                            a.m.value().cursor);
+                return !ok::is_inbounds(b.m.value().parent, b.m.value().cursor);
+            }
+            return a.m.value().cursor == b.m.value().cursor;
         };
-        inline constexpr friend bool
-        operator!=(const iterator& a, const iterator& b) OKAYLIB_NOEXCEPT
+        constexpr friend bool operator!=(const iterator& a,
+                                         const iterator& b) OKAYLIB_NOEXCEPT
         {
-            return !(a.cursor == b.cursor);
+            if (a.m.has_value() != b.m.has_value()) [[likely]] {
+                // only one is nonnull. treat null as "end" cursor (signals need
+                // to check for out-of-bounds)
+                if (a.m.has_value())
+                    return ok::is_inbounds(a.m.value().parent,
+                                           a.m.value().cursor);
+                return ok::is_inbounds(b.m.value().parent, b.m.value().cursor);
+            }
+            return a.m.value().cursor != b.m.value().cursor;
         };
 
       private:
-        T& parent;
-        cursor_t cursor;
+        struct members_t
+        {
+            T& parent;
+            cursor_t cursor;
+        };
+        opt_t<members_t> m;
     };
 
     struct const_iterator
@@ -96,76 +118,98 @@ template <typename T> class std_for
         using pointer = const value_type*;
         using reference = const value_type&;
 
-        inline constexpr const_iterator(const T& _parent, cursor_t _cursor)
-            : parent(_parent), cursor(_cursor)
+        constexpr const_iterator() = default;
+
+        constexpr const_iterator(const T& _parent,
+                                 cursor_t _cursor) OKAYLIB_NOEXCEPT
+            : m(members_t{_parent, _cursor})
         {
         }
 
-        inline constexpr reference operator*() const OKAYLIB_NOEXCEPT
+        constexpr reference operator*() const OKAYLIB_NOEXCEPT
         {
-            return ok::iter_get_ref(parent, cursor);
+            const auto& members = m.value();
+            return ok::iter_get_ref(members.parent, members.cursor);
         }
 
-        inline constexpr pointer operator->() OKAYLIB_NOEXCEPT
+        constexpr pointer operator->() OKAYLIB_NOEXCEPT
         {
-            return std::addressof(ok::iter_get_ref(parent, cursor));
+            const auto& members = m.value();
+            return std::addressof(
+                ok::iter_get_ref(members.parent, members.cursor));
         }
 
         // Prefix increment
-        inline constexpr const_iterator& operator++() OKAYLIB_NOEXCEPT
+        constexpr const_iterator& operator++() OKAYLIB_NOEXCEPT
         {
-            ++cursor;
+            ++(m.value().cursor);
             return *this;
         }
 
         // Postfix increment
         // NOLINTNEXTLINE
-        inline constexpr const_iterator operator++(int) OKAYLIB_NOEXCEPT
+        constexpr const_iterator operator++(int) OKAYLIB_NOEXCEPT
         {
             const_iterator tmp = *this;
             ++(*this);
             return tmp;
         }
 
-        inline constexpr friend bool
+        constexpr friend bool
         operator==(const const_iterator& a,
                    const const_iterator& b) OKAYLIB_NOEXCEPT
         {
-            return a.cursor == b.cursor;
+            if (a.m.has_value() != b.m.has_value()) [[likely]] {
+                if (a.m.has_value())
+                    return !ok::is_inbounds(a.m.value().parent,
+                                            a.m.value().cursor);
+                return !ok::is_inbounds(b.m.value().parent, b.m.value().cursor);
+            }
+            return a.m.value().cursor == b.m.value().cursor;
         };
-        inline constexpr friend bool
+        constexpr friend bool
         operator!=(const const_iterator& a,
                    const const_iterator& b) OKAYLIB_NOEXCEPT
         {
-            return !(a.cursor == b.cursor);
+            if (a.m.has_value() != b.m.has_value()) [[likely]] {
+                if (a.m.has_value())
+                    return ok::is_inbounds(a.m.value().parent,
+                                           a.m.value().cursor);
+                return ok::is_inbounds(b.m.value().parent, b.m.value().cursor);
+            }
+            return a.m.value().cursor != b.m.value().cursor;
         };
 
       private:
-        const T& parent;
-        cursor_t cursor;
+        struct members_t
+        {
+            const T& parent;
+            cursor_t cursor;
+        };
+        opt_t<members_t> m;
     };
 
     using correct_iterator_t =
         std::conditional_t<std::is_const_v<T>, const_iterator, iterator>;
 
-    inline constexpr correct_iterator_t begin() OKAYLIB_NOEXCEPT
+    constexpr correct_iterator_t begin() OKAYLIB_NOEXCEPT
     {
         return correct_iterator_t(inner, ok::begin(inner));
     }
 
-    inline constexpr correct_iterator_t end() OKAYLIB_NOEXCEPT
+    constexpr correct_iterator_t end() OKAYLIB_NOEXCEPT
     {
-        return correct_iterator_t(inner, ok::end(inner));
+        return correct_iterator_t();
     }
 
-    inline constexpr const_iterator begin() const OKAYLIB_NOEXCEPT
+    constexpr const_iterator begin() const OKAYLIB_NOEXCEPT
     {
         return const_iterator(inner, ok::begin(inner));
     }
 
-    inline constexpr const_iterator end() const OKAYLIB_NOEXCEPT
+    constexpr const_iterator end() const OKAYLIB_NOEXCEPT
     {
-        return const_iterator(inner, ok::end(inner));
+        return const_iterator();
     }
 };
 }; // namespace ok

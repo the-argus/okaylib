@@ -2,13 +2,17 @@
 // test header must be first
 #include "okay/opt.h"
 #include "okay/slice.h"
+#include "okay/stdmem.h"
 #include "testing_types.h"
 
 #include <array>
 #include <optional>
 
 using namespace ok;
-struct big {int i[100];};
+struct big
+{
+    int i[100];
+};
 static_assert(!std::is_convertible_v<std::optional<big>, const int&>);
 static_assert(!std::is_convertible_v<opt_t<big>, const int&>);
 static_assert(!std::is_convertible_v<int*, const int&>);
@@ -250,7 +254,8 @@ TEST_SUITE("opt")
             testref = test;
             REQUIRE(testref.value() == test);
             REQUIRE(testref.is_alias_for(test));
-            static_assert(std::is_same_v<opt_t<const int&>::pointer_t, const int>);
+            static_assert(
+                std::is_same_v<opt_t<const int&>::pointer_t, const int>);
             static_assert(!std::is_convertible_v<opt_t<int&>, const int>);
             REQUIRE(!testref.is_alias_for(testref2));
 
@@ -330,7 +335,7 @@ TEST_SUITE("opt")
                                          slice_t<uint8_t>&>);
 
             slice_t<uint8_t> my_slice = get_maybe_slice().value();
-            std::fill(my_slice.begin(), my_slice.end(), 0);
+            ok::memfill(my_slice, 0);
             for (auto byte : mem) {
                 REQUIRE(byte == 0);
             }
