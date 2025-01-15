@@ -56,7 +56,7 @@ template <typename T> class std_for
         constexpr pointer operator->() OKAYLIB_NOEXCEPT
         {
             auto& members = m.value();
-            return std::addressof(
+            return ok::addressof(
                 ok::iter_get_ref(members.parent, members.cursor));
         }
 
@@ -135,7 +135,7 @@ template <typename T> class std_for
         constexpr pointer operator->() OKAYLIB_NOEXCEPT
         {
             const auto& members = m.value();
-            return std::addressof(
+            return ok::addressof(
                 ok::iter_get_ref(members.parent, members.cursor));
         }
 

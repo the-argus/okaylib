@@ -1,7 +1,7 @@
 #ifndef __OKAYLIB_DEFER_H__
 #define __OKAYLIB_DEFER_H__
 
-#include <memory> // std::addressof
+#include "okay/detail/addressof.h"
 #include <type_traits>
 
 namespace ok {
@@ -13,7 +13,7 @@ template <typename callable_t> class maydefer_t
                   "not return void.");
 
   public:
-    explicit maydefer_t(callable_t&& f) : statement(std::addressof(f)) {}
+    explicit maydefer_t(callable_t&& f) : statement(ok::addressof(f)) {}
 
     // you cannot move or copy or really mess with a defer at all
     maydefer_t& operator=(const maydefer_t&) = delete;

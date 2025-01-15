@@ -92,7 +92,7 @@ class res_t
     release() OKAYLIB_NOEXCEPT
     {
         if (!okay()) [[unlikely]] {
-            OK_ABORT();
+            __ok_abort();
         }
 
         this->get_error_payload() = 1;
@@ -111,7 +111,7 @@ class res_t
         release_ref() & OKAYLIB_NOEXCEPT
     {
         if (!okay()) [[unlikely]] {
-            OK_ABORT();
+            __ok_abort();
         }
         this->get_error_payload() = enum_int_t(enum_t::result_released);
         return this->get_value_unchecked_payload();
@@ -161,7 +161,7 @@ class res_t
     inline constexpr res_t(enum_t failure) OKAYLIB_NOEXCEPT
     {
         if (failure == enum_t::okay) [[unlikely]] {
-            OK_ABORT();
+            __ok_abort();
         }
 
         this->get_error_payload() = enum_int_t(failure);

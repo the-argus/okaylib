@@ -1,6 +1,7 @@
 #ifndef __OKAYLIB_DETAIL_RES_H__
 #define __OKAYLIB_DETAIL_RES_H__
 
+#include "okay/detail/addressof.h"
 #include "okay/detail/template_util/uninitialized_storage.h"
 #include "okay/detail/traits/is_instance.h"
 #include <cassert>
@@ -60,7 +61,7 @@ struct res_payload_base_t
     inline constexpr void
     construct_no_destroy(args_t&&... args) OKAYLIB_NOEXCEPT
     {
-        new (std::addressof(this->storage.value))
+        new (ok::addressof(this->storage.value))
             contained_t(std::forward<args_t>(args)...);
     }
 
@@ -418,7 +419,7 @@ struct res_base_t<input_contained_t, enum_int_t, copy, move, true>
     constexpr res_base_t() = default;
 
     inline constexpr explicit res_base_t(input_contained_t _ref)
-        OKAYLIB_NOEXCEPT : pointer(std::addressof(_ref)),
+        OKAYLIB_NOEXCEPT : pointer(ok::addressof(_ref)),
                            error(0)
     {
     }
@@ -432,7 +433,7 @@ struct res_base_t<input_contained_t, enum_int_t, copy, move, true>
     inline constexpr void
     construct_no_destroy_payload(input_contained_t _ref) OKAYLIB_NOEXCEPT
     {
-        pointer = std::addressof(_ref);
+        pointer = ok::addressof(_ref);
     }
 
     inline constexpr void

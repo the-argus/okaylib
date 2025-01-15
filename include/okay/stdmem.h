@@ -1,6 +1,7 @@
 #ifndef __OKAYLIB_STDMEM_H__
 #define __OKAYLIB_STDMEM_H__
 
+#include "okay/detail/addressof.h"
 #include "okay/iterable/iterable.h"
 #include "okay/slice.h"
 #include <cstdint>
@@ -148,7 +149,7 @@ constexpr void ok::memfill(ok::slice_t<slice_viewed_t> slice,
         if constexpr (!std::is_trivially_destructible_v<slice_viewed_t>) {
             item.~slice_viewed_t();
         }
-        new ((void*)std::addressof(item))
+        new ((void*)ok::addressof(item))
             slice_viewed_t(std::forward<constructor_args_t>(args)...);
     }
 }

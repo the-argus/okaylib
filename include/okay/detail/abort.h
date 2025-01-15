@@ -10,13 +10,13 @@ class _abort_exception : std::exception
     char* what() { return const_cast<char*>("Program failure."); }
 };
 } // namespace reserve
-#define OK_ABORT()                           \
+#define __ok_abort()                           \
     {                                        \
         throw ::reserve::_abort_exception(); \
     }
 #else
 #include <cstdlib>
-#define OK_ABORT()    \
+#define __ok_abort()    \
     {                 \
         std::abort(); \
     }

@@ -82,7 +82,7 @@ class example_iterable_cstyle
     value_type& operator[](size_t index) OKAYLIB_NOEXCEPT
     {
         if (index >= num_bytes) {
-            OK_ABORT();
+            __ok_abort();
         }
         return bytes[index];
     }
@@ -125,7 +125,7 @@ class example_iterable_bidirectional
         constexpr void operator--() OKAYLIB_NOEXCEPT
         {
             if (m_inner == 0)
-                OK_ABORT();
+                __ok_abort();
             --m_inner;
         }
 
@@ -138,7 +138,7 @@ class example_iterable_bidirectional
     constexpr value_type& get(cursor_t index) OKAYLIB_NOEXCEPT
     {
         if (index.inner() >= num_bytes)
-            OK_ABORT();
+            __ok_abort();
         return bytes[index.inner()];
     }
 

@@ -63,8 +63,8 @@ an effort to organize that (not always necessary) work into one reusable product
       jumping window (grouper? chunk?), lattice, bit_lattice (similar to sliding
       window, pass in 0b10101 to get the next three alternating items),
       enumerate, zip, into, take, drop, skip_if... support for allocators for
-      stuff like into. explicit when something turns random access -> forward
-      iterator
+      stuff like into. explicit when an iterable/cursor is demoted (from random
+      access to something else, especially)
 - [ ] fold/reduce function(s) compatible with above views
 - [ ] reimplementation of `<algorithm>` stuff: `stable_sort`, `sort`, `copy_if`,
       `copy`, `move`, `count`, `count_if` `mismatch` `find`, `starts_with`, `ends_with`,
@@ -90,4 +90,6 @@ an effort to organize that (not always necessary) work into one reusable product
 
 ## TODO
 
-- [ ] Remove dependency on `memory` header due to `std::addressof` if possible?
+- [ ] Remove dependency on `<memory>` header from `okay/detail/addressof.h`
+- [ ] Add better macro customization for some checking / assert behavior, like
+      removing slice bounds checks in release mode

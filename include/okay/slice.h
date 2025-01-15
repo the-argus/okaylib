@@ -1,11 +1,11 @@
 #ifndef __OKAYLIB_SLICE_H__
 #define __OKAYLIB_SLICE_H__
 
+#include "okay/detail/abort.h"
+#include "okay/detail/addressof.h"
+#include "okay/detail/traits/is_container.h"
 #include "okay/detail/traits/is_instance.h"
 #include <cassert>
-
-#include "okay/detail/abort.h"
-#include "okay/detail/traits/is_container.h"
 
 #ifdef OKAYLIB_USE_FMT
 #include <fmt/core.h>
@@ -37,7 +37,7 @@ template <typename viewed_t> class slice_t
     constexpr slice_t(viewed_t* data, size_t size) OKAYLIB_NOEXCEPT
     {
         if (!data) [[unlikely]]
-            OK_ABORT();
+            __ok_abort();
         m_data = data;
         m_elements = size;
     }
@@ -124,7 +124,7 @@ template <typename viewed_t> class slice_t
     constexpr value_type& operator[](size_t idx) const OKAYLIB_NOEXCEPT
     {
         if (idx >= m_elements) [[unlikely]]
-            OK_ABORT();
+            __ok_abort();
         return m_data[idx];
     }
 
@@ -145,7 +145,7 @@ template <typename viewed_t>
 [[nodiscard]] constexpr slice_t<viewed_t>
 raw_slice(viewed_t& data, size_t size) OKAYLIB_NOEXCEPT
 {
-    return slice_t<viewed_t>(std::addressof(data), size);
+    return slice_t<viewed_t>(ok::addressof(data), size);
 }
 
 /// Make a slice of only a part of a contiguous container
@@ -159,7 +159,7 @@ constexpr std::enable_if_t<detail::is_container_v<container_t>,
 make_subslice(container_t& container, size_t from, size_t to) OKAYLIB_NOEXCEPT
 {
     if (from > to || to > container.size()) [[unlikely]]
-        OK_ABORT();
+        __ok_abort();
     return raw_slice(container.data()[from], to - from);
 }
 

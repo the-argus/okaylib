@@ -1,9 +1,9 @@
 #ifndef __OKAYLIB_DETAIL_OPT_H__
 #define __OKAYLIB_DETAIL_OPT_H__
 
+#include "okay/detail/addressof.h"
 #include "okay/detail/template_util/uninitialized_storage.h"
 #include <cassert>
-#include <memory>
 #include <type_traits>
 #include <utility>
 
@@ -87,7 +87,7 @@ template <typename input_contained_t> struct opt_payload_base_t
     template <typename... args_t>
     inline constexpr void construct(args_t&&... args) OKAYLIB_NOEXCEPT
     {
-        new (std::addressof(this->payload.value))
+        new (ok::addressof(this->payload.value))
             contained_t(std::forward<args_t>(args)...);
         has_value = true;
     }

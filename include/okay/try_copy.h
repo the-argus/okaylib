@@ -1,6 +1,7 @@
 #ifndef __OKAYLIB_COPY_H__
 #define __OKAYLIB_COPY_H__
 
+#include "okay/detail/addressof.h"
 #include "okay/detail/traits/is_complete.h"
 #include <type_traits>
 #include <utility> // addressof
@@ -87,7 +88,7 @@ try_copy_into_uninitialized(T& uninitialized_output,
                   "Exceptions disallowed for okaylib, but type given to "
                   "ok::try_copy_into_uninitialized() can throw when copied.");
 
-    new (std::addressof(uninitialized_output)) T(input);
+    new (ok::addressof(uninitialized_output)) T(input);
 }
 
 /// Copy an object over an existing object. Can be specialized to return a

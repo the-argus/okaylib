@@ -275,7 +275,7 @@ class opt_t<payload_t,
     [[nodiscard]] inline payload_t& value() & OKAYLIB_NOEXCEPT
     {
         if (!has_value()) [[unlikely]] {
-            OK_ABORT();
+            __ok_abort();
         }
         return this->_get();
     }
@@ -283,7 +283,7 @@ class opt_t<payload_t,
     [[nodiscard]] inline payload_t&& value() && OKAYLIB_NOEXCEPT
     {
         if (!has_value()) [[unlikely]] {
-            OK_ABORT();
+            __ok_abort();
         }
         return std::move(this->_get());
     }
@@ -291,7 +291,7 @@ class opt_t<payload_t,
     inline const payload_t& value() const& OKAYLIB_NOEXCEPT
     {
         if (!has_value()) [[unlikely]] {
-            OK_ABORT();
+            __ok_abort();
         }
         return this->_get();
     }
@@ -360,7 +360,7 @@ class opt_t<payload_t, std::enable_if_t<std::is_lvalue_reference_v<payload_t>>>
     inline constexpr opt_t(pointer_t* p) : OKAYLIB_NOEXCEPT pointer(p) {}
     // allow non-const reference construction
     inline constexpr opt_t(std::remove_const_t<payload_t> p)
-        : OKAYLIB_NOEXCEPT pointer(std::addressof(p))
+        : OKAYLIB_NOEXCEPT pointer(ok::addressof(p))
     {
     }
 
@@ -380,7 +380,7 @@ class opt_t<payload_t, std::enable_if_t<std::is_lvalue_reference_v<payload_t>>>
     inline constexpr payload_t emplace(payload_t other) OKAYLIB_NOEXCEPT
     {
         // this function just to keep APIs of optionals as similar as possible
-        pointer = std::addressof(other);
+        pointer = ok::addressof(other);
     }
 
     inline constexpr bool has_value() const OKAYLIB_NOEXCEPT
@@ -396,7 +396,7 @@ class opt_t<payload_t, std::enable_if_t<std::is_lvalue_reference_v<payload_t>>>
     inline constexpr opt_t& operator=(payload_t ref) OKAYLIB_NOEXCEPT
     {
         static_assert(std::is_lvalue_reference_v<decltype(ref)>);
-        pointer = std::addressof(ref);
+        pointer = ok::addressof(ref);
         return *this;
     }
 
@@ -411,7 +411,7 @@ class opt_t<payload_t, std::enable_if_t<std::is_lvalue_reference_v<payload_t>>>
     [[nodiscard]] inline constexpr payload_t value() const OKAYLIB_NOEXCEPT
     {
         if (!has_value()) [[unlikely]] {
-            OK_ABORT();
+            __ok_abort();
         }
         return *pointer;
     }
@@ -419,7 +419,7 @@ class opt_t<payload_t, std::enable_if_t<std::is_lvalue_reference_v<payload_t>>>
     [[nodiscard]] inline constexpr bool
     is_alias_for(const pointer_t& other) OKAYLIB_NOEXCEPT
     {
-        return pointer == std::addressof(other);
+        return pointer == ok::addressof(other);
     }
 
     [[nodiscard]] inline constexpr bool
@@ -518,7 +518,7 @@ class opt_t<
     [[nodiscard]] inline constexpr wrapped_slice_t& value() OKAYLIB_NOEXCEPT
     {
         if (!has_value()) [[unlikely]] {
-            OK_ABORT();
+            __ok_abort();
         }
         return unchecked_value();
     }
@@ -527,7 +527,7 @@ class opt_t<
     value() const OKAYLIB_NOEXCEPT
     {
         if (!has_value()) [[unlikely]] {
-            OK_ABORT();
+            __ok_abort();
         }
         return unchecked_value();
     }

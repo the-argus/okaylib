@@ -130,7 +130,7 @@ class allocator_interface_t
         inline constexpr size_t size() const noexcept
         {
             if (!m_data) [[unlikely]] {
-                OK_ABORT();
+                __ok_abort();
             }
             return m_size;
         }
@@ -178,19 +178,19 @@ class allocator_interface_t
         inline constexpr size_t size() const noexcept
         {
             if (!m_data) [[unlikely]]
-                OK_ABORT();
+                __ok_abort();
             return m_size;
         }
         inline constexpr void* data_original_offset() const noexcept
         {
             if (!m_data) [[unlikely]]
-                OK_ABORT();
+                __ok_abort();
             return m_data_original_offset;
         }
         inline constexpr bool kept() const noexcept
         {
             if (!m_data) [[unlikely]]
-                OK_ABORT();
+                __ok_abort();
             return m_kept;
         }
         inline constexpr operator bool() const noexcept { return m_data; }
