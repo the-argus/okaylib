@@ -77,32 +77,21 @@ class owning_view<
     }
 };
 
+template <typename T> std::true_type is_referencable(T&);
+template <typename T> static std::false_type is_referencable(T&&);
+
 template <typename range_t>
-class ref_view<range_t, std::enable_if_t<std::is_object_v<range_t> &&
-                                         is_iterable_v<range_t>>>
+class ref_view<
+    range_t, std::enable_if_t<std::is_object_v<range_t> &&
+                              is_iterable_v<range_t>&& decltype(is_referencable(
+                                  std::declval<range_t>()))::value>>
 {
   private:
     range_t* m_range;
 
-    // not defined
-    static std::true_type can_take_ref(range_t&);
-    static std::false_type can_take_ref(range_t&&);
-
-    struct uninstantiable_t
-    {
-        friend class ref_view;
-
-      private:
-        uninstantiable_t() = default;
-    };
-
   public:
     template <typename T>
-    constexpr ref_view(
-        T&& t, std::enable_if_t<
-                   is_convertible_to_v<T, range_t>&& decltype(can_take_ref(
-                       std::declval<T>()))::value,
-                   uninstantiable_t> = {})
+    constexpr ref_view(T&& t)
         : m_range(ok::addressof(static_cast<range_t&>(std::forward<T>(t))))
     {
     }
@@ -112,17 +101,21 @@ class ref_view<range_t, std::enable_if_t<std::is_object_v<range_t> &&
     constexpr range_t& base_nonconst() const { return *m_range; }
 };
 
+template <typename range_t> ref_view(range_t&) -> ref_view<range_t>;
+
 template <typename T, typename = void>
 struct can_owning_view : public std::false_type
 {};
 template <typename T>
-struct can_owning_view<T, std::void_t<owning_view<T>>> : public std::true_type
+struct can_owning_view<T, std::void_t<decltype(owning_view{std::declval<T>()})>>
+    : public std::true_type
 {};
 template <typename T, typename = void>
 struct can_ref_view : public std::false_type
 {};
 template <typename T>
-struct can_ref_view<T, std::void_t<ref_view<T>>> : public std::true_type
+struct can_ref_view<T, std::void_t<decltype(ref_view{std::declval<T>()})>>
+    : public std::true_type
 {};
 
 template <typename T>

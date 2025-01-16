@@ -18,6 +18,8 @@ TEST_SUITE("enumerate")
             std::fill(ints.begin(), ints.end(), 0);
 
             size_t i = 0;
+            static_assert(detail::can_ref_view<std::array<int, 50>&>::value);
+            decltype(ok::detail::ref_view{ints}) i2(ints);
             ok_foreach(ok_pair(item, index), ints | enumerate)
             {
                 static_assert(std::is_same_v<decltype(item), int&>);
