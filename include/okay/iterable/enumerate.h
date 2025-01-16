@@ -18,8 +18,8 @@ struct enumerate_fn_t
     {
         static_assert(is_iterable_v<iterable_t>,
                       "Cannot enumerate given type- it is not iterable.");
-        return enumerated_view_t<std::remove_reference_t<iterable_t>>(
-            std::forward<iterable_t>(iterable));
+        return enumerated_view_t<std::remove_reference_t<iterable_t>>{
+            std::forward<iterable_t>(iterable)};
     }
 };
 

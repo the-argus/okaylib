@@ -98,11 +98,13 @@ class ref_view<range_t, std::enable_if_t<std::is_object_v<range_t> &&
 
   public:
     template <typename T>
-    constexpr ref_view(T&& t)
+    constexpr ref_view(
+        T&& t, std::enable_if_t<
+                   is_convertible_to_v<T, range_t>&& decltype(can_take_ref(
+                       std::declval<T>()))::value,
+                   uninstantiable_t> = {})
         : m_range(ok::addressof(static_cast<range_t&>(std::forward<T>(t))))
     {
-        static_assert(is_convertible_to_v<T, range_t> &&
-                      decltype(can_take_ref(std::declval<T>()))::value);
     }
 
     constexpr const range_t& base() const { return *m_range; }
