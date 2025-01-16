@@ -43,7 +43,10 @@ class is_convertible_to_meta_t : public std::false_type
 template <typename from_t, typename to_t>
 class is_convertible_to_meta_t<
     from_t, to_t,
-    std::void_t<decltype(static_cast<to_t>(std::declval<from_t>()))>>
+    std::enable_if_t<
+        std::is_convertible_v<from_t, to_t> &&
+        std::is_same_v<void, std::void_t<decltype(static_cast<to_t>(
+                                 std::declval<from_t>()))>>>>
     : public std::true_type
 {};
 

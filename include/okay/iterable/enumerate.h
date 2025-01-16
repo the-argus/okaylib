@@ -18,7 +18,7 @@ struct enumerate_fn_t
     {
         static_assert(is_iterable_v<iterable_t>,
                       "Cannot enumerate given type- it is not iterable.");
-        return enumerated_view_t<std::remove_reference_t<iterable_t>>{
+        return enumerated_view_t<decltype(iterable)>{
             std::forward<iterable_t>(iterable)};
     }
 };
@@ -26,8 +26,7 @@ struct enumerate_fn_t
 // conditionally either a ref view wrapper or a owned view wrapper or just
 // straight up inherits from the range_t if it's a view
 template <typename range_t>
-struct enumerated_view_t
-    : public underlying_view_type<std::remove_reference_t<range_t>>::type
+struct enumerated_view_t : public underlying_view_type<range_t>::type
 {};
 
 } // namespace detail

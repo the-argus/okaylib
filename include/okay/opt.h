@@ -365,13 +365,11 @@ class opt_t<payload_t, std::enable_if_t<std::is_lvalue_reference_v<payload_t>>>
     }
 
     // implicit conversion if references are implicitly convertible
-    template <
-        typename other_t,
-        std::enable_if_t<
-            std::is_convertible_v<other_t, payload_t> &&
-                !std::is_same_v<
-                    std::remove_cv_t<std::remove_reference_t<other_t>>, opt_t>,
-            bool> = false>
+    template <typename other_t,
+              std::enable_if_t<
+                  std::is_convertible_v<other_t, payload_t> &&
+                      !std::is_same_v<detail::remove_cvref_t<other_t>, opt_t>,
+                  bool> = false>
     inline constexpr opt_t(const opt_t<other_t>& other)
         : OKAYLIB_NOEXCEPT pointer(other.as_ptr())
     {

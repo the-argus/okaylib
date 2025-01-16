@@ -1,6 +1,7 @@
 #ifndef __OKAYLIB_DETAIL_TEMPLATE_UTIL_UNINITIALIZED_STORAGE_H__
 #define __OKAYLIB_DETAIL_TEMPLATE_UTIL_UNINITIALIZED_STORAGE_H__
 
+#include "okay/detail/template_util/empty.h"
 #include <type_traits>
 #include <utility>
 
@@ -15,9 +16,6 @@
  */
 
 namespace ok::detail {
-
-struct empty_t
-{};
 
 template <typename inner_input_contained_t,
           bool = std::is_trivially_destructible_v<inner_input_contained_t>>
