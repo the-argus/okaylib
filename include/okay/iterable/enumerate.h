@@ -8,7 +8,7 @@
 
 namespace ok {
 namespace detail {
-template <typename range_t> struct enumerated_view_t;
+template <typename iterable_t> struct enumerated_view_t;
 
 struct enumerate_fn_t
 {
@@ -24,9 +24,9 @@ struct enumerate_fn_t
 };
 
 // conditionally either a ref view wrapper or a owned view wrapper or just
-// straight up inherits from the range_t if it's a view
-template <typename range_t>
-struct enumerated_view_t : public underlying_view_type<range_t>::type
+// straight up inherits from the iterable_t if it's a view
+template <typename iterable_t>
+struct enumerated_view_t : public underlying_view_type<iterable_t>::type
 {};
 
 } // namespace detail
