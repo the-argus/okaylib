@@ -2,85 +2,47 @@
 #define every_other_dummy
 
 #include "okay/detail/ok_assert.h"
+#include "okay/detail/view_common.h"
 #include "okay/iterable/iterable.h"
 #include "okay/iterable/ranges.h"
 
 namespace ok {
-
 namespace detail {
-template <template <typename> typename enumerated_iterable_t, typename inner_t>
-struct sized_iterable_t;
-template <template <typename> typename enumerated_t, typename iterable_t>
-struct enumerated_iterable_definition_base_t;
+template <typename range_t> struct enumerated_view_t;
 
-template <typename iterable_t> struct enumerated_ref_t
+struct enumerate_fn_t
 {
-    constexpr explicit enumerated_ref_t(iterable_t& iterable)
-        : m_iterable(iterable) {};
-
-    friend class enumerated_iterable_definition_base_t<enumerated_ref_t,
-                                                       iterable_t>;
-    friend class ok::detail::sized_iterable_t<enumerated_ref_t, iterable_t>;
-
-  private:
-    iterable_t& iterable() OKAYLIB_NOEXCEPT { return m_iterable; }
-    const iterable_t& iterable() const OKAYLIB_NOEXCEPT { return m_iterable; }
-
-    // breaking const correctness specifically in the case of enumerate
-    // get_ref() where you need nonconst reference to internal iterable in order
-    // to store a value_type& in the pair
-    iterable_t& iterable_nonconst() const OKAYLIB_NOEXCEPT
+    template <typename iterable_t>
+    constexpr enumerated_view_t<std::remove_reference_t<iterable_t>>
+    operator()(iterable_t&& iterable) const OKAYLIB_NOEXCEPT
     {
-        return m_iterable;
-    }
-
-    iterable_t& m_iterable;
-};
-
-template <typename iterable_t> struct enumerated_owning_t
-{
-    constexpr explicit enumerated_owning_t(iterable_t&& iterable)
-        : m_iterable(std::forward<iterable_t>(iterable)) {};
-
-    friend class enumerated_iterable_definition_base_t<enumerated_owning_t,
-                                                       iterable_t>;
-    friend class ok::detail::sized_iterable_t<enumerated_owning_t, iterable_t>;
-
-  private:
-    iterable_t& iterable() OKAYLIB_NOEXCEPT { return m_iterable; }
-    const iterable_t& iterable() const OKAYLIB_NOEXCEPT { return m_iterable; }
-    iterable_t& iterable_nonconst() const OKAYLIB_NOEXCEPT
-    {
-        return m_iterable;
-    }
-
-    iterable_t&& m_iterable;
-};
-
-struct infinite_iterable_t
-{
-    static constexpr bool infinite = true;
-};
-
-struct finite_iterable_t
-{
-    static constexpr bool infinite = false;
-};
-
-template <template <typename> typename enumerated_iterable_t, typename inner_t>
-struct sized_iterable_t
-{
-    template <typename T = inner_t>
-    static constexpr std::enable_if_t<detail::iterable_has_size_v<T>, size_t>
-    size(const enumerated_iterable_t<inner_t>& i) OKAYLIB_NOEXCEPT
-    {
-        return i.iterable().size();
+        static_assert(is_iterable_v<iterable_t>,
+                      "Cannot enumerate given type- it is not iterable.");
+        return std::forward<iterable_t>(iterable);
     }
 };
 
-template <template <typename> typename enumerated_t, typename iterable_t>
-struct enumerated_iterable_definition_base_t
+// conditionally either a ref view wrapper or a owned view wrapper or just
+// straight up inherits from the range_t if it's a view
+template <typename range_t>
+struct enumerated_view_t
+    : public underlying_view_type<std::remove_reference_t<range_t>>::type
+{};
+
+} // namespace detail
+
+template <typename iterable_t>
+struct iterable_definition<detail::enumerated_view_t<iterable_t>> :
+    // inherit size() or infinite marking
+    public std::conditional_t<
+        detail::iterable_has_size_v<iterable_t>,
+        detail::sized_iterable_t<detail::enumerated_view_t<iterable_t>>,
+        std::conditional<detail::iterable_marked_infinite_v<iterable_t>,
+                         detail::infinite_iterable_t,
+                         detail::finite_iterable_t>>
 {
+    static constexpr bool is_view = true;
+
     struct cursor_t
     {
       private:
@@ -94,7 +56,7 @@ struct enumerated_iterable_definition_base_t
         cursor_t(const cursor_t&) = default;
         cursor_t& operator=(const cursor_t&) = default;
 
-        friend class enumerated_iterable_definition_base_t;
+        friend class iterable_definition<detail::enumerated_view_t<iterable_t>>;
 
         constexpr void operator++()
         {
@@ -222,18 +184,20 @@ struct enumerated_iterable_definition_base_t
         cursor_type_for<iterable_t> m_inner;
     };
 
-    constexpr static cursor_t begin(const enumerated_t<iterable_t>& i)
+    using enumerated_t = detail::enumerated_view_t<iterable_t>;
+
+    constexpr static cursor_t begin(const enumerated_t& i)
     {
-        return cursor_t(ok::begin(i.iterable()));
+        return cursor_t(ok::begin(i.base()));
     }
 
     template <typename T = iterable_t>
     constexpr static std::enable_if_t<std::is_same_v<iterable_t, T> &&
                                           detail::iterable_has_is_inbounds_v<T>,
                                       bool>
-    is_inbounds(const enumerated_t<iterable_t>& i, const cursor_t& c)
+    is_inbounds(const enumerated_t& i, const cursor_t& c)
     {
-        return detail::iterable_definition_inner<T>::is_inbounds(i.iterable(),
+        return detail::iterable_definition_inner<T>::is_inbounds(i.base(),
                                                                  c.inner());
     }
 
@@ -242,10 +206,10 @@ struct enumerated_iterable_definition_base_t
         std::is_same_v<iterable_t, T> &&
             detail::iterable_has_is_after_bounds_v<T>,
         bool>
-    is_after_bounds(const enumerated_t<iterable_t>& i, const cursor_t& c)
+    is_after_bounds(const enumerated_t& i, const cursor_t& c)
     {
-        return detail::iterable_definition_inner<T>::is_after_bounds(
-            i.iterable(), c.inner());
+        return detail::iterable_definition_inner<T>::is_after_bounds(i.base(),
+                                                                     c.inner());
     }
 
     template <typename T = iterable_t>
@@ -253,100 +217,36 @@ struct enumerated_iterable_definition_base_t
         std::is_same_v<iterable_t, T> &&
             detail::iterable_has_is_before_bounds_v<T>,
         bool>
-    is_before_bounds(const enumerated_t<iterable_t>& i, const cursor_t& c)
+    is_before_bounds(const enumerated_t& i, const cursor_t& c)
     {
         return detail::iterable_definition_inner<T>::is_before_bounds(
-            i.iterable(), c.inner());
+            i.base(), c.inner());
     }
 
-    constexpr static auto get(const enumerated_t<iterable_t>& i,
+    constexpr static auto get(const enumerated_t& i,
                               const cursor_t& c) OKAYLIB_NOEXCEPT
     {
         using inner_def = detail::iterable_definition_inner<iterable_t>;
         if constexpr (detail::iterable_has_get_ref_v<iterable_t> ||
                       detail::iterable_has_get_ref_const_v<iterable_t>) {
             using reftype =
-                decltype(inner_def::get_ref(i.iterable_nonconst(), c.inner()));
+                decltype(inner_def::get_ref(i.base_nonconst(), c.inner()));
             return std::pair<reftype, const size_t>(
-                inner_def::get_ref(i.iterable_nonconst(), c.inner()),
-                c.index());
+                inner_def::get_ref(i.base_nonconst(), c.inner()), c.index());
         } else {
-            using gettype = decltype(inner_def::get(i.iterable(), c.inner()));
+            using gettype = decltype(inner_def::get(i.base(), c.inner()));
             return std::pair<gettype, const size_t>(
-                inner_def::get(i.iterable(), c.inner()), c.index());
+                inner_def::get(i.base(), c.inner()), c.index());
         }
     }
 
     // satisfy requirement that get() returns value_type
     // TODO: value_type still needed?
-    using value_type =
-        decltype(get(std::declval<const enumerated_t<iterable_t>&>(),
-                     std::declval<const cursor_t&>()));
+    using value_type = decltype(get(std::declval<const enumerated_t&>(),
+                                    std::declval<const cursor_t&>()));
 };
 
-} // namespace detail
-
-template <typename iterable_t>
-struct iterable_definition<detail::enumerated_ref_t<iterable_t>>
-    : public detail::enumerated_iterable_definition_base_t<
-          detail::enumerated_ref_t, iterable_t>,
-      public std::conditional_t<
-          detail::iterable_has_size_v<iterable_t>,
-          detail::sized_iterable_t<detail::enumerated_ref_t, iterable_t>,
-          std::conditional<detail::iterable_marked_infinite_v<iterable_t>,
-                           detail::infinite_iterable_t,
-                           detail::finite_iterable_t>>
-{};
-
-template <typename iterable_t>
-struct iterable_definition<detail::enumerated_owning_t<iterable_t>>
-    : public detail::enumerated_iterable_definition_base_t<
-          detail::enumerated_owning_t, iterable_t>,
-      public std::conditional_t<
-          detail::iterable_has_size_v<iterable_t>,
-          detail::sized_iterable_t<detail::enumerated_owning_t, iterable_t>,
-          std::conditional<detail::iterable_marked_infinite_v<iterable_t>,
-                           detail::infinite_iterable_t,
-                           detail::finite_iterable_t>>
-{};
-
-namespace detail {
-
-struct enumerate_fn_t
-{
-    template <typename iterable_t>
-    constexpr decltype(auto) operator()(iterable_t& item) const OKAYLIB_NOEXCEPT
-    {
-        return enumerated_ref_t{item};
-    }
-
-    template <typename iterable_t>
-    constexpr decltype(auto)
-    operator()(iterable_t&& item) const OKAYLIB_NOEXCEPT
-    {
-        return enumerated_owning_t{std::forward<iterable_t>(item)};
-    }
-};
-
-struct enumerate_fn_range_adaptor_wrapper_t
-{
-    template <typename iterable_t>
-    constexpr decltype(auto)
-    operator()(iterable_t&& iterable) const OKAYLIB_NOEXCEPT
-    {
-        static_assert(is_iterable_v<iterable_t>,
-                      "Cannot enumerate given type- it is not iterable.");
-        return enumerate_fn_t{}(std::forward<iterable_t>(iterable));
-    }
-};
-
-} // namespace detail
-
-// constexpr detail::enumerate_fn_t enumerate{};
-
-constexpr detail::range_adaptor_closure_t<
-    detail::enumerate_fn_range_adaptor_wrapper_t>
-    enumerate;
+constexpr detail::range_adaptor_closure_t<detail::enumerate_fn_t> enumerate;
 
 } // namespace ok
 

@@ -33,6 +33,10 @@ template <typename callable_t> struct range_adaptor_t
 
   public:
     range_adaptor_t() = default;
+    range_adaptor_t(callable_t&& _callable)
+        : callable(std::forward<callable_t>(_callable))
+    {
+    }
 
     template <typename... args_t>
     constexpr auto
@@ -40,7 +44,7 @@ template <typename callable_t> struct range_adaptor_t
     {
         if constexpr (std::is_invocable_v<callable_t, args_t...>) {
             // adaptor(range, args...)
-            return callable(std::forward<args_t>(args)...);
+            return ok::invoke(callable, std::forward<args_t>(args)...);
         } else {
             // adaptor(args...)(range)
             return range_adaptor_closure_t(partial_called_t{

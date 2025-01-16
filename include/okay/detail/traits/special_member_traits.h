@@ -38,13 +38,13 @@ inline constexpr bool is_constructible_from_v =
     is_destructible_v<T> && std::is_constructible_v<T, args_t...>;
 
 template <typename from_t, typename to_t, typename = void>
-class is_convertible_to_meta_t : std::false_type
+class is_convertible_to_meta_t : public std::false_type
 {};
 template <typename from_t, typename to_t>
 class is_convertible_to_meta_t<
     from_t, to_t,
     std::void_t<decltype(static_cast<to_t>(std::declval<from_t>()))>>
-    : std::true_type
+    : public std::true_type
 {};
 
 template <typename from_t, typename to_t>
