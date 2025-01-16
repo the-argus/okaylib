@@ -13,12 +13,13 @@ template <typename range_t> struct enumerated_view_t;
 struct enumerate_fn_t
 {
     template <typename iterable_t>
-    constexpr enumerated_view_t<std::remove_reference_t<iterable_t>>
+    constexpr decltype(auto)
     operator()(iterable_t&& iterable) const OKAYLIB_NOEXCEPT
     {
         static_assert(is_iterable_v<iterable_t>,
                       "Cannot enumerate given type- it is not iterable.");
-        return std::forward<iterable_t>(iterable);
+        return enumerated_view_t<std::remove_reference_t<iterable_t>>(
+            std::forward<iterable_t>(iterable));
     }
 };
 
