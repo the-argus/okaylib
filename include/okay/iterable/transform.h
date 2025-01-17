@@ -9,6 +9,18 @@ namespace ok {
 namespace detail {
 template <typename iterable_t, typename callable_t> struct transformed_view_t;
 
+template <typename callable_t, typename param_t, typename = void>
+struct returns_transformed_type : std::false_type
+{};
+template <typename callable_t, typename param_t>
+struct returns_transformed_type<
+    callable_t, param_t,
+    // requires that callable does not return void
+    std::enable_if_t<!std::is_same_v<void, decltype(std::declval<callable_t>()(
+                                               std::declval<param_t>()))>>>
+    : std::true_type
+{};
+
 struct transform_fn_t
 {
     template <typename iterable_t, typename callable_t>
@@ -30,15 +42,15 @@ struct transform_fn_t
                       "const-qualified input from the given iterable.");
         constexpr bool doesnt_return_void =
             (detail::iterable_has_get_ref_const_v<iterable_t> &&
-             !std::is_invocable_r_v<void, callable_t,
-                                    const value_type_for<iterable_t>&>) ||
+             returns_transformed_type<
+                 callable_t, const value_type_for<iterable_t>&>::value) ||
             (detail::iterable_has_get_v<iterable_t> &&
-             !std::is_invocable_r_v<void, callable_t,
-                                    value_type_for<iterable_t>>);
+             returns_transformed_type<callable_t,
+                                      value_type_for<iterable_t>>::value);
         static_assert(doesnt_return_void,
                       "Object given as callable accepts the correct arguments, "
                       "but returns void.");
-        return transformed_view_t<decltype(iterable), decltype(callable)>{
+        return transformed_view_t<decltype(iterable), callable_t>{
             std::forward<iterable_t>(iterable),
             std::forward<callable_t>(callable)};
     }
@@ -48,7 +60,7 @@ template <typename range_t, typename callable_t>
 struct transformed_view_t : public underlying_view_type<range_t>::type
 {
   private:
-    callable_t m_callable;
+    std::remove_reference_t<callable_t> m_callable;
 
   public:
     constexpr const callable_t& callable() const OKAYLIB_NOEXCEPT
@@ -82,13 +94,14 @@ struct iterable_definition<detail::transformed_view_t<iterable_t, callable_t>> :
 
     constexpr static decltype(auto) begin(const transformed_t& i)
     {
-        return ok::begin(i);
+        return ok::begin(i.base());
     }
 
     template <typename T = iterable_t>
-    constexpr static std::enable_if_t<std::is_same_v<iterable_t, T> &&
-                                          detail::iterable_has_is_inbounds_v<T>,
-                                      bool>
+    constexpr static std::enable_if_t<
+        std::is_same_v<iterable_t, T> &&
+            detail::iterable_has_is_inbounds_v<iterable_t>,
+        bool>
     is_inbounds(const transformed_t& i, const cursor_t& c)
     {
         return detail::iterable_definition_inner<T>::is_inbounds(i.base(),
@@ -98,7 +111,7 @@ struct iterable_definition<detail::transformed_view_t<iterable_t, callable_t>> :
     template <typename T = iterable_t>
     constexpr static std::enable_if_t<
         std::is_same_v<iterable_t, T> &&
-            detail::iterable_has_is_after_bounds_v<T>,
+            detail::iterable_has_is_after_bounds_v<iterable_t>,
         bool>
     is_after_bounds(const transformed_t& i, const cursor_t& c)
     {
@@ -107,11 +120,8 @@ struct iterable_definition<detail::transformed_view_t<iterable_t, callable_t>> :
     }
 
     template <typename T = iterable_t>
-    constexpr static std::enable_if_t<
-        std::is_same_v<iterable_t, T> &&
-            detail::iterable_has_is_before_bounds_v<T>,
-        bool>
-    is_before_bounds(const transformed_t& i, const cursor_t& c)
+    constexpr static bool is_before_bounds(const transformed_t& i,
+                                           const cursor_t& c)
     {
         return detail::iterable_definition_inner<T>::is_before_bounds(
             i.base(), c.inner());
@@ -139,11 +149,6 @@ struct iterable_definition<detail::transformed_view_t<iterable_t, callable_t>> :
             return i.callable()(std::forward<rettype>(inner_def::get(c)));
         }
     }
-
-    // satisfy requirement that get() returns value_type
-    // TODO: remove value type- we can deduce it and this is getting annoying
-    using value_type = std::decay_t<decltype(std::declval<const callable_t&>()(
-        std::declval<value_type_for<iterable_t>()>))>;
 };
 
 constexpr detail::range_adaptor_t<detail::transform_fn_t> transform;

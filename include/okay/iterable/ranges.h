@@ -20,10 +20,34 @@ template <typename callable_t, typename... args_t> struct partial_called_t
     callable_t& callable;
     std::tuple<args_t...> args;
 
-    template <typename range_t> constexpr decltype(auto) operator()(range_t&& r)
+    // for CTAD- construct tuple here instead of passing it into brace
+    // initializer
+    constexpr partial_called_t(callable_t& c, args_t&&... a)
+        : callable(c), args(std::move(a)...)
     {
-        return ok::detail::prefix_apply(std::forward<range_t>(r), args);
     }
+
+    template <typename iterable_t>
+    constexpr auto operator()(iterable_t&& iterable) const&
+    {
+        auto forwarder = [this, &iterable](const args_t&... args) {
+            return callable(std::forward<iterable_t>(iterable), args...);
+        };
+        return std::apply(forwarder, args);
+    }
+
+    template <typename iterable_t>
+    constexpr auto operator()(iterable_t&& iterable) &&
+    {
+        auto forwarder = [this, &iterable](args_t&... args) {
+            return callable(std::forward<iterable_t>(iterable),
+                            std::move(args)...);
+        };
+        return std::apply(forwarder, args);
+    }
+
+    template <typename iterable_t>
+    constexpr auto operator()(iterable_t&& __r) const&& = delete;
 };
 
 template <typename callable_t> struct range_adaptor_t
@@ -39,16 +63,15 @@ template <typename callable_t> struct range_adaptor_t
     }
 
     template <typename... args_t>
-    constexpr auto
-    operator()(std::enable_if_t<sizeof...(args_t) >= 1, args_t&&>... args) const
+    constexpr auto operator()(args_t&&... args) const
     {
         if constexpr (std::is_invocable_v<callable_t, args_t...>) {
             // adaptor(range, args...)
             return ok::invoke(callable, std::forward<args_t>(args)...);
         } else {
             // adaptor(args...)(range)
-            return range_adaptor_closure_t(partial_called_t{
-                callable, std::tuple<args_t...>(std::move(args)...)});
+            return range_adaptor_closure_t(
+                partial_called_t(callable, std::move(args)...));
         }
     }
 };
@@ -56,12 +79,20 @@ template <typename callable_t> struct range_adaptor_t
 template <typename callable_t>
 struct range_adaptor_closure_t : range_adaptor_t<callable_t>
 {
+    constexpr range_adaptor_closure_t(callable_t&& c)
+        : OKAYLIB_NOEXCEPT range_adaptor_t<callable_t>(
+              std::forward<callable_t>(c))
+    {
+    }
+
+    range_adaptor_closure_t() = default;
+
     // support for C(R)
     template <typename range_t>
     constexpr auto operator()(range_t&& range) const
-        -> std::enable_if_t<
-            is_iterable_v<range_t>,
-            decltype(this->callable(std::forward<range_t>(range)))>
+        -> std::enable_if_t<is_iterable_v<range_t>,
+                            decltype(this->callable(
+                                std::forward<range_t>(range)))> OKAYLIB_NOEXCEPT
     {
         return this->callable(std::forward<range_t>(range));
     }
@@ -70,9 +101,9 @@ struct range_adaptor_closure_t : range_adaptor_t<callable_t>
     template <typename range_t>
     friend constexpr auto operator|(range_t&& range,
                                     const range_adaptor_closure_t& closure)
-        -> std::enable_if_t<
-            is_iterable_v<range_t>,
-            decltype(std::declval<callable_t>()(std::forward<range_t>(range)))>
+        -> std::enable_if_t<is_iterable_v<range_t>,
+                            decltype(std::declval<callable_t>()(
+                                std::forward<range_t>(range)))> OKAYLIB_NOEXCEPT
     {
         return closure.callable(std::forward<range_t>(range));
     }
@@ -80,8 +111,9 @@ struct range_adaptor_closure_t : range_adaptor_t<callable_t>
     // support for C | D to produce a new range_adaptor_closure_t
     // so that (R | C) | D and R | (C | D) can be equivalent
     template <typename T>
-    friend constexpr auto operator|(const range_adaptor_closure_t<T>& lhs,
-                                    const range_adaptor_closure_t& rhs)
+    friend constexpr auto
+    operator|(const range_adaptor_closure_t<T>& lhs,
+              const range_adaptor_closure_t& rhs) OKAYLIB_NOEXCEPT
     {
         return range_adaptor_closure_t([lhs, rhs](auto&& r) {
             return std::forward<std::remove_reference_t<decltype(r)>>(r) | lhs |

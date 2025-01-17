@@ -520,15 +520,14 @@ class iterable_for : public detail::iterable_definition_inner<T>
         detail::iterable_has_is_after_bounds_v<noref>;
     static constexpr bool has_before_bounds =
         detail::iterable_has_is_before_bounds_v<noref>;
-    static_assert(has_inbounds != (has_after_bounds && has_before_bounds),
-                  "Iterable definition invalid- provide exactly one of either "
-                  "`is_inbounds()` "
-                  "OR `is_after_bounds() and is_before_bounds()`.");
-
-    static_assert(has_after_bounds == has_before_bounds,
-                  "Iterable definition invalid- do not provide "
-                  "is_after_bounds() or is_before_bounds() when is_inbounds() "
-                  "is also provided, because the latter two will be ignored.");
+    static_assert(has_inbounds || (has_after_bounds && has_before_bounds),
+                  "Iterable definition invalid- No bounds checking functions "
+                  "provided. Provide either `is_inbounds()` function or both "
+                  "`is_after_bounds` and `is_before_bounds`.");
+    static_assert(
+        has_inbounds != (has_after_bounds && has_before_bounds),
+        "Iterable definition invalid- do not provide both of `is_inbounds()` "
+        "*and* `is_after_bounds() and is_before_bounds()`.");
 
     static constexpr bool has_size = detail::iterable_has_size_v<noref>;
     static constexpr bool marked_infinite =
