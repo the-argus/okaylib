@@ -479,13 +479,9 @@ struct iterable_deduced_value_type<
     using type = typename iterable_definition_inner<iterable_t>::value_type;
 };
 
-// get deduced value type, also don't compile if the type is void (unable to be
-// deduced)
 template <typename iterable_t>
-using iterable_deduced_value_type_t = std::enable_if_t<
-    !std::is_same_v<typename iterable_deduced_value_type<iterable_t>::type,
-                    void>,
-    typename iterable_deduced_value_type<iterable_t>::type>;
+using iterable_deduced_value_type_t =
+    typename iterable_deduced_value_type<iterable_t>::type;
 
 template <typename iterable_t, typename = void>
 struct iterable_has_set : public std::false_type
