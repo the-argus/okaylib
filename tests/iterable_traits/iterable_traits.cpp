@@ -10,10 +10,23 @@
 #include "okay/iterable/enumerate.h"
 #include "okay/slice.h"
 
+ok::iterable_for<const int[500]> array_instantiation;
+static_assert(std::is_same_v<ok::value_type_for<const int[500]>, int>);
+static_assert(!ok::detail::iterable_has_get_ref_v<const int[500]>);
+static_assert(ok::detail::iterable_has_get_ref_const_v<const int[500]>);
+
 static_assert(ok::detail::is_random_access_iterable_v<ok::slice_t<int>>);
 static_assert(ok::detail::is_input_iterable_v<ok::slice_t<int>>);
 static_assert(ok::detail::is_input_iterable_v<ok::slice_t<const int>>);
 static_assert(ok::detail::is_output_iterable_v<ok::slice_t<int>>);
+static_assert(!ok::detail::iterable_has_set_v<ok::slice_t<const int>>);
+static_assert(std::is_const_v<ok::slice_t<const int>::value_type>);
+static_assert(ok::detail::iterable_has_get_ref_const_v<ok::slice_t<const int>>);
+static_assert(std::is_same_v<
+              ok::value_type_for<ok::slice_t<const int>>,
+              const int>);
+static_assert(!ok::detail::iterable_has_get_ref_v<ok::slice_t<const int>>);
+static_assert(!ok::detail::iterable_has_set_v<ok::slice_t<const int>>);
 static_assert(!ok::detail::is_output_iterable_v<ok::slice_t<const int>>);
 
 static_assert(ok::detail::is_output_iterable_v<example_iterable_cstyle>);

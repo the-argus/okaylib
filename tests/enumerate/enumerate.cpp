@@ -1,7 +1,6 @@
 #include "test_header.h"
 // test header must be first
 #include "okay/iterable/enumerate.h"
-#include "okay/iterable/transform.h"
 #include "okay/macros/foreach.h"
 #include "okay/slice.h"
 #include <array>
@@ -18,11 +17,8 @@ TEST_SUITE("enumerate")
             std::array<int, 50> ints = {};
             std::fill(ints.begin(), ints.end(), 0);
 
-            auto trfrm = [](value_type_for<decltype(ints | enumerate)> pair) -> size_t { return 0UL; };
-
             size_t i = 0;
-            ok_foreach(ok_pair(item, index), ints | enumerate | transform(trfrm))
-            // ok_foreach(ok_pair(item, index), ints | enumerate)
+            ok_foreach(ok_pair(item, index), ints | enumerate)
             {
                 static_assert(std::is_same_v<decltype(item), int&>);
                 static_assert(std::is_same_v<decltype(index), const size_t>);

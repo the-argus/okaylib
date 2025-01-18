@@ -2,7 +2,7 @@
 #define __OKAYLIB_ITERABLE_RANGES_H__
 
 #include "okay/detail/no_unique_addr.h"
-#include "okay/detail/prefix_apply.h"
+#include "okay/detail/invoke.h"
 #include "okay/iterable/iterable.h"
 #include <tuple>
 #include <utility>
@@ -99,11 +99,14 @@ struct range_adaptor_closure_t : range_adaptor_t<callable_t>
 
     // support for R | C to evaluate as C(R)
     template <typename range_t>
-    friend constexpr auto operator|(range_t&& range,
-                                    const range_adaptor_closure_t& closure)
-        -> std::enable_if_t<is_iterable_v<range_t>,
-                            decltype(std::declval<callable_t>()(
-                                std::forward<range_t>(range)))> OKAYLIB_NOEXCEPT
+    friend constexpr decltype(auto)
+    operator|(range_t&& range,
+              std::enable_if_t<is_iterable_v<range_t> &&
+                                   std::is_invocable_v<callable_t, range_t>,
+                               const range_adaptor_closure_t&>
+                  closure)
+
+        OKAYLIB_NOEXCEPT
     {
         return closure.callable(std::forward<range_t>(range));
     }

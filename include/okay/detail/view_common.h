@@ -53,7 +53,10 @@ class owning_view<
     range_t, std::enable_if_t<is_moveable_v<range_t> && is_iterable_v<range_t>>>
 {
   private:
-    mutable range_t m_range;
+    // this gets accessed by evil const_casts in views
+    // TODO: i dont think there are any problems with the way this is used
+    // I should spend some more time thinking about that, though
+    range_t m_range;
 
   public:
     constexpr owning_view(range_t&& range)
@@ -64,17 +67,36 @@ class owning_view<
     owning_view(owning_view&&) = default;
     owning_view& operator=(owning_view&&) = default;
 
-    constexpr range_t& base() & noexcept { return m_range; }
-    constexpr const range_t& base() const& noexcept { return m_range; }
-    constexpr range_t&& base() && noexcept { return std::move(m_range); }
-    constexpr const range_t&& base() const&& noexcept
+    template <typename derived_t, typename desired_reference_t>
+    constexpr remove_cvref_t<desired_reference_t>&
+    get_view_reference() & noexcept
     {
-        return std::move(m_range);
+        using desired_t = remove_cvref_t<desired_reference_t>;
+        static_assert(is_derived_from_v<derived_t, owning_view>);
+        static_assert(is_convertible_to_v<derived_t&, owning_view&>);
+        if constexpr (std::is_convertible_v<derived_t&, desired_t&>) {
+            return *static_cast<derived_t*>(this);
+        } else {
+            static_assert(std::is_convertible_v<range_t&, desired_t&>);
+            return m_range;
+        }
     }
-    constexpr range_t& base_nonconst() const& noexcept { return m_range; }
-    constexpr range_t&& base_nonconst() const&& noexcept
+    template <typename derived_t, typename desired_reference_t>
+    constexpr const remove_cvref_t<desired_reference_t>&
+    get_view_reference() const& noexcept
     {
-        return std::move(m_range);
+        using desired_t = remove_cvref_t<desired_reference_t>;
+        static_assert(is_derived_from_v<derived_t, owning_view>);
+        static_assert(
+            is_convertible_to_v<const derived_t&, const owning_view&>);
+        if constexpr (std::is_convertible_v<const derived_t&,
+                                            const desired_t&>) {
+            return *static_cast<const derived_t*>(this);
+        } else {
+            static_assert(
+                std::is_convertible_v<const range_t&, const desired_t&>);
+            return m_range;
+        }
     }
 };
 
@@ -113,9 +135,36 @@ class ref_view<range_t, std::enable_if_t<std::is_object_v<range_t> &&
     {
     }
 
-    constexpr const range_t& base() const { return *m_range; }
-    constexpr range_t& base() { return *m_range; }
-    constexpr range_t& base_nonconst() const { return *m_range; }
+    template <typename derived_t, typename desired_reference_t>
+    constexpr remove_cvref_t<desired_reference_t>&
+    get_view_reference() & noexcept
+    {
+        using desired_t = remove_cvref_t<desired_reference_t>;
+        static_assert(is_derived_from_v<derived_t, ref_view>);
+        static_assert(is_convertible_to_v<derived_t&, ref_view&>);
+        if constexpr (std::is_convertible_v<derived_t&, desired_t&>) {
+            return *static_cast<derived_t*>(this);
+        } else {
+            static_assert(std::is_convertible_v<range_t&, desired_t&>);
+            return *m_range;
+        }
+    }
+    template <typename derived_t, typename desired_reference_t>
+    constexpr const remove_cvref_t<desired_reference_t>&
+    get_view_reference() const& noexcept
+    {
+        using desired_t = remove_cvref_t<desired_reference_t>;
+        static_assert(is_derived_from_v<derived_t, ref_view>);
+        static_assert(is_convertible_to_v<const derived_t&, const ref_view&>);
+        if constexpr (std::is_convertible_v<const derived_t&,
+                                            const desired_t&>) {
+            return *static_cast<const derived_t*>(this);
+        } else {
+            static_assert(
+                std::is_convertible_v<const range_t&, const desired_t&>);
+            return *m_range;
+        }
+    }
 };
 
 template <typename range_t> ref_view(range_t&) -> ref_view<range_t>;

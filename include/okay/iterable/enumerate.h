@@ -188,7 +188,8 @@ struct iterable_definition<detail::enumerated_view_t<iterable_t>> :
 
     constexpr static cursor_t begin(const enumerated_t& i)
     {
-        return cursor_t(ok::begin(i.base()));
+        return cursor_t(ok::begin(
+            i.template get_view_reference<enumerated_t, iterable_t>()));
     }
 
     template <typename T = iterable_t>
@@ -197,8 +198,9 @@ struct iterable_definition<detail::enumerated_view_t<iterable_t>> :
                                       bool>
     is_inbounds(const enumerated_t& i, const cursor_t& c)
     {
-        return detail::iterable_definition_inner<T>::is_inbounds(i.base(),
-                                                                 c.inner());
+        return detail::iterable_definition_inner<T>::is_inbounds(
+            i.template get_view_reference<enumerated_t, iterable_t>(),
+            c.inner());
     }
 
     template <typename T = iterable_t>
@@ -208,8 +210,9 @@ struct iterable_definition<detail::enumerated_view_t<iterable_t>> :
         bool>
     is_after_bounds(const enumerated_t& i, const cursor_t& c)
     {
-        return detail::iterable_definition_inner<T>::is_after_bounds(i.base(),
-                                                                     c.inner());
+        return detail::iterable_definition_inner<T>::is_after_bounds(
+            i.template get_view_reference<enumerated_t, iterable_t>(),
+            c.inner());
     }
 
     template <typename T = iterable_t>
@@ -220,23 +223,45 @@ struct iterable_definition<detail::enumerated_view_t<iterable_t>> :
     is_before_bounds(const enumerated_t& i, const cursor_t& c)
     {
         return detail::iterable_definition_inner<T>::is_before_bounds(
-            i.base(), c.inner());
+            i.template get_view_reference<enumerated_t, iterable_t>(),
+            c.inner());
     }
 
     constexpr static auto get(const enumerated_t& i,
                               const cursor_t& c) OKAYLIB_NOEXCEPT
     {
         using inner_def = detail::iterable_definition_inner<iterable_t>;
-        if constexpr (detail::iterable_has_get_ref_v<iterable_t> ||
-                      detail::iterable_has_get_ref_const_v<iterable_t>) {
-            using reftype =
-                decltype(inner_def::get_ref(i.base_nonconst(), c.inner()));
+        if constexpr (detail::iterable_has_get_ref_v<iterable_t>) {
+            // if get_ref nonconst exists, do evil const cast to get to it
+            using reftype = decltype(inner_def::get_ref(
+                const_cast<enumerated_t&>(i)
+                    .template get_view_reference<enumerated_t, iterable_t>(),
+                c.inner()));
             return std::pair<reftype, const size_t>(
-                inner_def::get_ref(i.base_nonconst(), c.inner()), c.index());
+                inner_def::get_ref(
+                    const_cast<enumerated_t&>(i)
+                        .template get_view_reference<enumerated_t,
+                                                     iterable_t>(),
+                    c.inner()),
+                c.index());
+        } else if constexpr (detail::iterable_has_get_ref_const_v<iterable_t>) {
+            using reftype = decltype(inner_def::get_ref(
+                i.template get_view_reference<enumerated_t, iterable_t>(),
+                c.inner()));
+            return std::pair<reftype, const size_t>(
+                inner_def::get_ref(
+                    i.template get_view_reference<enumerated_t, iterable_t>(),
+                    c.inner()),
+                c.index());
         } else {
-            using gettype = decltype(inner_def::get(i.base(), c.inner()));
+            using gettype = decltype(inner_def::get(
+                i.template get_view_reference<enumerated_t, iterable_t>(),
+                c.inner()));
             return std::pair<gettype, const size_t>(
-                inner_def::get(i.base(), c.inner()), c.index());
+                inner_def::get(
+                    i.template get_view_reference<enumerated_t, iterable_t>(),
+                    c.inner()),
+                c.index());
         }
     }
 

@@ -1,0 +1,87 @@
+#include "test_header.h"
+// test header must be first
+#include "okay/iterable/enumerate.h"
+#include "okay/iterable/transform.h"
+#include "okay/macros/foreach.h"
+#include "okay/slice.h"
+#include "okay/stdmem.h"
+#include <array>
+
+using namespace ok;
+
+TEST_SUITE("enumerate")
+{
+    TEST_CASE("functionality")
+    {
+        SUBCASE("identity transform")
+        {
+            std::array<int, 50> ints = {};
+            std::fill(ints.begin(), ints.end(), 0);
+
+            for (auto c = ok::begin(ints); ok::is_inbounds(ints, c); ++c) {
+                int& item = ok::iter_get_ref(ints, c);
+                item = c;
+            }
+
+            auto identity = ints | transform([](auto i) { return i; });
+            for (auto c = ok::begin(identity); ok::is_inbounds(identity, c);
+                 ++c) {
+                const int& item = ok::iter_get_temporary_ref(identity, c);
+                REQUIRE(item == c);
+            }
+        }
+
+        SUBCASE("identity transform with macros")
+        {
+            std::array<int, 50> ints = {};
+            memfill(slice_t(ints), 0);
+
+            size_t c = 0;
+            ok_foreach(auto& item, ints)
+            {
+                item = c;
+                ++c;
+            }
+
+            auto identity = ints | transform([](auto i) { return i; });
+            c = 0;
+            ok_foreach(const auto& item, identity)
+            {
+                REQUIRE(item == c);
+                ++c;
+            }
+        }
+
+        SUBCASE("squared view with std::array")
+        {
+            auto squared = transform([](auto i) { return i * i; });
+
+            std::array<int, 50> ints;
+
+            ok_foreach(ok_pair(item, index), enumerate(ints)) item = index;
+
+            size_t c = 0;
+            ok_foreach(const int i, ints | squared)
+            {
+                REQUIRE(i == c * c);
+                ++c;
+            }
+        }
+
+        SUBCASE("squared view with rvalue std::array")
+        {
+            auto squared = transform([](auto i) { return i * i; });
+
+            std::array<int, 50> ints;
+
+            ok_foreach(ok_pair(item, index), enumerate(ints)) item = index;
+
+            size_t c = 0;
+            ok_foreach(const int i, std::move(ints) | squared)
+            {
+                REQUIRE(i == c * c);
+                ++c;
+            }
+        }
+    }
+}

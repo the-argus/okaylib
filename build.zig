@@ -63,6 +63,7 @@ const okaylib_headers = &[_][]const u8{
 const test_source_files = &[_][]const u8{
     "defer/defer.cpp",
     "enumerate/enumerate.cpp",
+    "transform/transform.cpp",
     "opt/opt.cpp",
     "res/res.cpp",
     "slice/slice.cpp",

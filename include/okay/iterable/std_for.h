@@ -35,7 +35,7 @@ template <typename T> class std_for
     {
         using iterator_category = std::forward_iterator_tag;
         using difference_type = std::ptrdiff_t;
-        using value_type = detail::value_type_unchecked_for<T>;
+        using value_type = value_type_for<T>;
         using pointer = value_type*;
         using reference = value_type&;
 
@@ -114,7 +114,7 @@ template <typename T> class std_for
     {
         using iterator_category = std::forward_iterator_tag;
         using difference_type = std::ptrdiff_t;
-        using value_type = const detail::value_type_unchecked_for<T>;
+        using value_type = const value_type_for<T>;
         using pointer = const value_type*;
         using reference = const value_type&;
 

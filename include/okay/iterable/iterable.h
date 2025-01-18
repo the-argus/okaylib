@@ -145,6 +145,10 @@ struct iterable_definition<
 
   public:
     using value_type = typename iterable_t::value_type;
+    // specify this to allow the case where `value_type` is const to compile,
+    // despite `get_ref` incorrectly returning a `const type&`. (ignores get_ref
+    // as an iterable function and supresses the errors)
+    static constexpr bool allow_get_ref_return_const_ref = true;
 
     static constexpr value_type& get_ref(iterable_t& i,
                                          size_t c) OKAYLIB_NOEXCEPT
@@ -213,17 +217,6 @@ constexpr bool is_valid_cursor_v =
 template <typename T>
 constexpr bool is_valid_value_type_v = std::is_object_v<T>;
 
-template <typename T, typename = void>
-struct has_value_type : public std::false_type
-{};
-template <typename T>
-struct has_value_type<T, std::void_t<typename T::value_type>>
-    : public std::true_type
-{};
-
-template <typename T>
-using value_type_unchecked_for =
-    typename iterable_definition_inner<T>::value_type;
 template <typename T>
 using cursor_type_unchecked_for = decltype(iterable_definition_inner<T>::begin(
     std::declval<const remove_cvref_t<T>&>()));
@@ -236,6 +229,16 @@ struct iterable_has_begin<
     T, std::enable_if_t<!std::is_same_v<
            void, decltype(iterable_definition_inner<T>::begin(
                      std::declval<const remove_cvref_t<T>&>()))>>>
+    : public std::true_type
+{};
+
+template <typename T, typename = void>
+struct iterable_allows_get_ref_return_const_ref : public std::false_type
+{};
+template <typename T>
+struct iterable_allows_get_ref_return_const_ref<
+    T, std::enable_if_t<
+           iterable_definition_inner<T>::allow_get_ref_return_const_ref>>
     : public std::true_type
 {};
 
@@ -341,18 +344,148 @@ struct has_iterable_definition<
 {};
 
 template <typename iterable_t, typename = void>
-struct iterable_has_get : public std::false_type
-{};
+struct iterable_has_get_unchecked_rettype : public std::false_type
+{
+    using deduced_value_type = void;
+    using return_type = void;
+};
 
 template <typename iterable_t>
-struct iterable_has_get<
+struct iterable_has_get_unchecked_rettype<
     iterable_t,
-    std::enable_if_t<std::is_same_v<
+    std::enable_if_t<!std::is_same_v<
         decltype(iterable_definition_inner<iterable_t>::get(
             std::declval<const iterable_t&>(),
-            std::declval<const cursor_type_unchecked_for<iterable_t>&>())),
-        value_type_unchecked_for<iterable_t>>>> : public std::true_type
+            std::declval<const cursor_type_unchecked_for<iterable_t>&>()))
+
+            ,
+        void>>> : public std::true_type
+{
+    using return_type = decltype(iterable_definition_inner<iterable_t>::get(
+        std::declval<const iterable_t&>(),
+        std::declval<const cursor_type_unchecked_for<iterable_t>&>()));
+
+    // get() returns value_type
+    using deduced_value_type = return_type;
+};
+
+template <typename iterable_t, typename = void>
+struct iterable_has_get_ref_unchecked_rettype : public std::false_type
+{
+    using deduced_value_type = void;
+    using return_type = void;
+};
+
+template <typename iterable_t>
+struct iterable_has_get_ref_unchecked_rettype<
+    iterable_t,
+    std::enable_if_t<
+        std::is_same_v<
+            std::void_t<decltype(iterable_definition_inner<iterable_t>::get_ref(
+                std::declval<iterable_t&>(),
+                std::declval<const cursor_type_unchecked_for<iterable_t>&>()))>,
+            void>
+        // most complex boolean logic ever written...
+        // This function only checks if the object has a get_ref function, it
+        // does not check the return type. UNLESS the return type is
+        // incorrectly const& AND allow_get_ref_return_const_ref is defined. In
+        // this case we ignore the get_ref function altogether.
+        && (!iterable_allows_get_ref_return_const_ref<iterable_t>::value ||
+            (iterable_allows_get_ref_return_const_ref<iterable_t>::value &&
+             // allow_get_ref_return_const_ref is set, so do the constness check
+             // here to avoid static_asserts later down the line
+             !std::is_const_v<std::remove_reference_t<
+                 decltype(iterable_definition_inner<iterable_t>::get_ref(
+                     std::declval<iterable_t&>(),
+                     std::declval<
+                         const cursor_type_unchecked_for<iterable_t>&>()))>>))>>
+    : public std::true_type
+{
+    using return_type = decltype(iterable_definition_inner<iterable_t>::get_ref(
+        std::declval<iterable_t&>(),
+        std::declval<const cursor_type_unchecked_for<iterable_t>&>()));
+    using deduced_value_type = std::remove_reference_t<return_type>;
+};
+
+template <typename iterable_t, typename = void>
+struct iterable_has_get_ref_const_unchecked_rettype : public std::false_type
+{
+    using deduced_value_type = void;
+    using return_type = void;
+};
+
+template <typename iterable_t>
+struct iterable_has_get_ref_const_unchecked_rettype<
+    iterable_t,
+    std::void_t<decltype(iterable_definition_inner<iterable_t>::get_ref(
+        std::declval<const iterable_t&>(),
+        std::declval<const cursor_type_unchecked_for<iterable_t>&>()))>>
+    : public std::true_type
+{
+    using return_type = decltype(iterable_definition_inner<iterable_t>::get_ref(
+        std::declval<const iterable_t&>(),
+        std::declval<const cursor_type_unchecked_for<iterable_t>&>()));
+    using deduced_value_type = remove_cvref_t<return_type>;
+};
+
+template <typename iterable_t>
+constexpr bool iterable_has_get_unchecked_rettype_v =
+    iterable_has_get_unchecked_rettype<iterable_t>::value;
+template <typename iterable_t>
+constexpr bool iterable_has_get_ref_unchecked_rettype_v =
+    iterable_has_get_ref_unchecked_rettype<iterable_t>::value;
+template <typename iterable_t>
+constexpr bool iterable_has_get_ref_const_unchecked_rettype_v =
+    iterable_has_get_ref_const_unchecked_rettype<iterable_t>::value;
+
+template <typename T, typename = void>
+struct has_value_type : public std::false_type
 {};
+
+template <typename T>
+struct has_value_type<T, std::void_t<typename T::value_type>>
+    : public std::true_type
+{
+    using type = typename T::value_type;
+};
+
+/// Try to find the value type of an iterable, either from its
+/// iterable_definition's value_type member type, or by deducing it from the
+/// return values of get, get_ref_const, and get_ref (in that order). If unable
+/// to deduce, the type is void.
+template <typename iterable_t, typename = void>
+struct iterable_deduced_value_type
+{
+    using type = std::conditional_t<
+        iterable_has_get_unchecked_rettype_v<iterable_t>,
+        typename iterable_has_get_unchecked_rettype<
+            iterable_t>::deduced_value_type,
+        std::conditional_t<
+            iterable_has_get_ref_const_unchecked_rettype_v<iterable_t>,
+            typename iterable_has_get_ref_const_unchecked_rettype<
+                iterable_t>::deduced_value_type,
+            std::conditional_t<
+                iterable_has_get_ref_unchecked_rettype_v<iterable_t>,
+                typename iterable_has_get_ref_unchecked_rettype<
+                    iterable_t>::deduced_value_type,
+                void>>>;
+};
+
+template <typename iterable_t>
+struct iterable_deduced_value_type<
+    iterable_t,
+    std::void_t<typename iterable_definition_inner<iterable_t>::value_type>>
+{
+    using type = typename iterable_definition_inner<iterable_t>::value_type;
+};
+
+// get deduced value type, also don't compile if the type is void (unable to be
+// deduced)
+template <typename iterable_t>
+using iterable_deduced_value_type_t = std::enable_if_t<
+    !std::is_same_v<typename iterable_deduced_value_type<iterable_t>::type,
+                    void>,
+    typename iterable_deduced_value_type<iterable_t>::type>;
 
 template <typename iterable_t, typename = void>
 struct iterable_has_set : public std::false_type
@@ -365,60 +498,36 @@ struct iterable_has_set<
         decltype(iterable_definition_inner<iterable_t>::set(
             std::declval<iterable_t&>(),
             std::declval<const cursor_type_unchecked_for<iterable_t>&>(),
-            std::declval<value_type_unchecked_for<iterable_t>&&>())),
+            std::declval<iterable_deduced_value_type_t<iterable_t>&&>())),
         void>>> : std::true_type
 {};
 
-template <typename iterable_t, typename = void>
-struct iterable_has_get_ref : public std::false_type
-{};
-
-template <typename T>
-using iterable_get_ref_return_type_t =
-    decltype(iterable_definition_inner<T>::get_ref(
-        std::declval<T&>(),
-        std::declval<const cursor_type_unchecked_for<T>&>()));
-
-template <typename iterable_t>
-struct iterable_has_get_ref<
-    iterable_t,
-    std::enable_if_t<std::is_same_v<iterable_get_ref_return_type_t<iterable_t>,
-                                    value_type_unchecked_for<iterable_t>&> &&
-                     !std::is_const_v<std::remove_reference_t<
-                         iterable_get_ref_return_type_t<iterable_t>>>>>
-    : public std::true_type
-{};
-
-template <typename T>
-using iterable_get_ref_const_return_type_t =
-    decltype(iterable_definition_inner<T>::get_ref(
-        std::declval<const T&>(),
-        std::declval<const cursor_type_unchecked_for<T>&>()));
-
-template <typename iterable_t, typename = void>
-struct iterable_has_get_ref_const : public std::false_type
-{};
-
-template <typename iterable_t>
-struct iterable_has_get_ref_const<
-    iterable_t,
-    std::enable_if_t<
-        std::is_same_v<iterable_get_ref_const_return_type_t<iterable_t>,
-                       const value_type_unchecked_for<iterable_t>&> &&
-        std::is_const_v<std::remove_reference_t<
-            iterable_get_ref_const_return_type_t<iterable_t>>>>>
-    : public std::true_type
-{};
-
-template <typename iterable_t>
-constexpr bool iterable_has_get_v = iterable_has_get<iterable_t>::value;
 template <typename iterable_t>
 constexpr bool iterable_has_set_v = iterable_has_set<iterable_t>::value;
-template <typename iterable_t>
-constexpr bool iterable_has_get_ref_v = iterable_has_get_ref<iterable_t>::value;
-template <typename iterable_t>
+
+template <typename T>
+constexpr bool iterable_has_get_v =
+    detail::iterable_has_get_unchecked_rettype_v<T> &&
+    std::is_same_v<
+        typename detail::iterable_has_get_unchecked_rettype<T>::return_type,
+        detail::iterable_deduced_value_type_t<T>>;
+
+template <typename T>
+constexpr bool iterable_has_get_ref_v =
+    detail::iterable_has_get_ref_unchecked_rettype_v<T> &&
+    // additional check to make sure returned value is not const
+    !std::is_const_v<detail::iterable_deduced_value_type_t<T>> &&
+    std::is_same_v<
+        typename detail::iterable_has_get_ref_unchecked_rettype<T>::return_type,
+        detail::iterable_deduced_value_type_t<T>&>;
+
+template <typename T>
 constexpr bool iterable_has_get_ref_const_v =
-    iterable_has_get_ref_const<iterable_t>::value;
+    detail::iterable_has_get_ref_const_unchecked_rettype_v<T> &&
+    std::is_same_v<
+        typename detail::iterable_has_get_ref_const_unchecked_rettype<
+            T>::return_type,
+        const detail::iterable_deduced_value_type_t<T>&>;
 
 template <typename T>
 constexpr bool has_baseline_functions_v =
@@ -428,6 +537,9 @@ constexpr bool has_baseline_functions_v =
     // checks
     (iterable_has_is_inbounds_v<T> != (iterable_has_is_after_bounds_v<T> &&
                                        iterable_has_is_before_bounds_v<T>)) &&
+    // also make sure you dont have is_inbounds and one of after/before also
+    // defined
+    (iterable_has_is_after_bounds_v<T> == iterable_has_is_before_bounds_v<T>) &&
     iterable_has_begin_v<T>;
 
 template <typename T>
@@ -496,6 +608,10 @@ constexpr bool is_random_access_iterable_v =
 template <typename T>
 class iterable_for : public detail::iterable_definition_inner<T>
 {
+  public:
+    using value_type = typename detail::iterable_deduced_value_type<T>::type;
+
+  private:
     using noref = detail::remove_cvref_t<T>;
     static constexpr bool complete = detail::is_complete<noref>;
 
@@ -546,34 +662,87 @@ class iterable_for : public detail::iterable_definition_inner<T>
                   "Iterable definition invalid: specify only one of `static "
                   "bool infinite = ...` or `size()` method.");
 
-    static constexpr bool has_value_type =
-        detail::has_value_type<detail::iterable_definition_inner<noref>>::value;
-    static_assert(has_value_type,
-                  "Iterable definition invalid- specify value_type.");
+    static constexpr bool has_value_type = !std::is_same_v<value_type, void>;
+    static_assert(
+        has_value_type,
+        "Iterable definition invalid- specify some object type for "
+        "value_type, or provide valid `get()`, `get_ref()`, or `get_ref() "
+        "const` functions so that the value type can be deduced.");
 
-    static constexpr bool valid_value_type = detail::is_valid_value_type_v<
-        typename detail::iterable_definition_inner<noref>::value_type>;
+    static constexpr bool valid_value_type =
+        detail::is_valid_value_type_v<value_type>;
     static_assert(valid_value_type,
                   "Iterable definition invalid- value_type is not an object.");
 
+    // either it doesnt have the function at all, OR the function is good
+    static constexpr bool get_function_returns_value_type =
+        !detail::iterable_has_get_unchecked_rettype_v<noref> ||
+        detail::iterable_has_get_v<noref>;
+
+    static_assert(get_function_returns_value_type,
+                  "Iterable definition invalid- `get()` function does not "
+                  "return value_type.");
+
+    static constexpr bool get_ref_function_returns_value_type =
+        !detail::iterable_has_get_ref_unchecked_rettype_v<noref> ||
+        detail::iterable_has_get_ref_v<noref>;
+
+    static_assert(
+        !(!get_ref_function_returns_value_type && std::is_const_v<value_type>),
+        "Iterable definition invalid- `get_ref()` specified, and it returns "
+        "`value_type&` correctly, but `value_type` is const. If your iterable "
+        "definition is templated, consider adding `static constexpr bool "
+        "allow_get_ref_return_const_ref = true` to your iterable_definition to "
+        "ignore the invalid get_ref() altogether, and avoid this error "
+        "message.");
+
+    static_assert(get_ref_function_returns_value_type,
+                  "Iterable definition invalid- `get_ref()` function does not "
+                  "return `value_type&`");
+
+    static constexpr bool get_ref_const_function_returns_value_type =
+        !detail::iterable_has_get_ref_const_unchecked_rettype_v<noref> ||
+        detail::iterable_has_get_ref_const_v<noref>;
+
+    static_assert(get_ref_const_function_returns_value_type,
+                  "Iterable definition invalid- `get_ref() const` function "
+                  "does not return `const value_type&`");
+
     static constexpr bool valid_cursor =
-        detail::is_valid_cursor_v<detail::cursor_type_unchecked_for<T>>;
+        detail::is_valid_cursor_v<detail::cursor_type_unchecked_for<noref>>;
     static_assert(
         valid_cursor,
         "Iterable definition invalid- the return value from begin() (the "
         "cursor type) is either not an object or cannot be pre-incremented.");
 
+    static constexpr bool before_and_after_or_inbounds_are_mutually_exclusive =
+        detail::iterable_has_is_inbounds_v<noref> !=
+        (detail::iterable_has_is_after_bounds_v<noref> &&
+         detail::iterable_has_is_before_bounds_v<noref>);
+    static_assert(
+        before_and_after_or_inbounds_are_mutually_exclusive,
+        "Iterable definition invalid- define either `is_inbounds()` XOR (both "
+        "of `is_after_bounds()` and `is_before_bounds()`), but not both.");
+    static constexpr bool before_and_after_are_both_defined_or_not =
+        detail::iterable_has_is_after_bounds_v<noref> ==
+        detail::iterable_has_is_before_bounds_v<noref>;
+    static_assert(
+        before_and_after_are_both_defined_or_not,
+        "Iterable definition invalid- different status for `is_before_bounds` "
+        "and `is_after_bounds`. either define both of `is_before_bounds()` and "
+        "`is_after_bounds()`, or define neither.");
+
     static constexpr bool input_or_output =
-        detail::is_input_or_output_iterable_v<T>;
+        detail::is_input_or_output_iterable_v<noref>;
     static_assert(
         input_or_output,
         "Iterable definition invalid- it does not define any operations that "
         "can be done with the iterable like get(), set(), or get_ref()");
 
     static constexpr bool ref_or_get_are_mutually_exclusive =
-        detail::iterable_has_get_v<T> !=
-        (detail::iterable_has_get_ref_v<T> ||
-         detail::iterable_has_get_ref_const_v<T>);
+        detail::iterable_has_get_v<noref> !=
+        (detail::iterable_has_get_ref_v<noref> ||
+         detail::iterable_has_get_ref_const_v<noref>);
     static_assert(
         ref_or_get_are_mutually_exclusive,
         "Iterable definition invalid- both get() and a get_ref() functions are "
@@ -583,29 +752,31 @@ class iterable_for : public detail::iterable_definition_inner<T>
 };
 
 namespace detail {
-template <typename T, typename = void> struct is_iterable : std::false_type
+template <typename T, typename value_type, typename = void>
+struct is_iterable : std::false_type
 {};
 /// Same as the checks performed in `iterator_for`
-template <typename T>
+template <typename T, typename value_type>
 struct is_iterable<
-    T, std::enable_if_t<
-           is_complete<T> && has_iterable_definition<T>::value &&
-           has_value_type<iterable_definition_inner<T>>::value &&
-           is_valid_value_type_v<value_type_unchecked_for<T>> &&
-           iterable_has_begin_v<T> &&
-           is_valid_cursor_v<cursor_type_unchecked_for<T>> &&
-           (iterable_has_is_inbounds_v<T> !=
-            (iterable_has_is_after_bounds_v<T> &&
-             iterable_has_is_before_bounds_v<T>)) &&
-           iterable_has_is_after_bounds_v<T> ==
-               iterable_has_is_before_bounds_v<T> &&
-           (iterable_has_size_v<T> || iterable_marked_infinite_v<T> ||
-            iterable_marked_finite_v<T>) &&
-           ((int(iterable_has_size_v<T>) + int(iterable_marked_infinite_v<T>) +
-             int(iterable_marked_finite_v<T>)) == 1) &&
-           is_input_or_output_iterable_v<T> &&
-           (iterable_has_get_v<T> !=
-            (iterable_has_get_ref_v<T> || iterable_has_get_ref_const_v<T>))>>
+    T, value_type,
+    std::enable_if_t<
+        is_complete<T> && has_iterable_definition<T>::value &&
+        // NOTE: not checking if has value type before doing this: if it
+        // doesnt have it, it will be void, which is not a valid value type
+        is_valid_value_type_v<value_type> && iterable_has_begin_v<T> &&
+        is_valid_cursor_v<cursor_type_unchecked_for<T>> &&
+        (iterable_has_is_inbounds_v<T> !=
+         (iterable_has_is_after_bounds_v<T> &&
+          iterable_has_is_before_bounds_v<T>)) &&
+        iterable_has_is_after_bounds_v<T> ==
+            iterable_has_is_before_bounds_v<T> &&
+        (iterable_has_size_v<T> || iterable_marked_infinite_v<T> ||
+         iterable_marked_finite_v<T>) &&
+        ((int(iterable_has_size_v<T>) + int(iterable_marked_infinite_v<T>) +
+          int(iterable_marked_finite_v<T>)) == 1) &&
+        is_input_or_output_iterable_v<T> &&
+        (iterable_has_get_v<T> !=
+         (iterable_has_get_ref_v<T> || iterable_has_get_ref_const_v<T>))>>
     : std::true_type
 {};
 } // namespace detail
@@ -614,7 +785,8 @@ struct is_iterable<
 /// of either input or output iteration.
 template <typename T>
 constexpr bool is_iterable_v =
-    detail::is_iterable<detail::remove_cvref_t<T>>::value;
+    detail::is_iterable<detail::remove_cvref_t<T>,
+                        detail::iterable_deduced_value_type_t<T>>::value;
 
 template <typename T>
 using value_type_for = typename iterable_for<T>::value_type;
@@ -679,7 +851,7 @@ struct iter_get_temporary_ref_meta_t<
     call(const iterable_t& iterable,
          const cursor_type_for<iterable_t>& cursor) OKAYLIB_NOEXCEPT
     {
-        return iter_copyout(iterable, cursor);
+        return iter_copyout_fn_t{}(iterable, cursor);
     }
 };
 

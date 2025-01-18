@@ -3,6 +3,7 @@
 
 #include "okay/detail/abort.h"
 #include "okay/detail/addressof.h"
+#include "okay/detail/template_util/remove_cvref.h"
 #include "okay/detail/traits/is_container.h"
 #include "okay/detail/traits/is_instance.h"
 #include <cassert>
@@ -83,7 +84,8 @@ template <typename viewed_t> class slice_t
                       detail::is_container_v<U> &&
                           !detail::is_instance<U, ok::slice_t>() &&
                           // either the value type of the container is the
-                          // same as our value type, or
+                          // same as our value type, or it is nonconst and we
+                          // are const
                           (std::is_same_v<decltype(*other.data()), viewed_t&> ||
                            std::is_same_v<decltype(*other.data()),
                                           std::remove_const_t<viewed_t>&>),
@@ -138,6 +140,15 @@ template <typename viewed_t> class slice_t
     friend struct fmt::formatter<slice_t>;
 #endif
 };
+
+template <typename viewed_t, size_t size>
+slice_t(viewed_t (&)[size]) -> slice_t<viewed_t>;
+
+template <typename T>
+slice_t(T) -> slice_t<std::enable_if_t<
+               detail::is_container_v<detail::remove_cvref_t<T>> &&
+                   !detail::is_instance<detail::remove_cvref_t<T>, slice_t>(),
+               typename detail::remove_cvref_t<T>::value_type>>;
 
 /// Construct a slice point to a buffer of memory. Requires that data is not
 /// nullptr. Aborts the program if data is nullptr.

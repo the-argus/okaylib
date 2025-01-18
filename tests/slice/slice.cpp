@@ -169,7 +169,7 @@ TEST_SUITE("slice")
         SUBCASE("iteration")
         {
             std::array<uint8_t, 128> mem;
-            slice_t<uint8_t> slice(mem);
+            slice_t slice(mem);
 
             memfill(slice, 0);
             uint8_t index = 0;
@@ -225,7 +225,7 @@ TEST_SUITE("slice")
             uint8_t mem[128];
             auto slice = raw_slice(mem[0], sizeof(mem));
             REQUIRE(slice == slice_t<uint8_t>(mem));
-            memfill(slice, 0);
+            memfill(slice_t(mem), 0);
 
             ok_foreach(ok_pair(byte, index), enumerate(slice))
             {
