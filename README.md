@@ -18,14 +18,25 @@ an effort to organize that (not always necessary) work into one reusable product
 ## Planned features
 
 - [x] implicit `context()` for allocators, random number generators, current error
-      message, etc
+      message, etc.
+- [x] modify context with `context_switch` type, which always restores changes when
+      it is destroyed. it cannot be moved.
 - [x] polymorphic allocator interface
 - [ ] implementations for arena, block, slab, page, and remapping page allocators
-- [ ] wrapper / import of jemalloc for the allocator interface
+- [ ] wrapper / import of jemalloc for the allocator interface.
 - [x] "result" type: optional with enum error value. like `std::expected`, kind of
 - [x] "opt" type: optional but supports assigning in references which effectively
-      become pointers. no exceptions
-- [x] conditional support for constexpr + trivial traits for opt and result
+      become pointers. does not throw.
+- [ ] "hresult" type: like result but instead of storing its error value, it points
+      to a more complex (optionally polymorphic) error type. stands for "heavy
+      result"
+- [ ] "cresult" type, exactly like optional internally but with a different interface.
+      On construction, it stores an info string in the thread context. Has a getter
+      which returns a reference to the string in the context. Stands for "context
+      result". Maybe instead "lresult" for "local result?". Potentially a debugmode
+      check to make sure you haven't overwritten the value in the context when you
+      access it from the result.
+- [x] opt and result are constexpr + trivial, if their payloads are
 - [x] slice type: like span but not nullable
 - [x] defer statement
 - [x] stdmem: functions for checking if slices are overlapping, contained
@@ -44,8 +55,9 @@ an effort to organize that (not always necessary) work into one reusable product
       with iterator stuff should also be a range)
 - [ ] A dynamic bit array and a static bit array with boolean-like iterators, to
       prove capability of new iterators
-- [ ] sane `std::string` replacement, inspired a bit by Godot's `String` and
-      maybe `StringName` as well if that can be pulled off.
+- [ ] sane `std::string` replacement, inspired a bit by Godot's `String`
+- [ ] `static_string`: `const char*` replacement which stores its length and has
+      a lot of nice string operations. never does allocation.
 - [ ] A low friction variant which is something like `std::variant<int, float, string>`
 - [ ] A fast hashmap, maybe one of the flat hash sets / maps from Google, with
       support for emplace_back which can error by value
@@ -74,8 +86,8 @@ an effort to organize that (not always necessary) work into one reusable product
       variants for all algorithms. This is rangelike though- no need for
       begin() and end() as separate arguments
 - [ ] threadpool compatibility for some views which are embarassingly parellel,
-      like `count*` or `max_element` or `unique`. Specific threadsafe container
-      iterator type?
+      like `count*` or `max_element`. Specific threadsafe container iterator type?
+      iterables are all extremely templated, so this will be interesting.
 - [ ] reimplementation of `<thread>` and `<atomic>` ? avoid exceptions where
       possible, and avoid implicit atomic load/stores
 - [ ] standard coroutine types: task, generator
@@ -85,8 +97,16 @@ an effort to organize that (not always necessary) work into one reusable product
       submitting coroutines upon construction?)
 - [ ] fmtlib included for IO, all types mentioned above include formatters
 - [ ] all okaylib types have nlohmann json serialization defined
-- [ ] context contains an "allocator allocator" so you can refer to allocators in
-      a serializable way (not by pointer)?
+- [ ] Zig buildsystem module which makes it easy to import it into a zig project
+      and propagate up information about compilation flags (get an error if you
+      do something like enable bounds checking but a library youre calling into
+      explicitly disables them)
+- [ ] One day, far down the line: c++ modules support for zig build system, add
+      c++ modules support to okaylib.
+- [ ] (maybe) context contains an array of allocators so you can refer to allocators
+      in a serializable way (not by pointer)? Could be possible for users who
+      don't use pointers and only allocator handles to trivially serialize their
+      whole program to binary
 
 ## TODO
 
