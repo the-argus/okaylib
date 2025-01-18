@@ -83,5 +83,21 @@ TEST_SUITE("enumerate")
                 ++c;
             }
         }
+
+        SUBCASE("squared view with c-style array")
+        {
+            auto squared = transform([](auto i) { return i * i; });
+
+            int ints[50];
+
+            ok_foreach(ok_pair(item, index), enumerate(ints)) item = index;
+
+            size_t c = 0;
+            ok_foreach(const int i, ints | squared)
+            {
+                REQUIRE(i == c * c);
+                ++c;
+            }
+        }
     }
 }
