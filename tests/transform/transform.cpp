@@ -99,5 +99,22 @@ TEST_SUITE("enumerate")
                 ++c;
             }
         }
+
+        SUBCASE("can still get the size of transformed things")
+        {
+            auto squared = transform([](auto i) { return i * i; });
+            std::array<int, 50> stdarray;
+            int carray[35];
+            std::vector<int> vector;
+            vector.resize(25);
+
+            const size_t arraysize = ok::size(stdarray);
+            const size_t carraysize = ok::size(carray);
+            const size_t vectorsize = ok::size(vector);
+
+            REQUIRE(ok::size(stdarray | squared) == arraysize);
+            REQUIRE(ok::size(carray | squared) == carraysize);
+            REQUIRE(ok::size(vector | squared) == vectorsize);
+        }
     }
 }

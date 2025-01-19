@@ -83,16 +83,10 @@ struct transformed_view_t : public underlying_view_type<range_t>::type
 
 template <typename input_iterable_t, typename callable_t>
 struct iterable_definition<
-    detail::transformed_view_t<input_iterable_t, callable_t>> :
-    // inherit size() or infinite marking
-    public std::conditional_t<
-        detail::iterable_has_size_v<detail::remove_cvref_t<input_iterable_t>>,
-        detail::sized_iterable_t<
-            detail::transformed_view_t<input_iterable_t, callable_t>>,
-        std::conditional<detail::iterable_marked_infinite_v<
-                             detail::remove_cvref_t<input_iterable_t>>,
-                         detail::infinite_iterable_t,
-                         detail::finite_iterable_t>>
+    detail::transformed_view_t<input_iterable_t, callable_t>>
+    : public detail::propagate_sizedness_t<
+          detail::transformed_view_t<input_iterable_t, callable_t>,
+          detail::remove_cvref_t<input_iterable_t>>
 {
     static constexpr bool is_view = true;
 

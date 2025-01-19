@@ -2,6 +2,7 @@
 #define every_other_dummy
 
 #include "okay/detail/ok_assert.h"
+#include "okay/detail/template_util/empty.h"
 #include "okay/detail/view_common.h"
 #include "okay/iterable/iterable.h"
 #include "okay/iterable/ranges.h"
@@ -32,14 +33,9 @@ struct enumerated_view_t : public underlying_view_type<iterable_t>::type
 } // namespace detail
 
 template <typename iterable_t>
-struct iterable_definition<detail::enumerated_view_t<iterable_t>> :
-    // inherit size() or infinite marking
-    public std::conditional_t<
-        detail::iterable_has_size_v<iterable_t>,
-        detail::sized_iterable_t<detail::enumerated_view_t<iterable_t>>,
-        std::conditional<detail::iterable_marked_infinite_v<iterable_t>,
-                         detail::infinite_iterable_t,
-                         detail::finite_iterable_t>>
+struct iterable_definition<detail::enumerated_view_t<iterable_t>>
+    : public detail::propagate_sizedness_t<
+          detail::enumerated_view_t<iterable_t>, iterable_t>
 {
     static constexpr bool is_view = true;
 

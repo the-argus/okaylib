@@ -25,29 +25,6 @@ namespace detail {
 template <typename range_t, typename = void> class owning_view;
 template <typename range_t, typename = void> class ref_view;
 
-/// Conditionally inherit iterable_definition from this to mark as infinite
-struct infinite_iterable_t
-{
-    static constexpr bool infinite = true;
-};
-
-/// Conditionally inherit iterable_definition from this to mark as finite
-struct finite_iterable_t
-{
-    static constexpr bool infinite = false;
-};
-
-/// Conditionally inherit iterable_definition from this to mark as sized.
-/// iterable_t: the iterable which is being defined. must inherit from
-/// owning_view or ref_view, and therefore have a base() function.
-template <typename iterable_t> struct sized_iterable_t
-{
-    static constexpr size_t size(const iterable_t& i) OKAYLIB_NOEXCEPT
-    {
-        return i.base().size();
-    }
-};
-
 template <typename range_t>
 class owning_view<
     range_t, std::enable_if_t<is_moveable_v<range_t> && is_iterable_v<range_t>>>
@@ -195,6 +172,40 @@ template <typename T> struct underlying_view_type
 
     using type = decltype(wrap_range_with_view(std::declval<T>()));
 };
+
+struct infinite_iterable_t
+{
+    static constexpr bool infinite = true;
+};
+
+struct finite_iterable_t
+{
+    static constexpr bool infinite = false;
+};
+
+/// Conditionally inherit iterable_definition from this to mark as sized.
+/// iterable_t: the iterable which is being defined. must inherit from
+/// owning_view or ref_view, and therefore have a get_view_reference() function.
+template <typename iterable_t, typename parent_iterable_t>
+struct sized_iterable_t
+{
+    static constexpr size_t size(const iterable_t& i) OKAYLIB_NOEXCEPT
+    {
+        return detail::iterable_definition_inner<parent_iterable_t>::size(
+            i.template get_view_reference<iterable_t, parent_iterable_t>());
+    }
+};
+
+// derived_iterable_t: the iterable who is being implemented, and whose
+// definition should be inheriting from this type. CRTP.
+// parent_iterable_t: the iterable whos sizedness you want to propagate to the
+// iterable definition of argument 1
+template <typename derived_iterable_t, typename parent_iterable_t>
+using propagate_sizedness_t = std::conditional_t<
+    detail::iterable_has_size_v<parent_iterable_t>,
+    detail::sized_iterable_t<derived_iterable_t, parent_iterable_t>,
+    std::conditional<detail::iterable_marked_infinite_v<parent_iterable_t>,
+                     detail::infinite_iterable_t, detail::finite_iterable_t>>;
 
 } // namespace detail
 } // namespace ok
