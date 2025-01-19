@@ -202,10 +202,68 @@ struct sized_iterable_t
 // iterable definition of argument 1
 template <typename derived_iterable_t, typename parent_iterable_t>
 using propagate_sizedness_t = std::conditional_t<
-    detail::iterable_has_size_v<parent_iterable_t>,
-    detail::sized_iterable_t<derived_iterable_t, parent_iterable_t>,
-    std::conditional<detail::iterable_marked_infinite_v<parent_iterable_t>,
-                     detail::infinite_iterable_t, detail::finite_iterable_t>>;
+    iterable_has_size_v<parent_iterable_t>,
+    sized_iterable_t<derived_iterable_t, parent_iterable_t>,
+    std::conditional<iterable_marked_infinite_v<parent_iterable_t>,
+                     infinite_iterable_t, finite_iterable_t>>;
+
+// requires that cursor_t can be constructed from the
+// cursor_type_for<parent_iterable_t>
+template <typename derived_iterable_t, typename parent_iterable_t,
+          typename cursor_t>
+struct propagate_begin_t
+{
+    constexpr static cursor_t begin(const derived_iterable_t& i)
+    {
+        return cursor_t(
+            ok::begin(i.template get_view_reference<derived_iterable_t,
+                                                    parent_iterable_t>()));
+    }
+};
+
+template <typename derived_iterable_t, typename parent_iterable_t,
+          typename cursor_t>
+struct propagate_boundscheck_t
+{
+    template <typename T = parent_iterable_t>
+    constexpr static std::enable_if_t<
+        std::is_same_v<parent_iterable_t, T> &&
+            detail::iterable_has_is_inbounds_v<parent_iterable_t>,
+        bool>
+    is_inbounds(const derived_iterable_t& i, const cursor_t& c)
+    {
+        return detail::iterable_definition_inner<T>::is_inbounds(
+            i.template get_view_reference<derived_iterable_t,
+                                          parent_iterable_t>(),
+            cursor_type_for<parent_iterable_t>(c));
+    }
+
+    template <typename T = parent_iterable_t>
+    constexpr static std::enable_if_t<
+        std::is_same_v<parent_iterable_t, T> &&
+            detail::iterable_has_is_after_bounds_v<parent_iterable_t>,
+        bool>
+    is_after_bounds(const derived_iterable_t& i, const cursor_t& c)
+    {
+        return detail::iterable_definition_inner<T>::is_after_bounds(
+            i.template get_view_reference<derived_iterable_t,
+                                          parent_iterable_t>(),
+            cursor_type_for<parent_iterable_t>(c));
+    }
+
+    template <typename T = parent_iterable_t>
+    constexpr static std::enable_if_t<
+        std::is_same_v<parent_iterable_t, T> &&
+            detail::iterable_has_is_before_bounds_v<parent_iterable_t>,
+        bool>
+    is_before_bounds(const derived_iterable_t& i, const cursor_t& c)
+    {
+        return detail::iterable_definition_inner<T>::is_before_bounds(
+            i.template get_view_reference<derived_iterable_t,
+                                          parent_iterable_t>(),
+            cursor_type_for<parent_iterable_t>(c));
+    }
+};
 
 } // namespace detail
 } // namespace ok

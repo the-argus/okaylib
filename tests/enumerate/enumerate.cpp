@@ -8,6 +8,24 @@
 
 using namespace ok;
 
+// make sure that enumerated pair includes mutable reference if possible,
+// otherwise it includes const reference
+using eview = detail::enumerated_view_t<std::array<int, 50>&>;
+using ecursor = detail::enumerated_cursor_t<std::array<int, 50>&>;
+static_assert(
+    std::is_same_v<decltype(ok::iter_copyout(std::declval<const eview&>(),
+                                             std::declval<const ecursor&>())
+                                .first),
+                   int&>);
+using eview_const = detail::enumerated_view_t<const std::array<int, 50>&>;
+using ecursor_const = detail::enumerated_cursor_t<const std::array<int, 50>&>;
+static_assert(std::is_same_v<
+              decltype(ok::iter_copyout(std::declval<const eview_const&>(),
+                                        std::declval<const ecursor_const&>())
+                           .first),
+              const int&>);
+// TODO: make sure otherwise it includes get() result by value
+
 TEST_SUITE("enumerate")
 {
     TEST_CASE("functionality")

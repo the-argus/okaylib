@@ -86,7 +86,15 @@ struct iterable_definition<
     detail::transformed_view_t<input_iterable_t, callable_t>>
     : public detail::propagate_sizedness_t<
           detail::transformed_view_t<input_iterable_t, callable_t>,
-          detail::remove_cvref_t<input_iterable_t>>
+          detail::remove_cvref_t<input_iterable_t>>,
+      public detail::propagate_begin_t<
+          detail::transformed_view_t<input_iterable_t, callable_t>,
+          detail::remove_cvref_t<input_iterable_t>,
+          cursor_type_for<detail::remove_cvref_t<input_iterable_t>>>,
+      public detail::propagate_boundscheck_t<
+          detail::transformed_view_t<input_iterable_t, callable_t>,
+          detail::remove_cvref_t<input_iterable_t>,
+          cursor_type_for<detail::remove_cvref_t<input_iterable_t>>>
 {
     static constexpr bool is_view = true;
 
@@ -94,45 +102,6 @@ struct iterable_definition<
     using transformed_t =
         detail::transformed_view_t<input_iterable_t, callable_t>;
     using cursor_t = cursor_type_for<iterable_t>;
-
-    constexpr static decltype(auto) begin(const transformed_t& i)
-    {
-        return ok::begin(
-            i.template get_view_reference<transformed_t, iterable_t>());
-    }
-
-    template <typename T = iterable_t>
-    constexpr static std::enable_if_t<
-        std::is_same_v<iterable_t, T> &&
-            detail::iterable_has_is_inbounds_v<iterable_t>,
-        bool>
-    is_inbounds(const transformed_t& i, const cursor_t& c)
-    {
-        return detail::iterable_definition_inner<T>::is_inbounds(
-            i.template get_view_reference<transformed_t, iterable_t>(), c);
-    }
-
-    template <typename T = iterable_t>
-    constexpr static std::enable_if_t<
-        std::is_same_v<iterable_t, T> &&
-            detail::iterable_has_is_after_bounds_v<iterable_t>,
-        bool>
-    is_after_bounds(const transformed_t& i, const cursor_t& c)
-    {
-        return detail::iterable_definition_inner<T>::is_after_bounds(
-            i.template get_view_reference<transformed_t, iterable_t>(), c);
-    }
-
-    template <typename T = iterable_t>
-    constexpr static std::enable_if_t<
-        std::is_same_v<iterable_t, T> &&
-            detail::iterable_has_is_before_bounds_v<iterable_t>,
-        bool>
-    is_before_bounds(const transformed_t& i, const cursor_t& c)
-    {
-        return detail::iterable_definition_inner<T>::is_before_bounds(
-            i.template get_view_reference<transformed_t, iterable_t>(), c);
-    }
 
     constexpr static decltype(auto) get(const transformed_t& i,
                                         const cursor_t& c) OKAYLIB_NOEXCEPT
