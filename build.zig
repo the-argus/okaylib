@@ -43,21 +43,52 @@ const okaylib_headers = &[_][]const u8{
     "slice.h",
     "status.h",
     "stdmem.h",
+    "try_copy.h",
+
     "allocators/allocator_interface.h",
     "allocators/c_allocator.h",
     "allocators/disable_clearing.h",
     "allocators/disable_freeing.h",
     "allocators/std_memory_resource_allocator.h",
+
+    "detail/template_util/c_array_length.h",
+    "detail/template_util/c_array_value_type.h",
+    "detail/template_util/empty.h",
     "detail/template_util/enable_copy_move.h",
     "detail/template_util/remove_cvref.h",
     "detail/template_util/uninitialized_storage.h",
+
     "detail/traits/is_complete.h",
     "detail/traits/is_container.h",
+    "detail/traits/is_derived_from.h",
     "detail/traits/is_instance.h",
     "detail/traits/is_nonthrowing.h",
+    "detail/traits/is_same.h",
     "detail/traits/is_status_enum.h",
-    "iterable/traits.h",
+    "detail/traits/mathop_traits.h",
+    "detail/traits/special_member_traits.h",
+
+    "detail/abort.h",
+    "detail/abort.h",
+    "detail/addressof.h",
+    "detail/get_best.h",
+    "detail/invoke.h",
+    "detail/is_lvalue.h",
+    "detail/no_unique_add",
+    "detail/ok_assert.h",
+    "detail/opt.h",
+    "detail/res.h",
+    "detail/view_common.h",
+
+    "macros/foreach.h",
     "macros/try.h",
+
+    "ranges/ranges.h",
+    "ranges/adaptors.h",
+
+    "ranges/views/enumerate.h",
+    "ranges/views/std_for.h",
+    "ranges/views/transform.h",
 };
 
 const test_source_files = &[_][]const u8{
@@ -69,7 +100,7 @@ const test_source_files = &[_][]const u8{
     "slice/slice.cpp",
     "status/status.cpp",
     "stdmem/stdmem.cpp",
-    "iterable_traits/iterable_traits.cpp",
+    "ranges/ranges.cpp",
 };
 
 const universal_tests_source_files = &[_][]const u8{};
