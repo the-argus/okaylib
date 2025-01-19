@@ -5,41 +5,15 @@
 // https://stackoverflow.com/questions/16504062/how-to-make-the-for-each-loop-function-in-c-work-with-a-custom-class
 // in turn taken from https://www.chiark.greenend.org.uk/~sgtatham/mp/
 
-#include "okay/iterable/iterable.h"
-#include <type_traits>
-
-namespace ok::detail {
-// behavior of foreach loop: try mutable reference, then try const reference,
-// then try get()
-template <typename qualified_iterable_t>
-constexpr decltype(auto)
-get_best(qualified_iterable_t& i,
-         const cursor_type_for<qualified_iterable_t>& c)
-{
-    static_assert(is_iterable_v<qualified_iterable_t> &&
-                      is_input_iterable_v<qualified_iterable_t>,
-                  "Cannot run ok_foreach loop on the given type.");
-    using iterable_t = std::remove_cv_t<qualified_iterable_t>;
-
-    if constexpr ((detail::iterable_has_get_ref_v<iterable_t> &&
-                   !std::is_const_v<qualified_iterable_t>) ||
-                  (detail::iterable_has_get_ref_const_v<iterable_t> &&
-                   std::is_const_v<qualified_iterable_t>)) {
-        return ok::iter_get_ref(i, c);
-    } else {
-        return ok::iter_copyout(i, c);
-    }
-}
-
-} // namespace ok::detail
+#include "okay/detail/get_best.h"
 
 #define __OK_LN(l, x) x##l // creates unique labels
 #define __OK_L(x, y) __OK_LN(x, y)
-#define ok_foreach(decl, _iterable)                                           \
-    auto&& __OK_L(__LINE__, iterable) = _iterable;                            \
+#define ok_foreach(decl, _range)                                              \
+    auto&& __OK_L(__LINE__, range) = _range;                                  \
     for (bool _run = true; _run; _run = false)                                \
-        for (auto cursor = ok::begin(__OK_L(__LINE__, iterable));             \
-             ok::is_inbounds(__OK_L(__LINE__, iterable), cursor,              \
+        for (auto cursor = ok::begin(__OK_L(__LINE__, range));                \
+             ok::is_inbounds(__OK_L(__LINE__, range), cursor,                 \
                              ok::prefer_after_bounds_check_t{});              \
              ++cursor)                                                        \
             if (1) {                                                          \
@@ -62,7 +36,7 @@ get_best(qualified_iterable_t& i,
                     } else                                                    \
                         __OK_L(__LINE__, body)                                \
                             : for (decl = ok::detail::get_best(               \
-                                       __OK_L(__LINE__, iterable), cursor);   \
+                                       __OK_L(__LINE__, range), cursor);      \
                                    _run; _run = false) /* block following the \
                                                           expanded macro */
 

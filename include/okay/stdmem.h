@@ -2,7 +2,7 @@
 #define __OKAYLIB_STDMEM_H__
 
 #include "okay/detail/addressof.h"
-#include "okay/iterable/iterable.h"
+#include "okay/ranges/ranges.h"
 #include "okay/slice.h"
 #include <cstdint>
 #include <cstring>

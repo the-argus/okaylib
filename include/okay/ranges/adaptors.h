@@ -1,15 +1,11 @@
-#ifndef __OKAYLIB_ITERABLE_RANGES_H__
-#define __OKAYLIB_ITERABLE_RANGES_H__
+#ifndef __OKAYLIB_RANGES_ADAPTORS_H__
+#define __OKAYLIB_RANGES_ADAPTORS_H__
 
-#include "okay/detail/no_unique_addr.h"
 #include "okay/detail/invoke.h"
-#include "okay/iterable/iterable.h"
+#include "okay/detail/no_unique_addr.h"
+#include "okay/ranges/ranges.h"
 #include <tuple>
 #include <utility>
-
-/*
- * C++17 backport of ranges
- */
 
 namespace ok::detail {
 
@@ -27,27 +23,25 @@ template <typename callable_t, typename... args_t> struct partial_called_t
     {
     }
 
-    template <typename iterable_t>
-    constexpr auto operator()(iterable_t&& iterable) const&
+    template <typename range_t>
+    constexpr auto operator()(range_t&& range) const&
     {
-        auto forwarder = [this, &iterable](const args_t&... args) {
-            return callable(std::forward<iterable_t>(iterable), args...);
+        auto forwarder = [this, &range](const args_t&... args) {
+            return callable(std::forward<range_t>(range), args...);
         };
         return std::apply(forwarder, args);
     }
 
-    template <typename iterable_t>
-    constexpr auto operator()(iterable_t&& iterable) &&
+    template <typename range_t> constexpr auto operator()(range_t&& range) &&
     {
-        auto forwarder = [this, &iterable](args_t&... args) {
-            return callable(std::forward<iterable_t>(iterable),
-                            std::move(args)...);
+        auto forwarder = [this, &range](args_t&... args) {
+            return callable(std::forward<range_t>(range), std::move(args)...);
         };
         return std::apply(forwarder, args);
     }
 
-    template <typename iterable_t>
-    constexpr auto operator()(iterable_t&& __r) const&& = delete;
+    template <typename range_t>
+    constexpr auto operator()(range_t&& __r) const&& = delete;
 };
 
 template <typename callable_t> struct range_adaptor_t
@@ -90,7 +84,7 @@ struct range_adaptor_closure_t : range_adaptor_t<callable_t>
     // support for C(R)
     template <typename range_t>
     constexpr auto operator()(range_t&& range) const
-        -> std::enable_if_t<is_iterable_v<range_t>,
+        -> std::enable_if_t<is_range_v<range_t>,
                             decltype(this->callable(
                                 std::forward<range_t>(range)))> OKAYLIB_NOEXCEPT
     {
@@ -101,12 +95,10 @@ struct range_adaptor_closure_t : range_adaptor_t<callable_t>
     template <typename range_t>
     friend constexpr decltype(auto)
     operator|(range_t&& range,
-              std::enable_if_t<is_iterable_v<range_t> &&
+              std::enable_if_t<is_range_v<range_t> &&
                                    std::is_invocable_v<callable_t, range_t>,
                                const range_adaptor_closure_t&>
-                  closure)
-
-        OKAYLIB_NOEXCEPT
+                  closure) OKAYLIB_NOEXCEPT
     {
         return closure.callable(std::forward<range_t>(range));
     }

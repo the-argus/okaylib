@@ -1,29 +1,28 @@
-#ifndef __OKAYLIB_ITERABLE_STD_FOR_H__
-#define __OKAYLIB_ITERABLE_STD_FOR_H__
+#ifndef __OKAYLIB_RANGES_VIEWS_STD_FOR_H__
+#define __OKAYLIB_RANGES_VIEWS_STD_FOR_H__
 
-#include "okay/iterable/iterable.h"
+#include "okay/detail/get_best.h"
+#include "okay/detail/view_common.h"
 #include "okay/opt.h"
+#include "okay/ranges/adaptors.h"
+#include "okay/ranges/ranges.h"
 #include <iterator>
 
+/*
+ * Given any okaylib range, create a view which can be used as a c++17 input
+ * iterator, MINUS operator->. This makes the iterator not actually conformant
+ * and only sometimes suitable as a hack to get compat w/ range-based for loops.
+ */
+
 namespace ok {
-template <typename T> class std_for
+template <typename T>
+class std_for_view : public detail::underlying_view_type<T>::type
 {
   public:
-    static_assert(is_iterable_v<T>, "Cannot wrap given type for a standard for "
-                                    "loop- it is not a valid iterable.");
-
-    static_assert(
-        detail::iterable_has_get_ref_v<T> ||
-            detail::iterable_has_get_ref_const_v<T>,
-        "Cannot wrap type which does not provide any get_ref() functions for "
-        "standard for loop, which requires dereferencing.");
-
+    static_assert(is_range_v<T>, "Cannot wrap given type for a standard for "
+                                 "loop- it is not a valid range.");
     using cursor_t = detail::cursor_type_unchecked_for<T>;
-
-    constexpr std_for(T& _inner) : inner(_inner) {}
-
-  private:
-    T& inner;
+    using parent_t = typename detail::underlying_view_type<T>::type;
 
   public:
     struct iterator;
@@ -33,11 +32,31 @@ template <typename T> class std_for
 
     struct iterator
     {
-        using iterator_category = std::forward_iterator_tag;
+      private:
+        // TODO: can use uninitialized_storage_t here to avoid construction of
+        // cursor_t here instead and then embed the optional in the T&, to save
+        // some bytes
+        struct members_t
+        {
+            T& parent;
+            cursor_t cursor;
+        };
+        opt_t<members_t> m;
+
+      public:
+        using iterator_category = std::input_iterator_tag;
         using difference_type = std::ptrdiff_t;
         using value_type = value_type_for<T>;
+        using reference =
+            decltype(ok::detail::get_best(m.value().parent, m.value().cursor));
         using pointer = value_type*;
-        using reference = value_type&;
+
+        static_assert(
+            std::is_convertible_v<reference, value_type>,
+            "Unable to convert the value that would be gotten for an "
+            "ok_foreach loop into the value type. This conversion is needed to "
+            "make an STL compatible input iterator. You may need to define a "
+            "copy constructor for your value type.");
 
         constexpr iterator() = default;
 
@@ -49,16 +68,15 @@ template <typename T> class std_for
         constexpr reference operator*() const OKAYLIB_NOEXCEPT
         {
             auto& members = m.value();
-            return ok::iter_get_ref(members.parent, members.cursor);
+            return ok::detail::get_best(members.parent, members.cursor);
         }
 
-        // TODO: should this be const?
-        constexpr pointer operator->() OKAYLIB_NOEXCEPT
-        {
-            auto& members = m.value();
-            return ok::addressof(
-                ok::iter_get_ref(members.parent, members.cursor));
-        }
+        // constexpr pointer operator->() const OKAYLIB_NOEXCEPT
+        // {
+        //     auto& members = m.value();
+        //     return std::move(
+        //         ok::detail::get_best(members.parent, members.cursor));
+        // }
 
         // Prefix increment
         constexpr iterator& operator++() OKAYLIB_NOEXCEPT
@@ -69,7 +87,7 @@ template <typename T> class std_for
 
         // Postfix increment
         // NOLINTNEXTLINE
-        constexpr iterator operator++(int) OKAYLIB_NOEXCEPT
+        constexpr iterator operator++(int) const OKAYLIB_NOEXCEPT
         {
             iterator tmp = *this;
             ++(*this);
@@ -79,7 +97,7 @@ template <typename T> class std_for
         constexpr friend bool operator==(const iterator& a,
                                          const iterator& b) OKAYLIB_NOEXCEPT
         {
-            if (a.m.has_value() != b.m.has_value()) [[likely]] {
+            if (!(a.m.has_value() == b.m.has_value())) [[likely]] {
                 if (a.m.has_value())
                     return !ok::is_inbounds(a.m.value().parent,
                                             a.m.value().cursor);
@@ -90,7 +108,7 @@ template <typename T> class std_for
         constexpr friend bool operator!=(const iterator& a,
                                          const iterator& b) OKAYLIB_NOEXCEPT
         {
-            if (a.m.has_value() != b.m.has_value()) [[likely]] {
+            if (!(a.m.has_value() == b.m.has_value())) [[likely]] {
                 // only one is nonnull. treat null as "end" cursor (signals need
                 // to check for out-of-bounds)
                 if (a.m.has_value())
@@ -98,25 +116,27 @@ template <typename T> class std_for
                                            a.m.value().cursor);
                 return ok::is_inbounds(b.m.value().parent, b.m.value().cursor);
             }
-            return a.m.value().cursor != b.m.value().cursor;
+            return !(a.m.value().cursor == b.m.value().cursor);
         };
-
-      private:
-        struct members_t
-        {
-            T& parent;
-            cursor_t cursor;
-        };
-        opt_t<members_t> m;
     };
 
     struct const_iterator
     {
-        using iterator_category = std::forward_iterator_tag;
+      private:
+        struct members_t
+        {
+            const T& parent;
+            cursor_t cursor;
+        };
+        opt_t<members_t> m;
+
+      public:
+        using iterator_category = std::input_iterator_tag;
         using difference_type = std::ptrdiff_t;
         using value_type = const value_type_for<T>;
+        using reference =
+            decltype(ok::detail::get_best(m.value().parent, m.value().cursor));
         using pointer = const value_type*;
-        using reference = const value_type&;
 
         constexpr const_iterator() = default;
 
@@ -129,15 +149,15 @@ template <typename T> class std_for
         constexpr reference operator*() const OKAYLIB_NOEXCEPT
         {
             const auto& members = m.value();
-            return ok::iter_get_ref(members.parent, members.cursor);
+            return ok::detail::get_best(members.parent, members.cursor);
         }
 
-        constexpr pointer operator->() OKAYLIB_NOEXCEPT
-        {
-            const auto& members = m.value();
-            return ok::addressof(
-                ok::iter_get_ref(members.parent, members.cursor));
-        }
+        // constexpr pointer operator->() OKAYLIB_NOEXCEPT
+        // {
+        //     const auto& members = m.value();
+        //     return ok::addressof(
+        //         ok::detail::get_best(members.parent, members.cursor));
+        // }
 
         // Prefix increment
         constexpr const_iterator& operator++() OKAYLIB_NOEXCEPT
@@ -159,7 +179,7 @@ template <typename T> class std_for
         operator==(const const_iterator& a,
                    const const_iterator& b) OKAYLIB_NOEXCEPT
         {
-            if (a.m.has_value() != b.m.has_value()) [[likely]] {
+            if (!(a.m.has_value() == b.m.has_value())) [[likely]] {
                 if (a.m.has_value())
                     return !ok::is_inbounds(a.m.value().parent,
                                             a.m.value().cursor);
@@ -171,22 +191,14 @@ template <typename T> class std_for
         operator!=(const const_iterator& a,
                    const const_iterator& b) OKAYLIB_NOEXCEPT
         {
-            if (a.m.has_value() != b.m.has_value()) [[likely]] {
+            if (!(a.m.has_value() == b.m.has_value())) [[likely]] {
                 if (a.m.has_value())
                     return ok::is_inbounds(a.m.value().parent,
                                            a.m.value().cursor);
                 return ok::is_inbounds(b.m.value().parent, b.m.value().cursor);
             }
-            return a.m.value().cursor != b.m.value().cursor;
+            return !(a.m.value().cursor == b.m.value().cursor);
         };
-
-      private:
-        struct members_t
-        {
-            const T& parent;
-            cursor_t cursor;
-        };
-        opt_t<members_t> m;
     };
 
     using correct_iterator_t =
@@ -194,7 +206,8 @@ template <typename T> class std_for
 
     constexpr correct_iterator_t begin() OKAYLIB_NOEXCEPT
     {
-        return correct_iterator_t(inner, ok::begin(inner));
+        auto&& ref = parent_t::template get_view_reference<std_for_view, T>();
+        return correct_iterator_t(ref, ok::begin(ref));
     }
 
     constexpr correct_iterator_t end() OKAYLIB_NOEXCEPT
@@ -204,7 +217,8 @@ template <typename T> class std_for
 
     constexpr const_iterator begin() const OKAYLIB_NOEXCEPT
     {
-        return const_iterator(inner, ok::begin(inner));
+        auto&& ref = parent_t::template get_view_reference<std_for_view, T>();
+        return const_iterator(ref, ok::begin(ref));
     }
 
     constexpr const_iterator end() const OKAYLIB_NOEXCEPT
@@ -212,6 +226,20 @@ template <typename T> class std_for
         return const_iterator();
     }
 };
+
+namespace detail {
+struct std_for_fn_t
+{
+    template <typename range_t>
+    constexpr decltype(auto) operator()(range_t&& range) const
+    {
+        return std_for_view<decltype(range)>{std::forward<range_t>(range)};
+    }
+};
+}; // namespace detail
+
+constexpr detail::range_adaptor_closure_t<detail::std_for_fn_t> std_for;
+
 }; // namespace ok
 
 #endif

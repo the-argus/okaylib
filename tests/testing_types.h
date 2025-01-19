@@ -1,7 +1,7 @@
 #pragma once
 #include "fmt/core.h"
 #include "okay/detail/abort.h"
-#include "okay/iterable/iterable.h"
+#include "okay/ranges/ranges.h"
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -72,12 +72,12 @@ struct nonmoveable_t
     nonmoveable_t(nonmoveable_t&& other) = delete;
 };
 
-class example_iterable_cstyle
+class example_range_cstyle
 {
   public:
     using value_type = uint8_t;
-    // propagate our iterable definition to child  classes
-    using inherited_iterable_type = example_iterable_cstyle;
+    // propagate our range definition to child  classes
+    using inherited_range_type = example_range_cstyle;
 
     value_type& operator[](size_t index) OKAYLIB_NOEXCEPT
     {
@@ -89,10 +89,10 @@ class example_iterable_cstyle
 
     const value_type& operator[](size_t index) const OKAYLIB_NOEXCEPT
     {
-        return (*const_cast<example_iterable_cstyle*>(this))[index];
+        return (*const_cast<example_range_cstyle*>(this))[index];
     }
 
-    example_iterable_cstyle() OKAYLIB_NOEXCEPT
+    example_range_cstyle() OKAYLIB_NOEXCEPT
     {
         bytes = static_cast<uint8_t*>(malloc(100));
         std::memset(bytes, 0, 100);
@@ -106,19 +106,19 @@ class example_iterable_cstyle
     size_t num_bytes;
 };
 
-class example_iterable_bidirectional
+class example_range_bidirectional
 {
   public:
     using value_type = uint8_t;
-    using inherited_iterable_type = example_iterable_bidirectional;
+    using inherited_range_type = example_range_bidirectional;
 
-    friend class ok::iterable_definition<example_iterable_bidirectional>;
+    friend class ok::range_definition<example_range_bidirectional>;
 
     struct cursor_t
     {
         constexpr cursor_t() = default;
 
-        friend class example_iterable_bidirectional;
+        friend class example_range_bidirectional;
 
         constexpr void operator++() OKAYLIB_NOEXCEPT { ++m_inner; }
 
@@ -144,10 +144,10 @@ class example_iterable_bidirectional
 
     constexpr const value_type& get(cursor_t index) const OKAYLIB_NOEXCEPT
     {
-        return (*const_cast<example_iterable_bidirectional*>(this)).get(index);
+        return (*const_cast<example_range_bidirectional*>(this)).get(index);
     }
 
-    example_iterable_bidirectional() OKAYLIB_NOEXCEPT
+    example_range_bidirectional() OKAYLIB_NOEXCEPT
     {
         bytes = static_cast<uint8_t*>(malloc(100));
         std::memset(bytes, 0, 100);
@@ -159,75 +159,73 @@ class example_iterable_bidirectional
     size_t num_bytes;
 };
 
-class example_iterable_cstyle_child : public example_iterable_cstyle
+class example_range_cstyle_child : public example_range_cstyle
 {};
 
-// implement iterable trait for example_iterable_cstyle
+// implement range trait for example_range_cstyle
 namespace ok {
-template <> struct iterable_definition<example_iterable_cstyle>
+template <> struct range_definition<example_range_cstyle>
 {
-    using value_type = typename example_iterable_cstyle::value_type;
+    using value_type = typename example_range_cstyle::value_type;
 
-    static constexpr size_t
-    size(const example_iterable_cstyle& i) OKAYLIB_NOEXCEPT
+    static constexpr size_t size(const example_range_cstyle& i) OKAYLIB_NOEXCEPT
     {
         return i.size();
     }
 
-    static constexpr value_type& get_ref(example_iterable_cstyle& i,
+    static constexpr value_type& get_ref(example_range_cstyle& i,
                                          size_t c) OKAYLIB_NOEXCEPT
     {
         return i[c];
     }
 
-    static constexpr const value_type& get_ref(const example_iterable_cstyle& i,
+    static constexpr const value_type& get_ref(const example_range_cstyle& i,
                                                size_t c) OKAYLIB_NOEXCEPT
     {
         return i[c];
     }
 
-    static constexpr size_t
-    begin(const example_iterable_cstyle&) OKAYLIB_NOEXCEPT
+    static constexpr size_t begin(const example_range_cstyle&) OKAYLIB_NOEXCEPT
     {
         return 0;
     }
 
-    static constexpr bool is_inbounds(const example_iterable_cstyle& i,
+    static constexpr bool is_inbounds(const example_range_cstyle& i,
                                       size_t c) OKAYLIB_NOEXCEPT
     {
         return c < i.size();
     }
 };
 
-template <> struct iterable_definition<example_iterable_bidirectional>
+template <> struct range_definition<example_range_bidirectional>
 {
-    using value_type = typename example_iterable_bidirectional::value_type;
+    using value_type = typename example_range_bidirectional::value_type;
 
     constexpr static bool infinite = false;
 
     static constexpr value_type&
-    get_ref(example_iterable_bidirectional& i,
-            const example_iterable_bidirectional::cursor_t& c) OKAYLIB_NOEXCEPT
+    get_ref(example_range_bidirectional& i,
+            const example_range_bidirectional::cursor_t& c) OKAYLIB_NOEXCEPT
     {
         return i.get(c);
     }
 
     static constexpr const value_type&
-    get_ref(const example_iterable_bidirectional& i,
-            const example_iterable_bidirectional::cursor_t& c) OKAYLIB_NOEXCEPT
+    get_ref(const example_range_bidirectional& i,
+            const example_range_bidirectional::cursor_t& c) OKAYLIB_NOEXCEPT
     {
         return i.get(c);
     }
 
-    static constexpr example_iterable_bidirectional::cursor_t
-    begin(const example_iterable_bidirectional&) OKAYLIB_NOEXCEPT
+    static constexpr example_range_bidirectional::cursor_t
+    begin(const example_range_bidirectional&) OKAYLIB_NOEXCEPT
     {
         return {};
     }
 
     static constexpr bool is_after_bounds(
-        const example_iterable_bidirectional& i,
-        const example_iterable_bidirectional::cursor_t& c) OKAYLIB_NOEXCEPT
+        const example_range_bidirectional& i,
+        const example_range_bidirectional::cursor_t& c) OKAYLIB_NOEXCEPT
     {
         // no size() method exposed to iterator API, its just a finite range.
         // but we can internally figure out if an iterator is valid
@@ -235,8 +233,8 @@ template <> struct iterable_definition<example_iterable_bidirectional>
     }
 
     static constexpr bool is_before_bounds(
-        const example_iterable_bidirectional& i,
-        const example_iterable_bidirectional::cursor_t& c) OKAYLIB_NOEXCEPT
+        const example_range_bidirectional& i,
+        const example_range_bidirectional::cursor_t& c) OKAYLIB_NOEXCEPT
     {
         // unsigned type can never go below zero index
         return false;

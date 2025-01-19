@@ -4,17 +4,17 @@
 #include "okay/detail/addressof.h"
 #include "okay/detail/template_util/empty.h"
 #include "okay/detail/traits/special_member_traits.h"
-#include "okay/iterable/iterable.h"
+#include "okay/ranges/ranges.h"
 
 namespace ok {
 template <typename T, typename = void>
 struct enable_view : public std::false_type
 {};
 
-// specialize enable_view or add is_view to iterable_definition
+// specialize enable_view or add is_view to range_definition
 template <typename T>
-struct enable_view<
-    T, std::enable_if_t<detail::iterable_definition_inner<T>::is_view>>
+struct enable_view<T,
+                   std::enable_if_t<detail::range_definition_inner<T>::is_view>>
     : public std::true_type
 {};
 
@@ -27,12 +27,9 @@ template <typename range_t, typename = void> class ref_view;
 
 template <typename range_t>
 class owning_view<
-    range_t, std::enable_if_t<is_moveable_v<range_t> && is_iterable_v<range_t>>>
+    range_t, std::enable_if_t<is_moveable_v<range_t> && is_range_v<range_t>>>
 {
   private:
-    // this gets accessed by evil const_casts in views
-    // TODO: i dont think there are any problems with the way this is used
-    // I should spend some more time thinking about that, though
     range_t m_range;
 
   public:
@@ -78,8 +75,8 @@ class owning_view<
 };
 
 template <typename range_t>
-class ref_view<range_t, std::enable_if_t<std::is_object_v<range_t> &&
-                                         is_iterable_v<range_t>>>
+class ref_view<
+    range_t, std::enable_if_t<std::is_object_v<range_t> && is_range_v<range_t>>>
 {
   private:
     range_t* m_range;
@@ -149,10 +146,11 @@ template <typename range_t> owning_view(range_t&&) -> owning_view<range_t>;
 
 template <typename T>
 constexpr bool is_view_v =
-    is_iterable_v<std::decay_t<T>> && enable_view_v<T> && is_moveable_v<T>;
+    is_range_v<std::decay_t<T>> && enable_view_v<T> && is_moveable_v<T>;
 
 template <typename T> struct underlying_view_type
 {
+  private:
     template <typename range_t>
     [[nodiscard]] static constexpr auto
     wrap_range_with_view(range_t&& view) OKAYLIB_NOEXCEPT
@@ -170,98 +168,92 @@ template <typename T> struct underlying_view_type
             return owning_view{std::forward<range_t>(view)};
     }
 
+  public:
     using type = decltype(wrap_range_with_view(std::declval<T>()));
 };
 
-struct infinite_iterable_t
+struct infinite_range_t
 {
     static constexpr bool infinite = true;
 };
 
-struct finite_iterable_t
+struct finite_range_t
 {
     static constexpr bool infinite = false;
 };
 
-/// Conditionally inherit iterable_definition from this to mark as sized.
-/// iterable_t: the iterable which is being defined. must inherit from
+/// Conditionally inherit range_definition from this to mark as sized.
+/// range_t: the range which is being defined. must inherit from
 /// owning_view or ref_view, and therefore have a get_view_reference() function.
-template <typename iterable_t, typename parent_iterable_t>
-struct sized_iterable_t
+template <typename range_t, typename parent_range_t> struct sized_range_t
 {
-    static constexpr size_t size(const iterable_t& i) OKAYLIB_NOEXCEPT
+    static constexpr size_t size(const range_t& i) OKAYLIB_NOEXCEPT
     {
-        return detail::iterable_definition_inner<parent_iterable_t>::size(
-            i.template get_view_reference<iterable_t, parent_iterable_t>());
+        return detail::range_definition_inner<parent_range_t>::size(
+            i.template get_view_reference<range_t, parent_range_t>());
     }
 };
 
-// derived_iterable_t: the iterable who is being implemented, and whose
+// derived_range_t: the range who is being implemented, and whose
 // definition should be inheriting from this type. CRTP.
-// parent_iterable_t: the iterable whos sizedness you want to propagate to the
-// iterable definition of argument 1
-template <typename derived_iterable_t, typename parent_iterable_t>
-using propagate_sizedness_t = std::conditional_t<
-    iterable_has_size_v<parent_iterable_t>,
-    sized_iterable_t<derived_iterable_t, parent_iterable_t>,
-    std::conditional<iterable_marked_infinite_v<parent_iterable_t>,
-                     infinite_iterable_t, finite_iterable_t>>;
+// parent_range_t: the range whos sizedness you want to propagate to the
+// range definition of argument 1
+template <typename derived_range_t, typename parent_range_t>
+using propagate_sizedness_t =
+    std::conditional_t<range_has_size_v<parent_range_t>,
+                       sized_range_t<derived_range_t, parent_range_t>,
+                       std::conditional<range_marked_infinite_v<parent_range_t>,
+                                        infinite_range_t, finite_range_t>>;
 
 // requires that cursor_t can be constructed from the
-// cursor_type_for<parent_iterable_t>
-template <typename derived_iterable_t, typename parent_iterable_t,
-          typename cursor_t>
+// cursor_type_for<parent_range_t>
+template <typename derived_range_t, typename parent_range_t, typename cursor_t>
 struct propagate_begin_t
 {
-    constexpr static cursor_t begin(const derived_iterable_t& i)
+    constexpr static cursor_t begin(const derived_range_t& i)
     {
-        return cursor_t(
-            ok::begin(i.template get_view_reference<derived_iterable_t,
-                                                    parent_iterable_t>()));
+        return cursor_t(ok::begin(
+            i.template get_view_reference<derived_range_t, parent_range_t>()));
     }
 };
 
-template <typename derived_iterable_t, typename parent_iterable_t,
-          typename cursor_t>
+template <typename derived_range_t, typename parent_range_t, typename cursor_t>
 struct propagate_boundscheck_t
 {
-    template <typename T = parent_iterable_t>
+    template <typename T = parent_range_t>
     constexpr static std::enable_if_t<
-        std::is_same_v<parent_iterable_t, T> &&
-            detail::iterable_has_is_inbounds_v<parent_iterable_t>,
+        std::is_same_v<parent_range_t, T> &&
+            detail::range_has_is_inbounds_v<parent_range_t>,
         bool>
-    is_inbounds(const derived_iterable_t& i, const cursor_t& c)
+    is_inbounds(const derived_range_t& i, const cursor_t& c)
     {
-        return detail::iterable_definition_inner<T>::is_inbounds(
-            i.template get_view_reference<derived_iterable_t,
-                                          parent_iterable_t>(),
-            cursor_type_for<parent_iterable_t>(c));
+        return detail::range_definition_inner<T>::is_inbounds(
+            i.template get_view_reference<derived_range_t, parent_range_t>(),
+            cursor_type_for<parent_range_t>(c));
     }
 
-    template <typename T = parent_iterable_t>
+    template <typename T = parent_range_t>
     constexpr static std::enable_if_t<
-        std::is_same_v<parent_iterable_t, T> &&
-            detail::iterable_has_is_after_bounds_v<parent_iterable_t>,
+        std::is_same_v<parent_range_t, T> &&
+            detail::range_has_is_after_bounds_v<parent_range_t>,
         bool>
-    is_after_bounds(const derived_iterable_t& i, const cursor_t& c)
+    is_after_bounds(const derived_range_t& i, const cursor_t& c)
     {
-        return detail::iterable_definition_inner<T>::is_after_bounds(
-            i.template get_view_reference<derived_iterable_t,
-                                          parent_iterable_t>(),
-            cursor_type_for<parent_iterable_t>(c));
+        return detail::range_definition_inner<T>::is_after_bounds(
+            i.template get_view_reference<derived_range_t, parent_range_t>(),
+            cursor_type_for<parent_range_t>(c));
     }
 
-    template <typename T = parent_iterable_t>
+    template <typename T = parent_range_t>
     constexpr static std::enable_if_t<
-        std::is_same_v<parent_iterable_t, T> &&
-            detail::iterable_has_is_before_bounds_v<parent_iterable_t>,
+        std::is_same_v<parent_range_t, T> &&
+            detail::range_has_is_before_bounds_v<parent_range_t>,
         bool>
-    is_before_bounds(const derived_iterable_t& i, const cursor_t& c)
+    is_before_bounds(const derived_range_t& i, const cursor_t& c)
     {
-        return detail::iterable_definition_inner<T>::is_before_bounds(
-            i.template get_view_reference<derived_iterable_t,
-                                          parent_iterable_t>(),
-            cursor_type_for<parent_iterable_t>(c));
+        return detail::range_definition_inner<T>::is_before_bounds(
+            i.template get_view_reference<derived_range_t, parent_range_t>(),
+            cursor_type_for<parent_range_t>(c));
     }
 };
 

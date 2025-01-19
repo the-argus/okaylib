@@ -1,7 +1,7 @@
 #include "test_header.h"
 // test header must be first
-#include "okay/iterable/enumerate.h"
-#include "okay/iterable/transform.h"
+#include "okay/ranges/views/enumerate.h"
+#include "okay/ranges/views/transform.h"
 #include "okay/macros/foreach.h"
 #include "okay/slice.h"
 #include "okay/stdmem.h"
