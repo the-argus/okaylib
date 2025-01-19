@@ -33,10 +33,6 @@
 
 namespace ok {
 
-namespace detail {
-template <typename derived_t, typename = void> class view_interface;
-}
-
 template <typename iterable_t, typename enable = void>
 struct iterable_definition
 {
@@ -130,10 +126,6 @@ struct iterable_definition<
             detail::remove_cvref_t<input_iterable_t>> &&
         // provides size_t .size() method and pointer data() method
         detail::is_container_v<input_iterable_t> &&
-        // avoid recursion with view interface, which defines data and size
-        // methods in terms of the functions provided here
-        !detail::is_derived_from_v<
-            input_iterable_t, ok::detail::view_interface<input_iterable_t>> &&
         // iterator_t()[size_t{}] -> iterator_t::value_type&
         std::is_same_v<
             typename detail::remove_cvref_t<input_iterable_t>::value_type&,
