@@ -71,17 +71,11 @@ class std_for_view : public detail::underlying_view_type<T>::type
             return ok::detail::get_best(members.parent, members.cursor);
         }
 
-        // constexpr pointer operator->() const OKAYLIB_NOEXCEPT
-        // {
-        //     auto& members = m.value();
-        //     return std::move(
-        //         ok::detail::get_best(members.parent, members.cursor));
-        // }
-
         // Prefix increment
         constexpr iterator& operator++() OKAYLIB_NOEXCEPT
         {
-            ++(m.value().cursor);
+            auto& members = m.value();
+            ok::increment(members.parent, members.cursor);
             return *this;
         }
 
@@ -162,7 +156,8 @@ class std_for_view : public detail::underlying_view_type<T>::type
         // Prefix increment
         constexpr const_iterator& operator++() OKAYLIB_NOEXCEPT
         {
-            ++(m.value().cursor);
+            auto& members = m.value();
+            ok::increment(members.parent, members.cursor);
             return *this;
         }
 

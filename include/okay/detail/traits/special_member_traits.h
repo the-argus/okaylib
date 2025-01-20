@@ -81,7 +81,9 @@ inline constexpr bool is_swappable_v = std::is_swappable_v<T>;
 template <typename T>
 inline constexpr bool is_moveable_v =
     std::is_object_v<T> && is_move_constructible_v<T> &&
-    is_assignable_from_v<T&, T> && is_swappable_v<T>;
+    std::is_move_assignable_v<T>
+    // is_assignable_from_v<T&, T>
+    && is_swappable_v<T>;
 
 } // namespace ok::detail
 

@@ -120,13 +120,18 @@ class example_range_bidirectional
 
         friend class example_range_bidirectional;
 
-        constexpr void operator++() OKAYLIB_NOEXCEPT { ++m_inner; }
+        constexpr cursor_t& operator++() OKAYLIB_NOEXCEPT
+        {
+            ++m_inner;
+            return *this;
+        }
 
-        constexpr void operator--() OKAYLIB_NOEXCEPT
+        constexpr cursor_t& operator--() OKAYLIB_NOEXCEPT
         {
             if (m_inner == 0)
                 __ok_abort();
             --m_inner;
+            return *this;
         }
 
         constexpr size_t inner() const OKAYLIB_NOEXCEPT { return m_inner; }

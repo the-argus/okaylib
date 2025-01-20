@@ -32,6 +32,9 @@ template <typename parent_range_t> struct enumerated_cursor_t
   private:
     using parent_cursor_t = cursor_type_for<parent_range_t>;
 
+    constexpr void increment_index() OKAYLIB_NOEXCEPT { ++m_index; }
+    constexpr void decrement_index() OKAYLIB_NOEXCEPT { --m_index; }
+
   public:
     explicit constexpr enumerated_cursor_t(parent_cursor_t&& c)
         : OKAYLIB_NOEXCEPT m_index(0), m_inner(std::move(c))
@@ -43,12 +46,6 @@ template <typename parent_range_t> struct enumerated_cursor_t
     enumerated_cursor_t& operator=(const enumerated_cursor_t&) = default;
 
     friend class range_definition<detail::enumerated_view_t<parent_range_t>>;
-
-    constexpr void operator++()
-    {
-        ++m_index;
-        ++m_inner;
-    }
 
     // only equality comparable to self if wrapped type is equality
     // comparable to self
@@ -66,6 +63,7 @@ template <typename parent_range_t> struct enumerated_cursor_t
     {
         return m_inner;
     }
+    constexpr parent_cursor_t& inner() OKAYLIB_NOEXCEPT { return m_inner; }
 
     explicit constexpr operator parent_cursor_t() const noexcept
     {
@@ -76,11 +74,24 @@ template <typename parent_range_t> struct enumerated_cursor_t
 
     template <typename T = parent_range_t>
     constexpr std::enable_if_t<std::is_same_v<T, parent_range_t> &&
-                               detail::is_bidirectional_range_v<parent_range_t>>
-    operator--()
+                                   detail::is_random_access_range_v<T>,
+                               enumerated_cursor_t&>
+    operator++() OKAYLIB_NOEXCEPT
     {
-        --this->m_index;
-        --this->m_inner;
+        ++m_inner;
+        ++m_index;
+        return *this;
+    }
+
+    template <typename T = parent_range_t>
+    constexpr std::enable_if_t<std::is_same_v<T, parent_range_t> &&
+                                   detail::is_random_access_range_v<T>,
+                               enumerated_cursor_t&>
+    operator--() OKAYLIB_NOEXCEPT
+    {
+        --m_inner;
+        --m_index;
+        return *this;
     }
 
 #define __okaylib_enumerator_enable_relop_if_random_access                     \
@@ -172,15 +183,18 @@ template <typename parent_range_t> struct enumerated_cursor_t
 
 } // namespace detail
 
+// TODO: review const / ref correctness here, range_t input is allowed to be a
+// reference or const but thats not really being removed before sending it to
+// other templates
 template <typename range_t>
 struct range_definition<detail::enumerated_view_t<range_t>>
     : public detail::propagate_sizedness_t<detail::enumerated_view_t<range_t>,
-                                           range_t>,
+                                           detail::remove_cvref_t<range_t>>,
       public detail::propagate_begin_t<detail::enumerated_view_t<range_t>,
-                                       range_t,
+                                       detail::remove_cvref_t<range_t>,
                                        detail::enumerated_cursor_t<range_t>>,
       public detail::propagate_boundscheck_t<
-          detail::enumerated_view_t<range_t>, range_t,
+          detail::enumerated_view_t<range_t>, detail::remove_cvref_t<range_t>,
           detail::enumerated_cursor_t<range_t>>
 {
     static constexpr bool is_view = true;
@@ -188,38 +202,62 @@ struct range_definition<detail::enumerated_view_t<range_t>>
     using enumerated_t = detail::enumerated_view_t<range_t>;
     using cursor_t = detail::enumerated_cursor_t<range_t>;
 
-    constexpr static auto get(const enumerated_t& i,
+    template <typename T = enumerated_t>
+    constexpr static std::enable_if_t<std::is_same_v<T, enumerated_t> &&
+                                      detail::range_definition_has_increment_v<T>>
+    increment(const enumerated_t& range, cursor_t& c) OKAYLIB_NOEXCEPT
+    {
+        // perform parent's increment function
+        ok::increment(
+            range.template get_view_reference<enumerated_t, range_t>(),
+            c.inner());
+        // also do our bit
+        c.increment_index();
+    }
+
+    template <typename T = enumerated_t>
+    constexpr static std::enable_if_t<std::is_same_v<T, enumerated_t> &&
+                                      detail::range_definition_has_decrement_v<T>>
+    decrement(const enumerated_t& range, cursor_t& c) OKAYLIB_NOEXCEPT
+    {
+        ok::decrement(
+            range.template get_view_reference<enumerated_t, range_t>(),
+            c.inner());
+        c.decrement_index();
+    }
+
+    constexpr static auto get(const enumerated_t& range,
                               const cursor_t& c) OKAYLIB_NOEXCEPT
     {
         using inner_def = detail::range_definition_inner<range_t>;
         if constexpr (detail::range_has_get_ref_v<range_t>) {
             // if get_ref nonconst exists, do evil const cast to get to it
             using reftype = decltype(inner_def::get_ref(
-                const_cast<enumerated_t&>(i)
+                const_cast<enumerated_t&>(range)
                     .template get_view_reference<enumerated_t, range_t>(),
                 c.inner()));
             return std::pair<reftype, const size_t>(
                 inner_def::get_ref(
-                    const_cast<enumerated_t&>(i)
+                    const_cast<enumerated_t&>(range)
                         .template get_view_reference<enumerated_t, range_t>(),
                     c.inner()),
                 c.index());
         } else if constexpr (detail::range_has_get_ref_const_v<range_t>) {
             using reftype = decltype(inner_def::get_ref(
-                i.template get_view_reference<enumerated_t, range_t>(),
+                range.template get_view_reference<enumerated_t, range_t>(),
                 c.inner()));
             return std::pair<reftype, const size_t>(
                 inner_def::get_ref(
-                    i.template get_view_reference<enumerated_t, range_t>(),
+                    range.template get_view_reference<enumerated_t, range_t>(),
                     c.inner()),
                 c.index());
         } else {
             using gettype = decltype(inner_def::get(
-                i.template get_view_reference<enumerated_t, range_t>(),
+                range.template get_view_reference<enumerated_t, range_t>(),
                 c.inner()));
             return std::pair<gettype, const size_t>(
                 inner_def::get(
-                    i.template get_view_reference<enumerated_t, range_t>(),
+                    range.template get_view_reference<enumerated_t, range_t>(),
                     c.inner()),
                 c.index());
         }

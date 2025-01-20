@@ -144,7 +144,7 @@ constexpr void ok::memfill(ok::slice_t<slice_viewed_t> slice,
         "arguments.");
     for (auto cursor = ok::begin(slice);
          ok::is_inbounds(slice, cursor, ok::prefer_after_bounds_check_t{});
-         ++cursor) {
+         ok::increment(slice, cursor)) {
         auto& item = ok::iter_get_ref(slice, cursor);
         if constexpr (!std::is_trivially_destructible_v<slice_viewed_t>) {
             item.~slice_viewed_t();

@@ -41,7 +41,8 @@ struct transform_fn_t
             can_call_with_get_ref_const || can_call_with_copied_value,
             "Given transformation function and given range do not match up: "
             "there is no way to do `func(ok::iter_get_ref(const range))` "
-            "nor `func(ok::iter_copyout(const range))`");
+            "nor `func(ok::iter_copyout(const range))`. This may also be "
+            "caused by a lambda being marked \"mutable\".");
         constexpr bool const_ref_call_doesnt_return_void =
             (detail::range_has_get_ref_const_v<T> &&
              returns_transformed_type<callable_t,
@@ -63,16 +64,22 @@ template <typename range_t, typename callable_t>
 struct transformed_view_t : public underlying_view_type<range_t>::type
 {
   private:
-    std::remove_reference_t<callable_t> m_callable;
+    assignment_op_wrapper_t<std::remove_reference_t<callable_t>>
+        m_transformer_callable;
 
   public:
-    constexpr const callable_t& callable() const OKAYLIB_NOEXCEPT
+    transformed_view_t(const transformed_view_t&) = default;
+    transformed_view_t& operator=(const transformed_view_t&) = default;
+    transformed_view_t(transformed_view_t&&) = default;
+    transformed_view_t& operator=(transformed_view_t&&) = default;
+
+    constexpr const callable_t& transformer_callable() const OKAYLIB_NOEXCEPT
     {
-        return m_callable;
+        return m_transformer_callable.value();
     }
 
     constexpr transformed_view_t(range_t&& range, callable_t&& callable)
-        : OKAYLIB_NOEXCEPT m_callable(std::move(callable)),
+        : OKAYLIB_NOEXCEPT m_transformer_callable(std::move(callable)),
           underlying_view_type<range_t>::type(std::forward<range_t>(range))
     {
     }
@@ -89,6 +96,10 @@ struct range_definition<detail::transformed_view_t<input_range_t, callable_t>>
           detail::remove_cvref_t<input_range_t>,
           cursor_type_for<detail::remove_cvref_t<input_range_t>>>,
       public detail::propagate_boundscheck_t<
+          detail::transformed_view_t<input_range_t, callable_t>,
+          detail::remove_cvref_t<input_range_t>,
+          cursor_type_for<detail::remove_cvref_t<input_range_t>>>,
+      public detail::propagate_increment_decrement_t<
           detail::transformed_view_t<input_range_t, callable_t>,
           detail::remove_cvref_t<input_range_t>,
           cursor_type_for<detail::remove_cvref_t<input_range_t>>>
@@ -108,7 +119,7 @@ struct range_definition<detail::transformed_view_t<input_range_t, callable_t>>
             using rettype = decltype(inner_def::get(
                 i.template get_view_reference<transformed_t, range_t>(), c));
 
-            return i.callable()(
+            return i.transformer_callable()(
                 std::forward<std::remove_reference_t<rettype>>(inner_def::get(
                     i.template get_view_reference<transformed_t, range_t>(),
                     c)));
@@ -118,8 +129,10 @@ struct range_definition<detail::transformed_view_t<input_range_t, callable_t>>
             using rettype = decltype(inner_def::get_ref(
                 i.template get_view_reference<transformed_t, range_t>(), c));
 
-            return i.callable()(std::forward<rettype>(inner_def::get_ref(
-                i.template get_view_reference<transformed_t, range_t>(), c)));
+            return i.transformer_callable()(
+                std::forward<rettype>(inner_def::get_ref(
+                    i.template get_view_reference<transformed_t, range_t>(),
+                    c)));
         }
     }
 };

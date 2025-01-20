@@ -3,6 +3,7 @@
 
 #include "okay/detail/addressof.h"
 #include "okay/detail/template_util/empty.h"
+#include "okay/detail/template_util/uninitialized_storage.h"
 #include "okay/detail/traits/special_member_traits.h"
 #include "okay/ranges/ranges.h"
 
@@ -194,6 +195,44 @@ template <typename range_t, typename parent_range_t> struct sized_range_t
     }
 };
 
+template <typename derived_range_t, typename parent_range_t, typename cursor_t>
+struct increment_only_range_t
+{
+    constexpr static void increment(const derived_range_t& i, cursor_t& c)
+    {
+        static_assert(std::is_same_v<cursor_t, cursor_type_for<parent_range_t>>,
+                      "Cannot increment cursor if it requires a conversion of "
+                      "any kind, even upcasting.");
+        ok::increment(
+            i.template get_view_reference<derived_range_t, parent_range_t>(),
+            c);
+    }
+};
+
+template <typename derived_range_t, typename parent_range_t, typename cursor_t>
+struct increment_decrement_range_t
+    : public increment_only_range_t<derived_range_t, parent_range_t, cursor_t>
+{
+    constexpr static void decrement(const derived_range_t& i, cursor_t& c)
+    {
+        static_assert(std::is_same_v<cursor_t, cursor_type_for<parent_range_t>>,
+                      "Cannot decrement cursor if it requires a conversion of "
+                      "any kind, even upcasting.");
+        ok::decrement(
+            i.template get_view_reference<derived_range_t, parent_range_t>(),
+            c);
+    }
+};
+
+template <typename derived_range_t, typename parent_range_t, typename cursor_t>
+using propagate_increment_decrement_t = std::conditional_t<
+    detail::range_definition_has_increment_v<parent_range_t>,
+    std::conditional_t<
+        detail::range_definition_has_decrement_v<parent_range_t>,
+        increment_decrement_range_t<derived_range_t, parent_range_t, cursor_t>,
+        increment_only_range_t<derived_range_t, parent_range_t, cursor_t>>,
+    detail::empty_t>;
+
 // derived_range_t: the range who is being implemented, and whose
 // definition should be inheriting from this type. CRTP.
 // parent_range_t: the range whos sizedness you want to propagate to the
@@ -214,6 +253,70 @@ struct propagate_begin_t
     {
         return cursor_t(ok::begin(
             i.template get_view_reference<derived_range_t, parent_range_t>()));
+    }
+};
+
+template <typename derived_range_t, typename parent_range_t, typename cursor_t>
+struct propagate_get_set_t
+{
+    template <typename T = parent_range_t>
+    constexpr static auto get(const derived_range_t& range,
+                              const cursor_t& cursor)
+        -> std::enable_if_t<
+            std::is_same_v<T, parent_range_t>,
+            decltype(range_definition_inner<T>::get(
+                std::declval<const T&>(),
+                std::declval<const cursor_type_unchecked_for<T>>()))>
+    {
+        return range_definition_inner<T>::get(
+            range
+                .template get_view_reference<derived_range_t, parent_range_t>(),
+            cursor);
+    }
+
+    template <typename T = parent_range_t>
+    constexpr static auto set(derived_range_t& range, const cursor_t& cursor,
+                              value_type_for<T>&& value)
+        -> std::enable_if_t<
+            std::is_same_v<T, parent_range_t>,
+            decltype(range_definition_inner<T>::set(
+                std::declval<const T&>(),
+                std::declval<const cursor_type_unchecked_for<T>>(),
+                std::forward<value_type_for<T>>(value)))>
+    {
+        return range_definition_inner<T>::get(
+            range.template get_view_reference<derived_range_t, T>(), cursor,
+            std::forward<value_type_for<T>>(value));
+    }
+
+    template <typename T = parent_range_t>
+    constexpr static auto get_ref(derived_range_t& range,
+                                  const cursor_t& cursor)
+        -> std::enable_if_t<
+            std::is_same_v<T, parent_range_t>,
+            decltype(range_definition_inner<T>::get_ref(
+                std::declval<T&>(),
+                std::declval<const cursor_type_unchecked_for<T>>()))>
+    {
+        return range_definition_inner<T>::get_ref(
+            range
+                .template get_view_reference<derived_range_t, parent_range_t>(),
+            cursor);
+    }
+
+    template <typename T = parent_range_t>
+    constexpr static auto get_ref(const derived_range_t& range,
+                                  const cursor_t& cursor)
+        -> std::enable_if_t<
+            std::is_same_v<T, parent_range_t>,
+            decltype(range_definition_inner<T>::get_ref(
+                std::declval<const T&>(),
+                std::declval<const cursor_type_unchecked_for<T>>()))>
+    {
+        return range_definition_inner<T>::get_ref(
+            range
+                .template get_view_reference<derived_range_t, parent_range_t>(),
+            cursor);
     }
 };
 
@@ -254,6 +357,106 @@ struct propagate_boundscheck_t
         return detail::range_definition_inner<T>::is_before_bounds(
             i.template get_view_reference<derived_range_t, parent_range_t>(),
             cursor_type_for<parent_range_t>(c));
+    }
+};
+
+template <typename payload_t>
+struct uninitialized_storage_default_constructible_t
+{
+    constexpr uninitialized_storage_default_constructible_t() OKAYLIB_NOEXCEPT
+        : m_value(std::in_place)
+    {
+    }
+
+    template <typename... args_t>
+    constexpr uninitialized_storage_default_constructible_t(args_t&&... args)
+        OKAYLIB_NOEXCEPT : m_value(std::in_place, std::forward<args_t>(args)...)
+    {
+    }
+
+    uninitialized_storage_t<payload_t> m_value;
+};
+template <typename payload_t>
+struct uninitialized_storage_deleted_default_constructor_t
+{
+    uninitialized_storage_deleted_default_constructor_t() = delete;
+
+    template <typename... args_t>
+    constexpr uninitialized_storage_deleted_default_constructor_t(
+        args_t&&... args) OKAYLIB_NOEXCEPT
+        : m_value(std::in_place, std::forward<args_t>(args)...)
+    {
+    }
+
+    uninitialized_storage_t<payload_t> m_value;
+};
+
+template <typename payload_t>
+using propagate_default_constructibility_t = std::conditional_t<
+    std::is_default_constructible_v<payload_t>,
+    uninitialized_storage_default_constructible_t<payload_t>,
+    uninitialized_storage_deleted_default_constructor_t<payload_t>>;
+
+/// type which wraps another type which does not have copy/move assignment and
+/// gives it copy/move by destroying the reciever and then constructing over it
+template <typename payload_t>
+struct assignment_op_wrapper_t
+    : public propagate_default_constructibility_t<payload_t>
+{
+  private:
+    using parent_t = propagate_default_constructibility_t<payload_t>;
+    using self_t = assignment_op_wrapper_t;
+    constexpr parent_t* derived() OKAYLIB_NOEXCEPT
+    {
+        return static_cast<parent_t*>(this);
+    }
+    constexpr const parent_t* derived() const OKAYLIB_NOEXCEPT
+    {
+        return static_cast<const parent_t*>(this);
+    }
+
+  public:
+    using parent_t::parent_t;
+
+    constexpr payload_t& value() & OKAYLIB_NOEXCEPT
+    {
+        return derived()->m_value.value;
+    }
+    constexpr const payload_t& value() const& OKAYLIB_NOEXCEPT
+    {
+        return derived()->m_value.value;
+    }
+    constexpr payload_t&& value() && OKAYLIB_NOEXCEPT
+    {
+        return std::move(derived()->m_value.value);
+    }
+    constexpr payload_t& value() const&& = delete;
+
+    constexpr assignment_op_wrapper_t(const assignment_op_wrapper_t& other) =
+        default;
+    constexpr assignment_op_wrapper_t(assignment_op_wrapper_t&& other) =
+        default;
+
+    constexpr self_t& operator=(const self_t& other) OKAYLIB_NOEXCEPT
+    {
+        static_assert(std::is_nothrow_copy_constructible_v<payload_t>);
+        if (this != ok::addressof(other)) {
+            auto* ptr = ok::addressof(value());
+            ptr->~payload_t();
+            ::new (ptr) payload_t(other.value());
+        }
+        return *this;
+    }
+
+    constexpr self_t& operator=(self_t&& other) OKAYLIB_NOEXCEPT
+    {
+        static_assert(std::is_nothrow_move_constructible_v<payload_t>);
+        if (this != ok::addressof(other)) {
+            auto* ptr = ok::addressof(value());
+            ptr->~payload_t();
+            ::new (ptr) payload_t(std::move(other).value());
+        }
+        return *this;
     }
 };
 

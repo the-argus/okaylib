@@ -287,7 +287,7 @@ TEST_SUITE("range traits")
             static_assert(ok::begin(myints) == 0);
 
             for (size_t i = ok::begin(myints); ok::is_inbounds(myints, i);
-                 ++i) {
+                 ok::increment(myints, i)) {
                 REQUIRE((i >= 0 && i < 500));
                 myints[i] = i;
             }
@@ -299,7 +299,8 @@ TEST_SUITE("range traits")
             REQUIRE(!ok::is_inbounds(range, range.size()));
             REQUIRE(ok::begin(range) == 0);
 
-            for (size_t i = ok::begin(range); ok::is_inbounds(range, i); ++i) {
+            for (size_t i = ok::begin(range); ok::is_inbounds(range, i);
+                 ok::increment(range, i)) {
                 REQUIRE((i >= 0 && i < 100)); // NOTE: 100 is size always
                 range[i] = i;
             }
@@ -315,7 +316,7 @@ TEST_SUITE("range traits")
             int myints[500];
 
             for (size_t i = ok::begin(myints); ok::is_inbounds(myints, i);
-                 ++i) {
+                 ok::increment(myints, i)) {
                 int& iter = myints[i];
 
                 iter = i;
@@ -332,7 +333,7 @@ TEST_SUITE("range traits")
 
             for (size_t i = ok::begin(myints);
                  ok::is_inbounds(myints, i, ok::prefer_after_bounds_check_t{});
-                 ++i) {
+                 ok::increment(myints, i)) {
                 int& iter = myints[i];
 
                 iter = i;
@@ -350,13 +351,14 @@ TEST_SUITE("range traits")
 
             for (auto i = ok::begin(bytes);
                  ok::is_inbounds(bytes, i, ok::prefer_after_bounds_check_t{});
-                 ++i) {
+                 ok::increment(bytes, i)) {
                 uint8_t& iter = bytes.get(i);
 
                 iter = i.inner();
             }
 
-            for (auto i = ok::begin(bytes); ok::is_inbounds(bytes, i); ++i) {
+            for (auto i = ok::begin(bytes); ok::is_inbounds(bytes, i);
+                 ok::increment(bytes, i)) {
                 uint8_t& iter = bytes.get(i);
 
                 REQUIRE(iter == i.inner());
@@ -401,8 +403,7 @@ TEST_SUITE("range traits")
             for (uint8_t& i : bytes | std_for)
                 i = 20;
 
-            for (auto [byte, index] : bytes | enumerate | std_for)
-            {
+            for (auto [byte, index] : bytes | enumerate | std_for) {
                 REQUIRE(byte == 20);
             }
 

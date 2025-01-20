@@ -194,7 +194,7 @@ using range_definition_inner =
 template <typename T>
 constexpr bool is_valid_cursor_v =
     // NOTE: update static_assert in range_def_for if this changes
-    std::is_object_v<T> && has_pre_increment_v<T>;
+    std::is_object_v<T>;
 
 template <typename T>
 constexpr bool is_valid_value_type_v = std::is_object_v<T>;
@@ -261,6 +261,30 @@ struct range_has_is_before_bounds<
 {};
 
 template <typename T, typename = void>
+struct range_definition_has_increment : public std::false_type
+{};
+template <typename T>
+struct range_definition_has_increment<
+    T, std::enable_if_t<std::is_same_v<
+           void, decltype(range_definition_inner<T>::increment(
+                     std::declval<const remove_cvref_t<T>&>(),
+                     std::declval<cursor_type_unchecked_for<T>&>()))>>>
+    : public std::true_type
+{};
+
+template <typename T, typename = void>
+struct range_definition_has_decrement : public std::false_type
+{};
+template <typename T>
+struct range_definition_has_decrement<
+    T, std::enable_if_t<std::is_same_v<
+           void, decltype(range_definition_inner<T>::decrement(
+                     std::declval<const remove_cvref_t<T>&>(),
+                     std::declval<cursor_type_unchecked_for<T>&>()))>>>
+    : public std::true_type
+{};
+
+template <typename T, typename = void>
 struct range_has_size : public std::false_type
 {};
 template <typename T>
@@ -310,6 +334,10 @@ template <typename T>
 constexpr bool range_has_is_before_bounds_v =
     range_has_is_before_bounds<T>::value;
 template <typename T>
+constexpr bool range_definition_has_increment_v = range_definition_has_increment<T>::value;
+template <typename T>
+constexpr bool range_definition_has_decrement_v = range_definition_has_decrement<T>::value;
+template <typename T>
 constexpr bool range_has_size_v = range_has_size<T>::value;
 template <typename T>
 constexpr bool range_marked_infinite_v = range_marked_infinite<T>::value;
@@ -333,13 +361,12 @@ struct range_has_get_unchecked_rettype : public std::false_type
 
 template <typename range_t>
 struct range_has_get_unchecked_rettype<
-    range_t, std::enable_if_t<!std::is_same_v<
-                 decltype(range_definition_inner<range_t>::get(
-                     std::declval<const range_t&>(),
-                     std::declval<const cursor_type_unchecked_for<range_t>&>()))
-
-                     ,
-                 void>>> : public std::true_type
+    range_t,
+    std::enable_if_t<!std::is_same_v<
+        decltype(range_definition_inner<range_t>::get(
+            std::declval<const range_t&>(),
+            std::declval<const cursor_type_unchecked_for<range_t>&>())),
+        void>>> : public std::true_type
 {
     using return_type = decltype(range_definition_inner<range_t>::get(
         std::declval<const range_t&>(),
@@ -511,14 +538,35 @@ constexpr bool has_baseline_functions_v =
     (range_has_is_after_bounds_v<T> == range_has_is_before_bounds_v<T>) &&
     range_has_begin_v<T>;
 
+template <typename T, typename = void> struct cursor_or_void
+{
+    using type = void;
+};
+
+template <typename T>
+struct cursor_or_void<T, std::void_t<cursor_type_unchecked_for<T>>>
+{
+    using type = cursor_type_unchecked_for<T>;
+};
+
+template <typename T> using cursor_or_void_t = typename cursor_or_void<T>::type;
+
+template <typename T>
+constexpr bool range_can_increment_v =
+    range_definition_has_increment_v<T> || has_pre_increment_v<cursor_or_void_t<T>>;
+
+template <typename T>
+constexpr bool range_can_decrement_v =
+    range_definition_has_decrement_v<T> || has_pre_decrement_v<cursor_or_void_t<T>>;
+
 template <typename T>
 constexpr bool is_output_range_v =
-    has_baseline_functions_v<T> &&
+    has_baseline_functions_v<T> && range_can_increment_v<T> &&
     (range_has_set_v<T> || range_has_get_ref_v<T>);
 
 template <typename T>
 constexpr bool is_input_range_v =
-    has_baseline_functions_v<T> &&
+    has_baseline_functions_v<T> && range_can_increment_v<T> &&
     (range_has_get_v<T> || range_has_get_ref_const_v<T> ||
      range_has_get_ref_v<T>);
 
@@ -532,18 +580,6 @@ template <typename maybe_range_t>
 constexpr bool is_single_pass_range_v =
     is_input_or_output_range_v<maybe_range_t>;
 
-template <typename T, typename = void> struct cursor_or_void
-{
-    using type = void;
-};
-template <typename T>
-struct cursor_or_void<T, std::void_t<cursor_type_unchecked_for<T>>>
-{
-    using type = cursor_type_unchecked_for<T>;
-};
-
-template <typename T> using cursor_or_void_t = typename cursor_or_void<T>::type;
-
 // a multi pass range is copyable- enabling consumers to pause and come back
 // to copies of ranges at previous positions.
 template <typename maybe_range_t>
@@ -556,11 +592,18 @@ template <typename maybe_range_t>
 constexpr bool is_bidirectional_range_v =
     is_multi_pass_range_v<maybe_range_t> &&
     // can also be decremented
-    has_pre_decrement_v<cursor_or_void_t<maybe_range_t>>;
+    range_can_decrement_v<maybe_range_t>;
 
 template <typename maybe_range_t>
 constexpr bool is_random_access_range_v =
     is_bidirectional_range_v<maybe_range_t> &&
+    // must be able to do math on cursor without range context
+    has_pre_increment_v<cursor_or_void_t<maybe_range_t>> &&
+    has_pre_decrement_v<cursor_or_void_t<maybe_range_t>> &&
+    // if user defines increment(), then that method is preferred so random
+    // access is lost- increment with range context is now required
+    !range_definition_has_increment_v<maybe_range_t> &&
+    !range_definition_has_decrement_v<maybe_range_t> &&
     // must also be able to do +, +=, -, -=, <, >, <=, >=
     has_addition_with_size_v<cursor_or_void_t<maybe_range_t>> &&
     has_subtraction_with_size_v<cursor_or_void_t<maybe_range_t>> &&
@@ -678,7 +721,7 @@ class range_def_for : public detail::range_definition_inner<T>
     static_assert(
         valid_cursor,
         "Range definition invalid- the return value from begin() (the "
-        "cursor type) is either not an object or cannot be pre-incremented.");
+        "cursor type) is not an object.");
 
     static constexpr bool before_and_after_or_inbounds_are_mutually_exclusive =
         detail::range_has_is_inbounds_v<noref> !=
@@ -696,6 +739,15 @@ class range_def_for : public detail::range_definition_inner<T>
         "Range definition invalid- different status for `is_before_bounds` "
         "and `is_after_bounds`. either define both of `is_before_bounds()` and "
         "`is_after_bounds()`, or define neither.");
+
+    static constexpr bool can_increment_cursor =
+        detail::has_pre_increment_v<detail::cursor_type_unchecked_for<noref>> ||
+        detail::range_definition_has_increment_v<noref>;
+    static_assert(
+        can_increment_cursor,
+        "Range definition invalid- given cursor type (the return type of "
+        "begin()) is not able to be pre-incremented, nor is an increment(const "
+        "range&, cursor&) function defined in the range definition.");
 
     static constexpr bool input_or_output =
         detail::is_input_or_output_range_v<noref>;
@@ -883,9 +935,8 @@ struct iter_set_fn_t
         } else {
             static_assert(
                 detail::range_has_set_v<range_t>,
-                "Cannot set for given range- it does not define iter_set, "
-                "nor "
-                "does not define get_ref + a move constructor for value type.");
+                "Cannot set for given range- it does not define iter_set, nor "
+                "does it define get_ref + a move constructor for value type.");
             range_definition_inner<range_t>::set(range, cursor,
                                                  std::move(value));
         }
@@ -899,6 +950,40 @@ struct begin_fn_t
         OKAYLIB_NOEXCEPT->decltype(range_def_for<range_t>::begin(range))
     {
         return range_def_for<range_t>::begin(range);
+    }
+};
+
+struct increment_fn_t
+{
+    template <typename range_t>
+    constexpr void
+    operator()(const range_t& range,
+               cursor_type_for<range_t>& cursor) const OKAYLIB_NOEXCEPT
+    {
+        if constexpr (detail::range_definition_has_increment_v<range_t>) {
+            range_def_for<range_t>::increment(range, cursor);
+        } else {
+            static_assert(detail::has_pre_increment_v<
+                          detail::cursor_type_unchecked_for<range_t>>);
+            ++cursor;
+        }
+    }
+};
+
+struct decrement_fn_t
+{
+    template <typename range_t>
+    constexpr void
+    operator()(const range_t& range,
+               cursor_type_for<range_t>& cursor) const OKAYLIB_NOEXCEPT
+    {
+        if constexpr (detail::range_definition_has_increment_v<range_t>) {
+            range_def_for<range_t>::decrement(range, cursor);
+        } else {
+            static_assert(detail::has_pre_increment_v<
+                          detail::cursor_type_unchecked_for<range_t>>);
+            --cursor;
+        }
     }
 };
 
@@ -1025,6 +1110,10 @@ constexpr detail::is_inbounds_fn_t is_inbounds{};
 constexpr detail::size_fn_t size{};
 
 constexpr detail::size_fn_t data{};
+
+constexpr detail::increment_fn_t increment{};
+
+constexpr detail::decrement_fn_t decrement{};
 
 } // namespace ok
 

@@ -9,7 +9,8 @@ template <typename, typename = void>
 class has_pre_increment_meta_t : public std::false_type
 {};
 template <typename T>
-class has_pre_increment_meta_t<T, std::void_t<decltype(++std::declval<T&>())>>
+class has_pre_increment_meta_t<
+    T, std::enable_if_t<std::is_same_v<decltype(++std::declval<T&>()), T&>>>
     : public std::true_type
 {};
 
@@ -17,7 +18,8 @@ template <typename, typename = void>
 class has_pre_decrement_meta_t : public std::false_type
 {};
 template <typename T>
-class has_pre_decrement_meta_t<T, std::void_t<decltype(--std::declval<T&>())>>
+class has_pre_decrement_meta_t<
+    T, std::enable_if_t<std::is_same_v<decltype(--std::declval<T&>()), T&>>>
     : public std::true_type
 {};
 

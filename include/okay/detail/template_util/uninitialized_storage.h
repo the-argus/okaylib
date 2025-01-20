@@ -21,11 +21,11 @@ template <typename inner_input_contained_t,
           bool = std::is_trivially_destructible_v<inner_input_contained_t>>
 union uninitialized_storage_t
 {
-    inline constexpr uninitialized_storage_t() OKAYLIB_NOEXCEPT : empty() {}
+    constexpr uninitialized_storage_t() OKAYLIB_NOEXCEPT : empty() {}
 
     template <typename... args_t>
-    inline constexpr uninitialized_storage_t(std::in_place_t,
-                                             args_t&&... args) OKAYLIB_NOEXCEPT
+    constexpr uninitialized_storage_t(std::in_place_t,
+                                      args_t&&... args) OKAYLIB_NOEXCEPT
         : value(std::forward<args_t>(args)...)
     {
     }
@@ -37,11 +37,11 @@ union uninitialized_storage_t
 template <typename inner_input_contained_t>
 union uninitialized_storage_t<inner_input_contained_t, false>
 {
-    inline constexpr uninitialized_storage_t() OKAYLIB_NOEXCEPT : empty() {}
+    constexpr uninitialized_storage_t() OKAYLIB_NOEXCEPT : empty() {}
 
     template <typename... args_t>
-    inline constexpr uninitialized_storage_t(std::in_place_t,
-                                             args_t&&... args) OKAYLIB_NOEXCEPT
+    constexpr uninitialized_storage_t(std::in_place_t,
+                                      args_t&&... args) OKAYLIB_NOEXCEPT
         : value(std::forward<args_t>(args)...)
     {
     }

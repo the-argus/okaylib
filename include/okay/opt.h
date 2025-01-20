@@ -35,13 +35,9 @@ using enable_copy_move_opt_for_t = detail::enable_copy_move<
     opt_t<T>>;
 }
 
-// optional which is not
-template <typename payload_t>
-class opt_t<payload_t,
-            std::enable_if_t<(!detail::is_instance<payload_t, ok::slice_t>() &&
-                              !std::is_lvalue_reference_v<payload_t>)>>
-    : private detail::opt_base_t<payload_t>,
-      private detail::enable_copy_move_opt_for_t<payload_t>
+template <typename payload_t, typename>
+class opt_t : private detail::opt_base_t<payload_t>,
+              private detail::enable_copy_move_opt_for_t<payload_t>
 {
   public:
     // type constraints

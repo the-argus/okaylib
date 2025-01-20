@@ -2,6 +2,7 @@
 // test header must be first
 #include "okay/macros/foreach.h"
 #include "okay/ranges/views/enumerate.h"
+#include "okay/ranges/views/filter.h"
 #include "okay/ranges/views/transform.h"
 #include "okay/slice.h"
 #include "okay/stdmem.h"
@@ -13,7 +14,7 @@ TEST_SUITE("enumerate")
 {
     TEST_CASE("functionality")
     {
-        SUBCASE("identity transform")
+        SUBCASE("identity filter")
         {
             std::array<int, 50> ints = {};
             std::fill(ints.begin(), ints.end(), 0);
@@ -24,15 +25,16 @@ TEST_SUITE("enumerate")
                 item = c;
             }
 
-            auto identity = ints | transform([](auto i) { return i; });
+            auto t = [](auto i) { return true; };
+            auto identity = ints | filter([](auto i) { return true; });
             for (auto c = ok::begin(identity); ok::is_inbounds(identity, c);
                  ok::increment(identity, c)) {
-                const int& item = ok::iter_get_temporary_ref(identity, c);
+                int& item = ok::iter_get_ref(identity, c);
                 REQUIRE(item == c);
             }
         }
 
-        SUBCASE("identity transform with macros")
+        SUBCASE("identity filter with macros")
         {
             std::array<int, 50> ints = {};
             memfill(slice_t(ints), 0);
@@ -44,7 +46,7 @@ TEST_SUITE("enumerate")
                 ++c;
             }
 
-            auto identity = ints | transform([](auto i) { return i; });
+            auto identity = ints | filter([](auto) { return true; });
             c = 0;
             ok_foreach(const auto& item, identity)
             {
@@ -53,19 +55,49 @@ TEST_SUITE("enumerate")
             }
         }
 
-        SUBCASE("squared view with std::array")
+        SUBCASE("skip even numbers with std::array")
         {
-            auto squared = transform([](auto i) { return i * i; });
+            auto skip_even = filter([](auto i) { return i % 2 != 1; });
 
             std::array<int, 50> ints;
 
+            static_assert(
+                !detail::range_definition_has_increment_v<decltype(ints)>);
+            static_assert(
+                detail::range_definition_has_increment_v<decltype(ints |
+                                                                  skip_even)>);
+            static_assert(detail::is_random_access_range_v<decltype(ints)>);
+            static_assert(
+                !detail::is_random_access_range_v<decltype(ints | skip_even)>);
+            static_assert(
+                std::is_same_v<cursor_type_for<decltype(ints)>,
+                               cursor_type_for<decltype(ints | skip_even)>>);
+            static_assert(
+                std::is_same_v<value_type_for<decltype(ints)>,
+                               value_type_for<decltype(ints | skip_even)>>);
+
             ok_foreach(ok_pair(item, index), enumerate(ints)) item = index;
 
-            size_t c = 0;
-            ok_foreach(const int i, ints | squared)
+            ok_foreach(const int i, ints | skip_even) { REQUIRE(i % 2 == 1); }
+        }
+
+        SUBCASE("filter by index and then go back to not having index type")
+        {
+            auto skip_even = filter([](auto i) { return i.second % 2 != 1; });
+            auto get_first = transform([](auto pair) { return pair.first; });
+
+            std::array<int, 50> ints;
+            memfill(slice_t(ints), 0);
+
+            ok_foreach(ok_pair(i, index), enumerate(ints))
             {
-                REQUIRE(i == c * c);
-                ++c;
+                // start at 50 and count backwards
+                i = ints.size() - index;
+            }
+
+            ok_foreach(const auto i, ints | enumerate | get_first)
+            {
+                REQUIRE(i % 2 == 1);
             }
         }
 

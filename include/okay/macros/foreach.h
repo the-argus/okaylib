@@ -15,7 +15,7 @@
         for (auto cursor = ok::begin(__OK_L(__LINE__, range));                \
              ok::is_inbounds(__OK_L(__LINE__, range), cursor,                 \
                              ok::prefer_after_bounds_check_t{});              \
-             ++cursor)                                                        \
+             ok::increment(__OK_L(__LINE__, range), cursor))                  \
             if (1) {                                                          \
                 _run = true;                                                  \
                 goto __OK_L(__LINE__, body);                                  \
