@@ -458,6 +458,8 @@ struct assignment_op_wrapper_t
         }
         return *this;
     }
+
+    ~assignment_op_wrapper_t() { value().~payload_t(); }
 };
 
 } // namespace detail
