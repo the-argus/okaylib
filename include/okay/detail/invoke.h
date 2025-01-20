@@ -10,7 +10,7 @@
 namespace ok {
 template <typename... args_t> constexpr decltype(auto) invoke(args_t&&... args)
 {
-    return std::invoke(std::forward<args_t&&>(args)...);
+    return std::invoke(std::forward<args_t>(args)...);
 }
 } // namespace ok
 
