@@ -1,6 +1,7 @@
 #ifndef __OKAYLIB_RANGES_RANGES_H__
 #define __OKAYLIB_RANGES_RANGES_H__
 
+#include "okay/detail/ok_assert.h"
 #include "okay/detail/template_util/c_array_length.h"
 #include "okay/detail/template_util/c_array_value_type.h"
 #include "okay/detail/template_util/remove_cvref.h"
@@ -64,20 +65,20 @@ struct range_definition<
 {
   private:
     using range_t = detail::remove_cvref_t<input_range_t>;
-    static_assert(!has_inherited_range_type_v<range_t>,
-                  "Type that should be array has inherited range member type?");
 
   public:
     using value_type = detail::c_array_value_type<range_t>;
 
     static constexpr value_type& get_ref(range_t& i, size_t c) OKAYLIB_NOEXCEPT
     {
+        __ok_assert(c < size(i)); // out of bounds on c style array
         return i[c];
     }
 
     static constexpr const value_type& get_ref(const range_t& i,
                                                size_t c) OKAYLIB_NOEXCEPT
     {
+        __ok_assert(c < size(i)); // out of bounds on c style array
         return i[c];
     }
 
@@ -334,9 +335,11 @@ template <typename T>
 constexpr bool range_has_is_before_bounds_v =
     range_has_is_before_bounds<T>::value;
 template <typename T>
-constexpr bool range_definition_has_increment_v = range_definition_has_increment<T>::value;
+constexpr bool range_definition_has_increment_v =
+    range_definition_has_increment<T>::value;
 template <typename T>
-constexpr bool range_definition_has_decrement_v = range_definition_has_decrement<T>::value;
+constexpr bool range_definition_has_decrement_v =
+    range_definition_has_decrement<T>::value;
 template <typename T>
 constexpr bool range_has_size_v = range_has_size<T>::value;
 template <typename T>
@@ -552,12 +555,12 @@ struct cursor_or_void<T, std::void_t<cursor_type_unchecked_for<T>>>
 template <typename T> using cursor_or_void_t = typename cursor_or_void<T>::type;
 
 template <typename T>
-constexpr bool range_can_increment_v =
-    range_definition_has_increment_v<T> || has_pre_increment_v<cursor_or_void_t<T>>;
+constexpr bool range_can_increment_v = range_definition_has_increment_v<T> ||
+                                       has_pre_increment_v<cursor_or_void_t<T>>;
 
 template <typename T>
-constexpr bool range_can_decrement_v =
-    range_definition_has_decrement_v<T> || has_pre_decrement_v<cursor_or_void_t<T>>;
+constexpr bool range_can_decrement_v = range_definition_has_decrement_v<T> ||
+                                       has_pre_decrement_v<cursor_or_void_t<T>>;
 
 template <typename T>
 constexpr bool is_output_range_v =

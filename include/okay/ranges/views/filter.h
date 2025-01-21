@@ -64,7 +64,8 @@ template <typename range_t, typename predicate_t>
 struct filtered_view_t : public underlying_view_type<range_t>::type
 {
   private:
-    assignment_op_wrapper_t<std::remove_reference_t<predicate_t>> m_filter_predicate;
+    assignment_op_wrapper_t<std::remove_reference_t<predicate_t>>
+        m_filter_predicate;
 
   public:
     filtered_view_t(const filtered_view_t&) = default;
@@ -133,7 +134,9 @@ struct range_definition<detail::filtered_view_t<input_range_t, predicate_t>>
         do {
             ok::decrement(i.template get_view_reference<filtered_t, range_t>(),
                           c);
-        } while (!i.filter_predicate()(ok::iter_get_temporary_ref(i, c)));
+        } while (ok::is_inbounds(
+                     i.template get_view_reference<filtered_t, range_t>(), c) &&
+                 !i.filter_predicate()(ok::iter_get_temporary_ref(i, c)));
     }
 };
 
