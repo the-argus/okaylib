@@ -91,10 +91,6 @@ struct range_definition<detail::filtered_view_t<input_range_t, predicate_t>>
     : public detail::propagate_sizedness_t<
           detail::filtered_view_t<input_range_t, predicate_t>,
           detail::remove_cvref_t<input_range_t>>,
-      public detail::propagate_begin_t<
-          detail::filtered_view_t<input_range_t, predicate_t>,
-          detail::remove_cvref_t<input_range_t>,
-          cursor_type_for<detail::remove_cvref_t<input_range_t>>>,
       public detail::propagate_boundscheck_t<
           detail::filtered_view_t<input_range_t, predicate_t>,
           detail::remove_cvref_t<input_range_t>,
@@ -115,15 +111,30 @@ struct range_definition<detail::filtered_view_t<input_range_t, predicate_t>>
                   "Cannot filter a range which does not provide const "
                   "get_ref() or get().");
 
+    constexpr static cursor_t begin(const filtered_t& i)
+    {
+        const auto& parent =
+            i.template get_view_reference<filtered_t, range_t>();
+        auto parent_cursor = ok::begin(parent);
+        while (ok::is_inbounds(parent, parent_cursor) &&
+               !i.filter_predicate()(
+                   ok::iter_get_temporary_ref(parent, parent_cursor))) {
+            ok::increment(parent, parent_cursor);
+        }
+        return cursor_t(parent_cursor);
+    }
+
     template <typename T = range_t>
     constexpr static auto increment(const filtered_t& i, cursor_t& c)
         -> std::void_t<decltype(ok::increment(std::declval<const range_t&>(),
                                               std::declval<cursor_t&>()))>
     {
+        const auto& parent =
+            i.template get_view_reference<filtered_t, range_t>();
         do {
-            ok::increment(i.template get_view_reference<filtered_t, range_t>(),
-                          c);
-        } while (!i.filter_predicate()(ok::iter_get_temporary_ref(i, c)));
+            ok::increment(parent, c);
+        } while (ok::is_inbounds(parent, c) &&
+                 !i.filter_predicate()(ok::iter_get_temporary_ref(parent, c)));
     }
 
     template <typename T = range_t>
@@ -131,12 +142,12 @@ struct range_definition<detail::filtered_view_t<input_range_t, predicate_t>>
         -> std::void_t<decltype(ok::decrement(std::declval<const range_t&>(),
                                               std::declval<cursor_t&>()))>
     {
+        const auto& parent =
+            i.template get_view_reference<filtered_t, range_t>();
         do {
-            ok::decrement(i.template get_view_reference<filtered_t, range_t>(),
-                          c);
-        } while (ok::is_inbounds(
-                     i.template get_view_reference<filtered_t, range_t>(), c) &&
-                 !i.filter_predicate()(ok::iter_get_temporary_ref(i, c)));
+            ok::decrement(parent, c);
+        } while (ok::is_inbounds(parent, c) &&
+                 !i.filter_predicate()(ok::iter_get_temporary_ref(parent, c)));
     }
 };
 
