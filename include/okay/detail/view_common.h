@@ -173,14 +173,9 @@ template <typename T> struct underlying_view_type
     using type = decltype(wrap_range_with_view(std::declval<T>()));
 };
 
-struct infinite_range_t
+template <bool is_infinite> struct infinite_static_def_t
 {
-    static constexpr bool infinite = true;
-};
-
-struct finite_range_t
-{
-    static constexpr bool infinite = false;
+    static constexpr bool infinite = is_infinite;
 };
 
 /// Conditionally inherit range_definition from this to mark as sized.
@@ -238,11 +233,10 @@ using propagate_increment_decrement_t = std::conditional_t<
 // parent_range_t: the range whos sizedness you want to propagate to the
 // range definition of argument 1
 template <typename derived_range_t, typename parent_range_t>
-using propagate_sizedness_t =
-    std::conditional_t<range_has_size_v<parent_range_t>,
-                       sized_range_t<derived_range_t, parent_range_t>,
-                       std::conditional<range_marked_infinite_v<parent_range_t>,
-                                        infinite_range_t, finite_range_t>>;
+using propagate_sizedness_t = std::conditional_t<
+    range_has_size_v<parent_range_t>,
+    sized_range_t<derived_range_t, parent_range_t>,
+    infinite_static_def_t<range_marked_infinite_v<parent_range_t>>>;
 
 // requires that cursor_t can be constructed from the
 // cursor_type_for<parent_range_t>

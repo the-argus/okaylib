@@ -10,7 +10,7 @@
 
 using namespace ok;
 
-TEST_SUITE("enumerate")
+TEST_SUITE("keep_if")
 {
     TEST_CASE("functionality")
     {

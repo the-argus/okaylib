@@ -89,17 +89,21 @@ struct keep_if_view_t : public underlying_view_type<range_t>::type
 
 template <typename input_range_t, typename predicate_t>
 struct range_definition<detail::keep_if_view_t<input_range_t, predicate_t>>
-    : public detail::propagate_sizedness_t<
-          detail::keep_if_view_t<input_range_t, predicate_t>,
-          detail::remove_cvref_t<input_range_t>>,
-      public detail::propagate_boundscheck_t<
+    : public detail::propagate_boundscheck_t<
           detail::keep_if_view_t<input_range_t, predicate_t>,
           detail::remove_cvref_t<input_range_t>,
           cursor_type_for<detail::remove_cvref_t<input_range_t>>>,
       public detail::propagate_get_set_t<
           detail::keep_if_view_t<input_range_t, predicate_t>,
           detail::remove_cvref_t<input_range_t>,
-          cursor_type_for<detail::remove_cvref_t<input_range_t>>>
+          cursor_type_for<detail::remove_cvref_t<input_range_t>>>,
+      public detail::infinite_static_def_t<
+          // finite if the range has size or if it is not marked infinite. never
+          // propagate size() function because we cant know it until we traverse
+          // the view
+          !(detail::range_has_size_v<detail::remove_cvref_t<input_range_t>> ||
+            !detail::range_marked_finite_v<
+                detail::remove_cvref_t<input_range_t>>)>
 {
     static constexpr bool is_view = true;
 
@@ -112,7 +116,7 @@ struct range_definition<detail::keep_if_view_t<input_range_t, predicate_t>>
                   "Cannot keep_if a range which does not provide const "
                   "get_ref() or get().");
 
-    constexpr static cursor_t begin(const keep_if_t& i)
+    constexpr static cursor_t begin(const keep_if_t& i) OKAYLIB_NOEXCEPT
     {
         const auto& parent =
             i.template get_view_reference<keep_if_t, range_t>();
@@ -126,7 +130,8 @@ struct range_definition<detail::keep_if_view_t<input_range_t, predicate_t>>
     }
 
     template <typename T = range_t>
-    constexpr static auto increment(const keep_if_t& i, cursor_t& c)
+    constexpr static auto increment(const keep_if_t& i,
+                                    cursor_t& c) OKAYLIB_NOEXCEPT
         -> std::void_t<decltype(ok::increment(std::declval<const range_t&>(),
                                               std::declval<cursor_t&>()))>
     {
@@ -139,7 +144,8 @@ struct range_definition<detail::keep_if_view_t<input_range_t, predicate_t>>
     }
 
     template <typename T = range_t>
-    constexpr static auto decrement(const keep_if_t& i, cursor_t& c)
+    constexpr static auto decrement(const keep_if_t& i,
+                                    cursor_t& c) OKAYLIB_NOEXCEPT
         -> std::void_t<decltype(ok::decrement(std::declval<const range_t&>(),
                                               std::declval<cursor_t&>()))>
     {
