@@ -2,7 +2,7 @@
 // test header must be first
 #include "okay/macros/foreach.h"
 #include "okay/ranges/views/enumerate.h"
-#include "okay/ranges/views/filter.h"
+#include "okay/ranges/views/keep_if.h"
 #include "okay/ranges/views/transform.h"
 #include "okay/slice.h"
 #include "okay/stdmem.h"
@@ -14,7 +14,7 @@ TEST_SUITE("enumerate")
 {
     TEST_CASE("functionality")
     {
-        SUBCASE("identity filter")
+        SUBCASE("identity keep_if")
         {
             std::array<int, 50> ints = {};
             std::fill(ints.begin(), ints.end(), 0);
@@ -25,7 +25,7 @@ TEST_SUITE("enumerate")
                 item = c;
             }
 
-            auto identity = ints | filter([](auto i) { return true; });
+            auto identity = ints | keep_if([](auto i) { return true; });
             for (auto c = ok::begin(identity); ok::is_inbounds(identity, c);
                  ok::increment(identity, c)) {
                 int& item = ok::iter_get_ref(identity, c);
@@ -33,7 +33,7 @@ TEST_SUITE("enumerate")
             }
         }
 
-        SUBCASE("identity filter with macros")
+        SUBCASE("identity keep_if with macros")
         {
             std::array<int, 50> ints = {};
             memfill(slice_t(ints), 0);
@@ -45,7 +45,7 @@ TEST_SUITE("enumerate")
                 ++c;
             }
 
-            auto identity = ints | filter([](auto) { return true; });
+            auto identity = ints | keep_if([](auto) { return true; });
             c = 0;
             ok_foreach(const auto& item, identity)
             {
@@ -63,21 +63,21 @@ TEST_SUITE("enumerate")
             static_assert(
                 !detail::range_definition_has_increment_v<decltype(ints)>);
             static_assert(detail::range_definition_has_increment_v<
-                          decltype(ints | filter(is_even))>);
+                          decltype(ints | keep_if(is_even))>);
             static_assert(detail::is_random_access_range_v<decltype(ints)>);
             static_assert(
                 !detail::is_random_access_range_v<decltype(ints |
-                                                           filter(is_even))>);
+                                                           keep_if(is_even))>);
             static_assert(std::is_same_v<
                           cursor_type_for<decltype(ints)>,
-                          cursor_type_for<decltype(ints | filter(is_even))>>);
+                          cursor_type_for<decltype(ints | keep_if(is_even))>>);
             static_assert(std::is_same_v<
                           value_type_for<decltype(ints)>,
-                          value_type_for<decltype(ints | filter(is_even))>>);
+                          value_type_for<decltype(ints | keep_if(is_even))>>);
 
             ok_foreach(ok_pair(item, index), enumerate(ints)) item = index;
 
-            auto&& items = ints | filter(is_even);
+            auto&& items = ints | keep_if(is_even);
             auto begin = ok::begin(items);
             REQUIRE(ok::iter_get_temporary_ref(items, begin) == 0);
             for (auto i = ok::begin(items); ok::is_inbounds(items, i);
@@ -86,27 +86,27 @@ TEST_SUITE("enumerate")
             }
 
             // or, with macros
-            ok_foreach(const int i, ints | filter(is_even))
+            ok_foreach(const int i, ints | keep_if(is_even))
             {
                 REQUIRE(i % 2 == 0);
             }
         }
 
-        SUBCASE("ok::begin() filters")
+        SUBCASE("ok::begin() skips until first item that should be kept")
         {
             auto is_odd = [](auto i) { return i % 2 == 1; };
             int myints[100];
 
             ok_foreach(ok_pair(i, index), myints | enumerate) { i = index; }
 
-            auto filtered = myints | filter(is_odd);
+            auto filtered = myints | keep_if(is_odd);
             // starts at 1, skipping zero because it is not odd
             REQUIRE(iter_get_temporary_ref(filtered, ok::begin(filtered)) == 1);
         }
 
-        SUBCASE("filter by index and then go back to not having index type")
+        SUBCASE("keep_if by index and then go back to not having index type")
         {
-            auto skip_even = filter([](auto i) { return i.second % 2 == 1; });
+            auto skip_even = keep_if([](auto i) { return i.second % 2 == 1; });
             auto get_first = transform([](auto pair) { return pair.first; });
 
             std::array<int, 50> ints;
@@ -124,14 +124,14 @@ TEST_SUITE("enumerate")
             }
         }
 
-        SUBCASE("filter with no matches never runs in loop")
+        SUBCASE("keep_if with no matches never runs in loop")
         {
-            auto null_filter = filter([](auto) { return false; });
+            auto keep_none = keep_if([](auto) { return false; });
 
             std::array<int, 50> array;
             memfill(slice_t(array), 0);
 
-            ok_foreach(const int i, array | null_filter)
+            ok_foreach(const int i, array | keep_none)
             {
                 // should be unreachable
                 REQUIRE(false);
@@ -140,11 +140,11 @@ TEST_SUITE("enumerate")
 
         SUBCASE("filter with over empty array never runs")
         {
-            auto identity_filter = filter([](auto) { return true; });
+            auto keep_all = keep_if([](auto) { return true; });
 
             std::array<int, 0> array;
 
-            ok_foreach(const int i, array | identity_filter)
+            ok_foreach(const int i, array | keep_all)
             {
                 // should be unreachable
                 REQUIRE(false);

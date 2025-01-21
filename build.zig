@@ -89,13 +89,14 @@ const okaylib_headers = &[_][]const u8{
     "ranges/views/enumerate.h",
     "ranges/views/std_for.h",
     "ranges/views/transform.h",
+    "ranges/views/keep_if.h",
 };
 
 const test_source_files = &[_][]const u8{
     "defer/defer.cpp",
     "enumerate/enumerate.cpp",
     "transform/transform.cpp",
-    "filter/filter.cpp",
+    "keep_if/keep_if.cpp",
     "opt/opt.cpp",
     "res/res.cpp",
     "slice/slice.cpp",
