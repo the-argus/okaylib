@@ -113,3 +113,5 @@ an effort to organize that (not always necessary) work into one reusable product
 - [ ] Remove dependency on `<memory>` header from `okay/detail/addressof.h`
 - [ ] Add better macro customization for some checking / assert behavior, like
       removing slice bounds checks in release mode
+- [ ] Create "minimum viable" ranges for forward, multipass, bidirectional,
+      random access, and contiguous ranges, to test conformance of all the views
