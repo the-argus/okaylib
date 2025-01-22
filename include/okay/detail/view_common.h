@@ -610,6 +610,13 @@ template <typename derived_t, typename parent_range_t> struct cursor_wrapper_t
     parent_cursor_t m_inner;
 };
 
+template <typename range_t>
+struct propagate_cursor_comparison_optimization_marker_t
+{
+    static constexpr bool cursor_cannot_be_less_than_begin =
+        !range_cursor_can_go_below_begin<remove_cvref_t<range_t>>::value;
+};
+
 } // namespace detail
 } // namespace ok
 #endif

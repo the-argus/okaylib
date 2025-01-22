@@ -116,7 +116,8 @@ struct range_definition<detail::enumerated_view_t<range_t>>
                                        detail::enumerated_cursor_t<range_t>>,
       public detail::propagate_boundscheck_t<
           detail::enumerated_view_t<range_t>, detail::remove_cvref_t<range_t>,
-          detail::enumerated_cursor_t<range_t>>
+          detail::enumerated_cursor_t<range_t>>,
+      public detail::propagate_cursor_comparison_optimization_marker_t<range_t>
 {
     static constexpr bool is_view = true;
 

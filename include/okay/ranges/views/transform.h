@@ -102,7 +102,9 @@ struct range_definition<detail::transformed_view_t<input_range_t, callable_t>>
       public detail::propagate_increment_decrement_t<
           detail::transformed_view_t<input_range_t, callable_t>,
           detail::remove_cvref_t<input_range_t>,
-          cursor_type_for<detail::remove_cvref_t<input_range_t>>>
+          cursor_type_for<detail::remove_cvref_t<input_range_t>>>,
+      public detail::propagate_cursor_comparison_optimization_marker_t<
+          input_range_t>
 {
     static constexpr bool is_view = true;
 

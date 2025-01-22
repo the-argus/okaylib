@@ -1,5 +1,4 @@
 #pragma once
-#include "fmt/core.h"
 #include "okay/detail/abort.h"
 #include "okay/ranges/ranges.h"
 #include <cstddef>
@@ -167,6 +166,9 @@ class example_range_bidirectional
 class example_range_cstyle_child : public example_range_cstyle
 {};
 
+class fifty_items_unknown_size_t
+{};
+
 // implement range trait for example_range_cstyle
 namespace ok {
 template <> struct range_definition<example_range_cstyle>
@@ -243,6 +245,29 @@ template <> struct range_definition<example_range_bidirectional>
     {
         // unsigned type can never go below zero index
         return false;
+    }
+};
+
+template <> struct range_definition<fifty_items_unknown_size_t>
+{
+    static constexpr bool infinite = false;
+
+    static constexpr size_t
+    begin(const fifty_items_unknown_size_t&) OKAYLIB_NOEXCEPT
+    {
+        return 0;
+    }
+
+    static constexpr bool is_inbounds(const fifty_items_unknown_size_t&,
+                                      size_t c) OKAYLIB_NOEXCEPT
+    {
+        return c > 50;
+    }
+
+    static constexpr size_t get(const fifty_items_unknown_size_t&,
+                                size_t c) OKAYLIB_NOEXCEPT
+    {
+        return c;
     }
 };
 } // namespace ok

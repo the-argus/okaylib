@@ -97,6 +97,7 @@ const test_source_files = &[_][]const u8{
     "enumerate/enumerate.cpp",
     "transform/transform.cpp",
     "keep_if/keep_if.cpp",
+    "take_at_most/take_at_most.cpp",
     "opt/opt.cpp",
     "res/res.cpp",
     "slice/slice.cpp",

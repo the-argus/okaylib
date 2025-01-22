@@ -69,6 +69,8 @@ struct range_definition<
   public:
     using value_type = detail::c_array_value_type<range_t>;
 
+    static constexpr bool cursor_cannot_be_less_than_begin = true;
+
     static constexpr value_type& get_ref(range_t& i, size_t c) OKAYLIB_NOEXCEPT
     {
         __ok_assert(c < size(i)); // out of bounds on c style array
@@ -134,6 +136,8 @@ struct range_definition<
     // despite `get_ref` incorrectly returning a `const type&`. (ignores get_ref
     // as a range function and supresses the errors)
     static constexpr bool allow_get_ref_return_const_ref = true;
+    // optimization: views do not have to check if cursor < begin
+    static constexpr bool cursor_cannot_be_less_than_begin = true;
 
     static constexpr value_type& get_ref(range_t& i, size_t c) OKAYLIB_NOEXCEPT
     {
@@ -346,6 +350,21 @@ template <typename T>
 constexpr bool range_marked_infinite_v = range_marked_infinite<T>::value;
 template <typename T>
 constexpr bool range_marked_finite_v = range_marked_finite<T>::value;
+
+template <typename T, typename = void>
+struct range_cursor_can_go_below_begin : public std::true_type
+{};
+template <typename T>
+struct range_cursor_can_go_below_begin<
+    T, std::enable_if_t<
+           range_definition_inner<T>::cursor_cannot_be_less_than_begin>>
+    : public std::false_type
+{
+    static_assert(!range_has_is_before_bounds_v<T>,
+                  "Range marked as having a cursor which cannot be less than "
+                  "begin(), but it also has a `is_before_bounds()` function "
+                  "defined. Just define an `is_inbounds()` function instead.");
+};
 
 template <typename T, typename = void>
 struct has_range_definition : std::true_type
