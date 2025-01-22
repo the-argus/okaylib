@@ -35,12 +35,7 @@ TEST_SUITE("enumerate")
             std::array<int, 50> ints = {};
             std::fill(ints.begin(), ints.end(), 0);
 
-            // auto trfrm = [](auto pair) { return std::make_pair(pair,
-            // ok::detail::empty_t{}); };
-
             size_t i = 0;
-            // ok_foreach(ok_pair(item, index), transform(ints | enumerate,
-            // trfrm))
             ok_foreach(ok_pair(item, index), ints | enumerate)
             {
                 static_assert(std::is_same_v<decltype(item), int&>);
