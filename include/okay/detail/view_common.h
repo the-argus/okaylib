@@ -490,10 +490,7 @@ template <typename derived_t, typename parent_range_t> struct cursor_wrapper_t
         return m_inner;
     }
     constexpr parent_cursor_t& inner() OKAYLIB_NOEXCEPT { return m_inner; }
-    explicit constexpr operator parent_cursor_t() const noexcept
-    {
-        return inner();
-    }
+    constexpr operator parent_cursor_t() const noexcept { return inner(); }
 
     template <typename T = parent_cursor_t>
     constexpr friend std::enable_if_t<

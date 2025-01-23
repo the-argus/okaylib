@@ -92,6 +92,7 @@ const okaylib_headers = &[_][]const u8{
     "ranges/views/take_at_most.h",
     "ranges/views/transform.h",
     "ranges/views/keep_if.h",
+    "ranges/views/reverse.h",
 };
 
 const test_source_files = &[_][]const u8{
@@ -100,6 +101,7 @@ const test_source_files = &[_][]const u8{
     "transform/transform.cpp",
     "keep_if/keep_if.cpp",
     "take_at_most/take_at_most.cpp",
+    "reverse/reverse.cpp",
     "opt/opt.cpp",
     "res/res.cpp",
     "slice/slice.cpp",
