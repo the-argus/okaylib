@@ -180,7 +180,11 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
             }
 
             auto advanced = parent_begin + i.size();
+            // no need to check if within parent bounds- size is constant known,
+            // so when instantiating this view we already capped our size
             return c < advanced;
+        } else if constexpr (detail::range_has_size_v<T>) {
+            return c.num_consumed() < i.size();
         } else {
             return c.num_consumed() < i.size() &&
                    parent_def::is_inbounds(parent_ref, c.inner());
@@ -203,8 +207,11 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
                           "Cursor type has extra unneeded stuff in take() even "
                           "though it doesnt need it.");
             return c >= ok::begin(parent_ref) + i.size();
-        } else {
+        } else if constexpr (detail::range_has_size_v<T>) {
             return c.num_consumed() >= i.size();
+        } else {
+            return c.num_consumed() >= i.size() ||
+                   parent_def::is_after_bounds(parent_ref, c.inner());
         }
     }
 
@@ -215,19 +222,21 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
     is_before_bounds(const take_at_most_t& i, const cursor_t& c)
     {
         static_assert(detail::range_cursor_can_go_below_begin<T>::value);
+        using parent_def = detail::range_definition_inner<T>;
+        const range_t& parent_ref =
+            i.template get_view_reference<take_at_most_t, T>();
 
         if constexpr (detail::is_random_access_range_v<T> &&
                       detail::range_has_size_v<T>) {
             static_assert(std::is_same_v<cursor_t, cursor_type_for<T>>,
                           "Cursor type has extra unneeded stuff in take() even "
                           "though it doesnt need it.");
-            const range_t& parent_ref =
-                i.template get_view_reference<take_at_most_t, T>();
             return c < ok::begin(parent_ref);
-        } else {
-            // overflow happens because num_consumed is unsigned. no need to
-            // check if its less than zero
+        } else if constexpr (detail::range_has_size_v<T>) {
             return c.num_consumed() >= i.size();
+        } else {
+            return c.num_consumed() >= i.size() ||
+                   parent_def::is_after_bounds(parent_ref, c.inner());
         }
     }
 
