@@ -168,7 +168,7 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
             i.template get_view_reference<take_at_most_t, T>();
 
         if constexpr (detail::is_random_access_range_v<T> &&
-                      detail::range_has_size_v<T>) {
+                      !detail::range_marked_finite_v<T>) {
             static_assert(std::is_same_v<cursor_t, cursor_type_for<T>>,
                           "Cursor type has extra unneeded stuff in take() even "
                           "though it doesnt need it.");
@@ -183,7 +183,7 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
             // no need to check if within parent bounds- size is constant known,
             // so when instantiating this view we already capped our size
             return c < advanced;
-        } else if constexpr (detail::range_has_size_v<T>) {
+        } else if constexpr (!detail::range_marked_finite_v<T>) {
             return c.num_consumed() < i.size();
         } else {
             return c.num_consumed() < i.size() &&
@@ -202,12 +202,12 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
             i.template get_view_reference<take_at_most_t, T>();
 
         if constexpr (detail::is_random_access_range_v<T> &&
-                      detail::range_has_size_v<T>) {
+                      !detail::range_marked_finite_v<T>) {
             static_assert(std::is_same_v<cursor_t, cursor_type_for<T>>,
                           "Cursor type has extra unneeded stuff in take() even "
                           "though it doesnt need it.");
             return c >= ok::begin(parent_ref) + i.size();
-        } else if constexpr (detail::range_has_size_v<T>) {
+        } else if constexpr (!detail::range_marked_finite_v<T>) {
             return c.num_consumed() >= i.size();
         } else {
             return c.num_consumed() >= i.size() ||
@@ -227,12 +227,12 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
             i.template get_view_reference<take_at_most_t, T>();
 
         if constexpr (detail::is_random_access_range_v<T> &&
-                      detail::range_has_size_v<T>) {
+                      !detail::range_marked_finite_v<T>) {
             static_assert(std::is_same_v<cursor_t, cursor_type_for<T>>,
                           "Cursor type has extra unneeded stuff in take() even "
                           "though it doesnt need it.");
             return c < ok::begin(parent_ref);
-        } else if constexpr (detail::range_has_size_v<T>) {
+        } else if constexpr (!detail::range_marked_finite_v<T>) {
             return c.num_consumed() >= i.size();
         } else {
             return c.num_consumed() >= i.size() ||

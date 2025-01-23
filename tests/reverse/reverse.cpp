@@ -1,8 +1,10 @@
 #include "test_header.h"
 // test header must be first
 #include "okay/macros/foreach.h"
+#include "okay/ranges/indices.h"
 #include "okay/ranges/views/enumerate.h"
 #include "okay/ranges/views/reverse.h"
+#include "okay/ranges/views/take_at_most.h"
 #include <array>
 
 using namespace ok;
@@ -66,6 +68,21 @@ TEST_SUITE("reverse")
             size_t counter = 0;
             ok_foreach(int item, null | reverse) { ++counter; }
             REQUIRE(counter == 0);
+        }
+
+        SUBCASE("take and reverse indices to count backwards")
+        {
+            auto count_backwards_from_ten =
+                indices | take_at_most(10) | reverse;
+
+            static_assert(detail::is_random_access_range_v<
+                          decltype(count_backwards_from_ten)>);
+
+            ok_foreach(ok_pair(item, index),
+                       count_backwards_from_ten | enumerate)
+            {
+                REQUIRE(9 - item == index);
+            }
         }
     }
 }

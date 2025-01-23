@@ -2,6 +2,7 @@
 // test header must be first
 #include "okay/macros/foreach.h"
 #include "okay/ranges/views/take_at_most.h"
+#include "okay/ranges/indices.h"
 #include "testing_types.h"
 #include <array>
 #include <vector>
@@ -133,6 +134,16 @@ TEST_SUITE("take_at_most")
             count = 0;
             ok_foreach(size_t i, half_view) { ++count; }
             REQUIRE(count == 25);
+        }
+
+        SUBCASE("take subset of indices")
+        {
+            size_t counter = 0;
+            ok_foreach(auto i, indices | take_at_most(10))
+            {
+                REQUIRE(i == counter);
+                ++counter;
+            }
         }
     }
 }

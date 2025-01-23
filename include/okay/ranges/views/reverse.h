@@ -121,16 +121,6 @@ template <typename input_parent_range_t> struct reversed_cursor_t
 template <typename range_t>
 struct reversed_view_t : public underlying_view_type<range_t>::type
 {
-  private:
-    using parent_t = typename underlying_view_type<range_t>::type;
-
-  public:
-    reversed_view_t(const reversed_view_t&) = default;
-    reversed_view_t& operator=(const reversed_view_t&) = default;
-    reversed_view_t(reversed_view_t&&) = default;
-    reversed_view_t& operator=(reversed_view_t&&) = default;
-
-    using parent_t::parent_t;
 };
 } // namespace detail
 
