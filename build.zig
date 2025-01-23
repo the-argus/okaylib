@@ -85,9 +85,11 @@ const okaylib_headers = &[_][]const u8{
 
     "ranges/ranges.h",
     "ranges/adaptors.h",
+    "ranges/indices.h",
 
     "ranges/views/enumerate.h",
     "ranges/views/std_for.h",
+    "ranges/views/take_at_most.h",
     "ranges/views/transform.h",
     "ranges/views/keep_if.h",
 };
