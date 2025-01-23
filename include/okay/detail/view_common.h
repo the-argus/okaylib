@@ -507,9 +507,10 @@ template <typename derived_t, typename parent_range_t> struct cursor_wrapper_t
     }
 
     template <typename T = parent_range_t>
-    constexpr std::enable_if_t<std::is_same_v<T, parent_range_t> &&
-                                   detail::is_random_access_range_v<T>,
-                               derived_t&>
+    constexpr std::enable_if_t<
+        std::is_same_v<T, parent_range_t> &&
+            detail::has_pre_increment_v<cursor_type_for<T>>,
+        derived_t&>
     operator++() OKAYLIB_NOEXCEPT
     {
         ++m_inner;
@@ -518,9 +519,10 @@ template <typename derived_t, typename parent_range_t> struct cursor_wrapper_t
     }
 
     template <typename T = parent_range_t>
-    constexpr std::enable_if_t<std::is_same_v<T, parent_range_t> &&
-                                   detail::is_random_access_range_v<T>,
-                               derived_t&>
+    constexpr std::enable_if_t<
+        std::is_same_v<T, parent_range_t> &&
+            detail::has_pre_decrement_v<cursor_type_for<T>>,
+        derived_t&>
     operator--() OKAYLIB_NOEXCEPT
     {
         --m_inner;

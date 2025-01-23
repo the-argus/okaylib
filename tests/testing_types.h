@@ -173,6 +173,12 @@ class fifty_items_unknown_size_t
 class fifty_items_unknown_size_before_after_t
 {};
 
+class fifty_items_unknown_size_no_pre_increment_t
+{};
+
+class fifty_items_bidir_no_pre_decrement_t
+{};
+
 // implement range trait for example_range_cstyle
 namespace ok {
 template <> struct range_definition<example_range_cstyle>
@@ -305,4 +311,88 @@ template <> struct range_definition<fifty_items_unknown_size_before_after_t>
         return c + 1;
     }
 };
+
+template <> struct range_definition<fifty_items_unknown_size_no_pre_increment_t>
+{
+    using self_t = fifty_items_unknown_size_no_pre_increment_t;
+    static constexpr bool infinite = false;
+
+    struct cursor_t
+    {
+        constexpr cursor_t(size_t _inner) : inner(_inner) {}
+        size_t inner;
+    };
+
+    static constexpr cursor_t begin(const self_t&) OKAYLIB_NOEXCEPT
+    {
+        return 0;
+    }
+
+    static constexpr bool is_before_bounds(const self_t&,
+                                           cursor_t c) OKAYLIB_NOEXCEPT
+    {
+        return c.inner >= 50;
+    }
+
+    static constexpr bool is_after_bounds(const self_t&,
+                                          cursor_t c) OKAYLIB_NOEXCEPT
+    {
+        return c.inner >= 50;
+    }
+
+    static constexpr size_t get(const self_t&, cursor_t c) OKAYLIB_NOEXCEPT
+    {
+        return c.inner + 1;
+    }
+
+    static constexpr void increment(const self_t&, cursor_t& c) OKAYLIB_NOEXCEPT
+    {
+        ++c.inner;
+    }
+};
+
+template <> struct range_definition<fifty_items_bidir_no_pre_decrement_t>
+{
+    using self_t = fifty_items_bidir_no_pre_decrement_t;
+    static constexpr bool infinite = false;
+
+    struct cursor_t
+    {
+        constexpr cursor_t(size_t _inner) : inner(_inner) {}
+        size_t inner;
+    };
+
+    static constexpr cursor_t begin(const self_t&) OKAYLIB_NOEXCEPT
+    {
+        return 0;
+    }
+
+    static constexpr bool is_before_bounds(const self_t&,
+                                           cursor_t c) OKAYLIB_NOEXCEPT
+    {
+        return c.inner >= 50;
+    }
+
+    static constexpr bool is_after_bounds(const self_t&,
+                                          cursor_t c) OKAYLIB_NOEXCEPT
+    {
+        return c.inner >= 50;
+    }
+
+    static constexpr size_t get(const self_t&, cursor_t c) OKAYLIB_NOEXCEPT
+    {
+        return c.inner + 1;
+    }
+
+    static constexpr void increment(const self_t&, cursor_t& c) OKAYLIB_NOEXCEPT
+    {
+        ++c.inner;
+    }
+
+    static constexpr void decrement(const self_t&, cursor_t& c) OKAYLIB_NOEXCEPT
+    {
+        --c.inner;
+    }
+};
+
 } // namespace ok

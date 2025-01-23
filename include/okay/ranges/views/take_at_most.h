@@ -20,15 +20,17 @@ struct take_at_most_fn_t
     }
 };
 
-template <typename parent_range_t>
+template <typename input_parent_range_t>
 struct take_at_most_cursor_t
-    : public cursor_wrapper_t<take_at_most_cursor_t<parent_range_t>,
-                              parent_range_t>
+    : public cursor_wrapper_t<take_at_most_cursor_t<input_parent_range_t>,
+                              detail::remove_cvref_t<input_parent_range_t>>
 {
   private:
+    using parent_range_t = detail::remove_cvref_t<input_parent_range_t>;
     using parent_cursor_t = cursor_type_for<parent_range_t>;
     using wrapper_t =
-        cursor_wrapper_t<take_at_most_cursor_t<parent_range_t>, parent_range_t>;
+        cursor_wrapper_t<take_at_most_cursor_t<input_parent_range_t>,
+                         parent_range_t>;
     using self_t = take_at_most_cursor_t;
 
 #define __take_at_most_relop(name)                                   \
@@ -71,7 +73,8 @@ struct take_at_most_cursor_t
     }
 
     friend wrapper_t;
-    friend class range_definition<detail::take_at_most_view_t<parent_range_t>>;
+    friend class range_definition<
+        detail::take_at_most_view_t<input_parent_range_t>>;
 
     constexpr size_t num_consumed() const OKAYLIB_NOEXCEPT
     {
@@ -128,7 +131,7 @@ using take_at_most_cursor_optimized_t = std::conditional_t<
     detail::is_random_access_range_v<detail::remove_cvref_t<input_range_t>> &&
         !detail::range_marked_finite_v<detail::remove_cvref_t<input_range_t>>,
     cursor_type_for<detail::remove_cvref_t<input_range_t>>,
-    take_at_most_cursor_t<detail::remove_cvref_t<input_range_t>>>;
+    take_at_most_cursor_t<input_range_t>>;
 
 } // namespace detail
 
@@ -139,10 +142,6 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
           detail::remove_cvref_t<input_range_t>,
           detail::take_at_most_cursor_optimized_t<input_range_t>>,
       public detail::propagate_get_set_t<
-          detail::take_at_most_view_t<input_range_t>,
-          detail::remove_cvref_t<input_range_t>,
-          detail::take_at_most_cursor_optimized_t<input_range_t>>,
-      public detail::propagate_increment_decrement_t<
           detail::take_at_most_view_t<input_range_t>,
           detail::remove_cvref_t<input_range_t>,
           detail::take_at_most_cursor_optimized_t<input_range_t>>,
@@ -157,7 +156,7 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
 
     using range_t = detail::remove_cvref_t<input_range_t>;
     using take_at_most_t = detail::take_at_most_view_t<input_range_t>;
-    using cursor_t = detail::take_at_most_cursor_optimized_t<range_t>;
+    using cursor_t = detail::take_at_most_cursor_optimized_t<input_range_t>;
 
     template <typename T = range_t>
     constexpr static std::enable_if_t<
@@ -230,6 +229,38 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
             // check if its less than zero
             return c.num_consumed() >= i.size();
         }
+    }
+
+    template <typename T = range_t>
+    constexpr static std::enable_if_t<
+        std::is_same_v<range_t, T> &&
+        detail::range_definition_has_increment_v<T>>
+    increment(const take_at_most_t& i, cursor_t& c)
+    {
+        // if its random access, the cursor type might just be the parent cursor
+        // type
+        static_assert(!detail::is_random_access_range_v<T>,
+                      "this code relies on all range definitions which have "
+                      "increment() defined also being not random access");
+        const auto& parent_ref =
+            i.template get_view_reference<take_at_most_t, T>();
+        ok::increment(parent_ref, c.inner());
+        c.increment();
+    }
+
+    template <typename T = range_t>
+    constexpr static std::enable_if_t<
+        std::is_same_v<range_t, T> &&
+        detail::range_definition_has_decrement_v<T>>
+    decrement(const take_at_most_t& i, cursor_t& c)
+    {
+        static_assert(!detail::is_random_access_range_v<T>,
+                      "this code relies on all range definitions which have "
+                      "decrement() defined also being not random access");
+        const auto& parent_ref =
+            i.template get_view_reference<take_at_most_t, T>();
+        ok::decrement(parent_ref, c.inner());
+        c.decrement();
     }
 };
 
