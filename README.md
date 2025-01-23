@@ -115,3 +115,5 @@ an effort to organize that (not always necessary) work into one reusable product
       removing slice bounds checks in release mode
 - [ ] Create "minimum viable" ranges for forward, multipass, bidirectional,
       random access, and contiguous ranges, to test conformance of all the views
+- [ ] Add better static asserts for when you use an invalid range with a pipe operator-
+      right now errors come from inside the range adaptor closure

@@ -215,7 +215,7 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
         bool>
     is_before_bounds(const take_at_most_t& i, const cursor_t& c)
     {
-        static_assert(!detail::range_cursor_can_go_below_begin<T>::value);
+        static_assert(detail::range_cursor_can_go_below_begin<T>::value);
 
         if constexpr (detail::is_random_access_range_v<T> &&
                       detail::range_has_size_v<T>) {
