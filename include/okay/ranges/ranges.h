@@ -1020,8 +1020,8 @@ struct is_inbounds_fn_t
             return range_def_for<range_t>::is_inbounds(range, cursor);
         } else {
             using def = range_def_for<range_t>;
-            return def::is_before_bounds(range, cursor) ||
-                   def::is_after_bounds(range, cursor);
+            return !def::is_before_bounds(range, cursor) &&
+                   !def::is_after_bounds(range, cursor);
         }
     }
 
@@ -1032,7 +1032,7 @@ struct is_inbounds_fn_t
                        prefer_after_bounds_check_t) const
     {
         if constexpr (range_has_is_after_bounds_v<range_t>) {
-            return range_def_for<range_t>::is_after_bounds(range, cursor);
+            return !range_def_for<range_t>::is_after_bounds(range, cursor);
         } else {
             return this->operator()(range, cursor);
         }
@@ -1045,7 +1045,7 @@ struct is_inbounds_fn_t
                        prefer_before_bounds_check_t) const
     {
         if constexpr (range_has_is_after_bounds_v<range_t>) {
-            return range_def_for<range_t>::is_before_bounds(range, cursor);
+            return !range_def_for<range_t>::is_before_bounds(range, cursor);
         } else {
             return this->operator()(range, cursor);
         }
