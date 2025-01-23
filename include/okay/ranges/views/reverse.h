@@ -19,7 +19,8 @@ struct reverse_fn_t
                       "Cannot reverse given type- it is not a range.");
         static_assert(is_random_access_range_v<T> && range_has_size_v<T>,
                       "Cannot reverse given type- it is either not random "
-                      "access, or its size cannot be known in constant time.");
+                      "access, or its size is not finite or cannot be known in "
+                      "constant time.");
         return reversed_view_t<decltype(range)>{std::forward<range_t>(range)};
     }
 };
@@ -50,10 +51,7 @@ template <typename input_parent_range_t> struct reversed_cursor_t
     }
     constexpr parent_cursor_t& inner() OKAYLIB_NOEXCEPT { return m_inner; }
 
-    constexpr operator parent_cursor_t() const noexcept
-    {
-        return inner();
-    }
+    constexpr operator parent_cursor_t() const noexcept { return inner(); }
 
     constexpr friend bool operator==(const self_t& a, const self_t& b)
     {
@@ -120,8 +118,7 @@ template <typename input_parent_range_t> struct reversed_cursor_t
 
 template <typename range_t>
 struct reversed_view_t : public underlying_view_type<range_t>::type
-{
-};
+{};
 } // namespace detail
 
 template <typename input_range_t>
