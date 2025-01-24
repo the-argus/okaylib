@@ -123,11 +123,7 @@ struct reversed_view_t : public underlying_view_type<range_t>::type
 
 template <typename input_range_t>
 struct range_definition<detail::reversed_view_t<input_range_t>>
-    : public detail::propagate_boundscheck_t<
-          detail::reversed_view_t<input_range_t>,
-          detail::remove_cvref_t<input_range_t>,
-          detail::reversed_cursor_t<input_range_t>>,
-      public detail::propagate_get_set_t<
+    : public detail::propagate_get_set_t<
           detail::reversed_view_t<input_range_t>,
           detail::remove_cvref_t<input_range_t>,
           detail::reversed_cursor_t<input_range_t>>,
@@ -155,6 +151,33 @@ struct range_definition<detail::reversed_view_t<input_range_t>>
         auto parent_cursor = ok::begin(parent);
         auto size = ok::size(parent);
         return cursor_t(parent_cursor + (size == 0 ? 0 : size - 1));
+    }
+
+    __ok_enable_if_static(range_t, detail::range_has_is_inbounds_v<T>, bool)
+        is_inbounds(const reverse_t& i, const cursor_t& c)
+    {
+        return detail::range_definition_inner<T>::is_inbounds(
+            i.template get_view_reference<reverse_t, T>(),
+            cursor_type_for<T>(c));
+    }
+
+    // switch after bounds to do the parents before bounds check
+    __ok_enable_if_static(range_t, detail::range_has_is_before_bounds_v<T>,
+                          bool)
+        is_after_bounds(const reverse_t& i, const cursor_t& c)
+    {
+        return detail::range_definition_inner<T>::is_before_bounds(
+            i.template get_view_reference<reverse_t, T>(),
+            cursor_type_for<T>(c));
+    }
+
+    // switch before bounds to do the parent's after bounds check
+    __ok_enable_if_static(range_t, detail::range_has_is_after_bounds_v<T>, bool)
+        is_before_bounds(const reverse_t& i, const cursor_t& c)
+    {
+        return detail::range_definition_inner<T>::is_after_bounds(
+            i.template get_view_reference<reverse_t, T>(),
+            cursor_type_for<T>(c));
     }
 };
 

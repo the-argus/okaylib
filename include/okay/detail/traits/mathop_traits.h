@@ -111,6 +111,9 @@ inline constexpr bool has_comparison_operators_v =
 template <typename LHS, typename RHS>
 inline constexpr bool is_equality_comparable_to_v =
     is_equality_comparable_to_meta_t<LHS, RHS>::value;
+template <typename T>
+inline constexpr bool is_equality_comparable_to_self_v =
+    is_equality_comparable_to_meta_t<T, T>::value;
 
 } // namespace ok::detail
 #endif

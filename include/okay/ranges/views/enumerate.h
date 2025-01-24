@@ -124,25 +124,20 @@ struct range_definition<detail::enumerated_view_t<range_t>>
     using enumerated_t = detail::enumerated_view_t<range_t>;
     using cursor_t = detail::enumerated_cursor_t<range_t>;
 
-    template <typename T = enumerated_t>
-    constexpr static std::enable_if_t<
-        std::is_same_v<T, enumerated_t> &&
-        detail::range_definition_has_increment_v<T>>
-    increment(const enumerated_t& range, cursor_t& c) OKAYLIB_NOEXCEPT
+    __ok_enable_if_static(range_t, detail::range_definition_has_increment_v<T>,
+                          void)
+        increment(const enumerated_t& range, cursor_t& c) OKAYLIB_NOEXCEPT
     {
         // perform parent's increment function
-        ok::increment(
-            range.template get_view_reference<enumerated_t, range_t>(),
-            c.inner());
+        ok::increment(range.template get_view_reference<enumerated_t, T>(),
+                      c.inner());
         // also do our bit
         c.increment();
     }
 
-    template <typename T = enumerated_t>
-    constexpr static std::enable_if_t<
-        std::is_same_v<T, enumerated_t> &&
-        detail::range_definition_has_decrement_v<T>>
-    decrement(const enumerated_t& range, cursor_t& c) OKAYLIB_NOEXCEPT
+    __ok_enable_if_static(range_t, detail::range_definition_has_decrement_v<T>,
+                          void)
+        decrement(const enumerated_t& range, cursor_t& c) OKAYLIB_NOEXCEPT
     {
         ok::decrement(
             range.template get_view_reference<enumerated_t, range_t>(),

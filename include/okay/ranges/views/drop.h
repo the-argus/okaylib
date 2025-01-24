@@ -106,10 +106,8 @@ struct range_definition<detail::drop_view_t<input_range_t>>
         }
     }
 
-    template <typename T = range_t>
-    constexpr static std::enable_if_t<
-        std::is_same_v<range_t, T> && detail::range_has_is_inbounds_v<T>, bool>
-    is_inbounds(const drop_t& i, const cursor_t& c) OKAYLIB_NOEXCEPT
+    __ok_enable_if_static(range_t, detail::range_has_is_inbounds_v<T>, bool)
+        is_inbounds(const drop_t& i, const cursor_t& c) OKAYLIB_NOEXCEPT
     {
         using parent_def = detail::range_definition_inner<T>;
         const range_t& parent_ref = i.template get_view_reference<drop_t, T>();
@@ -138,11 +136,8 @@ struct range_definition<detail::drop_view_t<input_range_t>>
         }
     }
 
-    template <typename T = range_t>
-    constexpr static std::enable_if_t<
-        std::is_same_v<range_t, T> && detail::range_has_is_after_bounds_v<T>,
-        bool>
-    is_after_bounds(const drop_t& i, const cursor_t& c) OKAYLIB_NOEXCEPT
+    __ok_enable_if_static(range_t, detail::range_has_is_after_bounds_v<T>, bool)
+        is_after_bounds(const drop_t& i, const cursor_t& c) OKAYLIB_NOEXCEPT
     {
         using parent_def = detail::range_definition_inner<T>;
         const range_t& parent_ref = i.template get_view_reference<drop_t, T>();
@@ -161,11 +156,9 @@ struct range_definition<detail::drop_view_t<input_range_t>>
         }
     }
 
-    template <typename T = range_t>
-    constexpr static std::enable_if_t<
-        std::is_same_v<range_t, T> && detail::range_has_is_before_bounds_v<T>,
-        bool>
-    is_before_bounds(const drop_t& i, const cursor_t& c) OKAYLIB_NOEXCEPT
+    __ok_enable_if_static(range_t, detail::range_has_is_before_bounds_v<T>,
+                          bool)
+        is_before_bounds(const drop_t& i, const cursor_t& c) OKAYLIB_NOEXCEPT
     {
         static_assert(detail::range_cursor_can_go_below_begin<T>::value);
         using parent_def = detail::range_definition_inner<T>;

@@ -131,11 +131,10 @@ struct range_definition<detail::keep_if_view_t<input_range_t, predicate_t>>
         return cursor_t(parent_cursor);
     }
 
-    template <typename T = range_t>
-    constexpr static auto increment(const keep_if_t& i,
-                                    cursor_t& c) OKAYLIB_NOEXCEPT
-        -> std::void_t<decltype(ok::increment(std::declval<const range_t&>(),
-                                              std::declval<cursor_t&>()))>
+    // even if parent is random access range, convert to bidirectional range
+    // by defining increment() and decrement() in range definition
+    __ok_enable_if_static(range_t, detail::range_can_increment_v<T>, void)
+        increment(const keep_if_t& i, cursor_t& c) OKAYLIB_NOEXCEPT
     {
         const auto& parent =
             i.template get_view_reference<keep_if_t, range_t>();
@@ -145,11 +144,8 @@ struct range_definition<detail::keep_if_view_t<input_range_t, predicate_t>>
                  !i.filter_predicate()(ok::iter_get_temporary_ref(parent, c)));
     }
 
-    template <typename T = range_t>
-    constexpr static auto decrement(const keep_if_t& i,
-                                    cursor_t& c) OKAYLIB_NOEXCEPT
-        -> std::void_t<decltype(ok::decrement(std::declval<const range_t&>(),
-                                              std::declval<cursor_t&>()))>
+    __ok_enable_if_static(range_t, detail::range_can_decrement_v<T>, void)
+        decrement(const keep_if_t& i, cursor_t& c) OKAYLIB_NOEXCEPT
     {
         const auto& parent =
             i.template get_view_reference<keep_if_t, range_t>();

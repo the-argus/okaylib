@@ -2,6 +2,7 @@
 #define __OKAYLIB_DETAIL_VIEW_COMMON_H__
 
 #include "okay/detail/addressof.h"
+#include "okay/detail/ok_enable_if.h"
 #include "okay/detail/template_util/empty.h"
 #include "okay/detail/template_util/uninitialized_storage.h"
 #include "okay/detail/traits/special_member_traits.h"
@@ -317,36 +318,26 @@ struct propagate_get_set_t
 template <typename derived_range_t, typename parent_range_t, typename cursor_t>
 struct propagate_boundscheck_t
 {
-    template <typename T = parent_range_t>
-    constexpr static std::enable_if_t<
-        std::is_same_v<parent_range_t, T> &&
-            detail::range_has_is_inbounds_v<parent_range_t>,
-        bool>
-    is_inbounds(const derived_range_t& i, const cursor_t& c)
+    __ok_enable_if_static(parent_range_t, detail::range_has_is_inbounds_v<T>,
+                          bool)
+        is_inbounds(const derived_range_t& i, const cursor_t& c)
     {
         return detail::range_definition_inner<T>::is_inbounds(
             i.template get_view_reference<derived_range_t, parent_range_t>(),
             cursor_type_for<parent_range_t>(c));
     }
 
-    template <typename T = parent_range_t>
-    constexpr static std::enable_if_t<
-        std::is_same_v<parent_range_t, T> &&
-            detail::range_has_is_after_bounds_v<parent_range_t>,
-        bool>
-    is_after_bounds(const derived_range_t& i, const cursor_t& c)
+    __ok_enable_if(parent_range_t, detail::range_has_is_after_bounds_v<T>, bool)
+        is_after_bounds(const derived_range_t& i, const cursor_t& c)
     {
         return detail::range_definition_inner<T>::is_after_bounds(
             i.template get_view_reference<derived_range_t, parent_range_t>(),
             cursor_type_for<parent_range_t>(c));
     }
 
-    template <typename T = parent_range_t>
-    constexpr static std::enable_if_t<
-        std::is_same_v<parent_range_t, T> &&
-            detail::range_has_is_before_bounds_v<parent_range_t>,
-        bool>
-    is_before_bounds(const derived_range_t& i, const cursor_t& c)
+    __ok_enable_if_static(parent_range_t,
+                          detail::range_has_is_before_bounds_v<T>, bool)
+        is_before_bounds(const derived_range_t& i, const cursor_t& c)
     {
         return detail::range_definition_inner<T>::is_before_bounds(
             i.template get_view_reference<derived_range_t, parent_range_t>(),
@@ -492,35 +483,26 @@ template <typename derived_t, typename parent_range_t> struct cursor_wrapper_t
     constexpr parent_cursor_t& inner() OKAYLIB_NOEXCEPT { return m_inner; }
     constexpr operator parent_cursor_t() const noexcept { return inner(); }
 
-    template <typename T = parent_cursor_t>
-    constexpr friend std::enable_if_t<
-        std::is_same_v<parent_cursor_t, T> &&
-            detail::is_equality_comparable_to_v<T, T>,
-        bool>
-    operator==(const derived_t& a, const derived_t& b)
+    __ok_enable_if_friend(parent_cursor_t,
+                          detail::is_equality_comparable_to_self_v<T>, bool)
+    operator==(const derived_t & a, const derived_t & b)
     {
         return derived_t::compare(a, b) &&
                a.derived()->inner() == b.derived()->inner();
     }
 
-    template <typename T = parent_range_t>
-    constexpr std::enable_if_t<
-        std::is_same_v<T, parent_range_t> &&
-            detail::has_pre_increment_v<cursor_type_for<T>>,
-        derived_t&>
-    operator++() OKAYLIB_NOEXCEPT
+    __ok_enable_if(parent_range_t,
+                   detail::has_pre_increment_v<cursor_type_for<T>>,
+                   derived_t&) operator++() OKAYLIB_NOEXCEPT
     {
         ++m_inner;
         derived()->increment();
         return *derived();
     }
 
-    template <typename T = parent_range_t>
-    constexpr std::enable_if_t<
-        std::is_same_v<T, parent_range_t> &&
-            detail::has_pre_decrement_v<cursor_type_for<T>>,
-        derived_t&>
-    operator--() OKAYLIB_NOEXCEPT
+    __ok_enable_if(parent_range_t,
+                   detail::has_pre_decrement_v<cursor_type_for<T>>,
+                   derived_t&) operator--() OKAYLIB_NOEXCEPT
     {
         --m_inner;
         derived()->decrement();
