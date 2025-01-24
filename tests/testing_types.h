@@ -246,7 +246,7 @@ template <> struct range_definition<example_range_bidirectional>
     {
         // no size() method exposed to iterator API, its just a finite range.
         // but we can internally figure out if an iterator is valid
-        return c.inner() < i.num_bytes;
+        return c.inner() >= i.num_bytes;
     }
 
     static constexpr bool is_before_bounds(
