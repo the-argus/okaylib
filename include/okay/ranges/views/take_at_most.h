@@ -90,10 +90,10 @@ struct take_at_most_view_t : public underlying_view_type<range_t>::type
 {
   private:
     using cursor_t = take_at_most_cursor_t<detail::remove_cvref_t<range_t>>;
-    size_t m_size;
+    size_t m_amount;
 
   public:
-    constexpr size_t size() const noexcept { return m_size; }
+    constexpr size_t amount() const noexcept { return m_amount; }
 
     take_at_most_view_t(const take_at_most_view_t&) = default;
     take_at_most_view_t& operator=(const take_at_most_view_t&) = default;
@@ -108,9 +108,9 @@ struct take_at_most_view_t : public underlying_view_type<range_t>::type
             auto& parent_range =
                 this->template get_view_reference<take_at_most_view_t,
                                                   range_t>();
-            m_size = std::min(ok::size(parent_range), amount);
+            m_amount = std::min(ok::size(parent_range), amount);
         } else {
-            m_size = amount;
+            m_amount = amount;
         }
     }
 };
@@ -121,7 +121,7 @@ template <typename input_range_t> struct sized_take_at_most_range_t
     using take_at_most_t = detail::take_at_most_view_t<input_range_t>;
 
   public:
-    static constexpr size_t size(const take_at_most_t& i) { return i.size(); }
+    static constexpr size_t size(const take_at_most_t& i) { return i.amount(); }
 };
 
 // take_at_most_cursor_t but it is just the parent's cursor if there's no need
@@ -149,6 +149,8 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
           detail::range_marked_finite_v<detail::remove_cvref_t<input_range_t>>,
           detail::infinite_static_def_t<false>,
           detail::sized_take_at_most_range_t<input_range_t>>,
+      // keep optimization marker: we dont change were the beginning is, so
+      // boundscheck which compare to our end should be fine
       public detail::propagate_cursor_comparison_optimization_marker_t<
           input_range_t>
 {
@@ -171,20 +173,26 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
                           "Cursor type has extra unneeded stuff in take() even "
                           "though it doesnt need it.");
             auto parent_begin = ok::begin(parent_ref);
-            if constexpr (detail::range_cursor_can_go_below_begin<T>::value) {
+
+            // if range doesnt have the optimization to boundscheck with only <,
+            // we have to check if its below the start
+            if constexpr (!detail::
+                              range_can_boundscheck_with_less_than_end_cursor<
+                                  T>::value) {
                 if (c < parent_begin) [[unlikely]] {
                     return false;
                 }
             }
 
-            auto advanced = parent_begin + i.size();
-            // no need to check if within parent bounds- size is constant known,
-            // so when instantiating this view we already capped our size
+            auto advanced = parent_begin + i.amount();
+            // no need to check if within parent bounds- size is constant
+            // known, so when instantiating this view we already capped our
+            // size
             return c < advanced;
         } else if constexpr (!detail::range_marked_finite_v<T>) {
-            return c.num_consumed() < i.size();
+            return c.num_consumed() < i.amount();
         } else {
-            return c.num_consumed() < i.size() &&
+            return c.num_consumed() < i.amount() &&
                    parent_def::is_inbounds(parent_ref, c.inner());
         }
     }
@@ -202,11 +210,11 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
             static_assert(std::is_same_v<cursor_t, cursor_type_for<T>>,
                           "Cursor type has extra unneeded stuff in take() even "
                           "though it doesnt need it.");
-            return c >= ok::begin(parent_ref) + i.size();
+            return c >= ok::begin(parent_ref) + i.amount();
         } else if constexpr (!detail::range_marked_finite_v<T>) {
-            return c.num_consumed() >= i.size();
+            return c.num_consumed() >= i.amount();
         } else {
-            return c.num_consumed() >= i.size() ||
+            return c.num_consumed() >= i.amount() ||
                    parent_def::is_after_bounds(parent_ref, c.inner());
         }
     }
@@ -216,23 +224,10 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
         is_before_bounds(const take_at_most_t& i,
                          const cursor_t& c) OKAYLIB_NOEXCEPT
     {
-        static_assert(detail::range_cursor_can_go_below_begin<T>::value);
-        using parent_def = detail::range_definition_inner<T>;
-        const range_t& parent_ref =
-            i.template get_view_reference<take_at_most_t, T>();
-
-        if constexpr (detail::is_random_access_range_v<T> &&
-                      !detail::range_marked_finite_v<T>) {
-            static_assert(std::is_same_v<cursor_t, cursor_type_for<T>>,
-                          "Cursor type has extra unneeded stuff in take() even "
-                          "though it doesnt need it.");
-            return c < ok::begin(parent_ref);
-        } else if constexpr (!detail::range_marked_finite_v<T>) {
-            return c.num_consumed() >= i.size();
-        } else {
-            return c.num_consumed() >= i.size() ||
-                   parent_def::is_after_bounds(parent_ref, c.inner());
-        }
+        // take does not modify the beginning, so the parent's before bounds
+        // check should always work
+        return detail::range_definition_inner<T>::is_before_bounds(
+            i.template get_view_reference<take_at_most_t, T>(), c);
     }
 
     __ok_enable_if_static(range_t, detail::range_definition_has_increment_v<T>,

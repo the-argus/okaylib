@@ -295,20 +295,20 @@ template <> struct range_definition<fifty_items_unknown_size_before_after_t>
     is_before_bounds(const fifty_items_unknown_size_before_after_t&,
                      size_t c) OKAYLIB_NOEXCEPT
     {
-        return c >= 50;
+        return c >= 50UL;
     }
 
     static constexpr bool
     is_after_bounds(const fifty_items_unknown_size_before_after_t&,
                     size_t c) OKAYLIB_NOEXCEPT
     {
-        return c >= 50;
+        return c >= 50UL;
     }
 
     static constexpr size_t get(const fifty_items_unknown_size_before_after_t&,
                                 size_t c) OKAYLIB_NOEXCEPT
     {
-        return c + 1;
+        return c + 1UL;
     }
 };
 

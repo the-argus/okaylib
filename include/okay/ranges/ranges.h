@@ -69,7 +69,7 @@ struct range_definition<
   public:
     using value_type = detail::c_array_value_type<range_t>;
 
-    static constexpr bool cursor_cannot_be_less_than_begin = true;
+    static constexpr bool less_than_end_cursor_is_valid_boundscheck = true;
 
     static constexpr value_type& get_ref(range_t& i, size_t c) OKAYLIB_NOEXCEPT
     {
@@ -137,7 +137,7 @@ struct range_definition<
     // as a range function and supresses the errors)
     static constexpr bool allow_get_ref_return_const_ref = true;
     // optimization: views do not have to check if cursor < begin
-    static constexpr bool cursor_cannot_be_less_than_begin = true;
+    static constexpr bool less_than_end_cursor_is_valid_boundscheck = true;
 
     static constexpr value_type& get_ref(range_t& i, size_t c) OKAYLIB_NOEXCEPT
     {
@@ -352,18 +352,19 @@ template <typename T>
 constexpr bool range_marked_finite_v = range_marked_finite<T>::value;
 
 template <typename T, typename = void>
-struct range_cursor_can_go_below_begin : public std::true_type
+struct range_can_boundscheck_with_less_than_end_cursor : public std::false_type
 {};
 template <typename T>
-struct range_cursor_can_go_below_begin<
-    T, std::enable_if_t<
-           range_definition_inner<T>::cursor_cannot_be_less_than_begin>>
-    : public std::false_type
+struct range_can_boundscheck_with_less_than_end_cursor<
+    T, std::enable_if_t<range_definition_inner<
+           T>::less_than_end_cursor_is_valid_boundscheck>>
+    : public std::true_type
 {
-    static_assert(!range_has_is_before_bounds_v<T>,
-                  "Range marked as having a cursor which cannot be less than "
-                  "begin(), but it also has a `is_before_bounds()` function "
-                  "defined. Just define an `is_inbounds()` function instead.");
+    static_assert(
+        !range_has_is_before_bounds_v<T>,
+        "Range marked as only needing on boundscheck operation (cursor < "
+        "size()) but it also has a `is_before_bounds()` function "
+        "defined. Just define an `is_inbounds()` function instead.");
 };
 
 template <typename T, typename = void>
@@ -788,6 +789,15 @@ class range_def_for : public detail::range_definition_inner<T>
         "defined. There is currently no protocol in okaylib to choose between "
         "these implementations, so remove one of them and use the copy "
         "constructor of value_type if both copyout and get_ref are needed.");
+
+    static constexpr bool valid_boundscheck_optimization_marker =
+        !detail::range_can_boundscheck_with_less_than_end_cursor<
+            noref>::value ||
+        detail::is_random_access_range_v<noref>;
+    static_assert(valid_boundscheck_optimization_marker,
+                  "Attempt to specify that range can be boundschecked with "
+                  "just a `... < size()` operation, but the type is not random "
+                  "access so this optimization will be ignored.");
 };
 
 namespace detail {

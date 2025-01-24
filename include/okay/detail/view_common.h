@@ -594,8 +594,9 @@ template <typename derived_t, typename parent_range_t> struct cursor_wrapper_t
 template <typename range_t>
 struct propagate_cursor_comparison_optimization_marker_t
 {
-    static constexpr bool cursor_cannot_be_less_than_begin =
-        !range_cursor_can_go_below_begin<remove_cvref_t<range_t>>::value;
+    static constexpr bool less_than_end_cursor_is_valid_boundscheck =
+        range_can_boundscheck_with_less_than_end_cursor<
+            remove_cvref_t<range_t>>::value;
 };
 
 } // namespace detail

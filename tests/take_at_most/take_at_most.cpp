@@ -1,8 +1,8 @@
 #include "test_header.h"
 // test header must be first
 #include "okay/macros/foreach.h"
-#include "okay/ranges/views/take_at_most.h"
 #include "okay/ranges/indices.h"
+#include "okay/ranges/views/take_at_most.h"
 #include "testing_types.h"
 #include <array>
 #include <vector>
@@ -20,7 +20,7 @@ TEST_SUITE("take_at_most")
             auto half_view = array | take_at_most(25);
             static_assert(
                 detail::is_random_access_range_v<decltype(half_view)>);
-            REQUIRE(half_view.size() == 25);
+            REQUIRE(ok::size(half_view) == 25);
         }
 
         SUBCASE("get first half of forward no increment")
@@ -59,7 +59,14 @@ TEST_SUITE("take_at_most")
             static_assert(is_range_v<decltype(half_view)>);
             static_assert(
                 detail::is_bidirectional_range_v<decltype(half_view)>);
-            REQUIRE(half_view.size() == 25);
+
+            size_t count = 0;
+            for (auto c = ok::begin(half_view); ok::is_inbounds(
+                     half_view, c, ok::prefer_after_bounds_check_t{});
+                 ok::increment(half_view, c)) {
+                ++count;
+            }
+            REQUIRE(count == 25);
         }
 
         SUBCASE("get first half of vector of runtime known size")
@@ -67,7 +74,7 @@ TEST_SUITE("take_at_most")
             std::vector<int> vec;
             vec.resize(50);
             auto half_view = vec | take_at_most(25);
-            REQUIRE(half_view.size() == 25);
+            REQUIRE(ok::size(half_view) == 25);
         }
 
         SUBCASE("get first half of container of unknown size")
@@ -88,7 +95,7 @@ TEST_SUITE("take_at_most")
         {
             std::array<int, 50> array;
             auto big_view = array | take_at_most(100);
-            REQUIRE(big_view.size() == 50);
+            REQUIRE(ok::size(big_view) == 50);
         }
 
         SUBCASE("can't take more than container of unknown size")

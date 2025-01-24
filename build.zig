@@ -103,6 +103,7 @@ const test_source_files = &[_][]const u8{
     "transform/transform.cpp",
     "keep_if/keep_if.cpp",
     "take_at_most/take_at_most.cpp",
+    "drop/drop.cpp",
     "reverse/reverse.cpp",
     "opt/opt.cpp",
     "res/res.cpp",

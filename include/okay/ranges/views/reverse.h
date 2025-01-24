@@ -129,9 +129,8 @@ struct range_definition<detail::reversed_view_t<input_range_t>>
           detail::reversed_cursor_t<input_range_t>>,
       public detail::propagate_sizedness_t<
           detail::reversed_view_t<input_range_t>,
-          detail::remove_cvref_t<input_range_t>>,
-      public detail::propagate_cursor_comparison_optimization_marker_t<
-          input_range_t>
+          detail::remove_cvref_t<input_range_t>>
+// lose boundscheck optimization marker
 {
     static constexpr bool is_view = true;
 
