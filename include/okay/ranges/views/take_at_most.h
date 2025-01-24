@@ -161,7 +161,7 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
     template <typename T = range_t>
     constexpr static std::enable_if_t<
         std::is_same_v<range_t, T> && detail::range_has_is_inbounds_v<T>, bool>
-    is_inbounds(const take_at_most_t& i, const cursor_t& c)
+    is_inbounds(const take_at_most_t& i, const cursor_t& c) OKAYLIB_NOEXCEPT
     {
         using parent_def = detail::range_definition_inner<T>;
         const range_t& parent_ref =
@@ -195,7 +195,7 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
     constexpr static std::enable_if_t<
         std::is_same_v<range_t, T> && detail::range_has_is_after_bounds_v<T>,
         bool>
-    is_after_bounds(const take_at_most_t& i, const cursor_t& c)
+    is_after_bounds(const take_at_most_t& i, const cursor_t& c) OKAYLIB_NOEXCEPT
     {
         using parent_def = detail::range_definition_inner<T>;
         const range_t& parent_ref =
@@ -219,7 +219,8 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
     constexpr static std::enable_if_t<
         std::is_same_v<range_t, T> && detail::range_has_is_before_bounds_v<T>,
         bool>
-    is_before_bounds(const take_at_most_t& i, const cursor_t& c)
+    is_before_bounds(const take_at_most_t& i,
+                     const cursor_t& c) OKAYLIB_NOEXCEPT
     {
         static_assert(detail::range_cursor_can_go_below_begin<T>::value);
         using parent_def = detail::range_definition_inner<T>;
@@ -244,7 +245,7 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
     constexpr static std::enable_if_t<
         std::is_same_v<range_t, T> &&
         detail::range_definition_has_increment_v<T>>
-    increment(const take_at_most_t& i, cursor_t& c)
+    increment(const take_at_most_t& i, cursor_t& c) OKAYLIB_NOEXCEPT
     {
         // if its random access, the cursor type might just be the parent cursor
         // type
@@ -261,7 +262,7 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
     constexpr static std::enable_if_t<
         std::is_same_v<range_t, T> &&
         detail::range_definition_has_decrement_v<T>>
-    decrement(const take_at_most_t& i, cursor_t& c)
+    decrement(const take_at_most_t& i, cursor_t& c) OKAYLIB_NOEXCEPT
     {
         static_assert(!detail::is_random_access_range_v<T>,
                       "this code relies on all range definitions which have "
