@@ -1,5 +1,5 @@
-#ifndef every_other_dummy
-#define every_other_dummy
+#ifndef __OKAYLIB_RANGES_VIEWS_ENUMERATE_H__
+#define __OKAYLIB_RANGES_VIEWS_ENUMERATE_H__
 
 #include "okay/detail/ok_assert.h"
 #include "okay/detail/view_common.h"
