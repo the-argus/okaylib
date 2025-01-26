@@ -84,6 +84,8 @@ const okaylib_headers = &[_][]const u8{
     "macros/foreach.h",
     "macros/try.h",
 
+    "math/ordering.h",
+
     "ranges/ranges.h",
     "ranges/adaptors.h",
     "ranges/indices.h",
@@ -111,6 +113,7 @@ const test_source_files = &[_][]const u8{
     "status/status.cpp",
     "stdmem/stdmem.cpp",
     "ranges/ranges.cpp",
+    "ordering/ordering.cpp",
 };
 
 const universal_tests_source_files = &[_][]const u8{};

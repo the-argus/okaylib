@@ -9,6 +9,7 @@
 #include "okay/detail/traits/is_container.h"
 #include "okay/detail/traits/is_derived_from.h"
 #include "okay/detail/traits/mathop_traits.h"
+#include "okay/math/ordering.h"
 #include <type_traits>
 
 /*
@@ -287,6 +288,31 @@ struct range_definition_has_decrement<
                      std::declval<const remove_cvref_t<T>&>(),
                      std::declval<cursor_type_unchecked_for<T>&>()))>>>
     : public std::true_type
+{};
+
+template <typename T, typename = void>
+struct range_definition_has_offset : public std::false_type
+{};
+template <typename T>
+struct range_definition_has_offset<
+    T, std::enable_if_t<std::is_same_v<
+           void, decltype(range_definition_inner<T>::offset(
+                     std::declval<const remove_cvref_t<T>&>(),
+                     std::declval<cursor_type_unchecked_for<T>&>(),
+                     std::declval<int64_t>()))>>> : public std::true_type
+{};
+
+template <typename T, typename = void>
+struct range_definition_has_compare : public std::false_type
+{};
+template <typename T>
+struct range_definition_has_compare<
+    T, std::enable_if_t<std::is_same_v<
+           ok::ordering, decltype(range_definition_inner<T>::compare(
+                     std::declval<const remove_cvref_t<T>&>(),
+                     std::declval<const cursor_type_unchecked_for<T>&>(),
+                     std::declval<const cursor_type_unchecked_for<T>&>()
+                     ))>>> : public std::true_type
 {};
 
 template <typename T, typename = void>
@@ -1115,7 +1141,7 @@ struct data_fn_t
 /// implementing `iter_get()`, or `iter_deref() [const]` if value_type is copy
 /// constructible.
 /// Returns range_t::value_type.
-constexpr detail::iter_copyout_fn_t iter_copyout{};
+inline constexpr detail::iter_copyout_fn_t iter_copyout{};
 
 /// Get a temporary const reference to an item. More optimizable than iter_get
 /// (its possible for any copying to be elided) but the reference is only valid
@@ -1126,26 +1152,26 @@ constexpr detail::iter_copyout_fn_t iter_copyout{};
 /// If the return value is a reference, then it is the same as calling
 /// iter_get_ref. It is always valid to store the return value in a `const
 /// value_type&`
-constexpr detail::iter_get_temporary_ref_fn_t iter_get_temporary_ref{};
+inline constexpr detail::iter_get_temporary_ref_fn_t iter_get_temporary_ref{};
 
 /// Returns an lvalue reference to the internel representation of the data
 /// pointed at by the iterator. This reference is invalidated based on
 /// container-specific behavior.
-constexpr detail::iter_get_ref_fn_t iter_get_ref{};
+inline constexpr detail::iter_get_ref_fn_t iter_get_ref{};
 
-constexpr detail::iter_set_fn_t iter_set{};
+inline constexpr detail::iter_set_fn_t iter_set{};
 
-constexpr detail::begin_fn_t begin{};
+inline constexpr detail::begin_fn_t begin{};
 
-constexpr detail::is_inbounds_fn_t is_inbounds{};
+inline constexpr detail::is_inbounds_fn_t is_inbounds{};
 
-constexpr detail::size_fn_t size{};
+inline constexpr detail::size_fn_t size{};
 
-constexpr detail::size_fn_t data{};
+inline constexpr detail::size_fn_t data{};
 
-constexpr detail::increment_fn_t increment{};
+inline constexpr detail::increment_fn_t increment{};
 
-constexpr detail::decrement_fn_t decrement{};
+inline constexpr detail::decrement_fn_t decrement{};
 
 } // namespace ok
 
