@@ -1,6 +1,7 @@
 #ifndef __OKAYLIB_MATH_ORDERING_H__
 #define __OKAYLIB_MATH_ORDERING_H__
 
+#include "okay/detail/abort.h"
 #include "okay/detail/template_util/remove_cvref.h"
 #include "okay/detail/traits/is_complete.h"
 #include <cstdint>
@@ -76,7 +77,7 @@ struct ordering
     constexpr ordering() = delete;
 
   public:
-    constexpr operator partial_ordering() const noexcept
+    constexpr explicit operator partial_ordering() const noexcept
     {
         return partial_ordering(
             partial_ordering_enum(ordering_underlying_type(representation)));
@@ -98,6 +99,11 @@ struct ordering
 
     constexpr operator auto() const noexcept { return representation; }
     constexpr auto as_enum() const noexcept { return representation; }
+    constexpr partial_ordering as_partial() const noexcept
+    {
+        return partial_ordering(
+            partial_ordering_enum(ordering_underlying_type(representation)));
+    }
 
     static const ordering less;
     static const ordering greater;
@@ -305,7 +311,7 @@ struct partially_orderable_definition_inner<
     static constexpr partial_ordering partial_cmp(const T& lhs,
                                                   const T& rhs) OKAYLIB_NOEXCEPT
     {
-        return orderable_definition<T>::cmp(lhs, rhs);
+        return partial_ordering(orderable_definition<T>::cmp(lhs, rhs));
     }
 };
 
@@ -425,6 +431,36 @@ struct is_partial_equal_definition_valid<
            bool>>> : std::true_type
 {};
 
+template <typename T> struct orderable_asserts
+{
+    static_assert(is_complete_v<orderable_definition_inner<T>>,
+                  "Cannot call an orderable function (cmp, min, max, clamp) on "
+                  "type which is not strictly orderable. If using a float or "
+                  "other not strictly comparable type, try the partial variant "
+                  "(partial_cmp, partial_min, partial_max, etc), or otherwise "
+                  "implement ok::orderable_definition<T> for your type.");
+    static_assert(
+        is_orderable_definition_valid<T>::value,
+        "Given type's orderable definition is invalid- make sure it "
+        "contains a function called cmp() which returns an ok::ordering "
+        "and takes two const references to your type.");
+};
+
+template <typename T> struct partially_orderable_asserts
+{
+    static_assert(
+        is_complete_v<partially_orderable_definition_inner<T>>,
+        "Cannot call a `partial_*` function on a type which is not partially "
+        "orderable- if this is your own type then you may need to implement "
+        "ok::orderable_definition or ok::partially_orderable_definition to get "
+        "this functionality.");
+    static_assert(is_partially_orderable_definition_valid<T>::value,
+                  "Given type's partially orderable definition is invalid- "
+                  "make sure it contains a function called partial_cmp() "
+                  "which returns an ok::partial_ordering and takes two "
+                  "const references to your type.");
+};
+
 } // namespace detail
 
 #define __okaylib_convertible_relop_decl(rettype)               \
@@ -438,22 +474,10 @@ struct compare_fn_t
 {
     __okaylib_convertible_relop_decl(ordering)
     {
-        using T = detail::remove_cvref_t<LHS>;
-        constexpr no_primitive_definitions_assert<T> asserts;
-        static_assert(is_complete_v<orderable_definition_inner<T>>,
-                      "Cannot call cmp on type which is not strictly "
-                      "orderable. If using "
-                      "a float or other not strictly comparable type, try "
-                      "ok::partial_cmp- otherwise implement "
-                      "ok::orderable_definition<T> "
-                      "for your type.");
-        static_assert(
-            is_orderable_definition_valid<T>::value,
-            "Given type's orderable definition is invalid- make sure it "
-            "contains a function called cmp() which returns an ok::ordering "
-            "and takes two const references to your type.");
+        constexpr no_primitive_definitions_assert<LHS> asserts;
+        constexpr orderable_asserts<LHS> orderable_asserts;
 
-        return orderable_definition_inner<T>::cmp(lhs, rhs);
+        return orderable_definition_inner<LHS>::cmp(lhs, rhs);
     }
 };
 
@@ -461,20 +485,9 @@ struct partial_compare_fn_t
 {
     __okaylib_convertible_relop_decl(partial_ordering)
     {
-        using T = detail::remove_cvref_t<LHS>;
-        static_assert(
-            is_complete_v<partially_orderable_definition_inner<T>>,
-            "Cannot call partial_cmp on a type which is not partially "
-            "orderable- if this is your own type then you may need to "
-            "implement ok::orderable_definition or "
-            "ok::partially_orderable_definition to get this functionality.");
-        static_assert(is_partially_orderable_definition_valid<T>::value,
-                      "Given type's partially orderable definition is invalid- "
-                      "make sure it contains a function called partial_cmp() "
-                      "which returns an ok::partial_ordering and takes two "
-                      "const references to your type.");
-        constexpr no_primitive_definitions_assert<T> asserts;
-        return detail::partially_orderable_definition_inner<T>::partial_cmp(
+        constexpr no_primitive_definitions_assert<LHS> asserts;
+        constexpr partially_orderable_asserts<LHS> partially_orderable_asserts;
+        return detail::partially_orderable_definition_inner<LHS>::partial_cmp(
             lhs, rhs);
     }
 };
@@ -485,19 +498,19 @@ struct equal_fn_t
     {
         using T = detail::remove_cvref_t<LHS>;
         static_assert(
-            is_complete_v<equal_definition_inner<T>>,
+            is_complete_v<equal_definition_inner<LHS>>,
             "Cannot call ok::is_equal on type which is not fully equality "
             "comparable. If passing floating point values or other partially "
             "comparable type, use ok::is_partial_equal. Or, if this is your "
             "type, you may need to define ok::equal_definition<T> for it.");
         static_assert(
-            is_equal_definition_valid<T>::value,
+            is_equal_definition_valid<LHS>::value,
             "Given type's equal definition is invalid- make sure it "
             "contains a function called is_equal() which returns a boolean and "
             "takes two const references to your type.");
 
-        constexpr no_primitive_definitions_assert<T> asserts;
-        return detail::equal_definition_inner<T>::is_equal(lhs, rhs);
+        constexpr no_primitive_definitions_assert<LHS> asserts;
+        return detail::equal_definition_inner<LHS>::is_equal(lhs, rhs);
     }
 };
 
@@ -505,23 +518,193 @@ struct partial_equal_fn_t
 {
     __okaylib_convertible_relop_decl(bool)
     {
-        using T = detail::remove_cvref_t<LHS>;
         static_assert(
-            is_complete_v<partial_equal_definition_inner<T>>,
+            is_complete_v<partial_equal_definition_inner<LHS>>,
             "Cannot call ok::is_equal on type which is not equality "
             "comparable. If passing floating point values or other partially "
             "comparable type, use ok::is_partial_equal. Or, if this is your "
             "type, you may need to define ok::partial_equal_definition<T> for "
             "it.");
         static_assert(
-            is_partial_equal_definition_valid<T>::value,
+            is_partial_equal_definition_valid<LHS>::value,
             "Given type's partially equal definition is invalid- make sure it "
             "contains a function called is_partial_equal() which returns a "
             "boolean and takes two const references to your type.");
 
-        constexpr no_primitive_definitions_assert<T> asserts;
-        return detail::partial_equal_definition_inner<T>::is_partial_equal(lhs,
-                                                                           rhs);
+        constexpr no_primitive_definitions_assert<LHS> asserts;
+        return detail::partial_equal_definition_inner<LHS>::is_partial_equal(
+            lhs, rhs);
+    }
+};
+
+struct min_fn_t
+{
+    template <typename LHS, typename RHS>
+    constexpr auto operator()(const LHS& lhs, RHS&& rhs) OKAYLIB_NOEXCEPT const
+        -> std::enable_if_t<std::is_convertible_v<decltype(rhs), LHS> &&
+                                std::is_copy_constructible_v<LHS>,
+                            LHS>
+    {
+        constexpr no_primitive_definitions_assert<LHS> asserts;
+        constexpr orderable_asserts<LHS> orderable_asserts;
+
+        // TODO: require some "strong ordering" tag for this function to work.
+        // OR just specify that min always returns a copy of the left-hand
+        // argument in the case that the two are equal.
+        switch (
+            detail::orderable_definition_inner<LHS>::cmp(lhs, rhs).as_enum()) {
+        case ordering_enum::less:
+        case ordering_enum::equivalent:
+            return lhs;
+        case ordering_enum::greater:
+            return rhs;
+        }
+    }
+};
+
+struct unchecked_min_fn_t
+{
+    template <typename LHS, typename RHS>
+    constexpr auto operator()(const LHS& lhs, RHS&& rhs) OKAYLIB_NOEXCEPT const
+        -> std::enable_if_t<std::is_convertible_v<decltype(rhs), LHS> &&
+                                std::is_copy_constructible_v<LHS>,
+                            LHS>
+    {
+        constexpr no_primitive_definitions_assert<LHS> asserts;
+        constexpr partially_orderable_asserts<LHS> orderable_asserts;
+
+        switch (detail::partially_orderable_definition_inner<LHS>::partial_cmp(
+                    lhs, rhs)
+                    .as_enum()) {
+        case partial_ordering_enum::less:
+        case partial_ordering_enum::equivalent:
+        case partial_ordering_enum::unordered:
+            return lhs;
+        case partial_ordering_enum::greater:
+            return rhs;
+        }
+    }
+};
+
+struct partial_min_fn_t
+{
+    template <typename LHS, typename RHS>
+    constexpr auto operator()(const LHS& lhs, RHS&& rhs) OKAYLIB_NOEXCEPT const
+        -> std::enable_if_t<std::is_convertible_v<decltype(rhs), LHS> &&
+                                std::is_copy_constructible_v<LHS>,
+                            LHS>
+    {
+        constexpr no_primitive_definitions_assert<LHS> asserts;
+        constexpr partially_orderable_asserts<LHS> orderable_asserts;
+
+        switch (detail::partially_orderable_definition_inner<LHS>::partial_cmp(
+                    lhs, rhs)
+                    .as_enum()) {
+        case partial_ordering_enum::less:
+        case partial_ordering_enum::equivalent:
+            return lhs;
+        case partial_ordering_enum::greater:
+            return rhs;
+        case partial_ordering_enum::unordered:
+            __ok_abort();
+        }
+    }
+};
+
+struct max_fn_t
+{
+    template <typename LHS, typename RHS>
+    constexpr auto operator()(const LHS& lhs, RHS&& rhs) OKAYLIB_NOEXCEPT const
+        -> std::enable_if_t<std::is_convertible_v<decltype(rhs), LHS> &&
+                                std::is_copy_constructible_v<LHS>,
+                            LHS>
+    {
+        constexpr no_primitive_definitions_assert<LHS> asserts;
+        constexpr orderable_asserts<LHS> orderable_asserts;
+
+        // TODO: also need strong ordering here, as well as min
+        switch (
+            detail::orderable_definition_inner<LHS>::cmp(lhs, rhs).as_enum()) {
+        case ordering_enum::greater:
+        case ordering_enum::equivalent:
+            return lhs;
+        case ordering_enum::less:
+            return rhs;
+        }
+    }
+};
+
+struct partial_max_fn_t
+{
+    template <typename LHS, typename RHS>
+    constexpr auto operator()(const LHS& lhs, RHS&& rhs) OKAYLIB_NOEXCEPT const
+        -> std::enable_if_t<std::is_convertible_v<decltype(rhs), LHS> &&
+                                std::is_copy_constructible_v<LHS>,
+                            LHS>
+    {
+        constexpr no_primitive_definitions_assert<LHS> asserts;
+        constexpr partially_orderable_asserts<LHS> partially_orderable_asserts;
+
+        // TODO: also need strong ordering here, as well as min
+        switch (detail::partially_orderable_definition_inner<LHS>::partial_cmp(
+                    lhs, rhs)
+                    .as_enum()) {
+        case partial_ordering_enum::greater:
+        case partial_ordering_enum::equivalent:
+            return lhs;
+        case partial_ordering_enum::less:
+            return rhs;
+        case partial_ordering_enum::unordered:
+            __ok_abort();
+        }
+    }
+};
+
+struct unchecked_max_fn_t
+{
+    template <typename LHS, typename RHS>
+    constexpr auto operator()(const LHS& lhs, RHS&& rhs) OKAYLIB_NOEXCEPT const
+        -> std::enable_if_t<std::is_convertible_v<decltype(rhs), LHS> &&
+                                std::is_copy_constructible_v<LHS>,
+                            LHS>
+    {
+        constexpr no_primitive_definitions_assert<LHS> asserts;
+        constexpr partially_orderable_asserts<LHS> orderable_asserts;
+
+        switch (detail::partially_orderable_definition_inner<LHS>::partial_cmp(
+                    lhs, rhs)
+                    .as_enum()) {
+        case partial_ordering_enum::less:
+        case partial_ordering_enum::equivalent:
+        case partial_ordering_enum::unordered:
+            return lhs;
+        case partial_ordering_enum::greater:
+            return rhs;
+        }
+    }
+};
+
+struct clamp_fn_t
+{
+    template <typename LHS, typename arg_t>
+    constexpr auto operator()(const LHS& lhs, arg_t&& min,
+                              arg_t&& max) OKAYLIB_NOEXCEPT const
+        -> std::enable_if_t<std::is_convertible_v<decltype(min), LHS> &&
+                                std::is_copy_constructible_v<LHS>,
+                            LHS>
+    {
+        constexpr no_primitive_definitions_assert<LHS> asserts;
+        constexpr orderable_asserts<LHS> orderable_asserts;
+
+        if (detail::orderable_definition_inner<LHS>::cmp(lhs, min) ==
+            ordering::less)
+            return min;
+        if (detail::orderable_definition_inner<LHS>::cmp(lhs, max) ==
+            ordering::greater)
+            return max;
+
+        // TODO: also need strong ordering here
+        return lhs;
     }
 };
 
@@ -534,6 +717,25 @@ inline constexpr detail::partial_compare_fn_t partial_cmp;
 inline constexpr detail::equal_fn_t equal;
 
 inline constexpr detail::partial_equal_fn_t partial_equal;
+
+inline constexpr detail::min_fn_t min;
+
+// variant of min which accepts partially orderable values and aborts the
+// program in the case that they are not orderable
+inline constexpr detail::partial_min_fn_t partial_min;
+
+// variant of min which accepts partially orderable values and returns the
+// left-hand side in the case that they are not orderable
+// so unchecked_min(NaN, 3912.f) is NaN, unchecked_min(3912.f, NaN) is 3912.f
+inline constexpr detail::unchecked_min_fn_t unchecked_min;
+
+inline constexpr detail::max_fn_t max;
+
+inline constexpr detail::partial_max_fn_t partial_max;
+
+inline constexpr detail::unchecked_max_fn_t unchecked_max;
+
+inline constexpr detail::clamp_fn_t clamp;
 
 } // namespace ok
 

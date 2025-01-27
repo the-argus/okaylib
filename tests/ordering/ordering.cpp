@@ -51,7 +51,7 @@ TEST_SUITE("ordering")
         SUBCASE(
             "conversion from ordering to partial ordering, not the other way")
         {
-            ok::partial_ordering test = ok::ordering::greater;
+            ok::partial_ordering test = ok::ordering::greater.as_partial();
 
             // this shouldnt do conversion bc a partial_ordering -> ordering
             // operator== is defined, and vice versa
@@ -117,6 +117,83 @@ TEST_SUITE("ordering")
             REQUIRE(ok::partial_cmp(d, f) == ok::partial_ordering::unordered);
             REQUIRE(ok::partial_cmp(c, g) == ok::partial_ordering::unordered);
             REQUIRE(ok::partial_cmp(d, c) == ok::partial_ordering::less);
+        }
+
+        SUBCASE("equal comparison volatile int")
+        {
+            volatile int i = 1;
+            volatile int j = 1;
+            // make sure this compiles is all
+            REQUIRE(ok::equal(i, j));
+        }
+
+        SUBCASE("mins and maxs of ints")
+        {
+            REQUIRE(ok::min(1, 2) == 1);
+            REQUIRE(ok::min(1UL, 2UL) == 1UL);
+            REQUIRE(ok::min(uint8_t(1), 2UL) == uint8_t(1));
+            REQUIRE(ok::min(int8_t(1), 2UL) == int8_t(1));
+            REQUIRE(ok::min(uint16_t(1), 2UL) == uint16_t(1));
+            REQUIRE(ok::min(int16_t(1), 2UL) == int16_t(1));
+            REQUIRE(ok::min(uint32_t(1), 2UL) == uint32_t(1));
+            REQUIRE(ok::min(int32_t(1), 2UL) == int32_t(1));
+            REQUIRE(ok::min(uint64_t(1), 2UL) == uint64_t(1));
+            REQUIRE(ok::min(int64_t(1), 2UL) == int64_t(1));
+            REQUIRE(ok::max(1, 2) == 2);
+            REQUIRE(ok::max(uint8_t(1), 2UL) == uint8_t(2));
+            REQUIRE(ok::max(int8_t(1), 2UL) == int8_t(2));
+            REQUIRE(ok::max(uint16_t(1), 2UL) == uint16_t(2));
+            REQUIRE(ok::max(int16_t(1), 2UL) == int16_t(2));
+            REQUIRE(ok::max(uint32_t(1), 2UL) == uint32_t(2));
+            REQUIRE(ok::max(int32_t(1), 2UL) == int32_t(2));
+            REQUIRE(ok::max(uint64_t(1), 2UL) == uint64_t(2));
+            REQUIRE(ok::max(int64_t(1), 2UL) == int64_t(2));
+            REQUIRE(ok::partial_min(1.f, 2.f) == 1.f);
+        }
+
+        SUBCASE("partial max aborts on NaN, unchecked does not")
+        {
+            REQUIREABORTS(ok::partial_max(0.f / 0.0f, 10.f));
+            REQUIRE(isnanf(ok::unchecked_max(0.f / 0.0f, 10.f)));
+        }
+
+        SUBCASE("partial min aborts on NaN, unchecked does not")
+        {
+            REQUIREABORTS(ok::partial_min(0.f / 0.0f, 10.f));
+            REQUIRE(isnanf(ok::unchecked_min(0.f / 0.0f, 10.f)));
+        }
+
+        SUBCASE("clamp ints")
+        {
+            // clamp up
+            REQUIRE(ok::clamp(uint8_t(1), 2UL, 20UL) == uint8_t(2));
+            REQUIRE(ok::clamp(int8_t(1), 2UL, 20UL) == int8_t(2));
+            REQUIRE(ok::clamp(uint16_t(1), 2UL, 20UL) == uint16_t(2));
+            REQUIRE(ok::clamp(int16_t(1), 2UL, 20UL) == int16_t(2));
+            REQUIRE(ok::clamp(uint32_t(1), 2UL, 20UL) == uint32_t(2));
+            REQUIRE(ok::clamp(int32_t(1), 2UL, 20UL) == int32_t(2));
+            REQUIRE(ok::clamp(uint64_t(1), 2UL, 20UL) == uint64_t(2));
+            REQUIRE(ok::clamp(int64_t(1), 2UL, 20UL) == int64_t(2));
+
+            // in range
+            REQUIRE(ok::clamp(uint8_t(10), 2UL, 20UL) == uint8_t(10));
+            REQUIRE(ok::clamp(int8_t(10), 2UL, 20UL) == int8_t(10));
+            REQUIRE(ok::clamp(uint16_t(10), 2UL, 20UL) == uint16_t(10));
+            REQUIRE(ok::clamp(int16_t(10), 2UL, 20UL) == int16_t(10));
+            REQUIRE(ok::clamp(uint32_t(10), 2UL, 20UL) == uint32_t(10));
+            REQUIRE(ok::clamp(int32_t(10), 2UL, 20UL) == int32_t(10));
+            REQUIRE(ok::clamp(uint64_t(10), 2UL, 20UL) == uint64_t(10));
+            REQUIRE(ok::clamp(int64_t(10), 2UL, 20UL) == int64_t(10));
+
+            // clamp down
+            REQUIRE(ok::clamp(uint8_t(40), 2UL, 20UL) == uint8_t(20));
+            REQUIRE(ok::clamp(int8_t(40), 2UL, 20UL) == int8_t(20));
+            REQUIRE(ok::clamp(uint16_t(40), 2UL, 20UL) == uint16_t(20));
+            REQUIRE(ok::clamp(int16_t(40), 2UL, 20UL) == int16_t(20));
+            REQUIRE(ok::clamp(uint32_t(40), 2UL, 20UL) == uint32_t(20));
+            REQUIRE(ok::clamp(int32_t(40), 2UL, 20UL) == int32_t(20));
+            REQUIRE(ok::clamp(uint64_t(40), 2UL, 20UL) == uint64_t(20));
+            REQUIRE(ok::clamp(int64_t(40), 2UL, 20UL) == int64_t(20));
         }
     }
 
