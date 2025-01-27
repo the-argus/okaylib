@@ -2,6 +2,7 @@
 #define __OKAYLIB_MATH_ORDERING_H__
 
 #include "okay/detail/abort.h"
+#include "okay/detail/ok_assert.h"
 #include "okay/detail/template_util/remove_cvref.h"
 #include "okay/detail/traits/is_complete.h"
 #include <cstdint>
@@ -492,7 +493,7 @@ struct partial_compare_fn_t
     }
 };
 
-struct equal_fn_t
+struct is_equal_fn_t
 {
     __okaylib_convertible_relop_decl(bool)
     {
@@ -514,7 +515,7 @@ struct equal_fn_t
     }
 };
 
-struct partial_equal_fn_t
+struct is_partial_equal_fn_t
 {
     __okaylib_convertible_relop_decl(bool)
     {
@@ -693,6 +694,7 @@ struct clamp_fn_t
                                 std::is_copy_constructible_v<LHS>,
                             LHS>
     {
+        __ok_assert(min < max);
         constexpr no_primitive_definitions_assert<LHS> asserts;
         constexpr orderable_asserts<LHS> orderable_asserts;
 
@@ -708,15 +710,80 @@ struct clamp_fn_t
     }
 };
 
+struct partial_clamp_fn_t
+{
+    template <typename LHS, typename arg_t>
+    constexpr auto operator()(const LHS& lhs, arg_t&& min,
+                              arg_t&& max) OKAYLIB_NOEXCEPT const
+        -> std::enable_if_t<std::is_convertible_v<decltype(min), LHS> &&
+                                std::is_copy_constructible_v<LHS>,
+                            LHS>
+    {
+        __ok_assert(min < max);
+        constexpr no_primitive_definitions_assert<LHS> asserts;
+        constexpr partially_orderable_asserts<LHS> partially_orderable_asserts;
+
+        switch (detail::partially_orderable_definition_inner<LHS>::partial_cmp(
+                    lhs, min)
+                    .as_enum()) {
+        case partial_ordering_enum::less:
+            return min;
+        case partial_ordering_enum::unordered:
+            __ok_abort();
+        default:
+            break;
+        }
+
+        switch (detail::partially_orderable_definition_inner<LHS>::partial_cmp(
+                    lhs, max)
+                    .as_enum()) {
+        case partial_ordering_enum::greater:
+            return max;
+        case partial_ordering_enum::unordered:
+            __ok_abort();
+        default:
+            break;
+        }
+
+        return lhs;
+    }
+};
+
+struct unchecked_clamp_fn_t
+{
+    template <typename LHS, typename arg_t>
+    constexpr auto operator()(const LHS& lhs, arg_t&& min,
+                              arg_t&& max) OKAYLIB_NOEXCEPT const
+        -> std::enable_if_t<std::is_convertible_v<decltype(min), LHS> &&
+                                std::is_copy_constructible_v<LHS>,
+                            LHS>
+    {
+        // min != min protects from NaN causing this assert to fire
+        __ok_assert(min != min || max != max || min < max);
+        constexpr no_primitive_definitions_assert<LHS> asserts;
+        constexpr partially_orderable_asserts<LHS> partially_orderable_asserts;
+
+        if (detail::partially_orderable_definition_inner<LHS>::partial_cmp(
+                lhs, min) == ordering::less)
+            return min;
+
+        if (detail::partially_orderable_definition_inner<LHS>::partial_cmp(
+                lhs, max) == ordering::greater)
+            return max;
+
+        return lhs;
+    }
+};
+
 } // namespace detail
 
 inline constexpr detail::compare_fn_t cmp;
 
 inline constexpr detail::partial_compare_fn_t partial_cmp;
 
-inline constexpr detail::equal_fn_t equal;
+inline constexpr detail::is_equal_fn_t is_equal;
 
-inline constexpr detail::partial_equal_fn_t partial_equal;
+inline constexpr detail::is_partial_equal_fn_t is_partial_equal;
 
 inline constexpr detail::min_fn_t min;
 
@@ -736,6 +803,10 @@ inline constexpr detail::partial_max_fn_t partial_max;
 inline constexpr detail::unchecked_max_fn_t unchecked_max;
 
 inline constexpr detail::clamp_fn_t clamp;
+
+inline constexpr detail::partial_clamp_fn_t partial_clamp;
+
+inline constexpr detail::unchecked_clamp_fn_t unchecked_clamp;
 
 } // namespace ok
 

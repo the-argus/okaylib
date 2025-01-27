@@ -48,8 +48,7 @@ TEST_SUITE("ordering")
 {
     TEST_CASE("type behavior")
     {
-        SUBCASE(
-            "conversion from ordering to partial ordering, not the other way")
+        SUBCASE("conversion from ordering to partial ordering, all explicit")
         {
             ok::partial_ordering test = ok::ordering::greater.as_partial();
 
@@ -61,6 +60,9 @@ TEST_SUITE("ordering")
             static_assert(!std::is_convertible_v<
                           decltype(ok::partial_ordering::unordered),
                           decltype(ok::ordering::less)>);
+            static_assert(!std::is_convertible_v<
+                          decltype(ok::ordering::less),
+                          decltype(ok::partial_ordering::unordered)>);
         }
 
         SUBCASE("cmp and partial_cmp template deducation")
@@ -86,7 +88,7 @@ TEST_SUITE("ordering")
             REQUIRE(ok::cmp(a, b) == ok::ordering::less);
             REQUIRE(ok::cmp(b, a) == ok::ordering::greater);
             REQUIRE(ok::cmp(c, b) == ok::ordering::equivalent);
-            REQUIRE(ok::equal(c, b));
+            REQUIRE(ok::is_equal(c, b));
         }
 
         SUBCASE("partial compare fully comparable type")
@@ -110,9 +112,9 @@ TEST_SUITE("ordering")
             float_wrapper g{0.0f / 0.f};
 
             REQUIRE(ok::partial_cmp(f, g) == ok::partial_ordering::unordered);
-            REQUIRE(!ok::partial_equal(f, g));
-            REQUIRE(!ok::partial_equal(g, g));
-            REQUIRE(ok::partial_equal(d, d));
+            REQUIRE(!ok::is_partial_equal(f, g));
+            REQUIRE(!ok::is_partial_equal(g, g));
+            REQUIRE(ok::is_partial_equal(d, d));
             REQUIRE(ok::partial_cmp(a, b) == ok::partial_ordering::greater);
             REQUIRE(ok::partial_cmp(d, f) == ok::partial_ordering::unordered);
             REQUIRE(ok::partial_cmp(c, g) == ok::partial_ordering::unordered);
@@ -124,7 +126,7 @@ TEST_SUITE("ordering")
             volatile int i = 1;
             volatile int j = 1;
             // make sure this compiles is all
-            REQUIRE(ok::equal(i, j));
+            REQUIRE(ok::is_equal(i, j));
         }
 
         SUBCASE("mins and maxs of ints")
@@ -194,6 +196,44 @@ TEST_SUITE("ordering")
             REQUIRE(ok::clamp(int32_t(40), 2UL, 20UL) == int32_t(20));
             REQUIRE(ok::clamp(uint64_t(40), 2UL, 20UL) == uint64_t(20));
             REQUIRE(ok::clamp(int64_t(40), 2UL, 20UL) == int64_t(20));
+        }
+
+        SUBCASE("cant clamp invalid direction in debug mode")
+        {
+            REQUIREABORTS(ok::clamp(10, -30, -40));
+        }
+
+        SUBCASE("partial clamp floats")
+        {
+            REQUIRE(ok::partial_clamp(10.f, 20.f, 30.f) == 20.f);
+            REQUIRE(ok::partial_clamp(40.f, 20.f, 30.f) == 30.f);
+            REQUIRE(ok::partial_clamp(25.f, 20.f, 30.f) == 25.f);
+            REQUIREABORTS(ok::partial_clamp(0.0f / 0.0f, 20.f, 30.f));
+            REQUIREABORTS(ok::partial_clamp(1.f, 0.0f / 0.0f, 30.f));
+            REQUIREABORTS(ok::partial_clamp(1.f, 30.f, 0.0f / 0.0f));
+            REQUIRE(isnanf(ok::unchecked_clamp(0.0f / 0.0f, 20.f, 30.f)));
+            // unchecked clamp with NaN bounds just doesnt enforce that side
+            // of the bounds
+            REQUIRE(ok::unchecked_clamp(1.f, 0.0f / 0.0f, 30.f) == 1.f);
+            REQUIRE(ok::unchecked_clamp(40.f, 0.0f / 0.0f, 30.f) == 30.f);
+            REQUIRE(ok::unchecked_clamp(1.f, 30.f, 0.0f / 0.0f) == 30.f);
+            REQUIRE(ok::unchecked_clamp(500.f, 30.f, 0.0f / 0.0f) == 500.f);
+        }
+
+        SUBCASE("partial clamp doubles")
+        {
+            REQUIRE(ok::partial_clamp(10., 20., 30.) == 20.);
+            REQUIRE(ok::partial_clamp(40., 20., 30.) == 30.);
+            REQUIRE(ok::partial_clamp(25., 20., 30.) == 25.);
+            REQUIREABORTS(ok::partial_clamp(0.0 / 0.0, 20., 30.));
+            REQUIREABORTS(ok::partial_clamp(1., 0.0 / 0.0, 30.));
+            REQUIREABORTS(ok::partial_clamp(1., 30., 0.0 / 0.0));
+            REQUIRE(isnanf(ok::unchecked_clamp(0. / 0., 20., 30.)));
+            // unchecked clamp with NaN bounds doesnt enforce NaN side of bounds
+            REQUIRE(ok::unchecked_clamp(1., 0.0 / 0.0, 30.) == 1.);
+            REQUIRE(ok::unchecked_clamp(40., 0.0 / 0.0, 30.) == 30.);
+            REQUIRE(ok::unchecked_clamp(1., 30., 0.0 / 0.0) == 30.);
+            REQUIRE(ok::unchecked_clamp(500., 30., 0.0 / 0.0) == 500.);
         }
     }
 
