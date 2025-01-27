@@ -308,11 +308,12 @@ struct range_definition_has_compare : public std::false_type
 template <typename T>
 struct range_definition_has_compare<
     T, std::enable_if_t<std::is_same_v<
-           ok::ordering, decltype(range_definition_inner<T>::compare(
-                     std::declval<const remove_cvref_t<T>&>(),
-                     std::declval<const cursor_type_unchecked_for<T>&>(),
-                     std::declval<const cursor_type_unchecked_for<T>&>()
-                     ))>>> : public std::true_type
+           ok::ordering,
+           decltype(range_definition_inner<T>::compare(
+               std::declval<const remove_cvref_t<T>&>(),
+               std::declval<const cursor_type_unchecked_for<T>&>(),
+               std::declval<const cursor_type_unchecked_for<T>&>()))>>>
+    : public std::true_type
 {};
 
 template <typename T, typename = void>
@@ -674,7 +675,7 @@ class range_def_for : public detail::range_definition_inner<T>
 
   private:
     using noref = detail::remove_cvref_t<T>;
-    static constexpr bool complete = detail::is_complete<noref>;
+    static constexpr bool complete = detail::is_complete_v<noref>;
 
     static_assert(complete,
                   "Refusing to access range definition for incomplete type.");
@@ -835,7 +836,7 @@ template <typename T, typename value_type>
 struct is_range<
     T, value_type,
     std::enable_if_t<
-        is_complete<T> && has_range_definition<T>::value &&
+        is_complete_v<T> && has_range_definition<T>::value &&
         // NOTE: not checking if has value type before doing this: if it
         // doesnt have it, it will be void, which is not a valid value type
         is_valid_value_type_v<value_type> && range_has_begin_v<T> &&

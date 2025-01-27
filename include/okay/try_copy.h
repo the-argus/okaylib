@@ -40,7 +40,7 @@ inline constexpr bool is_valid_copy_constructible =
 } // namespace detail
 template <typename T>
 inline constexpr bool is_valid_type_for_copy =
-    !std::is_reference_v<T> && detail::is_complete<T> && !std::is_array_v<T>;
+    !std::is_reference_v<T> && detail::is_complete_v<T> && !std::is_array_v<T>;
 
 /// Copy an object. Can be specialized to return a result in order to return an
 /// error by value. A program is ill formed if it specializes try_copy for
