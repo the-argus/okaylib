@@ -9,6 +9,8 @@ struct int_wrapper
 
 template <> struct ok::orderable_definition<int_wrapper>
 {
+    // leaving out is_strong_orderable marker
+
     static constexpr ordering cmp(const int_wrapper& lhs,
                                   const int_wrapper& rhs) noexcept
     {
@@ -29,6 +31,8 @@ struct float_wrapper
 
 template <> struct ok::partially_orderable_definition<float_wrapper>
 {
+    // leaving out is_strong_orderable marker
+
     static constexpr partial_ordering
     partial_cmp(const float_wrapper& lhs, const float_wrapper& rhs) noexcept
     {
@@ -43,6 +47,20 @@ template <> struct ok::partially_orderable_definition<float_wrapper>
         }
     }
 };
+
+static_assert(ok::is_orderable_v<int>);
+static_assert(ok::is_strong_fully_orderable_v<int>);
+static_assert(!ok::is_strong_fully_orderable_v<int_wrapper>);
+
+static_assert(!ok::is_orderable_v<float>);
+static_assert(ok::is_partially_orderable_v<float>);
+static_assert(ok::is_strong_partially_orderable_v<float>);
+static_assert(!ok::is_strong_partially_orderable_v<float_wrapper>);
+
+static_assert(ok::is_orderable_v<int>);
+static_assert(ok::is_partially_orderable_v<int>);
+// strong-ness should propagate downwards
+static_assert(ok::is_strong_partially_orderable_v<int>);
 
 TEST_SUITE("ordering")
 {
