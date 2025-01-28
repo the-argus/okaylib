@@ -107,6 +107,9 @@ struct range_definition<detail::keep_if_view_t<input_range_t, predicate_t>>
 // lose boundscheck optimization marker
 {
     static constexpr bool is_view = true;
+    // assures we are not random access because we dont define offset here.
+    // dont want people offsetting cursors by random amounts with keep_if
+    static constexpr bool disallow_cursor_member_offset = true;
 
     using range_t = detail::remove_cvref_t<input_range_t>;
     using keep_if_t = detail::keep_if_view_t<input_range_t, predicate_t>;

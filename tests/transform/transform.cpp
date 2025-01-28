@@ -9,7 +9,7 @@
 
 using namespace ok;
 
-TEST_SUITE("enumerate")
+TEST_SUITE("transform")
 {
     TEST_CASE("functionality")
     {

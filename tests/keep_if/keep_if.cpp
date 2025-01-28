@@ -66,6 +66,11 @@ TEST_SUITE("keep_if")
                           decltype(ints | keep_if(is_even))>);
             static_assert(detail::is_random_access_range_v<decltype(ints)>);
             static_assert(
+                detail::is_bidirectional_range_v<decltype(ints |
+                                                          keep_if(is_even))>);
+            static_assert(
+                !detail::range_can_offset_v<decltype(ints | keep_if(is_even))>);
+            static_assert(
                 !detail::is_random_access_range_v<decltype(ints |
                                                            keep_if(is_even))>);
             static_assert(std::is_same_v<

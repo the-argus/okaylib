@@ -53,11 +53,6 @@ template <typename input_parent_range_t> struct reversed_cursor_t
 
     constexpr operator parent_cursor_t() const noexcept { return inner(); }
 
-    constexpr friend bool operator==(const self_t& a, const self_t& b)
-    {
-        return a.inner() == b.inner();
-    }
-
     constexpr self_t& operator++() OKAYLIB_NOEXCEPT
     {
         --m_inner;
@@ -68,26 +63,6 @@ template <typename input_parent_range_t> struct reversed_cursor_t
     {
         ++m_inner;
         return *this;
-    }
-
-    constexpr friend bool operator<(const self_t& lhs, const self_t& rhs)
-    {
-        return lhs.inner() > rhs.inner();
-    }
-
-    constexpr friend bool operator<=(const self_t& lhs, const self_t& rhs)
-    {
-        return lhs.inner() >= rhs.inner();
-    }
-
-    constexpr friend bool operator>(const self_t& lhs, const self_t& rhs)
-    {
-        return lhs.inner() < rhs.inner();
-    }
-
-    constexpr friend bool operator>=(const self_t& lhs, const self_t& rhs)
-    {
-        return lhs.inner() <= rhs.inner();
     }
 
     constexpr self_t& operator+=(const size_t rhs) OKAYLIB_NOEXCEPT
@@ -112,6 +87,8 @@ template <typename input_parent_range_t> struct reversed_cursor_t
         return self_t(m_inner + rhs);
     }
 
+    friend class ok::orderable_definition<self_t>;
+
   private:
     parent_cursor_t m_inner;
 };
@@ -120,6 +97,23 @@ template <typename range_t>
 struct reversed_view_t : public underlying_view_type<range_t>::type
 {};
 } // namespace detail
+
+template <typename input_parent_range_t>
+class ok::orderable_definition<detail::reversed_cursor_t<input_parent_range_t>>
+{
+    using self_t = detail::reversed_cursor_t<input_parent_range_t>;
+
+  public:
+    static constexpr bool is_strong_orderable =
+        is_strong_fully_orderable_v<detail::remove_cvref_t<
+            decltype(std::declval<const self_t&>().inner())>>;
+
+    static constexpr ordering cmp(const self_t& lhs,
+                                  const self_t& rhs) OKAYLIB_NOEXCEPT
+    {
+        return ok::cmp(lhs.inner(), rhs.inner());
+    }
+};
 
 template <typename input_range_t>
 struct range_definition<detail::reversed_view_t<input_range_t>>

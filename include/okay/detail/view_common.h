@@ -483,14 +483,6 @@ template <typename derived_t, typename parent_range_t> struct cursor_wrapper_t
     constexpr parent_cursor_t& inner() OKAYLIB_NOEXCEPT { return m_inner; }
     constexpr operator parent_cursor_t() const noexcept { return inner(); }
 
-    __ok_enable_if_friend(parent_cursor_t,
-                          detail::is_equality_comparable_to_self_v<T>, bool)
-    operator==(const derived_t & a, const derived_t & b)
-    {
-        return derived_t::compare(a, b) &&
-               a.derived()->inner() == b.derived()->inner();
-    }
-
     __ok_enable_if(parent_range_t,
                    detail::has_pre_increment_v<cursor_type_for<T>>,
                    derived_t&) operator++() OKAYLIB_NOEXCEPT
@@ -508,42 +500,6 @@ template <typename derived_t, typename parent_range_t> struct cursor_wrapper_t
         derived()->decrement();
         return *derived();
     }
-
-#define __okaylib_cursor_wrapper_enable_relop_if_random_access                 \
-    template <typename T = parent_range_t>                                     \
-    constexpr friend std::enable_if_t<std::is_same_v<T, parent_range_t> &&     \
-                                          detail::is_random_access_range_v<T>, \
-                                      bool>
-
-    __okaylib_cursor_wrapper_enable_relop_if_random_access
-    operator<(const derived_t& lhs, const derived_t& rhs)
-    {
-        return derived_t::less_than(lhs, rhs) &&
-               lhs.derived()->inner() < rhs.derived()->inner();
-    }
-
-    __okaylib_cursor_wrapper_enable_relop_if_random_access
-    operator<=(const cursor_wrapper_t& lhs, const cursor_wrapper_t& rhs)
-    {
-        return derived_t::less_than_eql(lhs, rhs) &&
-               lhs.derived()->inner() <= rhs.derived()->inner();
-    }
-
-    __okaylib_cursor_wrapper_enable_relop_if_random_access
-    operator>(const cursor_wrapper_t& lhs, const cursor_wrapper_t& rhs)
-    {
-        return derived_t::greater_than(lhs, rhs) &&
-               lhs.derived()->inner() > rhs.derived()->inner();
-    }
-
-    __okaylib_cursor_wrapper_enable_relop_if_random_access
-    operator>=(const cursor_wrapper_t& lhs, const cursor_wrapper_t& rhs)
-    {
-        return derived_t::greater_than_eql(lhs, rhs) &&
-               lhs.derived()->inner() >= rhs.derived()->inner();
-    }
-
-#undef __okaylib_cursor_wrapper_enable_relop_if_random_access
 
 #define __okaylib_cursor_wrapper_enable_member_if_random_access(rettype) \
     template <typename T = parent_range_t>                               \

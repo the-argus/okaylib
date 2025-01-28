@@ -41,46 +41,6 @@ struct enumerated_cursor_t
     constexpr void increment() OKAYLIB_NOEXCEPT { ++m_index; }
     constexpr void decrement() OKAYLIB_NOEXCEPT { --m_index; }
 
-    constexpr static bool compare(const self_t& lhs,
-                                  const self_t& rhs) OKAYLIB_NOEXCEPT
-    {
-        __ok_assert((lhs.index() == rhs.index()) ==
-                    (lhs.inner() == rhs.inner()));
-        // we dont care if indices are the same really, except in debug mode.
-        // underlying cursor can be compared instead
-        return true;
-    }
-
-    constexpr static bool less_than(const self_t& lhs,
-                                    const self_t& rhs) OKAYLIB_NOEXCEPT
-    {
-        __ok_assert((lhs.index() < rhs.index()) == (lhs.inner() < rhs.inner()));
-        return true;
-    }
-
-    constexpr static bool less_than_eql(const self_t& lhs,
-                                        const self_t& rhs) OKAYLIB_NOEXCEPT
-    {
-        __ok_assert((lhs.index() <= rhs.index()) ==
-                    (lhs.inner() <= rhs.inner()));
-        return true;
-    }
-
-    constexpr static bool greater_than_eql(const self_t& lhs,
-                                           const self_t& rhs) OKAYLIB_NOEXCEPT
-    {
-        __ok_assert((lhs.index() >= rhs.index()) ==
-                    (lhs.inner() >= rhs.inner()));
-        return true;
-    }
-
-    constexpr static bool greater_than(const self_t& lhs,
-                                       const self_t& rhs) OKAYLIB_NOEXCEPT
-    {
-        __ok_assert((lhs.index() > rhs.index()) == (lhs.inner() > rhs.inner()));
-        return true;
-    }
-
     constexpr void plus_eql(size_t delta) OKAYLIB_NOEXCEPT { m_index += delta; }
     constexpr void minus_eql(size_t delta) OKAYLIB_NOEXCEPT
     {
@@ -94,7 +54,9 @@ struct enumerated_cursor_t
     }
 
     friend wrapper_t;
-    friend class range_definition<detail::enumerated_view_t<parent_range_t>>;
+    friend class ok::range_definition<
+        detail::enumerated_view_t<parent_range_t>>;
+    friend class ok::orderable_definition<enumerated_cursor_t>;
 
     constexpr size_t index() const OKAYLIB_NOEXCEPT { return m_index; }
 
@@ -103,6 +65,24 @@ struct enumerated_cursor_t
 };
 
 } // namespace detail
+
+template <typename parent_range_t>
+class ok::orderable_definition<detail::enumerated_cursor_t<parent_range_t>>
+{
+    using self_t = detail::enumerated_cursor_t<parent_range_t>;
+
+  public:
+    static constexpr bool is_strong_orderable =
+        is_strong_fully_orderable_v<cursor_type_for<parent_range_t>>;
+
+    static constexpr ordering cmp(const self_t& lhs,
+                                  const self_t& rhs) OKAYLIB_NOEXCEPT
+    {
+        const auto ordering = ok::cmp(lhs.inner(), rhs.inner());
+        __ok_assert(ordering == ok::cmp(lhs.m_index, rhs.m_index));
+        return ordering;
+    }
+};
 
 // TODO: review const / ref correctness here, range_t input is allowed to be a
 // reference or const but thats not really being removed before sending it to
@@ -181,11 +161,6 @@ struct range_definition<detail::enumerated_view_t<range_t>>
                 c.index());
         }
     }
-
-    // satisfy requirement that get() returns value_type
-    // TODO: value_type still needed?
-    using value_type = decltype(get(std::declval<const enumerated_t&>(),
-                                    std::declval<const cursor_t&>()));
 };
 
 constexpr detail::range_adaptor_closure_t<detail::enumerate_fn_t> enumerate;

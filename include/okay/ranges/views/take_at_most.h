@@ -33,23 +33,7 @@ struct take_at_most_cursor_t
                          parent_range_t>;
     using self_t = take_at_most_cursor_t;
 
-#define __take_at_most_relop(name)                                   \
-    constexpr static bool name(const self_t& lhs, const self_t& rhs) \
-        OKAYLIB_NOEXCEPT                                             \
-    {                                                                \
-        return true;                                                 \
-    }
-
-    __take_at_most_relop(compare) __take_at_most_relop(less_than)
-        __take_at_most_relop(less_than_eql) __take_at_most_relop(greater_than)
-            __take_at_most_relop(greater_than_eql)
-
-#undef __take_at_most_relop
-
-                constexpr void increment() OKAYLIB_NOEXCEPT
-    {
-        ++m_consumed;
-    }
+    constexpr void increment() OKAYLIB_NOEXCEPT { ++m_consumed; }
     constexpr void decrement() OKAYLIB_NOEXCEPT { --m_consumed; }
 
     constexpr void plus_eql(size_t delta) OKAYLIB_NOEXCEPT
@@ -75,6 +59,7 @@ struct take_at_most_cursor_t
     friend wrapper_t;
     friend class range_definition<
         detail::take_at_most_view_t<input_parent_range_t>>;
+    friend class ok::orderable_definition<take_at_most_cursor_t>;
 
     constexpr size_t num_consumed() const OKAYLIB_NOEXCEPT
     {
@@ -134,6 +119,24 @@ using take_at_most_cursor_optimized_t = std::conditional_t<
     take_at_most_cursor_t<input_range_t>>;
 
 } // namespace detail
+
+template <typename input_parent_range_t>
+class ok::orderable_definition<
+    detail::take_at_most_cursor_t<input_parent_range_t>>
+{
+    using self_t = detail::take_at_most_cursor_t<input_parent_range_t>;
+
+  public:
+    static constexpr bool is_strong_orderable =
+        is_strong_fully_orderable_v<detail::remove_cvref_t<
+            decltype(std::declval<const self_t&>().inner())>>;
+
+    static constexpr ordering cmp(const self_t& lhs,
+                                  const self_t& rhs) OKAYLIB_NOEXCEPT
+    {
+        return ok::cmp(lhs.inner(), rhs.inner());
+    }
+};
 
 template <typename input_range_t>
 struct range_definition<detail::take_at_most_view_t<input_range_t>>

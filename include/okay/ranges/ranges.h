@@ -346,6 +346,16 @@ struct range_marked_finite<
 {};
 
 template <typename T, typename = void>
+struct range_disallows_cursor_member_offset : public std::false_type
+{};
+template <typename T>
+struct range_disallows_cursor_member_offset<
+    T,
+    std::enable_if_t<range_definition_inner<T>::disallow_cursor_member_offset>>
+    : public std::true_type
+{};
+
+template <typename T, typename = void>
 struct range_has_data : public std::false_type
 {};
 template <typename T>
@@ -383,6 +393,9 @@ template <typename T>
 constexpr bool range_marked_infinite_v = range_marked_infinite<T>::value;
 template <typename T>
 constexpr bool range_marked_finite_v = range_marked_finite<T>::value;
+template <typename T>
+constexpr bool range_disallows_cursor_member_offset_v =
+    range_disallows_cursor_member_offset<T>::value;
 
 template <typename T, typename = void>
 struct range_can_boundscheck_with_less_than_end_cursor : public std::false_type
@@ -610,7 +623,8 @@ template <typename T> using cursor_or_void_t = typename cursor_or_void<T>::type;
 template <typename T>
 constexpr bool range_can_offset_v =
     range_definition_has_offset_v<T> ||
-    has_inplace_addition_with_i64_v<cursor_or_void_t<T>>;
+    (!range_disallows_cursor_member_offset_v<T> &&
+     has_inplace_addition_with_i64_v<cursor_or_void_t<T>>);
 
 template <typename T>
 constexpr bool range_can_compare_v =
@@ -1030,7 +1044,7 @@ struct increment_fn_t
     {
         if constexpr (detail::range_definition_has_increment_v<range_t>) {
             range_def_for<range_t>::increment(range, cursor);
-        } else if constexpr (detail::range_can_offset_v<range_t>) {
+        } else if constexpr (detail::range_definition_has_offset_v<range_t>) {
             range_def_for<range_t>::offset(range, cursor, int64_t(1));
         } else {
             static_assert(detail::has_pre_increment_v<
@@ -1066,6 +1080,10 @@ struct iter_compare_fn_t
     operator()(const range_t& range, const cursor_type_for<range_t>& cursor_a,
                const cursor_type_for<range_t>& cursor_b) const OKAYLIB_NOEXCEPT
     {
+        static_assert(
+            range_can_compare_v<range_t>,
+            "Cannot call iter_compare on a range which does not allow "
+            "comparing cursors.");
         if constexpr (detail::range_definition_has_compare_v<range_t>) {
             return range_def_for<range_t>::compare(range, cursor_a, cursor_b);
         } else {
@@ -1082,6 +1100,9 @@ struct iter_offset_fn_t
                                   cursor_type_for<range_t>& cursor,
                                   int64_t offset) const OKAYLIB_NOEXCEPT
     {
+        static_assert(range_can_offset_v<range_t>,
+                      "Cannot call iter_offset on a range which does not allow "
+                      "offsetting cursors.");
         if constexpr (detail::range_definition_has_offset_v<range_t>) {
             return range_def_for<range_t>::offset(range, cursor, offset);
         } else {
@@ -1218,6 +1239,12 @@ inline constexpr detail::size_fn_t data{};
 inline constexpr detail::increment_fn_t increment{};
 
 inline constexpr detail::decrement_fn_t decrement{};
+
+// functions for random access ranges ---------------------
+
+inline constexpr detail::iter_compare_fn_t iter_compare{};
+
+inline constexpr detail::iter_offset_fn_t iter_offset{};
 
 } // namespace ok
 
