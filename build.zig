@@ -69,17 +69,16 @@ const okaylib_headers = &[_][]const u8{
     "detail/traits/special_member_traits.h",
 
     "detail/abort.h",
-    "detail/abort.h",
     "detail/addressof.h",
     "detail/get_best.h",
     "detail/invoke.h",
     "detail/is_lvalue.h",
     "detail/no_unique_add",
     "detail/ok_assert.h",
+    "detail/ok_enable_if.h",
     "detail/opt.h",
     "detail/res.h",
     "detail/view_common.h",
-    "detail/ok_enable_if.h",
 
     "macros/foreach.h",
     "macros/try.h",
@@ -90,13 +89,13 @@ const okaylib_headers = &[_][]const u8{
     "ranges/adaptors.h",
     "ranges/indices.h",
 
-    "ranges/views/enumerate.h",
-    "ranges/views/std_for.h",
-    "ranges/views/take_at_most.h",
     "ranges/views/drop.h",
-    "ranges/views/transform.h",
+    "ranges/views/enumerate.h",
     "ranges/views/keep_if.h",
     "ranges/views/reverse.h",
+    "ranges/views/std_for.h",
+    "ranges/views/take_at_most.h",
+    "ranges/views/transform.h",
 };
 
 const test_source_files = &[_][]const u8{
