@@ -363,6 +363,12 @@ template <typename T>
 constexpr bool range_has_is_after_bounds_v =
     range_has_is_after_bounds<T>::value;
 template <typename T>
+constexpr bool range_definition_has_offset_v =
+    range_definition_has_offset<T>::value;
+template <typename T>
+constexpr bool range_definition_has_compare_v =
+    range_definition_has_compare<T>::value;
+template <typename T>
 constexpr bool range_has_is_before_bounds_v =
     range_has_is_before_bounds<T>::value;
 template <typename T>
@@ -602,12 +608,23 @@ struct cursor_or_void<T, std::void_t<cursor_type_unchecked_for<T>>>
 template <typename T> using cursor_or_void_t = typename cursor_or_void<T>::type;
 
 template <typename T>
-constexpr bool range_can_increment_v = range_definition_has_increment_v<T> ||
-                                       has_pre_increment_v<cursor_or_void_t<T>>;
+constexpr bool range_can_offset_v =
+    range_definition_has_offset_v<T> ||
+    has_inplace_addition_with_i64_v<cursor_or_void_t<T>>;
 
 template <typename T>
-constexpr bool range_can_decrement_v = range_definition_has_decrement_v<T> ||
-                                       has_pre_decrement_v<cursor_or_void_t<T>>;
+constexpr bool range_can_compare_v =
+    range_definition_has_compare_v<T> || is_orderable_v<cursor_or_void_t<T>>;
+
+template <typename T>
+constexpr bool range_can_increment_v =
+    range_definition_has_increment_v<T> ||
+    has_pre_increment_v<cursor_or_void_t<T>> || range_can_offset_v<T>;
+
+template <typename T>
+constexpr bool range_can_decrement_v =
+    range_definition_has_decrement_v<T> ||
+    has_pre_decrement_v<cursor_or_void_t<T>> || range_can_offset_v<T>;
 
 template <typename T>
 constexpr bool is_output_range_v =
@@ -647,21 +664,10 @@ constexpr bool is_bidirectional_range_v =
 template <typename maybe_range_t>
 constexpr bool is_random_access_range_v =
     is_bidirectional_range_v<maybe_range_t> &&
-    // must be able to do math on cursor without range context
-    has_pre_increment_v<cursor_or_void_t<maybe_range_t>> &&
-    has_pre_decrement_v<cursor_or_void_t<maybe_range_t>> &&
-    // if user defines increment(), then that method is preferred so random
-    // access is lost- increment with range context is now required
-    !range_definition_has_increment_v<maybe_range_t> &&
-    !range_definition_has_decrement_v<maybe_range_t> &&
-    // must also be able to do +, +=, -, -=, <, >, <=, >=
-    has_addition_with_size_v<cursor_or_void_t<maybe_range_t>> &&
-    has_subtraction_with_size_v<cursor_or_void_t<maybe_range_t>> &&
-    has_inplace_addition_with_size_v<cursor_or_void_t<maybe_range_t>> &&
-    has_inplace_subtraction_with_size_v<cursor_or_void_t<maybe_range_t>> &&
-    is_equality_comparable_to_v<cursor_or_void_t<maybe_range_t>,
-                                cursor_or_void_t<maybe_range_t>> &&
-    has_comparison_operators_v<cursor_or_void_t<maybe_range_t>>;
+    // must be able to offset cursor by arbitrary i64
+    range_can_offset_v<maybe_range_t> &&
+    // must be able to compre two cursors
+    range_can_compare_v<maybe_range_t>;
 } // namespace detail
 
 /// range_def_for is a way of accessing the range definition for a type, with
@@ -873,6 +879,9 @@ struct prefer_after_bounds_check_t
 struct prefer_before_bounds_check_t
 {};
 
+inline constexpr prefer_before_bounds_check_t prefer_before_bounds_check{};
+inline constexpr prefer_after_bounds_check_t prefer_after_bounds_check{};
+
 namespace detail {
 struct iter_copyout_fn_t
 {
@@ -1021,6 +1030,8 @@ struct increment_fn_t
     {
         if constexpr (detail::range_definition_has_increment_v<range_t>) {
             range_def_for<range_t>::increment(range, cursor);
+        } else if constexpr (detail::range_can_offset_v<range_t>) {
+            range_def_for<range_t>::offset(range, cursor, int64_t(1));
         } else {
             static_assert(detail::has_pre_increment_v<
                           detail::cursor_type_unchecked_for<range_t>>);
@@ -1038,10 +1049,44 @@ struct decrement_fn_t
     {
         if constexpr (detail::range_definition_has_increment_v<range_t>) {
             range_def_for<range_t>::decrement(range, cursor);
+        } else if constexpr (detail::range_can_offset_v<range_t>) {
+            range_def_for<range_t>::offset(range, cursor, int64_t(-1));
         } else {
             static_assert(detail::has_pre_increment_v<
                           detail::cursor_type_unchecked_for<range_t>>);
             --cursor;
+        }
+    }
+};
+
+struct iter_compare_fn_t
+{
+    template <typename range_t>
+    constexpr ordering
+    operator()(const range_t& range, const cursor_type_for<range_t>& cursor_a,
+               const cursor_type_for<range_t>& cursor_b) const OKAYLIB_NOEXCEPT
+    {
+        if constexpr (detail::range_definition_has_compare_v<range_t>) {
+            return range_def_for<range_t>::compare(range, cursor_a, cursor_b);
+        } else {
+            static_assert(is_orderable_v<cursor_type_for<range_t>>);
+            return ok::cmp(cursor_a, cursor_b);
+        }
+    }
+};
+
+struct iter_offset_fn_t
+{
+    template <typename range_t>
+    constexpr ordering operator()(const range_t& range,
+                                  cursor_type_for<range_t>& cursor,
+                                  int64_t offset) const OKAYLIB_NOEXCEPT
+    {
+        if constexpr (detail::range_definition_has_offset_v<range_t>) {
+            return range_def_for<range_t>::offset(range, cursor, offset);
+        } else {
+            static_assert(has_inplace_addition_with_i64_v<range_t>);
+            cursor += offset;
         }
     }
 };
