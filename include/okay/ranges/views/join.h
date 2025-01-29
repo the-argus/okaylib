@@ -12,9 +12,11 @@ template <typename range_t> struct joined_view_t;
 
 struct join_fn_t
 {
-    template <typename range_t>
-    constexpr decltype(auto) operator()(range_t&& range) const OKAYLIB_NOEXCEPT
+    template <typename input_range_t>
+    constexpr decltype(auto)
+    operator()(input_range_t&& range) const OKAYLIB_NOEXCEPT
     {
+        using range_t = detail::remove_cvref_t<input_range_t>;
         static_assert(is_range_v<range_t>,
                       "Cannot join given type- it is not a range.");
         static_assert(is_range_v<value_type_for<range_t>>,
@@ -24,7 +26,8 @@ struct join_fn_t
         static_assert(range_has_get_ref_const_v<range_t>,
                       "Cannot join given range- it does not provide a way to "
                       "get const reference to its internal ranges.");
-        return joined_view_t<decltype(range)>{std::forward<range_t>(range)};
+        return joined_view_t<decltype(range)>{
+            std::forward<input_range_t>(range)};
     }
 };
 
@@ -49,19 +52,12 @@ template <typename input_range_t> struct joined_cursor_t
         return m_inner;
     }
     constexpr inner_cursor_t& inner() OKAYLIB_NOEXCEPT { return m_inner; }
-    constexpr operator inner_cursor_t() const OKAYLIB_NOEXCEPT
-    {
-        return inner();
-    }
+
     constexpr const outer_cursor_t& outer() const OKAYLIB_NOEXCEPT
     {
         return m_outer;
     }
     constexpr outer_cursor_t& outer() OKAYLIB_NOEXCEPT { return m_outer; }
-    constexpr operator outer_cursor_t() const OKAYLIB_NOEXCEPT
-    {
-        return outer();
-    }
 
     explicit constexpr joined_cursor_t(outer_cursor_t&& outer_cursor,
                                        inner_cursor_t&& inner_cursor_t)
@@ -96,10 +92,10 @@ struct range_definition<detail::joined_view_t<input_range_t>>
     {
         const auto& outer_ref =
             joined.template get_view_reference<joined_t, outer_range_t>();
-        const auto outer_begin = ok::begin(outer_ref);
+        auto outer_begin = ok::begin(outer_ref);
         const auto& inner = ok::iter_get_ref(outer_ref, outer_begin);
-        const auto& inner_begin = ok::begin(inner);
-        return cursor_t(outer_begin, inner_begin);
+        auto inner_begin = ok::begin(inner);
+        return cursor_t(std::move(outer_begin), std::move(inner_begin));
     }
 
     static constexpr void increment(const joined_t& joined,
@@ -129,11 +125,7 @@ struct range_definition<detail::joined_view_t<input_range_t>>
         // should be good
         const auto& outer_ref =
             joined.template get_view_reference<joined_t, outer_range_t>();
-        const bool result = ok::is_inbounds(outer_ref, cursor.outer());
-        __ok_assert(result ==
-                    ok::is_inbounds(ok::iter_get_ref(outer_ref, cursor.outer()),
-                                    cursor.inner()));
-        return result;
+        return ok::is_inbounds(outer_ref, cursor.outer());
     }
 
     __ok_enable_if_static(joined_t, detail::range_has_get_v<inner_range_t>,
