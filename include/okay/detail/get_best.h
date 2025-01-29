@@ -17,8 +17,7 @@ constexpr decltype(auto) get_best(qualified_range_t& i,
 
     if constexpr ((detail::range_has_get_ref_v<range_t> &&
                    !std::is_const_v<qualified_range_t>) ||
-                  (detail::range_has_get_ref_const_v<range_t> &&
-                   std::is_const_v<qualified_range_t>)) {
+                  detail::range_has_get_ref_const_v<range_t>) {
         return ok::iter_get_ref(i, c);
     } else {
         return ok::iter_copyout(i, c);

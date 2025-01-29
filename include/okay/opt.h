@@ -1,11 +1,13 @@
 #ifndef __OKAYLIB_OPT_H__
 #define __OKAYLIB_OPT_H__
 
+#include "okay/detail/ok_enable_if.h"
 #include "okay/detail/opt.h"
 #include "okay/detail/template_util/enable_copy_move.h"
 #include "okay/detail/template_util/remove_cvref.h"
 #include "okay/detail/traits/is_instance.h"
 #include "okay/detail/traits/is_nonthrowing.h"
+#include "okay/ranges/ranges.h"
 #include "okay/slice.h"
 
 #ifdef OKAYLIB_USE_FMT
@@ -607,6 +609,54 @@ class opt_t<
 #ifdef OKAYLIB_USE_FMT
     friend struct fmt::formatter<opt_t>;
 #endif
+};
+
+template <typename payload_t> struct ok::range_definition<opt_t<payload_t>>
+{
+    static constexpr bool allow_get_ref_return_const_ref = true;
+
+    struct cursor_t
+    {
+        friend class range_definition;
+
+      private:
+        bool is_out_of_bounds = false;
+    };
+
+    using opt_range_t = opt_t<payload_t>;
+
+    static constexpr cursor_t begin(const opt_range_t& range) OKAYLIB_NOEXCEPT
+    {
+        return cursor_t{};
+    }
+
+    static constexpr void increment(const opt_range_t& range,
+                                    cursor_t& cursor) OKAYLIB_NOEXCEPT
+    {
+        cursor.is_out_of_bounds = true;
+    }
+
+    static constexpr bool is_inbounds(const opt_range_t& range,
+                                      const cursor_t& cursor) OKAYLIB_NOEXCEPT
+    {
+        return range.has_value() && !cursor.is_out_of_bounds;
+    }
+
+    static constexpr size_t size(const opt_range_t& range) OKAYLIB_NOEXCEPT
+    {
+        return size_t(range.has_value());
+    }
+
+    static constexpr auto& get_ref(opt_range_t& range, const cursor_t& cursor)
+    {
+        return range.value();
+    }
+
+    static constexpr const auto& get_ref(const opt_range_t& range,
+                                         const cursor_t& cursor)
+    {
+        return range.value();
+    }
 };
 
 } // namespace ok

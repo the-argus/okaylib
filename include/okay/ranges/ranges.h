@@ -2,6 +2,7 @@
 #define __OKAYLIB_RANGES_RANGES_H__
 
 #include "okay/detail/ok_assert.h"
+#include "okay/detail/ok_enable_if.h"
 #include "okay/detail/template_util/c_array_length.h"
 #include "okay/detail/template_util/c_array_value_type.h"
 #include "okay/detail/template_util/remove_cvref.h"
@@ -981,13 +982,19 @@ struct iter_get_temporary_ref_fn_t
 struct iter_get_ref_fn_t
 {
     template <typename range_t>
-    constexpr value_type_for<range_t>& operator()
+    constexpr auto operator()
         [[nodiscard]] (range_t& range, const cursor_type_for<range_t>& cursor)
         const OKAYLIB_NOEXCEPT
+            ->decltype(range_definition_inner<range_t>::get_ref(range, cursor))
     {
-        static_assert(detail::range_has_get_ref_v<range_t>,
-                      "Unable to get_ref- no nonconst get_ref defined for this "
-                      "range.");
+        using return_type =
+            decltype(range_definition_inner<range_t>::get_ref(range, cursor));
+        static_assert(
+            // if the return type is const, give a special exception to
+            // static assert
+            std::is_const_v<std::remove_reference_t<return_type>> ||
+                range_has_get_ref_v<range_t>,
+            "Unable to get_ref- no valid get_ref defined for this range.");
         return range_definition_inner<range_t>::get_ref(range, cursor);
     }
 

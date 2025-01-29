@@ -481,7 +481,10 @@ template <typename derived_t, typename parent_range_t> struct cursor_wrapper_t
         return m_inner;
     }
     constexpr parent_cursor_t& inner() OKAYLIB_NOEXCEPT { return m_inner; }
-    constexpr operator parent_cursor_t() const noexcept { return inner(); }
+    constexpr operator parent_cursor_t() const OKAYLIB_NOEXCEPT
+    {
+        return inner();
+    }
 
     __ok_enable_if(parent_range_t,
                    detail::has_pre_increment_v<cursor_type_for<T>>,

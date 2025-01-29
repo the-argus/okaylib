@@ -1,5 +1,7 @@
+#include "okay/ranges/views/enumerate.h"
 #include "test_header.h"
 // test header must be first
+#include "okay/macros/foreach.h"
 #include "okay/opt.h"
 #include "okay/slice.h"
 #include "okay/stdmem.h"
@@ -405,5 +407,136 @@ TEST_SUITE("opt")
             fmt::println("optional slice: {}", maybe_bytes);
         }
 #endif
+    }
+
+    TEST_CASE("opt is range")
+    {
+        SUBCASE("can get size of opt")
+        {
+            opt_t<char> optchar;
+            REQUIRE(ok::size(optchar) == 0);
+            optchar = 'c';
+            REQUIRE(ok::size(optchar) == 1);
+        }
+
+        SUBCASE("can ok_foreach over opt")
+        {
+            opt_t<char> maybechar;
+
+            ok_foreach(auto c, maybechar)
+            {
+                static_assert(std::is_same_v<decltype(c), char>);
+                // unreachable here
+                REQUIRE(false);
+            }
+
+            ok_foreach(auto& c, maybechar)
+            {
+                static_assert(std::is_same_v<decltype(c), char&>);
+                REQUIRE(false);
+            }
+
+            ok_foreach(const auto& c, maybechar)
+            {
+                static_assert(std::is_same_v<decltype(c), const char&>);
+                REQUIRE(false);
+            }
+
+            maybechar = 'c';
+
+            ok_foreach(const auto& c, maybechar) { REQUIRE(c == 'c'); }
+        }
+
+        SUBCASE("ok_foreach over optional reference has the same semantics as "
+                "optional value")
+        {
+            opt_t<char&> maybechar_ref;
+
+            ok_foreach(auto c, maybechar_ref)
+            {
+                static_assert(std::is_same_v<decltype(c), char>);
+                // unreachable here
+                REQUIRE(false);
+            }
+
+            ok_foreach(auto& c, maybechar_ref)
+            {
+                static_assert(std::is_same_v<decltype(c), char&>);
+                REQUIRE(false);
+            }
+
+            ok_foreach(const auto& c, maybechar_ref)
+            {
+                static_assert(std::is_same_v<decltype(c), const char&>);
+                REQUIRE(false);
+            }
+
+            static char char_c = 'c';
+            maybechar_ref = char_c;
+
+            ok_foreach(const auto& c, maybechar_ref) { REQUIRE(c == 'c'); }
+        }
+
+        SUBCASE("ok_foreach over const ref or value")
+        {
+            const opt_t<char> maybechar;
+            opt_t<const char&> maybechar_ref;
+
+            ok_foreach(auto c, maybechar_ref)
+            {
+                static_assert(std::is_same_v<decltype(c), char>);
+                REQUIRE(false);
+            }
+            ok_foreach(auto c, maybechar)
+            {
+                static_assert(std::is_same_v<decltype(c), char>);
+                REQUIRE(false);
+            }
+
+            ok_foreach(auto& c, maybechar_ref)
+            {
+                static_assert(std::is_same_v<decltype(c), const char&>);
+                REQUIRE(false);
+            }
+            ok_foreach(auto& c, maybechar)
+            {
+                static_assert(std::is_same_v<decltype(c), const char&>);
+                REQUIRE(false);
+            }
+
+            ok_foreach(const auto& c, maybechar_ref)
+            {
+                static_assert(std::is_same_v<decltype(c), const char&>);
+                REQUIRE(false);
+            }
+            ok_foreach(const auto& c, maybechar)
+            {
+                static_assert(std::is_same_v<decltype(c), const char&>);
+                REQUIRE(false);
+            }
+
+            static const char char_c = 'c';
+            maybechar_ref = char_c;
+
+            ok_foreach(const auto& c, maybechar_ref) { REQUIRE(c == 'c'); }
+        }
+
+        SUBCASE("nested ok_foreach for optional slice")
+        {
+            std::array<uint8_t, 12> bytes;
+            opt_t<slice_t<uint8_t>> opt_bytes = bytes;
+            // fill with indices
+            ok_foreach(auto& slice, opt_bytes)
+            {
+                ok_foreach(ok_pair(byteref, index), slice | enumerate)
+                {
+                    byteref = index;
+                }
+            }
+
+            for (size_t i = 0; i < bytes.size(); ++i) {
+                REQUIRE(bytes[i] == i);
+            }
+        }
     }
 }
