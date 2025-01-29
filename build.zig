@@ -113,6 +113,7 @@ const test_source_files = &[_][]const u8{
     "stdmem/stdmem.cpp",
     "ranges/ranges.cpp",
     "ordering/ordering.cpp",
+    "join/join.cpp",
 };
 
 const universal_tests_source_files = &[_][]const u8{};
