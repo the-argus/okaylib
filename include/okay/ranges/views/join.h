@@ -3,6 +3,7 @@
 
 #include "okay/detail/ok_assert.h"
 #include "okay/detail/view_common.h"
+#include "okay/opt.h"
 #include "okay/ranges/adaptors.h"
 #include "okay/ranges/ranges.h"
 
@@ -49,28 +50,50 @@ template <typename input_range_t> struct joined_cursor_t
   public:
     constexpr const inner_cursor_t& inner() const OKAYLIB_NOEXCEPT
     {
-        return m_inner;
+        return m.value().inner;
     }
-    constexpr inner_cursor_t& inner() OKAYLIB_NOEXCEPT { return m_inner; }
+    constexpr inner_cursor_t& inner() OKAYLIB_NOEXCEPT
+    {
+        return m.value().inner;
+    }
 
     constexpr const outer_cursor_t& outer() const OKAYLIB_NOEXCEPT
     {
-        return m_outer;
+        return m.value().outer;
     }
-    constexpr outer_cursor_t& outer() OKAYLIB_NOEXCEPT { return m_outer; }
+    constexpr outer_cursor_t& outer() OKAYLIB_NOEXCEPT
+    {
+        return m.value().outer;
+    }
 
-    explicit constexpr joined_cursor_t(outer_cursor_t&& outer_cursor,
-                                       inner_cursor_t&& inner_cursor_t)
-        : OKAYLIB_NOEXCEPT m_outer(std::move(outer_cursor)),
-          m_inner(std::move(inner_cursor_t))
+    constexpr joined_cursor_t(outer_cursor_t&& outer_cursor,
+                              inner_cursor_t&& inner_cursor)
+        : OKAYLIB_NOEXCEPT m(std::in_place, std::move(outer_cursor),
+                             std::move(inner_cursor))
     {
     }
+
+    constexpr bool has_value() const OKAYLIB_NOEXCEPT { return m.has_value(); }
+
+    constexpr joined_cursor_t() = default;
 
     friend class range_definition<detail::joined_view_t<input_range_t>>;
 
   private:
-    outer_cursor_t m_outer;
-    inner_cursor_t m_inner;
+    struct members_t
+    {
+        outer_cursor_t outer;
+        inner_cursor_t inner;
+
+        constexpr members_t(outer_cursor_t&& _outer,
+                            inner_cursor_t&& _inner) OKAYLIB_NOEXCEPT
+            : outer(std::move(_outer)),
+              inner(std::move(_inner))
+        {
+        }
+    };
+
+    opt_t<members_t> m;
 };
 
 } // namespace detail
@@ -92,27 +115,49 @@ struct range_definition<detail::joined_view_t<input_range_t>>
     {
         const auto& outer_ref =
             joined.template get_view_reference<joined_t, outer_range_t>();
-        auto outer_begin = ok::begin(outer_ref);
-        const auto& inner = ok::iter_get_ref(outer_ref, outer_begin);
-        auto inner_begin = ok::begin(inner);
-        return cursor_t(std::move(outer_begin), std::move(inner_begin));
+
+        auto outer_cursor = ok::begin(outer_ref);
+        opt_t<const inner_range_t&> inner;
+        opt_t<cursor_type_for<inner_range_t>> inner_cursor;
+
+        while (ok::is_inbounds(outer_ref, outer_cursor)) {
+            inner = ok::iter_get_ref(outer_ref, outer_cursor);
+            inner_cursor = ok::begin(inner.value());
+
+            // make sure we're not empty
+            if (!ok::is_inbounds(inner.value(), inner_cursor.value())) {
+                ok::increment(outer_ref, outer_cursor);
+                continue; // retry
+            } else {
+                return {}; // submit empty cursor
+            }
+        }
+
+        return cursor_t(std::move(outer_cursor),
+                        std::move(inner_cursor).value());
     }
 
     static constexpr void increment(const joined_t& joined,
                                     cursor_t& cursor) OKAYLIB_NOEXCEPT
     {
+        if (!cursor.has_value()) [[unlikely]]
+            return;
+
         const auto& outer_ref =
             joined.template get_view_reference<joined_t, outer_range_t>();
-        const auto& inner_ref = ok::iter_get_ref(outer_ref, cursor.outer());
+        auto& outer_cursor = cursor.outer();
 
-        ok::increment(inner_ref, cursor.inner());
+        while (ok::is_inbounds(outer_ref, outer_cursor)) {
+            const auto& inner_ref = ok::iter_get_ref(outer_ref, outer_cursor);
+            auto& inner_cursor = cursor.inner();
+            __ok_assert(ok::is_inbounds(inner_ref, inner_cursor));
+            ok::increment(inner_ref, inner_cursor);
 
-        // if inner goes out of the current range, go to the next range
-        if (!ok::is_inbounds(inner_ref, cursor.inner())) [[unlikely]] {
-            ok::increment(outer_ref, cursor.outer());
-            if (ok::is_inbounds(outer_ref, cursor.outer())) [[likely]] {
-                cursor.inner() =
-                    ok::begin(ok::iter_get_ref(outer_ref, cursor.outer()));
+            if (!ok::is_inbounds(inner_ref, inner_cursor)) {
+                ok::increment(outer_ref, outer_cursor);
+                continue;
+            } else {
+                return;
             }
         }
     }
@@ -120,6 +165,8 @@ struct range_definition<detail::joined_view_t<input_range_t>>
     static constexpr bool is_inbounds(const joined_t& joined,
                                       const cursor_t& cursor) OKAYLIB_NOEXCEPT
     {
+        if (!cursor.has_value())
+            return false;
         // increment will always increment outer when going out of bounds on
         // inner, so we only have to check if the outer is out of bounds and we
         // should be good
@@ -132,6 +179,8 @@ struct range_definition<detail::joined_view_t<input_range_t>>
                           value_type_for<inner_range_t>)
         get(const T& joined, const cursor_t& cursor) OKAYLIB_NOEXCEPT
     {
+        __ok_assert(cursor.has_value());
+
         const auto& outer_ref =
             joined.template get_view_reference<joined_t, outer_range_t>();
 
@@ -149,6 +198,8 @@ struct range_definition<detail::joined_view_t<input_range_t>>
                           value_type_for<inner_range_t>&)
         get_ref(T& joined, const cursor_t& cursor) OKAYLIB_NOEXCEPT
     {
+        __ok_assert(cursor.has_value());
+
         auto& outer_ref =
             joined.template get_view_reference<joined_t, outer_range_t>();
 
@@ -167,6 +218,8 @@ struct range_definition<detail::joined_view_t<input_range_t>>
                           const value_type_for<inner_range_t>&)
         get_ref(const T& joined, const cursor_t& cursor) OKAYLIB_NOEXCEPT
     {
+        __ok_assert(cursor.has_value());
+
         const auto& outer_ref =
             joined.template get_view_reference<joined_t, outer_range_t>();
 
