@@ -125,16 +125,16 @@ struct range_definition<detail::joined_view_t<input_range_t>>
             inner_cursor = ok::begin(inner.value());
 
             // make sure we're not empty
-            if (!ok::is_inbounds(inner.value(), inner_cursor.value())) {
-                ok::increment(outer_ref, outer_cursor);
-                continue; // retry
-            } else {
-                return {}; // submit empty cursor
+            if (ok::is_inbounds(inner.value(), inner_cursor.value())) {
+                return cursor_t(std::move(outer_cursor),
+                                std::move(inner_cursor).value());
             }
+
+            ok::increment(outer_ref, outer_cursor);
         }
 
-        return cursor_t(std::move(outer_cursor),
-                        std::move(inner_cursor).value());
+        // out of bounds of outer
+        return {};
     }
 
     static constexpr void increment(const joined_t& joined,
@@ -153,9 +153,20 @@ struct range_definition<detail::joined_view_t<input_range_t>>
             __ok_assert(ok::is_inbounds(inner_ref, inner_cursor));
             ok::increment(inner_ref, inner_cursor);
 
-            if (!ok::is_inbounds(inner_ref, inner_cursor)) {
-                ok::increment(outer_ref, outer_cursor);
-                continue;
+            // if good after increment, then we just did a valid increment and
+            // we're done
+            if (ok::is_inbounds(inner_ref, inner_cursor)) {
+                return;
+            }
+
+            // only runs if we just went out of bounds on the inner: go to the
+            // next inner range and try that
+            ok::increment(outer_ref, outer_cursor);
+
+            // make sure to move cursor to be a cursor for the next range
+            if (ok::is_inbounds(outer_ref, outer_cursor)) {
+                cursor.inner() =
+                    ok::begin(ok::iter_get_ref(outer_ref, outer_cursor));
             } else {
                 return;
             }
