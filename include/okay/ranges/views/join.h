@@ -124,6 +124,7 @@ struct range_definition<detail::joined_view_t<input_range_t>>
 
     using joined_t = detail::joined_view_t<input_range_t>;
     using cursor_t = detail::joined_cursor_t<input_range_t>;
+    using view_t = typename cursor_t::view_t;
 
     static constexpr cursor_t begin(const joined_t& joined) OKAYLIB_NOEXCEPT
     {
@@ -189,11 +190,10 @@ struct range_definition<detail::joined_view_t<input_range_t>>
         while (ok::is_inbounds(outer_ref, outer_cursor)) {
 
             if constexpr (detail::range_has_get_ref_const_v<outer_range_t>) {
-                inner_view = typename cursor_t::view_t(
-                    ok::iter_get_ref(outer_ref, outer_cursor));
+                inner_view = view_t(ok::iter_get_ref(outer_ref, outer_cursor));
             } else {
-                inner_view = typename cursor_t::view_t(
-                    std::move(ok::iter_get_ref(outer_ref, outer_cursor)));
+                inner_view = view_t(
+                    std::move(ok::iter_copyout(outer_ref, outer_cursor)));
             }
 
             cursor.inner() = ok::begin(inner_view);
@@ -219,8 +219,8 @@ struct range_definition<detail::joined_view_t<input_range_t>>
         return ok::is_inbounds(outer_ref, cursor.outer());
     }
 
-    __ok_enable_if_static(joined_t, detail::range_has_get_v<inner_range_t>,
-                          value_type_for<inner_range_t>)
+    __ok_enable_if_static(joined_t, detail::range_has_get_v<view_t>,
+                          value_type_for<view_t>)
         get(const T& joined, const cursor_t& cursor) OKAYLIB_NOEXCEPT
     {
         __ok_assert(cursor.has_value());
@@ -233,8 +233,8 @@ struct range_definition<detail::joined_view_t<input_range_t>>
         return ok::iter_copyout(cursor.view(), cursor.inner());
     }
 
-    __ok_enable_if_static(joined_t, detail::range_has_get_ref_v<inner_range_t>,
-                          value_type_for<inner_range_t>&)
+    __ok_enable_if_static(joined_t, detail::range_has_get_ref_v<view_t>,
+                          value_type_for<view_t>&)
         get_ref(T& joined, const cursor_t& cursor) OKAYLIB_NOEXCEPT
     {
         __ok_assert(cursor.has_value());
@@ -247,9 +247,8 @@ struct range_definition<detail::joined_view_t<input_range_t>>
         return ok::iter_get_ref(cursor.view(), cursor.inner());
     }
 
-    __ok_enable_if_static(joined_t,
-                          detail::range_has_get_ref_const_v<inner_range_t>,
-                          const value_type_for<inner_range_t>&)
+    __ok_enable_if_static(joined_t, detail::range_has_get_ref_const_v<view_t>,
+                          const value_type_for<view_t>&)
         get_ref(const T& joined, const cursor_t& cursor) OKAYLIB_NOEXCEPT
     {
         __ok_assert(cursor.has_value());

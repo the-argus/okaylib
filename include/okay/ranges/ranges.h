@@ -2,7 +2,6 @@
 #define __OKAYLIB_RANGES_RANGES_H__
 
 #include "okay/detail/ok_assert.h"
-#include "okay/detail/ok_enable_if.h"
 #include "okay/detail/template_util/c_array_length.h"
 #include "okay/detail/template_util/c_array_value_type.h"
 #include "okay/detail/template_util/remove_cvref.h"
@@ -133,15 +132,23 @@ struct range_definition<
     using range_t = detail::remove_cvref_t<input_range_t>;
 
   public:
-    using value_type = typename range_t::value_type;
-    // specify this to allow the case where `value_type` is const to compile,
-    // despite `get_ref` incorrectly returning a `const type&`. (ignores get_ref
-    // as a range function and supresses the errors)
-    static constexpr bool allow_get_ref_return_const_ref = true;
+    // value type for ranges is different than value type for vector or array.
+    // a range over `const int` has a value_type of `int`, and jut only provides
+    // `const int& get_ref(const range_t&)`
+    using value_type = detail::remove_cvref_t<typename range_t::value_type>;
     // optimization: views do not have to check if cursor < begin
     static constexpr bool less_than_end_cursor_is_valid_boundscheck = true;
 
-    static constexpr value_type& get_ref(range_t& i, size_t c) OKAYLIB_NOEXCEPT
+    // discrepancy between slice and std::array value_type, which may be const
+    // qualified. If operator[] returns a const reference, then we shouldn't
+    // enable a nonconst get_ref.
+    template <typename T = range_t>
+    static constexpr std::enable_if_t<
+        std::is_same_v<T, range_t> &&
+            std::is_same_v<value_type&, decltype(std::declval<range_t&>()
+                                                     [std::declval<size_t>()])>,
+        value_type&>
+    get_ref(range_t& i, size_t c) OKAYLIB_NOEXCEPT
     {
         return i[c];
     }
@@ -218,16 +225,6 @@ struct range_has_begin<
     T, std::enable_if_t<!std::is_same_v<
            void, decltype(range_definition_inner<T>::begin(
                      std::declval<const remove_cvref_t<T>&>()))>>>
-    : public std::true_type
-{};
-
-template <typename T, typename = void>
-struct range_allows_get_ref_return_const_ref : public std::false_type
-{};
-template <typename T>
-struct range_allows_get_ref_return_const_ref<
-    T,
-    std::enable_if_t<range_definition_inner<T>::allow_get_ref_return_const_ref>>
     : public std::true_type
 {};
 
@@ -456,32 +453,18 @@ struct range_has_get_ref_unchecked_rettype : public std::false_type
 template <typename range_t>
 struct range_has_get_ref_unchecked_rettype<
     range_t,
-    std::enable_if_t<
-        std::is_same_v<
-            std::void_t<decltype(range_definition_inner<range_t>::get_ref(
-                std::declval<range_t&>(),
-                std::declval<const cursor_type_unchecked_for<range_t>&>()))>,
-            void>
-        // most complex boolean logic ever written...
-        // This function only checks if the object has a get_ref function, it
-        // does not check the return type. UNLESS the return type is
-        // incorrectly const& AND allow_get_ref_return_const_ref is defined. In
-        // this case we ignore the get_ref function altogether.
-        && (!range_allows_get_ref_return_const_ref<range_t>::value ||
-            (range_allows_get_ref_return_const_ref<range_t>::value &&
-             // allow_get_ref_return_const_ref is set, so do the constness check
-             // here to avoid static_asserts later down the line
-             !std::is_const_v<std::remove_reference_t<
-                 decltype(range_definition_inner<range_t>::get_ref(
-                     std::declval<range_t&>(),
-                     std::declval<
-                         const cursor_type_unchecked_for<range_t>&>()))>>))>>
-    : public std::true_type
+    std::enable_if_t<std::is_same_v<
+        std::void_t<decltype(range_definition_inner<range_t>::get_ref(
+            std::declval<range_t&>(),
+            std::declval<const cursor_type_unchecked_for<range_t>&>()))>,
+        void>>> : public std::true_type
 {
     using return_type = decltype(range_definition_inner<range_t>::get_ref(
         std::declval<range_t&>(),
         std::declval<const cursor_type_unchecked_for<range_t>&>()));
-    using deduced_value_type = std::remove_reference_t<return_type>;
+    // NOTE: remove_cvref_t is used here because the result may be const if we
+    // hit the const reference overload. value_type is never const.
+    using deduced_value_type = remove_cvref_t<return_type>;
 };
 
 template <typename range_t, typename = void>
@@ -582,11 +565,14 @@ constexpr bool range_has_get_v =
 template <typename T>
 constexpr bool range_has_get_ref_v =
     detail::range_has_get_ref_unchecked_rettype_v<T> &&
-    // additional check to make sure returned value is not const
-    !std::is_const_v<detail::range_deduced_value_type_t<T>> &&
-    std::is_same_v<
-        typename detail::range_has_get_ref_unchecked_rettype<T>::return_type,
-        detail::range_deduced_value_type_t<T>&>;
+    // must not return const- this range_has_get_ref is to check if it
+    // explicitly has a nonconst overload for get_ref, not just any overload.
+    !std::is_const_v<std::remove_reference_t<
+        typename detail::range_has_get_ref_unchecked_rettype<
+            T>::return_type>> &&
+    std::is_same_v<typename detail::range_has_get_ref_unchecked_rettype<
+                       T>::deduced_value_type,
+                   detail::range_deduced_value_type_t<T>>;
 
 template <typename T>
 constexpr bool range_has_get_ref_const_v =
@@ -694,6 +680,12 @@ class range_def_for : public detail::range_definition_inner<T>
   public:
     using value_type = typename detail::range_deduced_value_type<T>::type;
 
+    // should never fire unless something is broken with ranges implementation.
+    // value_type is never const- if your value type is "const", then you just
+    // only provide the const get_ref overload.
+    static_assert(!std::is_reference_v<value_type> &&
+                  !std::is_const_v<value_type>);
+
   private:
     using noref = detail::remove_cvref_t<T>;
     static constexpr bool complete = detail::is_complete_v<noref>;
@@ -762,23 +754,6 @@ class range_def_for : public detail::range_definition_inner<T>
                   "Range definition invalid- `get()` function does not "
                   "return value_type.");
 
-    static constexpr bool get_ref_function_returns_value_type =
-        !detail::range_has_get_ref_unchecked_rettype_v<noref> ||
-        detail::range_has_get_ref_v<noref>;
-
-    static_assert(
-        !(!get_ref_function_returns_value_type && std::is_const_v<value_type>),
-        "Range definition invalid- `get_ref()` specified, and it returns "
-        "`value_type&` correctly, but `value_type` is const. If your range "
-        "definition is templated, consider adding `static constexpr bool "
-        "allow_get_ref_return_const_ref = true` to your range_definition to "
-        "ignore the invalid get_ref() altogether, and avoid this error "
-        "message.");
-
-    static_assert(get_ref_function_returns_value_type,
-                  "Range definition invalid- `get_ref()` function does not "
-                  "return `value_type&`");
-
     static constexpr bool get_ref_const_function_returns_value_type =
         !detail::range_has_get_ref_const_unchecked_rettype_v<noref> ||
         detail::range_has_get_ref_const_v<noref>;
@@ -786,6 +761,18 @@ class range_def_for : public detail::range_definition_inner<T>
     static_assert(get_ref_const_function_returns_value_type,
                   "Range definition invalid- `get_ref() const` function "
                   "does not return `const value_type&`");
+
+    static constexpr bool get_ref_function_returns_value_type =
+        // can do get_ref(nonconst &), and it returns value_type with some
+        // const or ref qualifiers
+        !detail::range_has_get_ref_unchecked_rettype_v<noref> ||
+        std::is_same_v<value_type,
+                       typename detail::range_has_get_ref_unchecked_rettype<
+                           noref>::deduced_value_type>;
+
+    static_assert(get_ref_function_returns_value_type,
+                  "Range definition invalid- `get_ref()` function does not "
+                  "return `value_type&`");
 
     static constexpr bool valid_cursor =
         detail::is_valid_cursor_v<detail::cursor_type_unchecked_for<noref>>;

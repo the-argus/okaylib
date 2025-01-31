@@ -613,8 +613,6 @@ class opt_t<
 
 template <typename payload_t> struct ok::range_definition<opt_t<payload_t>>
 {
-    static constexpr bool allow_get_ref_return_const_ref = true;
-
     struct cursor_t
     {
         friend class range_definition;

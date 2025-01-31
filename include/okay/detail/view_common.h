@@ -148,7 +148,8 @@ struct propagate_get_set_t
     constexpr static auto set(derived_range_t& range, const cursor_t& cursor,
                               value_type_for<T>&& value)
         -> std::enable_if_t<
-            std::is_same_v<T, parent_range_t>,
+            std::is_same_v<T, parent_range_t> &&
+                !std::is_const_v<std::remove_reference_t<T>>,
             decltype(range_definition_inner<T>::set(
                 std::declval<const T&>(),
                 std::declval<const cursor_type_unchecked_for<T>>(),
@@ -163,7 +164,8 @@ struct propagate_get_set_t
     constexpr static auto get_ref(derived_range_t& range,
                                   const cursor_t& cursor)
         -> std::enable_if_t<
-            std::is_same_v<T, parent_range_t>,
+            std::is_same_v<T, parent_range_t> &&
+                !std::is_const_v<std::remove_reference_t<T>>,
             decltype(range_definition_inner<T>::get_ref(
                 std::declval<T&>(),
                 std::declval<const cursor_type_unchecked_for<T>>()))>
@@ -178,7 +180,7 @@ struct propagate_get_set_t
     constexpr static auto get_ref(const derived_range_t& range,
                                   const cursor_t& cursor)
         -> std::enable_if_t<
-            std::is_same_v<T, parent_range_t>,
+            std::is_same_v<T, parent_range_t> && range_has_get_ref_const_v<T>,
             decltype(range_definition_inner<T>::get_ref(
                 std::declval<const T&>(),
                 std::declval<const cursor_type_unchecked_for<T>>()))>
@@ -380,10 +382,7 @@ class ref_view<
 template <typename range_t>
 struct ok::range_definition<detail::ref_view<range_t>>
     : detail::propagate_all_range_traits_t<detail::ref_view<range_t>, range_t>
-{
-    static constexpr bool allow_get_ref_return_const_ref =
-        std::is_const_v<std::remove_reference_t<range_t>>;
-};
+{};
 
 namespace detail {
 
