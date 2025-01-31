@@ -4,9 +4,8 @@
 #include "okay/macros/foreach.h"
 #include "okay/ranges/views/enumerate.h"
 #include "okay/ranges/views/join.h"
-// #include "okay/opt.h"
-// #include "okay/ranges/views/keep_if.h"
-// #include "okay/ranges/views/transform.h"
+#include "okay/ranges/views/keep_if.h"
+#include "okay/ranges/views/transform.h"
 
 using namespace ok;
 
@@ -76,22 +75,41 @@ TEST_SUITE("join")
             }
         }
 
-        // SUBCASE("create keep_if/filter by using transform and opt and join")
-        // {
-        //     int myints[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13,
-        //     14};
+        SUBCASE("create keep_if/filter by using transform and opt and join")
+        {
+            int myints[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14};
 
-        //     auto evens_keep_if =
-        //         myints | keep_if([](int i) { return i % 2 == 0; });
+            auto evens_keep_if =
+                myints | keep_if([](int i) { return i % 2 == 0; });
 
-        //     auto evens_opt_transform = myints |
-        //                                transform([](int i) -> opt_t<int> {
-        //                                    if (i % 2 == 0)
-        //                                        return i;
-        //                                    else
-        //                                        return {};
-        //                                }) |
-        //                                join;
-        // }
+            const auto empty_range_or_even_number =
+                transform([](int i) -> opt_t<int> {
+                    if (i % 2 == 0)
+                        return i;
+                    else
+                        return {};
+                });
+
+            auto evens_opt_transform =
+                myints | empty_range_or_even_number | join;
+
+            auto begin_keep_if = ok::begin(evens_keep_if);
+            auto begin_transform = ok::begin(evens_opt_transform);
+
+            while (ok::is_inbounds(evens_keep_if, begin_keep_if)) {
+                __ok_assert(
+                    ok::is_inbounds(evens_opt_transform, begin_transform));
+
+                auto&& a =
+                    ok::iter_get_temporary_ref(evens_keep_if, begin_keep_if);
+                auto&& b = ok::iter_get_temporary_ref(evens_opt_transform,
+                                                      begin_transform);
+
+                REQUIRE(a == b);
+
+                ok::increment(evens_keep_if, begin_keep_if);
+                ok::increment(evens_opt_transform, begin_transform);
+            }
+        }
     }
 }

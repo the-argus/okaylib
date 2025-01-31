@@ -24,156 +24,6 @@ template <typename T> constexpr bool enable_view_v = enable_view<T>::value;
 
 namespace detail {
 
-template <typename range_t, typename = void> class owning_view;
-template <typename range_t, typename = void> class ref_view;
-
-template <typename range_t>
-class owning_view<
-    range_t, std::enable_if_t<is_moveable_v<range_t> && is_range_v<range_t>>>
-{
-  private:
-    range_t m_range;
-
-  public:
-    constexpr owning_view(range_t&& range)
-        : OKAYLIB_NOEXCEPT m_range(std::move(range))
-    {
-    }
-
-    owning_view(owning_view&&) = default;
-    owning_view& operator=(owning_view&&) = default;
-
-    template <typename derived_t, typename desired_reference_t>
-    constexpr remove_cvref_t<desired_reference_t>&
-    get_view_reference() & noexcept
-    {
-        using desired_t = remove_cvref_t<desired_reference_t>;
-        static_assert(is_derived_from_v<derived_t, owning_view>);
-        static_assert(is_convertible_to_v<derived_t&, owning_view&>);
-        if constexpr (std::is_convertible_v<derived_t&, desired_t&>) {
-            return *static_cast<derived_t*>(this);
-        } else {
-            static_assert(std::is_convertible_v<range_t&, desired_t&>);
-            return m_range;
-        }
-    }
-    template <typename derived_t, typename desired_reference_t>
-    constexpr const remove_cvref_t<desired_reference_t>&
-    get_view_reference() const& noexcept
-    {
-        using desired_t = remove_cvref_t<desired_reference_t>;
-        static_assert(is_derived_from_v<derived_t, owning_view>);
-        static_assert(
-            is_convertible_to_v<const derived_t&, const owning_view&>);
-        if constexpr (std::is_convertible_v<const derived_t&,
-                                            const desired_t&>) {
-            return *static_cast<const derived_t*>(this);
-        } else {
-            static_assert(
-                std::is_convertible_v<const range_t&, const desired_t&>);
-            return m_range;
-        }
-    }
-};
-
-template <typename range_t>
-class ref_view<
-    range_t, std::enable_if_t<std::is_object_v<range_t> && is_range_v<range_t>>>
-{
-  private:
-    range_t* m_range;
-
-    // not defined
-    static void is_referenceable_func(range_t&);
-    static void is_referenceable_func(range_t&&) = delete;
-
-    template <typename T, typename = void>
-    class is_referenceable : public std::false_type
-    {};
-
-    /// Checks if a type will select lvalue reference overload to range_t
-    template <typename T>
-    class is_referenceable<
-        T, std::void_t<decltype(is_referenceable_func(std::declval<T>()))>>
-        : public std::true_type
-    {};
-
-  public:
-    template <typename T>
-    constexpr ref_view(
-        T&& t,
-        std::enable_if_t<!std::is_same_v<ref_view, T> &&
-                             is_convertible_to_v<decltype(t), range_t&> &&
-                             is_referenceable<decltype(t)>::value,
-                         empty_t> = {})
-        : OKAYLIB_NOEXCEPT m_range(
-              ok::addressof(static_cast<range_t&>(std::forward<T>(t))))
-    {
-    }
-
-    template <typename derived_t, typename desired_reference_t>
-    constexpr remove_cvref_t<desired_reference_t>&
-    get_view_reference() & noexcept
-    {
-        using desired_t = remove_cvref_t<desired_reference_t>;
-        static_assert(is_derived_from_v<derived_t, ref_view>);
-        static_assert(is_convertible_to_v<derived_t&, ref_view&>);
-        if constexpr (std::is_convertible_v<derived_t&, desired_t&>) {
-            return *static_cast<derived_t*>(this);
-        } else {
-            static_assert(std::is_convertible_v<range_t&, desired_t&>);
-            return *m_range;
-        }
-    }
-    template <typename derived_t, typename desired_reference_t>
-    constexpr const remove_cvref_t<desired_reference_t>&
-    get_view_reference() const& noexcept
-    {
-        using desired_t = remove_cvref_t<desired_reference_t>;
-        static_assert(is_derived_from_v<derived_t, ref_view>);
-        static_assert(is_convertible_to_v<const derived_t&, const ref_view&>);
-        if constexpr (std::is_convertible_v<const derived_t&,
-                                            const desired_t&>) {
-            return *static_cast<const derived_t*>(this);
-        } else {
-            static_assert(
-                std::is_convertible_v<const range_t&, const desired_t&>);
-            return *m_range;
-        }
-    }
-};
-
-template <typename range_t> ref_view(range_t&) -> ref_view<range_t>;
-template <typename range_t> owning_view(range_t&&) -> owning_view<range_t>;
-
-template <typename T>
-constexpr bool is_view_v =
-    is_range_v<std::decay_t<T>> && enable_view_v<T> && is_moveable_v<T>;
-
-template <typename T> struct underlying_view_type
-{
-  private:
-    template <typename range_t>
-    [[nodiscard]] static constexpr auto
-    wrap_range_with_view(range_t&& view) OKAYLIB_NOEXCEPT
-    {
-        static_assert(
-            is_view_v<std::decay_t<range_t>> ||
-                std::is_lvalue_reference_v<decltype(view)> ||
-                std::is_rvalue_reference_v<decltype(view)>,
-            "Attempt to wrap something like a value type which is not a view.");
-        if constexpr (is_view_v<std::decay_t<range_t>>)
-            return std::forward<range_t>(view);
-        else if constexpr (std::is_lvalue_reference_v<decltype(view)>)
-            return ref_view{std::forward<range_t>(view)};
-        else if constexpr (std::is_rvalue_reference_v<decltype(view)>)
-            return owning_view{std::forward<range_t>(view)};
-    }
-
-  public:
-    using type = decltype(wrap_range_with_view(std::declval<T>()));
-};
-
 template <bool is_infinite> struct infinite_static_def_t
 {
     static constexpr bool infinite = is_infinite;
@@ -248,6 +98,31 @@ struct propagate_begin_t
     {
         return cursor_t(ok::begin(
             i.template get_view_reference<derived_range_t, parent_range_t>()));
+    }
+};
+
+template <typename derived_range_t, typename parent_range_t, typename cursor_t>
+struct propagate_offset_t
+{
+    __ok_enable_if_static(cursor_t,
+                          detail::range_definition_has_offset_v<parent_range_t>,
+                          T)
+        offset(const derived_range_t& range, cursor_t& cursor)
+    {
+        detail::range_definition_inner<parent_range_t>::offset(range, cursor);
+    }
+};
+
+template <typename derived_range_t, typename parent_range_t, typename cursor_t>
+struct propagate_compare_t_t
+{
+    __ok_enable_if_static(
+        cursor_t, detail::range_definition_has_compare_v<parent_range_t>, T)
+        offset(const derived_range_t& range, const cursor_t& cursor_a,
+               const cursor_t& cursor_b)
+    {
+        return detail::range_definition_inner<parent_range_t>::compare(
+            range, cursor_a, cursor_b);
     }
 };
 
@@ -343,6 +218,204 @@ struct propagate_boundscheck_t
             i.template get_view_reference<derived_range_t, parent_range_t>(),
             cursor_type_for<parent_range_t>(c));
     }
+};
+
+template <typename range_t>
+struct propagate_cursor_comparison_optimization_marker_t
+{
+    static constexpr bool less_than_end_cursor_is_valid_boundscheck =
+        range_can_boundscheck_with_less_than_end_cursor<
+            remove_cvref_t<range_t>>::value;
+};
+
+template <typename derived_range_t, typename parent_range_t>
+struct propagate_all_range_traits_t
+    : public detail::propagate_sizedness_t<derived_range_t, parent_range_t>,
+      public detail::propagate_begin_t<derived_range_t, parent_range_t,
+                                       cursor_type_for<parent_range_t>>,
+      public detail::propagate_get_set_t<derived_range_t, parent_range_t,
+                                         cursor_type_for<parent_range_t>>,
+      public detail::propagate_boundscheck_t<derived_range_t, parent_range_t,
+                                             cursor_type_for<parent_range_t>>,
+      public detail::propagate_increment_decrement_t<
+          derived_range_t, parent_range_t, cursor_type_for<parent_range_t>>,
+      public detail::propagate_offset_t<derived_range_t, parent_range_t,
+                                        cursor_type_for<parent_range_t>>,
+      public detail::propagate_compare_t_t<derived_range_t, parent_range_t,
+                                           cursor_type_for<parent_range_t>>,
+      public detail::propagate_cursor_comparison_optimization_marker_t<
+          parent_range_t>
+{};
+
+template <typename range_t, typename = void> class owning_view;
+template <typename range_t, typename = void> class ref_view;
+
+template <typename range_t>
+class owning_view<
+    range_t, std::enable_if_t<is_moveable_v<range_t> && is_range_v<range_t>>>
+{
+  private:
+    range_t m_range;
+
+  public:
+    constexpr owning_view(range_t&& range)
+        : OKAYLIB_NOEXCEPT m_range(std::move(range))
+    {
+    }
+
+    owning_view(owning_view&&) = default;
+    owning_view& operator=(owning_view&&) = default;
+
+    template <typename derived_t, typename desired_reference_t>
+    constexpr remove_cvref_t<desired_reference_t>&
+    get_view_reference() & noexcept
+    {
+        using desired_t = remove_cvref_t<desired_reference_t>;
+        static_assert(is_derived_from_v<derived_t, owning_view>);
+        static_assert(is_convertible_to_v<derived_t&, owning_view&>);
+        if constexpr (std::is_convertible_v<derived_t&, desired_t&>) {
+            return *static_cast<derived_t*>(this);
+        } else {
+            static_assert(std::is_convertible_v<range_t&, desired_t&>);
+            return m_range;
+        }
+    }
+    template <typename derived_t, typename desired_reference_t>
+    constexpr const remove_cvref_t<desired_reference_t>&
+    get_view_reference() const& noexcept
+    {
+        using desired_t = remove_cvref_t<desired_reference_t>;
+        static_assert(is_derived_from_v<derived_t, owning_view>);
+        static_assert(
+            is_convertible_to_v<const derived_t&, const owning_view&>);
+        if constexpr (std::is_convertible_v<const derived_t&,
+                                            const desired_t&>) {
+            return *static_cast<const derived_t*>(this);
+        } else {
+            static_assert(
+                std::is_convertible_v<const range_t&, const desired_t&>);
+            return m_range;
+        }
+    }
+};
+
+} // namespace detail
+
+template <typename range_t>
+struct ok::range_definition<detail::owning_view<range_t>>
+    : detail::propagate_all_range_traits_t<detail::owning_view<range_t>,
+                                           range_t>
+{};
+
+namespace detail {
+
+template <typename range_t>
+class ref_view<
+    range_t, std::enable_if_t<std::is_object_v<range_t> && is_range_v<range_t>>>
+{
+  private:
+    range_t* m_range;
+
+    // not defined
+    static void is_referenceable_func(range_t&);
+    static void is_referenceable_func(range_t&&) = delete;
+
+    template <typename T, typename = void>
+    class is_referenceable : public std::false_type
+    {};
+
+    /// Checks if a type will select lvalue reference overload to range_t
+    template <typename T>
+    class is_referenceable<
+        T, std::void_t<decltype(is_referenceable_func(std::declval<T>()))>>
+        : public std::true_type
+    {};
+
+  public:
+    template <typename T>
+    constexpr ref_view(
+        T&& t,
+        std::enable_if_t<!std::is_same_v<ref_view, T> &&
+                             is_convertible_to_v<decltype(t), range_t&> &&
+                             is_referenceable<decltype(t)>::value,
+                         empty_t> = {})
+        : OKAYLIB_NOEXCEPT m_range(
+              ok::addressof(static_cast<range_t&>(std::forward<T>(t))))
+    {
+    }
+
+    template <typename derived_t, typename desired_reference_t>
+    constexpr remove_cvref_t<desired_reference_t>&
+    get_view_reference() & noexcept
+    {
+        using desired_t = remove_cvref_t<desired_reference_t>;
+        static_assert(is_derived_from_v<derived_t, ref_view>);
+        static_assert(is_convertible_to_v<derived_t&, ref_view&>);
+        if constexpr (std::is_convertible_v<derived_t&, desired_t&>) {
+            return *static_cast<derived_t*>(this);
+        } else {
+            static_assert(std::is_convertible_v<range_t&, desired_t&>);
+            return *m_range;
+        }
+    }
+    template <typename derived_t, typename desired_reference_t>
+    constexpr const remove_cvref_t<desired_reference_t>&
+    get_view_reference() const& noexcept
+    {
+        using desired_t = remove_cvref_t<desired_reference_t>;
+        static_assert(is_derived_from_v<derived_t, ref_view>);
+        static_assert(is_convertible_to_v<const derived_t&, const ref_view&>);
+        if constexpr (std::is_convertible_v<const derived_t&,
+                                            const desired_t&>) {
+            return *static_cast<const derived_t*>(this);
+        } else {
+            static_assert(
+                std::is_convertible_v<const range_t&, const desired_t&>);
+            return *m_range;
+        }
+    }
+};
+} // namespace detail
+
+template <typename range_t>
+struct ok::range_definition<detail::ref_view<range_t>>
+    : detail::propagate_all_range_traits_t<detail::ref_view<range_t>, range_t>
+{
+    static constexpr bool allow_get_ref_return_const_ref =
+        std::is_const_v<std::remove_reference_t<range_t>>;
+};
+
+namespace detail {
+
+template <typename range_t> ref_view(range_t&) -> ref_view<range_t>;
+template <typename range_t> owning_view(range_t&&) -> owning_view<range_t>;
+
+template <typename T>
+constexpr bool is_view_v =
+    is_range_v<std::decay_t<T>> && enable_view_v<T> && is_moveable_v<T>;
+
+template <typename T> struct underlying_view_type
+{
+  private:
+    template <typename range_t>
+    [[nodiscard]] static constexpr auto
+    wrap_range_with_view(range_t&& view) OKAYLIB_NOEXCEPT
+    {
+        static_assert(
+            is_view_v<std::decay_t<range_t>> ||
+                std::is_lvalue_reference_v<decltype(view)> ||
+                std::is_rvalue_reference_v<decltype(view)>,
+            "Attempt to wrap something like a value type which is not a view.");
+        if constexpr (is_view_v<std::decay_t<range_t>>)
+            return std::forward<range_t>(view);
+        else if constexpr (std::is_lvalue_reference_v<decltype(view)>)
+            return ref_view{std::forward<range_t>(view)};
+        else if constexpr (std::is_rvalue_reference_v<decltype(view)>)
+            return owning_view{std::forward<range_t>(view)};
+    }
+
+  public:
+    using type = decltype(wrap_range_with_view(std::declval<T>()));
 };
 
 template <typename payload_t>
@@ -548,14 +621,6 @@ template <typename derived_t, typename parent_range_t> struct cursor_wrapper_t
 
   private:
     parent_cursor_t m_inner;
-};
-
-template <typename range_t>
-struct propagate_cursor_comparison_optimization_marker_t
-{
-    static constexpr bool less_than_end_cursor_is_valid_boundscheck =
-        range_can_boundscheck_with_less_than_end_cursor<
-            remove_cvref_t<range_t>>::value;
 };
 
 } // namespace detail

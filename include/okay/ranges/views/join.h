@@ -23,10 +23,11 @@ struct join_fn_t
         static_assert(is_range_v<value_type_for<range_t>>,
                       "Cannot join given type- it's a range, but it does not "
                       "view other ranges.");
-        // TODO: add caching of most recently accessed range to get this?
-        static_assert(range_has_get_ref_const_v<range_t>,
-                      "Cannot join given range- it does not provide a way to "
-                      "get const reference to its internal ranges.");
+        static_assert(range_has_get_ref_const_v<range_t> ||
+                          range_has_get_v<range_t>,
+                      "Cannot join given range- it does not provide a "
+                      "const-qualified way to get its internal ranges (neither "
+                      "`get() const` or `get_ref() const`)");
         return joined_view_t<decltype(range)>{
             std::forward<input_range_t>(range)};
     }
@@ -46,6 +47,11 @@ template <typename input_range_t> struct joined_cursor_t
     using outer_cursor_t = cursor_type_for<outer_range_t>;
     using inner_cursor_t = cursor_type_for<inner_range_t>;
     using self_t = joined_cursor_t;
+
+    using recieved_range_type_t =
+        std::conditional_t<range_has_get_ref_const_v<outer_range_t>,
+                           const inner_range_t&, inner_range_t&&>;
+    using view_t = typename underlying_view_type<recieved_range_type_t>::type;
 
   public:
     constexpr const inner_cursor_t& inner() const OKAYLIB_NOEXCEPT
@@ -67,9 +73,9 @@ template <typename input_range_t> struct joined_cursor_t
     }
 
     constexpr joined_cursor_t(outer_cursor_t&& outer_cursor,
-                              inner_cursor_t&& inner_cursor)
+                              recieved_range_type_t&& inner_range)
         : OKAYLIB_NOEXCEPT m(std::in_place, std::move(outer_cursor),
-                             std::move(inner_cursor))
+                             std::forward<recieved_range_type_t>(inner_range))
     {
     }
 
@@ -80,15 +86,23 @@ template <typename input_range_t> struct joined_cursor_t
     friend class range_definition<detail::joined_view_t<input_range_t>>;
 
   private:
+    // can always get mutable internal view from range friend impl
+    constexpr view_t& view() const OKAYLIB_NOEXCEPT
+    {
+        return m.value().inner_view;
+    }
+
     struct members_t
     {
+        mutable view_t inner_view;
         outer_cursor_t outer;
-        inner_cursor_t inner;
+        cursor_type_for<view_t> inner;
 
         constexpr members_t(outer_cursor_t&& _outer,
-                            inner_cursor_t&& _inner) OKAYLIB_NOEXCEPT
+                            recieved_range_type_t&& range) OKAYLIB_NOEXCEPT
             : outer(std::move(_outer)),
-              inner(std::move(_inner))
+              inner_view(std::forward<recieved_range_type_t>(range)),
+              inner(ok::begin(inner_view))
         {
         }
     };
@@ -117,17 +131,24 @@ struct range_definition<detail::joined_view_t<input_range_t>>
             joined.template get_view_reference<joined_t, outer_range_t>();
 
         auto outer_cursor = ok::begin(outer_ref);
-        opt_t<const inner_range_t&> inner;
-        opt_t<cursor_type_for<inner_range_t>> inner_cursor;
 
         while (ok::is_inbounds(outer_ref, outer_cursor)) {
-            inner = ok::iter_get_ref(outer_ref, outer_cursor);
-            inner_cursor = ok::begin(inner.value());
+            auto&& inner = ok::iter_get_temporary_ref(outer_ref, outer_cursor);
+            cursor_type_for<inner_range_t> inner_cursor = ok::begin(inner);
 
             // make sure we're not empty
-            if (ok::is_inbounds(inner.value(), inner_cursor.value())) {
-                return cursor_t(std::move(outer_cursor),
-                                std::move(inner_cursor).value());
+            if (ok::is_inbounds(inner, inner_cursor)) {
+                if constexpr (detail::range_has_get_ref_const_v<
+                                  outer_range_t>) {
+                    static_assert(
+                        std::is_same_v<decltype(inner), const inner_range_t&>);
+                    return cursor_t(std::move(outer_cursor), inner);
+                } else {
+                    static_assert(detail::range_has_get_v<outer_range_t>);
+                    static_assert(
+                        std::is_same_v<decltype(inner), inner_range_t&&>);
+                    return cursor_t(std::move(outer_cursor), std::move(inner));
+                }
             }
 
             ok::increment(outer_ref, outer_cursor);
@@ -147,29 +168,41 @@ struct range_definition<detail::joined_view_t<input_range_t>>
             joined.template get_view_reference<joined_t, outer_range_t>();
         auto& outer_cursor = cursor.outer();
 
+        // cant increment further
+        if (!ok::is_inbounds(outer_ref, outer_cursor))
+            return;
+
+        auto& inner_cursor = cursor.inner();
+        auto& inner_view = cursor.view();
+        __ok_assert(ok::is_inbounds(inner_view, inner_cursor));
+        ok::increment(inner_view, inner_cursor);
+
+        // if good after increment, then we just did a valid increment and
+        // we're done
+        if (ok::is_inbounds(inner_view, inner_cursor)) {
+            return;
+        }
+
+        // ran out of items on the current range, increment outer cursor until
+        // we find a non empty subrange
+        ok::increment(outer_ref, outer_cursor);
         while (ok::is_inbounds(outer_ref, outer_cursor)) {
-            const auto& inner_ref = ok::iter_get_ref(outer_ref, outer_cursor);
-            auto& inner_cursor = cursor.inner();
-            __ok_assert(ok::is_inbounds(inner_ref, inner_cursor));
-            ok::increment(inner_ref, inner_cursor);
 
-            // if good after increment, then we just did a valid increment and
-            // we're done
-            if (ok::is_inbounds(inner_ref, inner_cursor)) {
-                return;
-            }
-
-            // only runs if we just went out of bounds on the inner: go to the
-            // next inner range and try that
-            ok::increment(outer_ref, outer_cursor);
-
-            // make sure to move cursor to be a cursor for the next range
-            if (ok::is_inbounds(outer_ref, outer_cursor)) {
-                cursor.inner() =
-                    ok::begin(ok::iter_get_ref(outer_ref, outer_cursor));
+            if constexpr (detail::range_has_get_ref_const_v<outer_range_t>) {
+                inner_view = typename cursor_t::view_t(
+                    ok::iter_get_ref(outer_ref, outer_cursor));
             } else {
+                inner_view = typename cursor_t::view_t(
+                    std::move(ok::iter_get_ref(outer_ref, outer_cursor)));
+            }
+
+            cursor.inner() = ok::begin(inner_view);
+
+            if (ok::is_inbounds(inner_view, cursor.inner())) {
                 return;
             }
+
+            ok::increment(outer_ref, outer_cursor);
         }
     }
 
@@ -197,12 +230,7 @@ struct range_definition<detail::joined_view_t<input_range_t>>
 
         __ok_assert(ok::is_inbounds(outer_ref, cursor.outer()));
 
-        const auto& inner_ref = ok::iter_get_ref(outer_ref, cursor.outer());
-
-        __ok_assert(ok::is_inbounds(inner_ref, cursor.inner()));
-
-        return detail::range_definition_inner<inner_range_t>::get(
-            inner_ref, cursor.inner());
+        return ok::iter_copyout(cursor.view(), cursor.inner());
     }
 
     __ok_enable_if_static(joined_t, detail::range_has_get_ref_v<inner_range_t>,
@@ -216,12 +244,7 @@ struct range_definition<detail::joined_view_t<input_range_t>>
 
         __ok_assert(ok::is_inbounds(outer_ref, cursor.outer()));
 
-        auto& inner_ref = ok::iter_get_ref(outer_ref, cursor.outer());
-
-        __ok_assert(ok::is_inbounds(inner_ref, cursor.inner()));
-
-        return detail::range_definition_inner<inner_range_t>::get_ref(
-            inner_ref, cursor.inner());
+        return ok::iter_get_ref(cursor.view(), cursor.inner());
     }
 
     __ok_enable_if_static(joined_t,
@@ -236,12 +259,7 @@ struct range_definition<detail::joined_view_t<input_range_t>>
 
         __ok_assert(ok::is_inbounds(outer_ref, cursor.outer()));
 
-        const auto& inner_ref = ok::iter_get_ref(outer_ref, cursor.outer());
-
-        __ok_assert(ok::is_inbounds(inner_ref, cursor.inner()));
-
-        return detail::range_definition_inner<inner_range_t>::get_ref(
-            inner_ref, cursor.inner());
+        return ok::iter_get_ref(cursor.view(), cursor.inner());
     }
 };
 
