@@ -1,4 +1,3 @@
-#include "okay/slice.h"
 #include "test_header.h"
 // test header must be first
 #include "okay/macros/foreach.h"
@@ -6,6 +5,7 @@
 #include "okay/ranges/views/join.h"
 #include "okay/ranges/views/keep_if.h"
 #include "okay/ranges/views/transform.h"
+#include "okay/slice.h"
 
 using namespace ok;
 

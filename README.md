@@ -120,3 +120,8 @@ an effort to organize that (not always necessary) work into one reusable product
       have test coverage
 - [ ] Add better static asserts for when you use an invalid range with a pipe operator-
       right now errors come from inside the range adaptor closure
+- [ ] Try making `zip` view more like STL zip? ATM, zip cannot be random access
+      even if all underlying ranges are random access, and it doesn't like
+      having infinite / differently sized views (intended to prevent errors but
+      seems more trouble than its worth). Maybe zip expects its first argument
+      to be the shortest range, then only boundschecks that cursor?

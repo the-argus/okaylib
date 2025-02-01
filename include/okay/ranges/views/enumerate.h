@@ -130,7 +130,7 @@ struct range_definition<detail::enumerated_view_t<range_t>>
     {
         using inner_def = detail::range_definition_inner<range_t>;
         if constexpr (detail::range_has_get_ref_v<range_t>) {
-            // if get_ref nonconst exists, do evil const cast to get to it
+            // avoid deep const with const_cast
             using reftype = decltype(inner_def::get_ref(
                 const_cast<enumerated_t&>(range)
                     .template get_view_reference<enumerated_t, range_t>(),
