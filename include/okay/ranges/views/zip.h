@@ -72,7 +72,7 @@ template <typename... ranges_t> struct zipped_view_t
         (... + size_t(is_bidirectional_range_v<ranges_t>));
 
     static constexpr size_t num_sized_ranges =
-        (... + size_t(range_has_size_v<ranges_t>));
+        (... + size_t(range_can_size_v<ranges_t>));
 
     static constexpr size_t num_infinite_ranges =
         (... + size_t(range_marked_infinite_v<ranges_t>));
@@ -80,10 +80,14 @@ template <typename... ranges_t> struct zipped_view_t
     static constexpr size_t num_finite_ranges =
         (... + size_t(range_marked_finite_v<ranges_t>));
 
+    static constexpr size_t num_arraylike_ranges =
+        (... + size_t(range_is_arraylike_v<ranges_t>));
+
     static constexpr size_t num_ranges = sizeof...(ranges_t);
 
     static constexpr bool all_sized = num_ranges == num_sized_ranges;
     static constexpr bool all_infinite = num_ranges == num_infinite_ranges;
+    static constexpr bool all_arraylike = num_ranges == num_arraylike_ranges;
     static constexpr bool all_bidirectional =
         num_ranges == num_bidirectional_ranges;
 
@@ -100,7 +104,7 @@ template <typename... ranges_t> struct zipped_view_t
         int64_t size = -1;
         (
             [&] {
-                if constexpr (range_has_size_v<ranges_t>) {
+                if constexpr (range_can_size_v<ranges_t>) {
                     const size_t actual_size =
                         ok::size(std::get<indices>(m_views));
 
@@ -256,11 +260,19 @@ struct range_definition<detail::zipped_view_t<ranges_t...>> :
     get_impl(const zipped_t& range, const cursor_t& cursor,
              std::index_sequence<indices...>) OKAYLIB_NOEXCEPT
     {
-        // NOTE: get performs const cast because no deep const. we want to
-        // ignore const view<T> constness, but respect view<const T>
+        // worlds largest and most evil const cast inside of a parameter
+        // expansion. the idea is that we only cast to nonconst if the viewed
+        // type is itself a view or it is a nonconst reference to a range.
+        // This way we respect constness of stuff like std::array, but not
+        // views like ok::reverse etc.
         return std::make_tuple(ok::detail::get_best(
-            const_cast<detail::remove_cvref_t<
-                std::tuple_element_t<indices, decltype(range.m_views)>>&>(
+            const_cast<std::conditional_t<
+                detail::is_view_v<detail::remove_cvref_t<ranges_t>> ||
+                    !std::is_const_v<std::remove_reference_t<ranges_t>>,
+                detail::remove_cvref_t<
+                    std::tuple_element_t<indices, decltype(range.m_views)>>&,
+                const detail::remove_cvref_t<
+                    std::tuple_element_t<indices, decltype(range.m_views)>>&>>(
                 std::get<indices>(range.m_views)),
             std::get<indices>(cursor.m_cursors))...);
     }

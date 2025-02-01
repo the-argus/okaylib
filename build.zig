@@ -22,7 +22,7 @@ const testing_flags = &[_][]const u8{
     // use ctti (default behavior)
     // "-DOKAYLIB_ALLOCATORS_USE_RTTI",
     // "-DOKAYLIB_ALLOCATORS_DISABLE_TYPECHECKING",
-    // "-fno-rtti",
+    "-fno-rtti",
 
     "-I./tests/",
     "-I./include/",

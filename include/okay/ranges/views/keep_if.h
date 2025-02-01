@@ -101,7 +101,7 @@ struct range_definition<detail::keep_if_view_t<input_range_t, predicate_t>>
           // finite if the range has size or if it is not marked infinite. never
           // propagate size() function because we cant know it until we traverse
           // the view
-          !(detail::range_has_size_v<detail::remove_cvref_t<input_range_t>> ||
+          !(detail::range_can_size_v<detail::remove_cvref_t<input_range_t>> ||
             !detail::range_marked_finite_v<
                 detail::remove_cvref_t<input_range_t>>)>
 // lose boundscheck optimization marker

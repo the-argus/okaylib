@@ -12,19 +12,53 @@ using namespace ok;
 // otherwise it includes const reference
 using eview = detail::enumerated_view_t<std::array<int, 50>&>;
 using ecursor = detail::enumerated_cursor_t<std::array<int, 50>&>;
+using eview_const = detail::enumerated_view_t<const std::array<int, 50>&>;
+using ecursor_const = detail::enumerated_cursor_t<const std::array<int, 50>&>;
+using eview_inner_const = detail::enumerated_view_t<std::array<const int, 50>&>;
+using ecursor_inner_const =
+    detail::enumerated_cursor_t<std::array<const int, 50>&>;
+
+// const qualification doesnt matter for eview- it is a view of nonconst, so
+// it should enumerate nonconst.
+static_assert(
+    std::is_same_v<decltype(ok::iter_copyout(std::declval<const eview&>(),
+                                             std::declval<const ecursor&>())
+                                .first),
+                   decltype(ok::iter_copyout(std::declval<eview&>(),
+                                             std::declval<ecursor&>())
+                                .first)>);
 static_assert(
     std::is_same_v<decltype(ok::iter_copyout(std::declval<const eview&>(),
                                              std::declval<const ecursor&>())
                                 .first),
                    int&>);
-using eview_const = detail::enumerated_view_t<const std::array<int, 50>&>;
-using ecursor_const = detail::enumerated_cursor_t<const std::array<int, 50>&>;
+
+// if the inner type is const, then it is a view of const regardless of its
+// const qualification
 static_assert(std::is_same_v<
               decltype(ok::iter_copyout(std::declval<const eview_const&>(),
                                         std::declval<const ecursor_const&>())
                            .first),
               const int&>);
-// TODO: make sure otherwise it includes get() result by value
+static_assert(
+    std::is_same_v<decltype(ok::iter_copyout(std::declval<eview_const&>(),
+                                             std::declval<ecursor_const&>())
+                                .first),
+                   const int&>);
+
+// if the innermost type does not provide a get_ref() nonconst, then it should
+// be a view of nonconst
+static_assert(
+    std::is_same_v<
+        decltype(ok::iter_copyout(std::declval<const eview_inner_const&>(),
+                                  std::declval<const ecursor_inner_const&>())
+                     .first),
+        const int&>);
+static_assert(std::is_same_v<
+              decltype(ok::iter_copyout(std::declval<eview_inner_const&>(),
+                                        std::declval<ecursor_inner_const&>())
+                           .first),
+              const int&>);
 
 TEST_SUITE("enumerate")
 {

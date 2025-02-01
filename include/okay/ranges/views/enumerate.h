@@ -1,6 +1,7 @@
 #ifndef __OKAYLIB_RANGES_VIEWS_ENUMERATE_H__
 #define __OKAYLIB_RANGES_VIEWS_ENUMERATE_H__
 
+#include "okay/detail/get_best.h"
 #include "okay/detail/ok_assert.h"
 #include "okay/detail/view_common.h"
 #include "okay/ranges/adaptors.h"
@@ -87,22 +88,27 @@ class ok::orderable_definition<detail::enumerated_cursor_t<parent_range_t>>
 // TODO: review const / ref correctness here, range_t input is allowed to be a
 // reference or const but thats not really being removed before sending it to
 // other templates
-template <typename range_t>
-struct range_definition<detail::enumerated_view_t<range_t>>
-    : public detail::propagate_sizedness_t<detail::enumerated_view_t<range_t>,
-                                           detail::remove_cvref_t<range_t>>,
-      public detail::propagate_begin_t<detail::enumerated_view_t<range_t>,
-                                       detail::remove_cvref_t<range_t>,
-                                       detail::enumerated_cursor_t<range_t>>,
+template <typename input_range_t>
+struct range_definition<detail::enumerated_view_t<input_range_t>,
+                        std::enable_if_t<!detail::range_is_arraylike_v<
+                            detail::remove_cvref_t<input_range_t>>>>
+    : public detail::propagate_sizedness_t<
+          detail::enumerated_view_t<input_range_t>,
+          detail::remove_cvref_t<input_range_t>>,
+      public detail::propagate_begin_t<
+          detail::enumerated_view_t<input_range_t>,
+          detail::remove_cvref_t<input_range_t>,
+          detail::enumerated_cursor_t<input_range_t>>,
       public detail::propagate_boundscheck_t<
-          detail::enumerated_view_t<range_t>, detail::remove_cvref_t<range_t>,
-          detail::enumerated_cursor_t<range_t>>,
-      public detail::propagate_cursor_comparison_optimization_marker_t<range_t>
+          detail::enumerated_view_t<input_range_t>,
+          detail::remove_cvref_t<input_range_t>,
+          detail::enumerated_cursor_t<input_range_t>>
 {
     static constexpr bool is_view = true;
 
-    using enumerated_t = detail::enumerated_view_t<range_t>;
-    using cursor_t = detail::enumerated_cursor_t<range_t>;
+    using enumerated_t = detail::enumerated_view_t<input_range_t>;
+    using cursor_t = detail::enumerated_cursor_t<input_range_t>;
+    using range_t = detail::remove_cvref_t<input_range_t>;
 
     __ok_enable_if_static(range_t, detail::range_definition_has_increment_v<T>,
                           void)
@@ -129,37 +135,54 @@ struct range_definition<detail::enumerated_view_t<range_t>>
                               const cursor_t& c) OKAYLIB_NOEXCEPT
     {
         using inner_def = detail::range_definition_inner<range_t>;
-        if constexpr (detail::range_has_get_ref_v<range_t>) {
-            // avoid deep const with const_cast
-            using reftype = decltype(inner_def::get_ref(
-                const_cast<enumerated_t&>(range)
-                    .template get_view_reference<enumerated_t, range_t>(),
-                c.inner()));
-            return std::pair<reftype, const size_t>(
-                inner_def::get_ref(
-                    const_cast<enumerated_t&>(range)
-                        .template get_view_reference<enumerated_t, range_t>(),
-                    c.inner()),
-                c.index());
-        } else if constexpr (detail::range_has_get_ref_const_v<range_t>) {
-            using reftype = decltype(inner_def::get_ref(
-                range.template get_view_reference<enumerated_t, range_t>(),
-                c.inner()));
-            return std::pair<reftype, const size_t>(
-                inner_def::get_ref(
-                    range.template get_view_reference<enumerated_t, range_t>(),
-                    c.inner()),
-                c.index());
-        } else {
-            using gettype = decltype(inner_def::get(
-                range.template get_view_reference<enumerated_t, range_t>(),
-                c.inner()));
-            return std::pair<gettype, const size_t>(
-                inner_def::get(
-                    range.template get_view_reference<enumerated_t, range_t>(),
-                    c.inner()),
-                c.index());
-        }
+
+        const range_t& parent_ref =
+            range.template get_view_reference<enumerated_t, range_t>();
+        // only const cast if the thing we are viewing is another view or a
+        // nonconst reference to a range
+        auto& casted_parent_ref = const_cast<std::conditional_t<
+            detail::is_view_v<range_t> ||
+                !std::is_const_v<std::remove_reference_t<input_range_t>>,
+            range_t&, const range_t&>>(parent_ref);
+
+        using pair_left =
+            decltype(ok::detail::get_best(casted_parent_ref, c.inner()));
+        return std::pair<pair_left, const size_t>{
+            ok::detail::get_best(casted_parent_ref, c.inner()), c.index()};
+    }
+};
+
+// in the case that the child is arraylike, we can just use the cursor as the
+// index
+template <typename input_range_t>
+struct range_definition<detail::enumerated_view_t<input_range_t>,
+                        std::enable_if_t<detail::range_is_arraylike_v<
+                            detail::remove_cvref_t<input_range_t>>>>
+    : public detail::propagate_sizedness_t<
+          detail::enumerated_view_t<input_range_t>,
+          detail::remove_cvref_t<input_range_t>>
+{
+    constexpr static bool is_view = true;
+    constexpr static bool is_arraylike = true;
+
+    using range_t = detail::remove_cvref_t<input_range_t>;
+    using enumerated_t = detail::enumerated_view_t<input_range_t>;
+
+    constexpr static auto get(const enumerated_t& range,
+                              size_t cursor) OKAYLIB_NOEXCEPT
+    {
+        const range_t& parent_ref =
+            range.template get_view_reference<enumerated_t, range_t>();
+
+        auto& casted_parent_ref = const_cast<std::conditional_t<
+            detail::is_view_v<range_t> ||
+                !std::is_const_v<std::remove_reference_t<input_range_t>>,
+            range_t&, const range_t&>>(parent_ref);
+
+        using pair_left =
+            decltype(ok::detail::get_best(casted_parent_ref, cursor));
+        return std::pair<pair_left, const size_t>{
+            ok::detail::get_best(casted_parent_ref, cursor), cursor};
     }
 };
 

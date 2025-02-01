@@ -20,6 +20,9 @@ TEST_SUITE("reverse")
             static_assert(detail::is_random_access_range_v<decltype(forward)>);
             static_assert(
                 detail::is_random_access_range_v<decltype(forward | reverse)>);
+            static_assert(detail::range_is_arraylike_v<decltype(forward)>);
+            static_assert(
+                detail::range_is_arraylike_v<decltype(forward | reverse)>);
 
             auto reversed = forward | reverse;
             REQUIRE(ok::size(reversed) == ok::size(forward));

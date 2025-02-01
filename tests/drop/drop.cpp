@@ -11,10 +11,9 @@ using namespace ok;
 
 int dummy[500];
 static_assert(detail::is_random_access_range_v<decltype(dummy | drop(10))>);
-static_assert(detail::range_can_boundscheck_with_less_than_end_cursor<
-              decltype(dummy)>::value);
-static_assert(!detail::range_can_boundscheck_with_less_than_end_cursor<
-              decltype(dummy | drop(10))>::value);
+static_assert(detail::range_is_arraylike_v<decltype(dummy)>);
+// TODO: make this keep arraylike property
+// static_assert(detail::range_is_arraylike_v<decltype(dummy | drop(10))>);
 
 TEST_SUITE("drop")
 {

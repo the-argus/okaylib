@@ -97,7 +97,7 @@ struct drop_view_t : public underlying_view_type<input_range_t>::type
         : OKAYLIB_NOEXCEPT underlying_view_type<input_range_t>::type(
               std::forward<input_range_t>(range))
     {
-        if constexpr (range_has_size_v<range_t>) {
+        if constexpr (range_can_size_v<range_t>) {
             const auto& parent_ref =
                 this->template get_view_reference<drop_view_t, input_range_t>();
 
@@ -143,12 +143,10 @@ struct range_definition<detail::drop_view_t<input_range_t>>
       // propagate infinite / finite status, but if sized then use unique
       // sized_drop_range_t type
       public std::conditional_t<
-          detail::range_has_size_v<detail::remove_cvref_t<input_range_t>>,
+          detail::range_can_size_v<detail::remove_cvref_t<input_range_t>>,
           detail::sized_drop_range_t<input_range_t>,
           detail::infinite_static_def_t<detail::range_marked_infinite_v<
               detail::remove_cvref_t<input_range_t>>>>
-// lose boundscheck optimization marker (in bounds is no longer expressed by c <
-// begin(i) + size(i))
 {
     static constexpr bool is_view = true;
 
@@ -185,7 +183,7 @@ struct range_definition<detail::drop_view_t<input_range_t>>
         }
     }
 
-    __ok_enable_if_static(range_t, detail::range_has_is_inbounds_v<T>, bool)
+    __ok_enable_if_static(range_t, detail::range_can_is_inbounds_v<T>, bool)
         is_inbounds(const drop_t& i, const cursor_t& c) OKAYLIB_NOEXCEPT
     {
         using parent_def = detail::range_definition_inner<T>;
@@ -200,7 +198,7 @@ struct range_definition<detail::drop_view_t<input_range_t>>
             if constexpr (detail::range_marked_infinite_v<T>) {
                 return begin_check;
             } else {
-                static_assert(detail::range_has_size_v<T>);
+                static_assert(detail::range_can_size_v<T>);
                 const cursor_t parent_end = parent_begin + ok::size(parent_ref);
                 return c < parent_end && begin_check;
             }
@@ -217,7 +215,7 @@ struct range_definition<detail::drop_view_t<input_range_t>>
         }
     }
 
-    __ok_enable_if_static(range_t, detail::range_has_is_after_bounds_v<T>, bool)
+    __ok_enable_if_static(range_t, detail::range_can_is_after_bounds_v<T>, bool)
         is_after_bounds(const drop_t& i, const cursor_t& c) OKAYLIB_NOEXCEPT
     {
         // parent's after bounds check should still work: we can't change end
@@ -226,7 +224,7 @@ struct range_definition<detail::drop_view_t<input_range_t>>
             i.template get_view_reference<drop_t, T>(), c);
     }
 
-    __ok_enable_if_static(range_t, detail::range_has_is_before_bounds_v<T>,
+    __ok_enable_if_static(range_t, detail::range_can_is_before_bounds_v<T>,
                           bool)
         is_before_bounds(const drop_t& i, const cursor_t& c) OKAYLIB_NOEXCEPT
     {

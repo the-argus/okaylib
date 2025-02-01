@@ -17,7 +17,7 @@ struct reverse_fn_t
         using T = remove_cvref_t<range_t>;
         static_assert(is_range_v<T>,
                       "Cannot reverse given type- it is not a range.");
-        static_assert(is_random_access_range_v<T> && range_has_size_v<T>,
+        static_assert(is_random_access_range_v<T> && range_can_size_v<T>,
                       "Cannot reverse given type- it is either not random "
                       "access, or its size is not finite or cannot be known in "
                       "constant time.");
@@ -116,7 +116,9 @@ class ok::orderable_definition<detail::reversed_cursor_t<input_parent_range_t>>
 };
 
 template <typename input_range_t>
-struct range_definition<detail::reversed_view_t<input_range_t>>
+struct range_definition<detail::reversed_view_t<input_range_t>,
+                        std::enable_if_t<!detail::range_is_arraylike_v<
+                            detail::remove_cvref_t<input_range_t>>>>
     : public detail::propagate_get_set_t<
           detail::reversed_view_t<input_range_t>,
           detail::remove_cvref_t<input_range_t>,
@@ -134,7 +136,7 @@ struct range_definition<detail::reversed_view_t<input_range_t>>
 
     static_assert(
         detail::is_random_access_range_v<range_t> &&
-            detail::range_has_size_v<range_t>,
+            detail::range_can_size_v<range_t>,
         "Cannot reverse a range which is not both random access and sized.");
 
     constexpr static cursor_t begin(const reverse_t& i) OKAYLIB_NOEXCEPT
@@ -146,16 +148,15 @@ struct range_definition<detail::reversed_view_t<input_range_t>>
         return cursor_t(parent_cursor + (size == 0 ? 0 : size - 1));
     }
 
-    __ok_enable_if_static(range_t, detail::range_has_is_inbounds_v<T>, bool)
+    __ok_enable_if_static(range_t, detail::range_can_is_inbounds_v<T>, bool)
         is_inbounds(const reverse_t& i, const cursor_t& c)
     {
-        return detail::range_definition_inner<T>::is_inbounds(
-            i.template get_view_reference<reverse_t, T>(),
-            cursor_type_for<T>(c));
+        return ok::is_inbounds(i.template get_view_reference<reverse_t, T>(),
+                               cursor_type_for<T>(c));
     }
 
     // switch after bounds to do the parents before bounds check
-    __ok_enable_if_static(range_t, detail::range_has_is_before_bounds_v<T>,
+    __ok_enable_if_static(range_t, detail::range_can_is_before_bounds_v<T>,
                           bool)
         is_after_bounds(const reverse_t& i, const cursor_t& c)
     {
@@ -165,12 +166,74 @@ struct range_definition<detail::reversed_view_t<input_range_t>>
     }
 
     // switch before bounds to do the parent's after bounds check
-    __ok_enable_if_static(range_t, detail::range_has_is_after_bounds_v<T>, bool)
+    __ok_enable_if_static(range_t, detail::range_can_is_after_bounds_v<T>, bool)
         is_before_bounds(const reverse_t& i, const cursor_t& c)
     {
         return detail::range_definition_inner<T>::is_after_bounds(
             i.template get_view_reference<reverse_t, T>(),
             cursor_type_for<T>(c));
+    }
+};
+
+// in the case that something is arraylike, just subtract size when doing gets
+// and sets
+template <typename input_range_t>
+struct range_definition<detail::reversed_view_t<input_range_t>,
+                        std::enable_if_t<detail::range_is_arraylike_v<
+                            detail::remove_cvref_t<input_range_t>>>>
+    : public detail::propagate_sizedness_t<
+          detail::reversed_view_t<input_range_t>,
+          detail::remove_cvref_t<input_range_t>>
+{
+    using range_t = detail::remove_cvref_t<input_range_t>;
+    using reversed_t = detail::reversed_view_t<input_range_t>;
+
+    static constexpr bool is_view = true;
+    static constexpr bool is_arraylike = true;
+
+    __ok_enable_if_static(range_t, detail::range_has_get_v<T>,
+                          value_type_for<range_t>)
+        get(const reversed_t& range, size_t cursor) OKAYLIB_NOEXCEPT
+    {
+        const auto& parent_ref =
+            range.template get_view_reference<reversed_t, range_t>();
+        const size_t size = ok::size(parent_ref);
+        __ok_assert(cursor < size);
+        return ok::iter_copyout(parent_ref, size - (cursor + 1));
+    }
+
+    __ok_enable_if_static(range_t, detail::range_has_get_ref_v<T>,
+                          value_type_for<range_t>&)
+        get_ref(reversed_t& range, size_t cursor) OKAYLIB_NOEXCEPT
+    {
+        auto& parent_ref =
+            range.template get_view_reference<reversed_t, range_t>();
+        const size_t size = ok::size(parent_ref);
+        __ok_assert(cursor < size);
+        return ok::iter_get_ref(parent_ref, size - (cursor + 1));
+    }
+
+    __ok_enable_if_static(range_t, detail::range_has_get_ref_const_v<T>,
+                          const value_type_for<range_t>&)
+        get_ref(const reversed_t& range, size_t cursor) OKAYLIB_NOEXCEPT
+    {
+        const auto& parent_ref =
+            range.template get_view_reference<reversed_t, range_t>();
+        const size_t size = ok::size(parent_ref);
+        __ok_assert(cursor < size);
+        return ok::iter_get_ref(parent_ref, size - (cursor + 1));
+    }
+
+    __ok_enable_if_static(range_t, detail::range_has_get_v<T>, void)
+        set(const reversed_t& range, size_t cursor,
+            value_type_for<range_t>&& value) OKAYLIB_NOEXCEPT
+    {
+        const auto& parent_ref =
+            range.template get_view_reference<reversed_t, range_t>();
+        const size_t size = ok::size(parent_ref);
+        __ok_assert(cursor < size);
+        ok::iter_set(parent_ref, size - (cursor + 1),
+                     std::forward<value_type_for<range_t>>(value));
     }
 };
 

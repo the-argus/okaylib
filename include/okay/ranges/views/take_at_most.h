@@ -89,7 +89,7 @@ struct take_at_most_view_t : public underlying_view_type<range_t>::type
         : OKAYLIB_NOEXCEPT underlying_view_type<range_t>::type(
               std::forward<range_t>(range))
     {
-        if constexpr (detail::range_has_size_v<range_t>) {
+        if constexpr (detail::range_can_size_v<range_t>) {
             auto& parent_range =
                 this->template get_view_reference<take_at_most_view_t,
                                                   range_t>();
@@ -139,7 +139,9 @@ class ok::orderable_definition<
 };
 
 template <typename input_range_t>
-struct range_definition<detail::take_at_most_view_t<input_range_t>>
+struct range_definition<detail::take_at_most_view_t<input_range_t>,
+                        std::enable_if_t<!detail::range_is_arraylike_v<
+                            detail::remove_cvref_t<input_range_t>>>>
     : public detail::propagate_begin_t<
           detail::take_at_most_view_t<input_range_t>,
           detail::remove_cvref_t<input_range_t>,
@@ -151,11 +153,7 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
       public std::conditional_t<
           detail::range_marked_finite_v<detail::remove_cvref_t<input_range_t>>,
           detail::infinite_static_def_t<false>,
-          detail::sized_take_at_most_range_t<input_range_t>>,
-      // keep optimization marker: we dont change were the beginning is, so
-      // boundscheck which compare to our end should be fine
-      public detail::propagate_cursor_comparison_optimization_marker_t<
-          input_range_t>
+          detail::sized_take_at_most_range_t<input_range_t>>
 {
     static constexpr bool is_view = true;
 
@@ -163,7 +161,7 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
     using take_at_most_t = detail::take_at_most_view_t<input_range_t>;
     using cursor_t = detail::take_at_most_cursor_optimized_t<input_range_t>;
 
-    __ok_enable_if_static(range_t, detail::range_has_is_inbounds_v<T>, bool)
+    __ok_enable_if_static(range_t, detail::range_can_is_inbounds_v<T>, bool)
         is_inbounds(const take_at_most_t& i, const cursor_t& c) OKAYLIB_NOEXCEPT
     {
         using parent_def = detail::range_definition_inner<T>;
@@ -177,14 +175,8 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
                           "though it doesnt need it.");
             auto parent_begin = ok::begin(parent_ref);
 
-            // if range doesnt have the optimization to boundscheck with only <,
-            // we have to check if its below the start
-            if constexpr (!detail::
-                              range_can_boundscheck_with_less_than_end_cursor<
-                                  T>::value) {
-                if (c < parent_begin) [[unlikely]] {
-                    return false;
-                }
+            if (c < parent_begin) [[unlikely]] {
+                return false;
             }
 
             auto advanced = parent_begin + i.amount();
@@ -200,7 +192,7 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
         }
     }
 
-    __ok_enable_if_static(range_t, detail::range_has_is_after_bounds_v<T>, bool)
+    __ok_enable_if_static(range_t, detail::range_can_is_after_bounds_v<T>, bool)
         is_after_bounds(const take_at_most_t& i,
                         const cursor_t& c) OKAYLIB_NOEXCEPT
     {
@@ -222,7 +214,7 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
         }
     }
 
-    __ok_enable_if_static(range_t, detail::range_has_is_before_bounds_v<T>,
+    __ok_enable_if_static(range_t, detail::range_can_is_before_bounds_v<T>,
                           bool)
         is_before_bounds(const take_at_most_t& i,
                          const cursor_t& c) OKAYLIB_NOEXCEPT
@@ -259,6 +251,28 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
             i.template get_view_reference<take_at_most_t, T>();
         ok::decrement(parent_ref, c.inner());
         c.decrement();
+    }
+};
+
+// different definition if range is arraylike: just change what size() returns
+template <typename input_range_t>
+struct range_definition<detail::take_at_most_view_t<input_range_t>,
+                        std::enable_if_t<detail::range_is_arraylike_v<
+                            detail::remove_cvref_t<input_range_t>>>>
+    : public detail::propagate_get_set_t<
+          detail::take_at_most_view_t<input_range_t>,
+          detail::remove_cvref_t<input_range_t>,
+          detail::take_at_most_cursor_optimized_t<input_range_t>>
+{
+    static constexpr bool is_arraylike = true;
+    static constexpr bool is_view = true;
+
+    using range_t = detail::remove_cvref_t<input_range_t>;
+    using take_at_most_t = detail::take_at_most_view_t<input_range_t>;
+
+    static constexpr size_t size(const take_at_most_t& range)
+    {
+        return range.amount();
     }
 };
 

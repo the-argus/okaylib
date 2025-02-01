@@ -94,23 +94,23 @@ struct range_definition<detail::transformed_view_t<input_range_t, callable_t>>
       public detail::propagate_begin_t<
           detail::transformed_view_t<input_range_t, callable_t>,
           detail::remove_cvref_t<input_range_t>,
-          cursor_type_for<detail::remove_cvref_t<input_range_t>>>,
+          cursor_type_for<detail::remove_cvref_t<input_range_t>>, true>,
       public detail::propagate_boundscheck_t<
           detail::transformed_view_t<input_range_t, callable_t>,
           detail::remove_cvref_t<input_range_t>,
-          cursor_type_for<detail::remove_cvref_t<input_range_t>>>,
+          cursor_type_for<detail::remove_cvref_t<input_range_t>>, true>,
       public detail::propagate_increment_decrement_t<
           detail::transformed_view_t<input_range_t, callable_t>,
           detail::remove_cvref_t<input_range_t>,
-          cursor_type_for<detail::remove_cvref_t<input_range_t>>>,
-      public detail::propagate_cursor_comparison_optimization_marker_t<
-          input_range_t>
+          cursor_type_for<detail::remove_cvref_t<input_range_t>>>
 {
     static constexpr bool is_view = true;
 
     using range_t = detail::remove_cvref_t<input_range_t>;
     using transformed_t = detail::transformed_view_t<input_range_t, callable_t>;
     using cursor_t = cursor_type_for<range_t>;
+
+    static constexpr bool is_arraylike = detail::range_is_arraylike_v<range_t>;
 
     constexpr static decltype(auto) get(const transformed_t& i,
                                         const cursor_t& c) OKAYLIB_NOEXCEPT

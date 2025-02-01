@@ -85,16 +85,20 @@ using propagate_increment_decrement_t = std::conditional_t<
 // range definition of argument 1
 template <typename derived_range_t, typename parent_range_t>
 using propagate_sizedness_t = std::conditional_t<
-    range_has_size_v<parent_range_t>,
+    range_can_size_v<parent_range_t>,
     sized_range_t<derived_range_t, parent_range_t>,
     infinite_static_def_t<range_marked_infinite_v<parent_range_t>>>;
 
 // requires that cursor_t can be constructed from the
 // cursor_type_for<parent_range_t>
-template <typename derived_range_t, typename parent_range_t, typename cursor_t>
+template <typename derived_range_t, typename parent_range_t, typename cursor_t,
+          bool propagate_arraylike = false>
 struct propagate_begin_t
 {
-    constexpr static cursor_t begin(const derived_range_t& i)
+    __ok_enable_if_static(derived_range_t,
+                          (!propagate_arraylike ||
+                           !detail::range_is_arraylike_v<parent_range_t>),
+                          cursor_t) begin(const T& i)
     {
         return cursor_t(ok::begin(
             i.template get_view_reference<derived_range_t, parent_range_t>()));
@@ -192,19 +196,23 @@ struct propagate_get_set_t
     }
 };
 
-template <typename derived_range_t, typename parent_range_t, typename cursor_t>
+template <typename derived_range_t, typename parent_range_t, typename cursor_t,
+          bool propagate_arraylike = false>
 struct propagate_boundscheck_t
 {
-    __ok_enable_if_static(parent_range_t, detail::range_has_is_inbounds_v<T>,
+    __ok_enable_if_static(parent_range_t,
+                          (!propagate_arraylike ||
+                           !detail::range_is_arraylike_v<T>) &&
+                              detail::range_can_is_inbounds_v<T>,
                           bool)
         is_inbounds(const derived_range_t& i, const cursor_t& c)
     {
-        return detail::range_definition_inner<T>::is_inbounds(
+        return ok::is_inbounds(
             i.template get_view_reference<derived_range_t, parent_range_t>(),
             cursor_type_for<parent_range_t>(c));
     }
 
-    __ok_enable_if(parent_range_t, detail::range_has_is_after_bounds_v<T>, bool)
+    __ok_enable_if(parent_range_t, detail::range_can_is_after_bounds_v<T>, bool)
         is_after_bounds(const derived_range_t& i, const cursor_t& c)
     {
         return detail::range_definition_inner<T>::is_after_bounds(
@@ -213,21 +221,13 @@ struct propagate_boundscheck_t
     }
 
     __ok_enable_if_static(parent_range_t,
-                          detail::range_has_is_before_bounds_v<T>, bool)
+                          detail::range_can_is_before_bounds_v<T>, bool)
         is_before_bounds(const derived_range_t& i, const cursor_t& c)
     {
         return detail::range_definition_inner<T>::is_before_bounds(
             i.template get_view_reference<derived_range_t, parent_range_t>(),
             cursor_type_for<parent_range_t>(c));
     }
-};
-
-template <typename range_t>
-struct propagate_cursor_comparison_optimization_marker_t
-{
-    static constexpr bool less_than_end_cursor_is_valid_boundscheck =
-        range_can_boundscheck_with_less_than_end_cursor<
-            remove_cvref_t<range_t>>::value;
 };
 
 template <typename derived_range_t, typename parent_range_t>
@@ -244,9 +244,7 @@ struct propagate_all_range_traits_t
       public detail::propagate_offset_t<derived_range_t, parent_range_t,
                                         cursor_type_for<parent_range_t>>,
       public detail::propagate_compare_t_t<derived_range_t, parent_range_t,
-                                           cursor_type_for<parent_range_t>>,
-      public detail::propagate_cursor_comparison_optimization_marker_t<
-          parent_range_t>
+                                           cursor_type_for<parent_range_t>>
 {};
 
 template <typename range_t, typename = void> class owning_view;
