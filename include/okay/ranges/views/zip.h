@@ -2,7 +2,6 @@
 #define __OKAYLIB_RANGES_VIEW_ZIP_H__
 
 #include "okay/detail/get_best.h"
-#include "okay/detail/ok_assert.h"
 #include "okay/detail/view_common.h"
 #include "okay/ranges/adaptors.h"
 #include "okay/ranges/ranges.h"
