@@ -112,7 +112,7 @@ an effort to organize that (not always necessary) work into one reusable product
 
 - [ ] Remove dependency on `<memory>` header from `okay/detail/addressof.h`
 - [ ] Add better macro customization for some checking / assert behavior, like
-      removing slice bounds checks in release mode
+      optionally removing slice bounds checks in release mode
 - [ ] Create "minimum viable" ranges for forward, multipass, bidirectional,
       random access, and contiguous ranges, to test conformance of all the views
 - [ ] Add tests for all the views with a finite + random access range
@@ -120,8 +120,6 @@ an effort to organize that (not always necessary) work into one reusable product
       have test coverage
 - [ ] Add better static asserts for when you use an invalid range with a pipe operator-
       right now errors come from inside the range adaptor closure
-- [ ] Try making `zip` view more like STL zip? ATM, zip cannot be random access
-      even if all underlying ranges are random access, and it doesn't like
-      having infinite / differently sized views (intended to prevent errors but
-      seems more trouble than its worth). Maybe zip expects its first argument
-      to be the shortest range, then only boundschecks that cursor?
+- [ ] Add some concept of being infinite and arraylike. Currently infinite ranges
+      like `ok::indices` are not arraylike, which makes `enumerate(array)` more
+      space efficient than `zip(array, indices)`.

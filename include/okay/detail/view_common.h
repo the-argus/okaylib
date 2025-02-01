@@ -212,7 +212,8 @@ struct propagate_boundscheck_t
             cursor_type_for<parent_range_t>(c));
     }
 
-    __ok_enable_if(parent_range_t, detail::range_can_is_after_bounds_v<T>, bool)
+    __ok_enable_if_static(parent_range_t,
+                          detail::range_can_is_after_bounds_v<T>, bool)
         is_after_bounds(const derived_range_t& i, const cursor_t& c)
     {
         return detail::range_definition_inner<T>::is_after_bounds(

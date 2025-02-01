@@ -399,6 +399,13 @@ struct range_is_arraylike<T,
                   "functions. An arraylike type must be able to be "
                   "boundschecked with the provided arraylike function, which "
                   "checks if the cursor is less than the array's size.");
+    static_assert(
+        !range_definition_has_increment<T>::value &&
+            !range_definition_has_decrement<T>::value &&
+            !range_definition_has_offset<T>::value,
+        "Range marked arraylike, but it defines increment / "
+        "decrement / offset. An arraylike type must use a size_t for its "
+        "cursor and only the existing operator++ and operator+= etc.");
 };
 
 template <typename T>
@@ -1274,6 +1281,23 @@ struct size_fn_t
                                decltype(range_def_for<range_t>::size(range))>
     {
         return range_def_for<range_t>::size(range);
+    }
+
+    template <typename range_t>
+    constexpr auto operator() [[nodiscard]] (const range_t& range) const
+        OKAYLIB_NOEXCEPT->std::enable_if_t<range_marked_finite_v<range_t>, void>
+    {
+        static_assert(false, "Attempt to get the size of a range whose size "
+                             "can't be calculated in constant time.");
+    }
+
+    template <typename range_t>
+    constexpr auto operator()
+        [[nodiscard]] (const range_t& range) const OKAYLIB_NOEXCEPT
+            ->std::enable_if_t<range_marked_infinite_v<range_t>, void>
+    {
+        static_assert(false,
+                      "Attempt to get the size of an infinitely large range");
     }
 
     __ok_range_function_assert_not_partially_called_member(size)
