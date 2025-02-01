@@ -8,6 +8,7 @@
 #include "okay/detail/traits/is_complete.h"
 #include "okay/detail/traits/is_container.h"
 #include "okay/detail/traits/is_derived_from.h"
+#include "okay/detail/traits/is_instance.h"
 #include "okay/detail/traits/mathop_traits.h"
 #include "okay/math/ordering.h"
 #include <type_traits>
@@ -929,6 +930,39 @@ inline constexpr prefer_before_bounds_check_t prefer_before_bounds_check{};
 inline constexpr prefer_after_bounds_check_t prefer_after_bounds_check{};
 
 namespace detail {
+
+// forward declare these so we can make overloads that detect them and have
+// static asserts with nice error messages
+template <typename callable_t> struct range_adaptor_closure_t;
+template <typename callable_t> struct range_adaptor_t;
+template <typename callable_t, typename... args_t> struct partial_called_t;
+
+#define __ok_range_function_assert_not_partially_called_member(funcname)    \
+    template <typename T, typename... U>                                    \
+    constexpr auto operator()(const T&, U&&...)                             \
+        const OKAYLIB_NOEXCEPT->std::enable_if_t<                           \
+            !is_range_v<T> && (is_instance_v<T, range_adaptor_closure_t> || \
+                               is_instance_v<T, range_adaptor_t> ||         \
+                               is_instance_v<T, partial_called_t>)>         \
+    {                                                                       \
+        static_assert(false,                                                \
+                      "Attempt to call " #funcname ", but the object "      \
+                      "given as range hasn't finished being called. It "    \
+                      "may be a view which takes additional arguments.");   \
+    }
+
+#define __ok_range_function_assert_correct_cursor_type_member                  \
+    template <typename T, typename U, typename... pack>                        \
+    constexpr auto operator()(const T&, const U&,                              \
+                              pack&&...) const OKAYLIB_NOEXCEPT                \
+        ->std::enable_if_t<is_range_v<T> &&                                    \
+                           !std::is_convertible_v<                             \
+                               const U&, const cursor_type_unchecked_for<T>&>> \
+    {                                                                          \
+        static_assert(false,                                                   \
+                      "Incorrect cursor type passed as second argument.");     \
+    }
+
 struct iter_copyout_fn_t
 {
     template <typename range_t>
@@ -950,6 +984,9 @@ struct iter_copyout_fn_t
             return def::get_ref(range, cursor);
         }
     }
+
+    __ok_range_function_assert_not_partially_called_member(iter_copyout)
+        __ok_range_function_assert_correct_cursor_type_member
 };
 
 template <typename range_t, typename = void>
@@ -1008,6 +1045,10 @@ struct iter_get_temporary_ref_fn_t
         static_assert(is_range_v<range_t>,
                       "Invalid range passed in to iter_get_temporary_ref");
     }
+
+    __ok_range_function_assert_not_partially_called_member(
+        iter_get_temporary_ref)
+        __ok_range_function_assert_correct_cursor_type_member
 };
 
 struct iter_get_ref_fn_t
@@ -1039,6 +1080,9 @@ struct iter_get_ref_fn_t
             "Unable to get_ref- no const get_ref defined for this range.");
         return range_definition_inner<range_t>::get_ref(range, cursor);
     }
+
+    __ok_range_function_assert_not_partially_called_member(iter_get_ref)
+        __ok_range_function_assert_correct_cursor_type_member
 };
 
 struct iter_set_fn_t
@@ -1061,6 +1105,9 @@ struct iter_set_fn_t
                                                  std::move(value));
         }
     }
+
+    __ok_range_function_assert_not_partially_called_member(iter_set)
+        __ok_range_function_assert_correct_cursor_type_member
 };
 
 struct begin_fn_t
@@ -1076,6 +1123,8 @@ struct begin_fn_t
             return range_def_for<range_t>::begin(range);
         }
     }
+
+    __ok_range_function_assert_not_partially_called_member(begin)
 };
 
 struct increment_fn_t
@@ -1095,6 +1144,9 @@ struct increment_fn_t
             ++cursor;
         }
     }
+
+    __ok_range_function_assert_not_partially_called_member(increment)
+        __ok_range_function_assert_correct_cursor_type_member
 };
 
 struct decrement_fn_t
@@ -1114,6 +1166,9 @@ struct decrement_fn_t
             --cursor;
         }
     }
+
+    __ok_range_function_assert_not_partially_called_member(decrement)
+        __ok_range_function_assert_correct_cursor_type_member
 };
 
 struct iter_compare_fn_t
@@ -1134,6 +1189,9 @@ struct iter_compare_fn_t
             return ok::cmp(cursor_a, cursor_b);
         }
     }
+
+    __ok_range_function_assert_not_partially_called_member(iter_compare)
+        __ok_range_function_assert_correct_cursor_type_member
 };
 
 struct iter_offset_fn_t
@@ -1153,6 +1211,9 @@ struct iter_offset_fn_t
             cursor += offset;
         }
     }
+
+    __ok_range_function_assert_not_partially_called_member(iter_offset)
+        __ok_range_function_assert_correct_cursor_type_member
 };
 
 struct is_inbounds_fn_t
@@ -1198,30 +1259,9 @@ struct is_inbounds_fn_t
             return this->operator()(range, cursor);
         }
     }
-};
 
-struct is_before_bounds_fn_t
-{
-    template <typename range_t>
-    constexpr auto operator()
-        [[nodiscard]] (const range_t& range,
-                       const cursor_type_for<range_t>& cursor) const
-        -> decltype(range_def_for<range_t>::is_before_bounds(range, cursor))
-    {
-        return range_def_for<range_t>::is_before_bounds(range, cursor);
-    }
-};
-
-struct is_after_bounds_fn_t
-{
-    template <typename range_t>
-    constexpr auto operator()
-        [[nodiscard]] (const range_t& range,
-                       const cursor_type_for<range_t>& cursor) const
-        -> decltype(range_def_for<range_t>::is_after_bounds(range, cursor))
-    {
-        return range_def_for<range_t>::is_after_bounds(range, cursor);
-    }
+    __ok_range_function_assert_not_partially_called_member(is_inbounds)
+        __ok_range_function_assert_correct_cursor_type_member
 };
 
 struct size_fn_t
@@ -1235,6 +1275,8 @@ struct size_fn_t
     {
         return range_def_for<range_t>::size(range);
     }
+
+    __ok_range_function_assert_not_partially_called_member(size)
 };
 
 struct data_fn_t
@@ -1245,6 +1287,8 @@ struct data_fn_t
     {
         return range_def_for<range_t>::data(range);
     }
+
+    __ok_range_function_assert_not_partially_called_member(data)
 };
 
 } // namespace detail
