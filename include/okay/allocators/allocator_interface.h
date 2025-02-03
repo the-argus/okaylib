@@ -9,6 +9,7 @@
 
 #include "okay/detail/abort.h"
 #include "okay/opt.h"
+#include "okay/res.h"
 #include "okay/slice.h"
 
 namespace ok {
@@ -23,6 +24,16 @@ class allocator_interface_t
 {
   public:
     inline static constexpr size_t default_align = alignof(std::max_align_t);
+
+    enum class error : uint8_t
+    {
+        okay,
+        result_released,
+        oom,
+        unsupported,
+    };
+
+    template <typename T> using res_t = res_t<T, error>;
 
     enum class flags : uint8_t
     {
@@ -127,7 +138,7 @@ class allocator_interface_t
 
         inline constexpr void* data() const noexcept { return m_data; }
 
-        inline constexpr size_t size() const noexcept
+        inline constexpr size_t size() const OKAYLIB_NOEXCEPT
         {
             if (!m_data) [[unlikely]] {
                 __ok_abort();
@@ -135,14 +146,26 @@ class allocator_interface_t
             return m_size;
         }
 
-        inline constexpr ok::slice_t<uint8_t> slice() noexcept
+        inline constexpr ok::slice_t<uint8_t> slice() const OKAYLIB_NOEXCEPT
         {
+            if (!m_data) [[unlikely]] {
+                __ok_abort();
+            }
             return ok::raw_slice(*static_cast<uint8_t*>(m_data), m_size);
         }
 
-        inline constexpr operator ok::opt_t<ok::slice_t<uint8_t>>() noexcept
+        inline constexpr
+        operator ok::opt_t<ok::slice_t<uint8_t>>() const OKAYLIB_NOEXCEPT
         {
+            if (!m_data) [[unlikely]] {
+                __ok_abort();
+            }
             return ok::raw_slice(*static_cast<uint8_t*>(m_data), m_size);
+        }
+
+        inline constexpr error err() const noexcept
+        {
+            return m_data ? error::okay : error::oom;
         }
 
         inline constexpr operator bool() const noexcept { return m_data; }
@@ -175,19 +198,19 @@ class allocator_interface_t
         }
 
         inline constexpr void* data() const noexcept { return m_data; }
-        inline constexpr size_t size() const noexcept
+        inline constexpr size_t size() const OKAYLIB_NOEXCEPT
         {
             if (!m_data) [[unlikely]]
                 __ok_abort();
             return m_size;
         }
-        inline constexpr void* data_original_offset() const noexcept
+        inline constexpr void* data_original_offset() const OKAYLIB_NOEXCEPT
         {
             if (!m_data) [[unlikely]]
                 __ok_abort();
             return m_data_original_offset;
         }
-        inline constexpr bool kept() const noexcept
+        inline constexpr bool kept() const OKAYLIB_NOEXCEPT
         {
             if (!m_data) [[unlikely]]
                 __ok_abort();
@@ -379,5 +402,43 @@ inline constexpr bool operator&(allocator_interface_t::feature_flags a,
 }
 
 } // namespace ok
+
+#ifdef OKAYLIB_USE_FMT
+template <> struct fmt::formatter<ok::allocator_interface_t::error>
+{
+    using error_t = ok::allocator_interface_t::error;
+
+    constexpr format_parse_context::iterator parse(format_parse_context& ctx)
+    {
+        auto it = ctx.begin();
+        if (it != ctx.end() && *it != '}')
+            throw_format_error("invalid format");
+        return it;
+    }
+
+    format_context::iterator format(const error_t& err,
+                                    format_context& ctx) const
+    {
+        switch (err) {
+        case error_t::okay:
+            return fmt::format_to(ctx.out(),
+                                  "allocator_interface_t::error::okay");
+            break;
+        case error_t::unsupported:
+            return fmt::format_to(ctx.out(),
+                                  "allocator_interface_t::error::unsupported");
+            break;
+        case error_t::oom:
+            return fmt::format_to(ctx.out(),
+                                  "allocator_interface_t::error::oom");
+            break;
+        case error_t::result_released:
+            return fmt::format_to(
+                ctx.out(), "allocator_interface_t::error::result_released");
+            break;
+        }
+    }
+};
+#endif
 
 #endif
