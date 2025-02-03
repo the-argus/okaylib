@@ -1,21 +1,95 @@
 # okaylib
 
-The C++ STL is pretty bad. But this library... it's okay.
+The C++ STL is pretty bad. And this library... it's okay.
 
 ## goals
 
-Replace some of the C++ STL with absolutely no concern for backwards
-compatibility or familiarity, using C++20 features. Focus on mulithreading,
-don't use exceptions, and everything is `std::pmr`. Improve compile times over
-C++ STL. Basically eliminate standard constructors- instead have factory
-functions which can fail and return an optional or error type.
+Replace some of the C++17 STL with absolutely no concern for backwards compatibility.
+Backport and improve `std::ranges` ranges and range adaptors such as `enumerate`,
+`sliding_window`, etc. Provide a variety of containers which all use polymorphic
+allocators by default, and error by value instead of using exceptions. Additionally
+provide multithreading primitives for C++20 users, such as a thread pool and coroutine
+runtime. Optionally make use of C++20 modules for improved compile times without
+waiting for C++23 `import std`. Provide serialization to string and JSON for all
+types. Primarily intended for games / realtime domains. Probably will be useful
+in embededded code, also.
 
-And, honestly: something just feels kind of wrong when I use the C++ STL. Not sure
-why, but it fires up some motivation in my programmer brain to make something better.
-I often find myself reimplementing things that I wish were improved, so this is
-an effort to organize that (not always necessary) work into one reusable product.
+Currently, okaylib is a personal project which is intended to focus many disparate
+efforts of mine to make C and C++ libraries into one mega-project. I will use it
+during development, in game projects. Any actual releases (along with support for
+build systems that people actually use, like CMake) are a ways off.
 
-## Planned features
+## example code
+
+This code makes use of a polymorphic allocator, conditional `defer` statements,
+the `res` (result) type, and formatting of error values.
+
+```cpp
+auto make_three_buffers = [](ok::allocator_interface& allo)
+    -> ok::allocator_interface::res<std::array<ok::slice<u8>, 3>> {
+    using namespace ok;
+    // require allocator feature
+    if (!(allo.features() & allocator_interface::feature_flags::threadsafe)) {
+        return allocator_interface::error::unsupported;
+    }
+
+    // do allocation using raw allocator, no owning ptrs. rare, but acceptable
+    // when combined with defers.
+    auto first_mem = allo.allocate_bytes(100);
+    if (!first_mem)
+        return first_mem.err();
+
+    maydefer free_first_mem([first_mem, &allo] {
+        allo.deallocate_bytes(first_mem.data(), first_mem.size());
+    });
+
+    auto second_mem = allo.allocate_bytes(100);
+    if (!second_mem)
+        return second_mem.err();
+
+    maydefer free_second_mem([second_mem, &allo] {
+        allo.deallocate_bytes(second_mem.data(), second_mem.size());
+    });
+
+    auto third_mem = allo.allocate_bytes(100);
+    if (!third_mem)
+        return third_mem.err();
+
+    // okay, all initialization is good, dont free anything
+    free_first_mem.cancel();
+    free_second_mem.cancel();
+
+    return std::array{first_mem.slice(), second_mem.slice(), third_mem.slice()};
+};
+
+int main()
+{
+    ok::c_allocator my_allocator; // malloc and free
+
+    auto buffer_result = make_three_buffers(my_allocator);
+    if (!buffer_result.okay()) {
+        fmt::println("Allocation failure: {}", buffer_result.err());
+        return -1;
+    }
+    auto& buffers = buffer_result.release_ref();
+
+    for (auto& slice : buffers) {
+        // initialize to zero, just to demonstrate "stdmem" header
+        ok::memfill(slice, 0);
+
+        fmt::format_to_n(slice.data(), slice.size(),
+                         "Hello, world! in slice {}", slice);
+
+        printf("printed: %s\n", slice.data());
+        // outputs something like:
+        // printed: Hello, world! in slice [0x23c152a0 -> 100]
+        // printed: Hello, world! in slice [0x23c15310 -> 100]
+        // printed: Hello, world! in slice [0x23c15380 -> 100]
+    }
+}
+```
+
+## todo
 
 - [x] implicit `context()` for allocators, random number generators, current error
       message, etc.
@@ -25,8 +99,25 @@ an effort to organize that (not always necessary) work into one reusable product
 - [ ] implementations for arena, block, slab, page, and remapping page allocators
 - [ ] wrapper / import of jemalloc for the allocator interface.
 - [x] "result" type: optional with enum error value. like `std::expected`, kind of
-- [x] "opt" type: optional but supports assigning in references which effectively
-      become pointers. does not throw.
+- [x] "opt" type: optional but supports reference types with rebinding assignment
+- [x] opt and result are constexpr + trivial, if their payloads are
+- [x] slice type: like span but not nullable
+- [x] defer statement
+- [x] stdmem: functions for checking if slices are overlapping, contained
+      within, etc
+- [x] new iterators, with lower barrier to entry. c++17 compatible but not backwards
+      compatible with algorithms that use legacy iterators or c++20 iterators. Designed
+      for easy implementation, good codegen, and immediate rangelike support (type
+      with iterator stuff should also be a range)
+- [ ] [WIP](https://github.com/the-argus/vmath) SIMD vector and matrix types,
+      explicit by default but with optional operator overloading. inspired by DirectXMath
+- [ ] A dynamic bit array and a static bit array with boolean-like iterators, to
+      prove capability of new iterators
+- [x] `std::ranges` reimplementation, with some new views. enumerate, zip, take,
+      drop, join, keep_if, reverse, transform. Template specialization / optimization
+      when the viewed type is array-like.
+- [ ] More views (which will require allocation + error handling): sliding window,
+      chunking view, split view.
 - [ ] "hresult" type: like result but instead of storing its error value, it points
       to a more complex (optionally polymorphic) error type. stands for "heavy
       result"
@@ -36,25 +127,12 @@ an effort to organize that (not always necessary) work into one reusable product
       result". Maybe instead "lresult" for "local result?". Potentially a debugmode
       check to make sure you haven't overwritten the value in the context when you
       access it from the result.
-- [x] opt and result are constexpr + trivial, if their payloads are
-- [x] slice type: like span but not nullable
-- [x] defer statement
-- [x] stdmem: functions for checking if slices are overlapping, contained
-      within, etc
 - [ ] context handle: serializable replacement for a reference which is a unique
       index of an allocation along with a generation / magic value. when dereferencing,
       it asks the context for the corresponding memory and compares magic number
       to try to detect invalid allocator or use-after-free.
 - [ ] variants of context handle: explicit handle (dereferencing requires passing
       the allocator) and unique context handle
-- [ ] standardized SIMD vector and matrix types, explicit by default but with
-      optional operator overloading. inspired by DirectXMath
-- [x] new iterators, with lower barrier to entry. c++17 compatible but not backwards
-      compatible with algorithms that use legacy iterators or c++20 iterators. Designed
-      for easy implementation, good codegen, and immediate rangelike support (type
-      with iterator stuff should also be a range)
-- [ ] A dynamic bit array and a static bit array with boolean-like iterators, to
-      prove capability of new iterators
 - [ ] sane `std::string` replacement, inspired a bit by Godot's `String`
 - [ ] `static_string`: `const char*` replacement which stores its length and has
       a lot of nice string operations. never does allocation.
@@ -71,12 +149,6 @@ an effort to organize that (not always necessary) work into one reusable product
 - [ ] An arraylist type which does not store its elements contiguously but rather
       in roughly cache-line-sized blocks, then has an array of pointers to blocks.
       constant time lookup and less memory fragementation
-- [ ] `std::ranges` reimplementation, with some new views. sliding window,
-      jumping window (grouper? chunk?), lattice, bit_lattice (similar to sliding
-      window, pass in 0b10101 to get the next three alternating items),
-      enumerate, zip, into, take, drop, skip_if... support for allocators for
-      stuff like into. explicit when an iterable/cursor is demoted (from random
-      access to something else, especially)
 - [ ] fold/reduce function(s) compatible with above views
 - [ ] reimplementation of `<algorithm>` stuff: `stable_sort`, `sort`, `copy_if`,
       `copy`, `move`, `count`, `count_if` `mismatch` `find`, `starts_with`, `ends_with`,
@@ -93,8 +165,8 @@ an effort to organize that (not always necessary) work into one reusable product
 - [ ] standard coroutine types: task, generator
 - [ ] coroutines which can use thread's context allocator
 - [ ] coroutine-running threadpool with work queues and task stealing, for
-      copying off Go's homework. (potentially put threadpool into context for
-      submitting coroutines upon construction?)
+      copying off Go's homework. (potentially put threadpool and runtime into
+      context for submitting coroutines upon construction?)
 - [ ] fmtlib included for IO, all types mentioned above include formatters
 - [ ] all okaylib types have nlohmann json serialization defined
 - [ ] Zig buildsystem module which makes it easy to import it into a zig project
@@ -108,7 +180,7 @@ an effort to organize that (not always necessary) work into one reusable product
       don't use pointers and only allocator handles to trivially serialize their
       whole program to binary
 
-## TODO
+## misc improvements / backlog
 
 - [ ] Remove dependency on `<memory>` header from `okay/detail/addressof.h`
 - [ ] Add better macro customization for some checking / assert behavior, like
@@ -120,6 +192,6 @@ an effort to organize that (not always necessary) work into one reusable product
       have test coverage
 - [ ] Add better static asserts for when you use an invalid range with a pipe operator-
       right now errors come from inside the range adaptor closure
-- [ ] Add some concept of being infinite and arraylike. Currently infinite ranges
+- [ ] Add some concept of being infinite *and* arraylike. Currently infinite ranges
       like `ok::indices` are not arraylike, which makes `enumerate(array)` more
       space efficient than `zip(array, indices)`.
