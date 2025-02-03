@@ -1,6 +1,6 @@
 # okaylib
 
-The C++ STL is pretty bad. And this library... it's okay.
+C++17/20 STL replacement for realtime and memory-constrained domains.
 
 ## goals
 
@@ -11,15 +11,14 @@ allocators by default, and error by value instead of using exceptions. Additiona
 provide multithreading primitives for C++20 users, such as a thread pool and coroutine
 runtime. Optionally make use of C++20 modules for improved compile times without
 waiting for C++23 `import std`. Provide serialization to string and JSON for all
-types. Primarily intended for games / realtime domains. Probably will be useful
-in embededded code, also.
+types.
 
-Currently, okaylib is a personal project which is intended to focus many disparate
-efforts of mine to make C and C++ libraries into one mega-project. I will use it
-during development, in game projects. Any actual releases (along with support for
-build systems that people actually use, like CMake) are a ways off.
+okaylib is a personal project which is intended to focus many disparate
+efforts of mine to make C and C++ libraries into one mega-project. I have plan to
+use it myself in some of my other projects, but any actual releases (along with
+support for build systems that people actually use, like CMake) are a ways off.
 
-## example code
+## examples
 
 This code demonstrates some views of an array: transforming, enumerating,
 and reversing. C++17.
