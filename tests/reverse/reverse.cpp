@@ -1,9 +1,11 @@
+#include "okay/ranges/views/transform.h"
 #include "test_header.h"
 // test header must be first
 #include "okay/macros/foreach.h"
 #include "okay/ranges/indices.h"
 #include "okay/ranges/views/enumerate.h"
 #include "okay/ranges/views/reverse.h"
+#include "okay/ranges/views/std_for.h"
 #include "okay/ranges/views/take_at_most.h"
 #include <array>
 
@@ -38,12 +40,24 @@ TEST_SUITE("reverse")
 
         SUBCASE("reversed c style array, checked with enumeration")
         {
-            int forward[6] = {5, 4, 3, 2, 1, 0};
+            int forward[] = {5, 4, 3, 2, 1, 0};
 
-            int prev = 0;
-            ok_foreach(ok_pair(value, idx), forward | reverse | enumerate)
-            {
-                REQUIRE(value == idx);
+            auto size_minus =
+                transform([&](int i) { return ok::size(forward) - 1 - i; });
+
+            fmt::println("Range using size_minus:");
+            for (auto [value, idx] :
+                 forward | size_minus | enumerate | std_for) {
+                assert(value == idx);
+                const char* sep = idx == ok::size(forward) - 1 ? "\n" : " -> ";
+                fmt::print("{}: {}{}", value, idx, sep);
+            }
+
+            fmt::println("Range using reverse:");
+            for (auto [value, idx] : forward | reverse | enumerate | std_for) {
+                assert(value == idx);
+                const char* sep = idx == ok::size(forward) - 1 ? "\n" : " -> ";
+                fmt::print("{}: {}{}", value, idx, sep);
             }
         }
 

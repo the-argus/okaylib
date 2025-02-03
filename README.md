@@ -21,6 +21,41 @@ build systems that people actually use, like CMake) are a ways off.
 
 ## example code
 
+This code demonstrates some views of an array: transforming, enumerating,
+and reversing. C++17.
+
+```cpp
+int main()
+{
+    int forward[] = {5, 4, 3, 2, 1, 0};
+
+    auto size_minus =
+        transform([&](int i) { return ok::size(forward) - 1 - i; });
+
+    fmt::println("Range using size_minus:");
+    // std_for view to make okaylib ranges compatible with range based for
+    for (auto [value, idx] : forward | size_minus | enumerate | std_for) {
+        const char* sep = idx == ok::size(forward) - 1 ? "\n" : " -> ";
+        fmt::print("{}: {}{}", value, idx, sep);
+    }
+
+    fmt::println("Range using reverse:");
+    for (auto [value, idx] : forward | reverse | enumerate | std_for) {
+        const char* sep = idx == ok::size(forward) - 1 ? "\n" : " -> ";
+        fmt::print("{}: {}{}", value, idx, sep);
+    }
+}
+```
+
+Outputs:
+
+```txt
+Range using size_minus:
+0: 0 -> 1: 1 -> 2: 2 -> 3: 3 -> 4: 4 -> 5: 5
+Range using reverse:
+0: 0 -> 1: 1 -> 2: 2 -> 3: 3 -> 4: 4 -> 5: 5
+```
+
 This code makes use of a polymorphic allocator, conditional `defer` statements,
 the `res` (result) type, and formatting of error values.
 
@@ -80,13 +115,18 @@ int main()
         fmt::format_to_n(slice.data(), slice.size(),
                          "Hello, world! in slice {}", slice);
 
+        // cstdio still works fine of course!
         printf("printed: %s\n", slice.data());
-        // outputs something like:
-        // printed: Hello, world! in slice [0x23c152a0 -> 100]
-        // printed: Hello, world! in slice [0x23c15310 -> 100]
-        // printed: Hello, world! in slice [0x23c15380 -> 100]
     }
 }
+```
+
+Outputs:
+
+```txt
+printed: Hello, world! in slice [0x23c152a0 -> 100]
+printed: Hello, world! in slice [0x23c15310 -> 100]
+printed: Hello, world! in slice [0x23c15380 -> 100]
 ```
 
 ## todo

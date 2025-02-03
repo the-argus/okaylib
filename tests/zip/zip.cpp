@@ -142,5 +142,7 @@ TEST_SUITE("zip")
         {
             REQUIRE(s == i);
         }
+
+        ok_foreach(ok_pair(s, i), zip(array, indices)) { REQUIRE(s == i); }
     }
 }
