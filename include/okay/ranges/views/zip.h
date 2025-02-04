@@ -2,6 +2,7 @@
 #define __OKAYLIB_RANGES_VIEW_ZIP_H__
 
 #include "okay/detail/get_best.h"
+#include "okay/detail/template_util/first_type_in_pack.h"
 #include "okay/detail/view_common.h"
 #include "okay/ranges/adaptors.h"
 #include "okay/ranges/ranges.h"
@@ -31,13 +32,6 @@ struct zip_fn_t
         return out;
     }
 };
-
-template <typename T, typename... pack>
-T get_first_type_impl(T&&, pack&&...) noexcept;
-
-template <typename... pack>
-using first_type_in_pack_t =
-    decltype(get_first_type_impl(std::declval<pack&&>()...));
 
 template <typename... ranges_t> struct sized_zip_definition_t;
 
