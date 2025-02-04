@@ -11,8 +11,7 @@
     if (!_private_result_##capture.okay()) {                       \
         return _private_result_##capture.err();                    \
     }                                                              \
-    decltype(result)::type(capture)(                               \
-        std::move(_private_result_##capture.release()));
+    auto capture = _private_result_##capture.release();
 
 #define TRY_REF(capture, result)                                   \
     static_assert(!decltype(ok::detail::is_lvalue(result))::value, \
@@ -21,8 +20,7 @@
     if (!_private_result_##capture.okay()) {                       \
         return _private_result_##capture.err();                    \
     }                                                              \
-    decltype(result)::type(capture)(                               \
-        std::move(_private_result_##capture.release_ref()));
+    auto& capture = _private_result_##capture.release_ref();
 
 #define TRY_BLOCK(capture, result, code) \
     {                                    \
