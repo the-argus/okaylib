@@ -193,6 +193,8 @@ constexpr slice_t<T> make_slice_of_one(T& item) OKAYLIB_NOEXCEPT
     return raw_slice(item, 1);
 }
 
+using bytes_t = slice_t<uint8_t>;
+
 } // namespace ok
 
 #ifdef OKAYLIB_USE_FMT

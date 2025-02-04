@@ -13,17 +13,17 @@ class c_allocator_t : public allocator_interface_t
 
     c_allocator_t() = default;
 
-    [[nodiscard]] inline allocation_result
+    [[nodiscard]] inline result_t<bytes_t>
     allocate_bytes(size_t nbytes,
                    size_t alignment = default_align) noexcept final;
 
-    [[nodiscard]] inline reallocation_result reallocate_bytes(
-        const allocator_interface_t::reallocate_options&) noexcept final;
+    [[nodiscard]] inline reallocation_result_t reallocate_bytes(
+        const allocator_interface_t::reallocate_options_t&) noexcept final;
 
     [[nodiscard]] inline feature_flags features() const noexcept final;
 
-    [[nodiscard]] inline bool
-    register_destruction_callback(void*, destruction_callback) noexcept final;
+    [[nodiscard]] inline status_t<error>
+    register_destruction_callback(void*, destruction_callback_t) noexcept final;
 
     inline void clear() noexcept final;
 
@@ -36,17 +36,17 @@ class c_allocator_t : public allocator_interface_t
 
 inline auto
 c_allocator_t::allocate_bytes(size_t nbytes,
-                              size_t alignment) noexcept -> allocation_result
+                              size_t alignment) noexcept -> result_t<bytes_t>
 {
     // NOTE: alignment over 16 is not possible on most platforms, I don't think?
     // TODO: figure out what platforms this is a problem for, maybe alloc more
     // and then align when alignment is big
     assert(alignment <= 16);
     if (alignment > 16) [[unlikely]]
-        return {};
-    void* const mem = ::malloc(nbytes);
+        return error::unsupported;
+    uint8_t* const mem = static_cast<uint8_t*>(::malloc(nbytes));
     assert(!mem || ((uintptr_t)mem % alignment) == 0);
-    return {mem, nbytes};
+    return ok::raw_slice(*mem, nbytes);
 }
 
 inline void c_allocator_t::deallocate_bytes(void* p, size_t nbytes,
@@ -57,14 +57,14 @@ inline void c_allocator_t::deallocate_bytes(void* p, size_t nbytes,
 }
 
 inline auto c_allocator_t::reallocate_bytes(
-    const allocator_interface_t::reallocate_options& options) noexcept
-    -> reallocation_result
+    const allocator_interface_t::reallocate_options_t& options) noexcept
+    -> reallocation_result_t
 {
     assert(((uintptr_t)options.data % options.alignment) == 0);
 
     if (options.flags & flags::keep_old_nocopy) [[unlikely]] {
         assert(false);
-        return {};
+        return error::unsupported;
     }
 
     const bool shrinking_back = options.flags & flags::shrink_back;
@@ -75,13 +75,13 @@ inline auto c_allocator_t::reallocate_bytes(
     if ((shrinking_front && expanding_front) ||
         (shrinking_back && expanding_back)) {
         assert(false);
-        return {};
+        return error::usage;
     }
 
     // validate expanding_back first- it can happen in early return
     if (expanding_back &&
         options.preferred_bytes_back < options.required_bytes_back) [[unlikely]]
-        return {};
+        return error::usage;
 
     // if we arent doing any weird business, we can use run of the mill realloc
     if (!shrinking_back && !shrinking_front && !expanding_front) [[likely]] {
@@ -89,11 +89,11 @@ inline auto c_allocator_t::reallocate_bytes(
             ::realloc(options.data, options.size + options.required_bytes_back);
 
         if (!mem) [[unlikely]]
-            return {};
+            return error::oom;
 
-        return reallocation_result{
-            mem,
-            options.size + options.required_bytes_back,
+        return reallocation_result_t{
+            ok::raw_slice(*static_cast<uint8_t*>(mem),
+                          options.size + options.required_bytes_back),
             mem,
             false,
         };
@@ -103,11 +103,11 @@ inline auto c_allocator_t::reallocate_bytes(
     // allocation
     if (shrinking_front) [[unlikely]] {
         if (options.required_bytes_front >= options.size) [[unlikely]]
-            return {};
+            return error::usage;
         if (shrinking_back &&
             options.required_bytes_front + options.required_bytes_back >=
                 options.size) [[unlikely]]
-            return {};
+            return error::usage;
         // preferred bytes doesnt make sense when shrinking, setting this is
         // a mistake
         assert(options.preferred_bytes_front == 0);
@@ -115,7 +115,7 @@ inline auto c_allocator_t::reallocate_bytes(
 
     if (shrinking_back) [[unlikely]] {
         if (options.required_bytes_back >= options.size) [[unlikely]]
-            return {};
+            return error::usage;
         // preferred bytes doesnt make sense when shrinking, setting this is
         // a mistake
         assert(options.preferred_bytes_back == 0);
@@ -123,7 +123,7 @@ inline auto c_allocator_t::reallocate_bytes(
 
     if (expanding_front && options.preferred_bytes_front <
                                options.required_bytes_front) [[unlikely]]
-        return {};
+        return error::usage;
 
     size_t newsize = options.size;
     if (expanding_back)
@@ -141,7 +141,7 @@ inline auto c_allocator_t::reallocate_bytes(
 
     void* const mem = ::malloc(newsize);
     if (!mem) [[unlikely]]
-        return {};
+        return error::oom;
 
     void* original = nullptr;
     if (shrinking_front) {
@@ -161,9 +161,8 @@ inline auto c_allocator_t::reallocate_bytes(
 
     ::free(options.data);
 
-    return reallocation_result{
-        mem,
-        newsize,
+    return reallocation_result_t{
+        ok::raw_slice(*static_cast<uint8_t*>(mem), newsize),
         original,
         false,
     };
@@ -182,16 +181,15 @@ inline void c_allocator_t::clear() noexcept
     assert(false);
 }
 
-inline bool
-c_allocator_t::register_destruction_callback(void*,
-                                             destruction_callback) noexcept
+inline auto c_allocator_t::register_destruction_callback(
+    void*, destruction_callback_t) noexcept -> status_t<error>
 {
     // basic c allocator does not provide destruction callback registration so
     // it can be zero-sized when used without vtable
     // TODO: check codegen for this, maybe destruction callback list pointer is
     // fine
     assert(false);
-    return false;
+    return error::unsupported;
 }
 } // namespace ok
 

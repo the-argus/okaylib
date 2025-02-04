@@ -19,6 +19,8 @@
 
 namespace ok {
 
+class allocator_interface_t;
+
 namespace detail {
 template <typename T, typename E>
 using res_enable_copy_move_for_type_t = detail::enable_copy_move<
@@ -145,9 +147,11 @@ class res_t<contained_t, enum_t,
                          bool> = true>
     constexpr res_t(args_t&&... args) OKAYLIB_NOEXCEPT
     {
+#ifndef OKAYLIB_TESTING
         static_assert(std::is_nothrow_constructible_v<contained_t, args_t...>,
                       "Attempt to construct in place but constructor invoked "
                       "can throw exceptions.");
+#endif
         this->get_error_payload() = 0;
         this->construct_no_destroy_payload(std::forward<args_t>(args)...);
     }

@@ -7,10 +7,9 @@
 #include <cstring>
 #include <type_traits>
 
-#include "okay/detail/abort.h"
-#include "okay/opt.h"
+// pulls in slice and opt, and because of that also ranges and ordering
 #include "okay/res.h"
-#include "okay/slice.h"
+#include "okay/status.h"
 
 namespace ok {
 
@@ -31,9 +30,10 @@ class allocator_interface_t
         result_released,
         oom,
         unsupported,
+        usage,
     };
 
-    template <typename T> using res_t = res_t<T, error>;
+    template <typename T> using result_t = res_t<T, error>;
 
     enum class flags : uint8_t
     {
@@ -112,7 +112,7 @@ class allocator_interface_t
         // clang-format on
     };
 
-    struct reallocate_options
+    struct reallocate_options_t
     {
         void* data;
         size_t size;
@@ -126,119 +126,35 @@ class allocator_interface_t
         flags flags;
     };
 
-    struct allocation_result
+    struct reallocation_t
     {
-      public:
-        allocation_result() noexcept : m_data(nullptr), m_size(0) {}
-        allocation_result(undefined_t) noexcept {}
-        inline constexpr allocation_result(void* data, size_t size)
-            : m_data(data), m_size(size)
-        {
-        }
-
-        inline constexpr void* data() const noexcept { return m_data; }
-
-        inline constexpr size_t size() const OKAYLIB_NOEXCEPT
-        {
-            if (!m_data) [[unlikely]] {
-                __ok_abort();
-            }
-            return m_size;
-        }
-
-        inline constexpr ok::slice_t<uint8_t> slice() const OKAYLIB_NOEXCEPT
-        {
-            if (!m_data) [[unlikely]] {
-                __ok_abort();
-            }
-            return ok::raw_slice(*static_cast<uint8_t*>(m_data), m_size);
-        }
-
-        inline constexpr
-        operator ok::opt_t<ok::slice_t<uint8_t>>() const OKAYLIB_NOEXCEPT
-        {
-            if (!m_data) [[unlikely]] {
-                __ok_abort();
-            }
-            return ok::raw_slice(*static_cast<uint8_t*>(m_data), m_size);
-        }
-
-        inline constexpr error err() const noexcept
-        {
-            return m_data ? error::okay : error::oom;
-        }
-
-        inline constexpr operator bool() const noexcept { return m_data; }
-        // TODO: error() function here, if m_data is false error can be stored
-        // in m_size. needs matching constructor or factory function
-
-        friend class ok::allocator_interface_t;
-
-      private:
-        void* m_data;
-        size_t m_size;
-    };
-
-    struct reallocation_result
-    {
-      public:
-        reallocation_result(undefined_t) noexcept {}
-        reallocation_result() noexcept
-            : m_data(nullptr), m_size(0), m_data_original_offset(nullptr),
-              m_kept(false)
-        {
-        }
-
-        inline constexpr reallocation_result(void* data, size_t size,
-                                             void* data_original_offset,
-                                             bool kept) noexcept
-            : m_data(data), m_size(size),
-              m_data_original_offset(data_original_offset), m_kept(kept)
-        {
-        }
-
-        inline constexpr void* data() const noexcept { return m_data; }
-        inline constexpr size_t size() const OKAYLIB_NOEXCEPT
-        {
-            if (!m_data) [[unlikely]]
-                __ok_abort();
-            return m_size;
-        }
-        inline constexpr void* data_original_offset() const OKAYLIB_NOEXCEPT
-        {
-            if (!m_data) [[unlikely]]
-                __ok_abort();
-            return m_data_original_offset;
-        }
-        inline constexpr bool kept() const OKAYLIB_NOEXCEPT
-        {
-            if (!m_data) [[unlikely]]
-                __ok_abort();
-            return m_kept;
-        }
-        inline constexpr operator bool() const noexcept { return m_data; }
-
-        friend class ok::allocator_interface_t;
-
-      private:
-        void* m_data;
-        size_t m_size;
+        bytes_t memory;
         // pointer to the part of memory corresponding to what was originally
         // the pointer to the start of your allocation. Unless you shrink_front,
         // in which case this is nullptr. If you don't expand_back, this is
         // equal to data
-        void* m_data_original_offset;
-        bool m_kept;
+        void* data_original_offset;
+        bool kept;
+
+        constexpr reallocation_t(bytes_t _memory, void* _data_original_offset,
+                                 bool _kept) OKAYLIB_NOEXCEPT
+            : memory(_memory),
+              data_original_offset(_data_original_offset),
+              kept(_kept)
+        {
+        }
     };
 
-    using destruction_callback = void (*)(void*);
+    using reallocation_result_t = result_t<reallocation_t>;
+
+    using destruction_callback_t = void (*)(void*);
 
     /// Allocate some amount of memory of size at least nbytes.
     /// Return pointer to memory and the size of the block.
     /// The allocator will return at least nbytes but may make a decision to
     /// arbitrarily return more, especially if there is extra space it cannot
     /// reuse off the back of the allocation.
-    [[nodiscard]] virtual allocation_result
+    [[nodiscard]] virtual result_t<bytes_t>
     allocate_bytes(size_t nbytes, size_t alignment = default_align) = 0;
 
     // Given a live allocation specified by the "data" and "size" fields, alter
@@ -260,13 +176,13 @@ class allocator_interface_t
     // If try_defragment is specified, then the allocator will prioritize
     // moving the allocation to a better fit spot, being more likely to
     // cause copying or new allocations.
-    [[nodiscard]] virtual reallocation_result
-    reallocate_bytes(const reallocate_options& options) = 0;
+    [[nodiscard]] virtual reallocation_result_t
+    reallocate_bytes(const reallocate_options_t& options) = 0;
 
     [[nodiscard]] virtual feature_flags features() const noexcept = 0;
 
-    [[nodiscard]] virtual bool
-    register_destruction_callback(void*, destruction_callback) = 0;
+    [[nodiscard]] virtual status_t<error>
+    register_destruction_callback(void*, destruction_callback_t) = 0;
 
     // Free all allocations in this allocator.
     virtual void clear() = 0;
@@ -275,11 +191,11 @@ class allocator_interface_t
                                   size_t alignment = default_align) = 0;
 
   protected:
-    struct destruction_callback_entry
+    struct destruction_callback_entry_t
     {
         void* user_data;
-        destruction_callback callback;
-        destruction_callback_entry* previous = nullptr;
+        destruction_callback_t callback;
+        destruction_callback_entry_t* previous = nullptr;
     };
 
     /// Given an allocator and some pointer to the end of a destruction callback
@@ -288,81 +204,46 @@ class allocator_interface_t
     /// destruction.
     /// Returns false on memory allocation failure.
     template <typename T>
-    static inline constexpr bool
-    append_destruction_callback(T& allocator,
-                                destruction_callback_entry*& current_head,
-                                void* user_data, destruction_callback callback)
+    static inline constexpr status_t<error> append_destruction_callback(
+        T& allocator, destruction_callback_entry_t*& current_head,
+        void* user_data, destruction_callback_t callback)
     {
         static_assert(std::is_base_of_v<ok::allocator_interface_t, T>,
                       "Cannot append destruction callback to allocator which "
                       "does not inherit from allocator_interface_t");
-        allocation_result result = allocator.allocate_bytes(
-            sizeof(destruction_callback), alignof(destruction_callback_entry));
+        auto result =
+            allocator.allocate_bytes(sizeof(destruction_callback_t),
+                                     alignof(destruction_callback_entry_t));
         if (!result)
-            return false;
+            return error::oom;
 
         if (!current_head) {
             current_head =
-                static_cast<destruction_callback_entry*>(result.data());
+                static_cast<destruction_callback_entry_t*>(result.data());
             current_head->previous = nullptr;
         } else {
             auto* const temp = current_head;
             current_head =
-                static_cast<destruction_callback_entry*>(result.data());
+                static_cast<destruction_callback_entry_t*>(result.data());
             current_head->previous = temp;
         }
 
         current_head->callback = callback;
         current_head->user_data = user_data;
-        return true;
+        return error::okay;
     }
 
     // traverse a linked list of destruction callbacks and call each one of
     // them. Does not deallocate the space used by the destruction callback.
     // Intended to be called when an allocator is destroyed.
     static inline constexpr void
-    call_all_destruction_callbacks(destruction_callback_entry* current_head)
+    call_all_destruction_callbacks(destruction_callback_entry_t* current_head)
     {
-        destruction_callback_entry* iter = current_head;
+        destruction_callback_entry_t* iter = current_head;
         while (iter != nullptr) {
             iter->callback(iter->user_data);
             iter = iter->previous;
         }
-    }
-
-    // protected members allow allocators to modify allocation and reallocation
-    // results, so they can construct them in place and maintain RVO
-    inline static constexpr void
-    set_allocation_result_data(allocation_result& result, void* data)
-    {
-        result.m_data = data;
-    }
-    inline static constexpr void
-    set_allocation_result_size(allocation_result& result, size_t size)
-    {
-        result.m_size = size;
-    }
-
-    inline static constexpr void
-    set_reallocation_result_data(reallocation_result& result, void* data)
-    {
-        result.m_data = data;
-    }
-    inline static constexpr void
-    set_reallocation_result_size(reallocation_result& result, size_t size)
-    {
-        result.m_size = size;
-    }
-    inline static constexpr void
-    set_reallocation_result_data_original_offset(reallocation_result& result,
-                                                 void* data_original_offset)
-    {
-        result.m_data_original_offset = data_original_offset;
-    }
-    inline static constexpr void
-    set_reallocation_result_kept(reallocation_result& result, bool kept)
-    {
-        result.m_kept = kept;
     }
 };
 
@@ -423,19 +304,18 @@ template <> struct fmt::formatter<ok::allocator_interface_t::error>
         case error_t::okay:
             return fmt::format_to(ctx.out(),
                                   "allocator_interface_t::error::okay");
-            break;
         case error_t::unsupported:
             return fmt::format_to(ctx.out(),
                                   "allocator_interface_t::error::unsupported");
-            break;
         case error_t::oom:
             return fmt::format_to(ctx.out(),
                                   "allocator_interface_t::error::oom");
-            break;
         case error_t::result_released:
             return fmt::format_to(
                 ctx.out(), "allocator_interface_t::error::result_released");
-            break;
+        case error_t::usage:
+            return fmt::format_to(ctx.out(),
+                                  "allocator_interface_t::error::usage");
         }
     }
 };

@@ -16,14 +16,14 @@ template <typename T> class disable_freeing_t : public allocator_interface_t
 
     inline void clear() const noexcept { m_backing_allocator.clear(); }
 
-    [[nodiscard]] inline allocation_result
+    [[nodiscard]] inline result_t<bytes_t>
     allocate_bytes(size_t nbytes, size_t alignment = default_align) final
     {
         return m_backing_allocator.allocate_bytes(nbytes, alignment);
     }
 
-    [[nodiscard]] inline reallocation_result reallocate_bytes(
-        const allocator_interface_t::reallocate_options& options) final
+    [[nodiscard]] inline reallocation_result_t reallocate_bytes(
+        const allocator_interface_t::reallocate_options_t& options) final
     {
         return m_backing_allocator.reallocate_bytes(options);
     }
