@@ -2,6 +2,7 @@
 #define __OKAYLIB_DETAIL_RES_H__
 
 #include "okay/detail/addressof.h"
+#include "okay/detail/template_util/first_type_in_pack.h"
 #include "okay/detail/template_util/uninitialized_storage.h"
 #include "okay/detail/traits/is_instance.h"
 #include <cassert>
@@ -473,7 +474,7 @@ struct res_base_t<input_contained_t, enum_int_t, copy, move, true>
 } // namespace ok::detail
 
 namespace ok {
-template <typename contained_t, typename enum_t> class res_t;
+template <typename contained_t, typename enum_t, typename = void> class res_t;
 }
 
 namespace ok::detail {

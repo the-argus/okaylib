@@ -10,6 +10,9 @@
 
 using namespace ok;
 
+static_assert(sizeof(slice_t<uint8_t>) ==
+              sizeof(res_t<slice_t<uint8_t>, StatusCodeA>));
+
 TEST_SUITE("res")
 {
     TEST_CASE("Construction and type behavior")
@@ -38,12 +41,15 @@ TEST_SUITE("res")
             struct constructed_type
             {
                 const char* string = nullptr;
-                inline constructed_type(const std::string& instr)
+                inline constructed_type(const std::string& instr) noexcept
                 {
                     string = instr.c_str();
                 }
             };
             using result = res_t<constructed_type, StatusCodeA>;
+            // random thought: i assume this is undefined behavior (dangling
+            // pointer to string contents) but is it actually? maybe the
+            // standard specifies a const char* optimization
             auto constructed_result = [](bool cond) -> result {
                 return cond ? result(std::string("hello"))
                             : result(StatusCodeA::oom);
@@ -114,17 +120,7 @@ TEST_SUITE("res")
             // pass a copy of the vector into the result
             res vec_result_modified(std::move(vec));
 
-            // moving the result works fine
-            auto passthrough = [](res&& result) -> res&& {
-                REQUIRE(result.okay());
-                return std::move(result);
-            };
-
-            res vec_result_3(passthrough(std::move(vec_result_modified)));
-            REQUIRE(!vec_result_modified.okay());
-
-            REQUIRE(vec_result_3.okay());
-            std::vector<size_t> vec_modified = vec_result_3.release();
+            std::vector<size_t> vec_modified = vec_result_modified.release();
             REQUIRE(vec_modified.size() == 1);
             REQUIRE(vec_modified[0] == 42);
         }
@@ -206,11 +202,10 @@ TEST_SUITE("res")
 
         SUBCASE("res::to_opt() for value result")
         {
-            using res = res_t<int, StatusCodeA>;
+            using res = res_t<int&, StatusCodeA>;
 
-            // TODO: fix the following (more generous constructor selection
-            // needed) int i = 9; rest test = i;
-            res test = 9;
+            int i = 9;
+            res test = i;
             REQUIRE(test.okay() == test.to_opt().has_value());
             res test2 = StatusCodeA::oom;
             REQUIRE(test2.okay() == test2.to_opt().has_value());
@@ -333,6 +328,69 @@ TEST_SUITE("res")
         }
     }
 
+    TEST_CASE("slice result")
+    {
+        static std::array<int, 8> mem{};
+        using slice_int_result = res_t<slice_t<int>, StatusCodeA>;
+        auto get_slice = []() -> slice_int_result { return mem; };
+
+        SUBCASE("slice release_ref and conversion")
+        {
+            auto slice_res = get_slice();
+            REQUIRE(slice_res.okay());
+
+            static_assert(
+                std::is_same_v<decltype(slice_res.release()), slice_t<int>>);
+            static_assert(std::is_same_v<decltype(slice_res.release_ref()),
+                                         slice_t<int>&>);
+
+            auto& slice = slice_res.release_ref();
+
+            for (size_t i = 0; i < slice.size(); ++i) {
+                REQUIRE(slice[i] == mem.at(i));
+            }
+        }
+
+        SUBCASE("slice release copy")
+        {
+            auto slice_res = get_slice();
+            REQUIRE(slice_res.okay());
+            auto slice = slice_res.release();
+            for (size_t i = 0; i < slice.size(); ++i) {
+                REQUIRE(slice[i] == mem.at(i));
+            }
+        }
+
+        SUBCASE("slice not always okay")
+        {
+            slice_int_result res = StatusCodeA::oom;
+            REQUIRE(!res.okay());
+            REQUIRE(res.err() == StatusCodeA::oom);
+        }
+
+        SUBCASE("cannot assign okay to res")
+        {
+            try {
+                slice_int_result res = StatusCodeA::okay;
+                REQUIRE(false); // above should throw
+            } catch (...) {
+            }
+        }
+
+        // this would mean slice is default constructible
+        static_assert(
+            !std::is_constructible_v<slice_int_result, std::in_place_t>);
+
+        SUBCASE("slice res to opt")
+        {
+            std::array<int, 100> myints;
+            slice_int_result myslice = myints;
+            REQUIRE(myslice.okay() == myslice.to_opt().has_value());
+            slice_int_result myslicetwo = StatusCodeA::oom;
+            REQUIRE(myslicetwo.okay() == myslicetwo.to_opt().has_value());
+        }
+    }
+
     TEST_CASE("try macro")
     {
         enum class ExampleError : uint8_t
@@ -413,9 +471,20 @@ TEST_SUITE("res")
                               "local integer not recognized as lvalue");
             }
 
+            // makes no copies: uses try_ref
             auto attempt =
                 [try_make_big_thing](bool should_succeed) -> ExampleError {
                 TRY_REF_BLOCK(big_thing, try_make_big_thing(should_succeed), {
+                    for (int& number : big_thing.numbers) {
+                        number = 0;
+                    }
+                    return ExampleError::okay;
+                });
+            };
+
+            auto attempt_copy =
+                [try_make_big_thing](bool should_succeed) -> ExampleError {
+                TRY_BLOCK(big_thing, try_make_big_thing(should_succeed), {
                     for (int& number : big_thing.numbers) {
                         number = 0;
                     }
@@ -432,12 +501,12 @@ TEST_SUITE("res")
             };
 
             auto optional_attempt = [try_make_big_thing_optional]() -> bool {
-                decltype(try_make_big_thing_optional(true))
-                    _private_result_big_thing(
-                        try_make_big_thing_optional(true));
-                if (!_private_result_big_thing.has_value())
+                auto attempt = try_make_big_thing_optional(true);
+                if (!attempt.has_value())
                     return false;
-                auto(big_thing) = _private_result_big_thing.value();
+                // avoiding copy here with reference
+                auto& big_thing = attempt.value();
+
                 {
                     for (int& number : big_thing.numbers) {
                         number = 0;
@@ -449,13 +518,12 @@ TEST_SUITE("res")
             REQUIRE(attempt(false) == ExampleError::error);
             REQUIRE(copy_count == 0);
             attempt(true);
-            // once for it to be copied into the result returned from the first
-            // function, and once for it to be copied into the temporary
-            // variable used to try on that type
+            REQUIRE(copy_count == 0);
+            attempt_copy(true);
             REQUIRE(copy_count == 1);
             optional_attempt();
-            // std::optional causes the same number of copies
-            REQUIRE(copy_count == 2);
+            // optional causes no copies- stored as reference
+            REQUIRE(copy_count == 1);
         }
     }
 }
