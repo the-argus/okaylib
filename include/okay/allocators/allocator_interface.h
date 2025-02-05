@@ -114,8 +114,7 @@ class allocator_interface_t
 
     struct reallocate_options_t
     {
-        void* data;
-        size_t size;
+        bytes_t memory;
         // no way to change the alignment of an allocation, you can
         // manually realign within the buffer, or reallocate
         size_t alignment = default_align;
@@ -149,12 +148,18 @@ class allocator_interface_t
 
     using destruction_callback_t = void (*)(void*);
 
+    struct destruction_callback_entry_t
+    {
+        void* user_data;
+        destruction_callback_t callback;
+    };
+
     /// Allocate some amount of memory of size at least nbytes.
     /// Return pointer to memory and the size of the block.
     /// The allocator will return at least nbytes but may make a decision to
     /// arbitrarily return more, especially if there is extra space it cannot
     /// reuse off the back of the allocation.
-    [[nodiscard]] virtual result_t<bytes_t>
+    [[nodiscard]] virtual result_t<undefined_memory_t<uint8_t>>
     allocate_bytes(size_t nbytes, size_t alignment = default_align) = 0;
 
     // Given a live allocation specified by the "data" and "size" fields, alter
@@ -181,21 +186,20 @@ class allocator_interface_t
 
     [[nodiscard]] virtual feature_flags features() const noexcept = 0;
 
-    [[nodiscard]] virtual status_t<error>
+    [[nodiscard]] virtual result_t<destruction_callback_entry_t&>
     register_destruction_callback(void*, destruction_callback_t) = 0;
 
     // Free all allocations in this allocator.
     virtual void clear() = 0;
 
-    virtual void deallocate_bytes(void* p, size_t nbytes,
+    virtual void deallocate_bytes(bytes_t bytes,
                                   size_t alignment = default_align) = 0;
 
   protected:
-    struct destruction_callback_entry_t
+    struct destruction_callback_entry_node_t
     {
-        void* user_data;
-        destruction_callback_t callback;
-        destruction_callback_entry_t* previous = nullptr;
+        destruction_callback_entry_t entry;
+        destruction_callback_entry_node_t* previous = nullptr;
     };
 
     /// Given an allocator and some pointer to the end of a destruction callback
@@ -204,8 +208,9 @@ class allocator_interface_t
     /// destruction.
     /// Returns false on memory allocation failure.
     template <typename T>
-    static inline constexpr status_t<error> append_destruction_callback(
-        T& allocator, destruction_callback_entry_t*& current_head,
+    static inline constexpr result_t<destruction_callback_entry_t&>
+    append_destruction_callback(
+        T& allocator, destruction_callback_entry_node_t*& current_head,
         void* user_data, destruction_callback_t callback)
     {
         static_assert(std::is_base_of_v<ok::allocator_interface_t, T>,
@@ -219,29 +224,29 @@ class allocator_interface_t
 
         if (!current_head) {
             current_head =
-                static_cast<destruction_callback_entry_t*>(result.data());
+                static_cast<destruction_callback_entry_node_t*>(result.data());
             current_head->previous = nullptr;
         } else {
             auto* const temp = current_head;
             current_head =
-                static_cast<destruction_callback_entry_t*>(result.data());
+                static_cast<destruction_callback_entry_node_t*>(result.data());
             current_head->previous = temp;
         }
 
-        current_head->callback = callback;
-        current_head->user_data = user_data;
-        return error::okay;
+        current_head->entry.callback = callback;
+        current_head->entry.user_data = user_data;
+        return current_head->entry;
     }
 
     // traverse a linked list of destruction callbacks and call each one of
     // them. Does not deallocate the space used by the destruction callback.
     // Intended to be called when an allocator is destroyed.
-    static inline constexpr void
-    call_all_destruction_callbacks(destruction_callback_entry_t* current_head)
+    static inline constexpr void call_all_destruction_callbacks(
+        destruction_callback_entry_node_t* current_head)
     {
-        destruction_callback_entry_t* iter = current_head;
+        destruction_callback_entry_node_t* iter = current_head;
         while (iter != nullptr) {
-            iter->callback(iter->user_data);
+            iter->entry.callback(iter->entry.user_data);
             iter = iter->previous;
         }
     }
