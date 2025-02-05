@@ -14,25 +14,25 @@ TEST_SUITE("stdmem")
         {
             std::array<u8, 512> bytes;
 
-            slice_t<u8> a = make_subslice(bytes, 0, 100);
-            slice_t<u8> b = make_subslice(bytes, 20, 110);
+            bytes_t a = subslice(bytes, {.start = 0, .length = 40});
+            bytes_t b = subslice(bytes, {.start = 20, .length = 90});
 
-            REQUIRE(!memcopy(a, b));
-            REQUIRE(!memcopy_lenient(b, a));
-            // normally okay to copy into the bigger buffer, but these overlap
-            REQUIRE(!memcopy_lenient(a, b));
+            // memcopying these always aborts, because they are overlapping
+            REQUIREABORTS(auto&& _ = ok_memcopy(.to = b, .from = a););
+            REQUIREABORTS(auto&& _ = ok_memcopy(.to = a, .from = b););
 
-            slice_t<u8> c = make_subslice(bytes, 200, 250);
-            REQUIRE(memcopy_lenient(b, c));
-            REQUIRE(memcopy_lenient(a, c));
-            // c is smallest so you cant copy stuff into it
-            REQUIRE(!memcopy_lenient(c, b));
-            REQUIRE(!memcopy_lenient(c, a));
+            bytes_t c = subslice(bytes, {.start = 200, .length = 50});
+            auto ignored = ok_memcopy(.to = b, .from = c);
+            // c is smaller than a, should abort
+            REQUIREABORTS(auto&& _ = ok_memcopy(.to = a, .from = c););
 
             REQUIRE(!memcompare(a, b));
             REQUIRE(!memcompare(a, c));
             REQUIRE(!memcompare(b, c));
             REQUIRE(memcompare(c, c));
+            // bytes to bytes identity transform
+            REQUIRE(memcompare(reinterpret_as_bytes(c), c));
+            REQUIRE(memcompare(reinterpret_bytes_as<uint8_t>(c), c));
         }
 
         SUBCASE("memcompare for string")
@@ -53,9 +53,9 @@ TEST_SUITE("stdmem")
         {
             std::array<u8, 512> bytes;
 
-            slice_t<u8> a = make_subslice(bytes, 0, 100);
-            slice_t<u8> b = make_subslice(bytes, 20, 110);
-            slice_t<u8> c = make_subslice(bytes, 100, 200);
+            bytes_t a = subslice(bytes, {.start = 0, .length = 100});
+            bytes_t b = subslice(bytes, {.start = 20, .length = 90});
+            bytes_t c = subslice(bytes, {.start = 100, .length = 100});
             REQUIRE(memoverlaps(a, b));
             REQUIRE(!memoverlaps(a, c));
             REQUIRE(memoverlaps(c, b));
@@ -72,7 +72,7 @@ TEST_SUITE("stdmem")
                 REQUIRE(byte == 0);
             }
 
-            memfill(make_subslice(bytes, 0, 100), u8(1));
+            memfill(subslice(bytes, {.start = 0, .length = 100}), u8(1));
             for (size_t i = 0; i < bytes.size(); ++i) {
                 REQUIRE(bytes[i] == (i < 100 ? 1 : 0));
             }
@@ -81,46 +81,52 @@ TEST_SUITE("stdmem")
         SUBCASE("memcontains")
         {
             std::array<u8, 512> bytes;
-            slice_t<u8> a = make_subslice(bytes, 0, 512);
-            slice_t<u8> b = make_subslice(bytes, 256, 512);
-            slice_t<u8> c = make_subslice(bytes, 255, 511);
-            REQUIRE(memcontains(a, b));
-            REQUIRE(memcontains(a, c));
+            bytes_t a = subslice(bytes, {.start = 0, .length = 512});
+            bytes_t b = subslice(bytes, {.start = 256, .length = 256});
+            bytes_t c = subslice(bytes, {.start = 255, .length = 256});
+            REQUIRE(ok_memcontains(.containing = a, .inner = b));
+            REQUIRE(ok_memcontains(a, c));
             // nothing can contain A!
-            REQUIRE(!memcontains(b, a));
-            REQUIRE(!memcontains(c, a));
+            REQUIRE(!ok_memcontains(b, a));
+            REQUIRE(!ok_memcontains(.containing = c, .inner = a));
 
             // no way for b or c to contain the other, they are the same size
             // just offset
-            REQUIRE(!memcontains(b, c));
-            REQUIRE(!memcontains(c, b));
+            REQUIRE(!ok_memcontains(b, c));
+            REQUIRE(!ok_memcontains(.containing = c, .inner = b));
         }
 
-        SUBCASE("memcontains_one")
+        SUBCASE("memcontains")
         {
             struct Test
             {
                 int i;
                 float j;
             };
-            std::array<Test, 200> tests;
+            std::array<Test, 200> tests_arr;
+            slice_t tests = tests_arr;
 
-            REQUIRE(memcontains_one<Test>((tests), tests.data() + 100));
-            REQUIRE(!memcontains_one<Test>((tests), tests.data() + 200));
-            REQUIRE(!memcontains_one<Test>((tests), tests.data() + 201));
-            REQUIRE(memcontains_one<Test>((tests), tests.data() + 199));
+            bool c = ok_memcontains(.containing = tests,
+                                    .inner = slice_from_one(tests[100]));
+            // manually do slice_from_one
+            REQUIRE(ok_memcontains(
+                tests, subslice(tests, {.start = 100, .length = 1})));
+            REQUIRE(ok_memcontains(
+                tests, subslice(tests, {.start = 199, .length = 1})));
+            REQUIRE(ok_memcontains(tests, slice_from_one(tests[199])));
             ok::slice_t<Test> tmem = tests;
-            REQUIRE(memcontains_one(tmem, tests.data() + 100));
-            REQUIRE(!memcontains_one(tmem, tests.data() + 200));
-            REQUIRE(!memcontains_one(tmem, tests.data() + 201));
-            REQUIRE(memcontains_one(tmem, tests.data() + 199));
-            ok::slice_t<uint8_t> tmem_bytes =
-                raw_slice(*reinterpret_cast<uint8_t*>(tmem.data()),
-                          sizeof(Test) * tmem.size());
-            REQUIRE(memcontains_one(tmem_bytes, tests.data() + 100));
-            REQUIRE(!memcontains_one(tmem_bytes, tests.data() + 200));
-            REQUIRE(!memcontains_one(tmem_bytes, tests.data() + 201));
-            REQUIRE(memcontains_one(tmem_bytes, tests.data() + 199));
+            REQUIRE(ok_memcontains(tmem, slice_from_one(tests[100])));
+            REQUIRE(ok_memcontains(tmem, slice_from_one(tests[199])));
+
+            auto first_half = tests.subslice({.start = 0, .length = 100});
+            auto second_half = tests.subslice({.start = 99, .length = 100});
+            REQUIRE(!ok_memcontains(first_half, second_half));
+
+            // can go to and from bytes, get the same thing back
+            auto restored =
+                reinterpret_bytes_as<Test>(reinterpret_as_bytes(tests));
+            REQUIRE(restored.is_alias_for(tests));
+            REQUIRE(memcompare(tests, restored));
         }
     }
 }

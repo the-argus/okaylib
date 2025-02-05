@@ -7,8 +7,8 @@
 #endif
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
-#include <doctest.h>
 #include "okay/detail/abort.h"
+#include <doctest.h>
 
 #define REQUIREABORTS(operation)                         \
     {                                                    \

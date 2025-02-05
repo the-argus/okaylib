@@ -29,6 +29,9 @@ using namespace ok;
 static_assert(std::is_same_v<slice_t<const uint8_t>::value_type, const uint8_t>,
               "slice::value_type doesnt work as expected");
 
+// undefined memory should not be iterable
+static_assert(!ok::is_range_v<ok::undefined_memory_t<int>>);
+
 TEST_SUITE("slice")
 {
     TEST_CASE("Construction and type behavior")
@@ -42,16 +45,18 @@ TEST_SUITE("slice")
             REQUIRE(sl.size() == mem.size());
             REQUIRE(sl.data() == mem.data());
 
-            auto subslice_a = make_subslice(mem, 10, 120);
+            auto subslice_a = subslice(mem, {.start = 10, .length = 110});
             static_assert(
                 std::is_same_v<decltype(subslice_a), slice_t<uint8_t>>);
-            REQUIREABORTS(make_subslice(mem, 10, 600));
-            REQUIREABORTS(make_subslice(mem, 0, 513));
-            REQUIREABORTS(make_subslice(mem, 100, 50));
+
+            REQUIREABORTS(auto&& _ =
+                              subslice(mem, {.start = 10, .length = 600}));
+            REQUIREABORTS(auto&& _ =
+                              subslice(mem, {.start = 0, .length = 513}));
             {
-                auto subslice_b = make_subslice(mem, 0, 512);
+                auto subslice_b = subslice(mem, {.start = 0, .length = 512});
                 slice_t<uint8_t> subslice_c(mem);
-                REQUIRE(subslice_b == subslice_c);
+                REQUIRE(subslice_b.is_alias_for(subslice_c));
             }
             REQUIRE(subslice_a.size() == 110);
             REQUIRE(subslice_a.data() == &mem[10]);
@@ -115,28 +120,39 @@ TEST_SUITE("slice")
             slice_t<const int> cslice = carray;
         }
 
+        SUBCASE("convert nonconst slice to const slice")
+        {
+            std::array<int, 100> arr;
+
+            slice_t<int> ints = arr;
+
+            slice_t<const int> cints = ints;
+
+            REQUIRE(ints.is_alias_for(cints));
+        }
+
         SUBCASE("construct from single item")
         {
             int oneint[1] = {0};
 
-            slice_t<int> ints = make_slice_of_one((int&)oneint[0]);
+            slice_t<int> ints = slice_from_one((int&)oneint[0]);
             REQUIRE(ints.size() == 1);
             ok_foreach(int i, ints) REQUIRE(i == oneint[0]);
 
-            slice_t<const int> ints_const = make_slice_of_one(oneint[0]);
+            slice_t<const int> ints_const = slice_from_one(oneint[0]);
             REQUIRE(ints.size() == 1);
             const int oneint_const[1] = {0};
-            ints_const = make_slice_of_one(oneint_const[0]);
+            ints_const = slice_from_one(oneint_const[0]);
             REQUIRE(ints.size() == 1);
         }
 
         SUBCASE("const correctness")
         {
             int oneint[1] = {0};
-            slice_t<int> ints = make_slice_of_one(oneint[0]);
+            slice_t<int> ints = slice_from_one(oneint[0]);
             static_assert(std::is_same_v<int*, decltype(ints.data())>);
 
-            slice_t<const int> ints_const = make_slice_of_one((int&)oneint[0]);
+            slice_t<const int> ints_const = slice_from_one((int&)oneint[0]);
             static_assert(
                 std::is_same_v<const int*, decltype(ints_const.data())>);
 
@@ -149,8 +165,8 @@ TEST_SUITE("slice")
             static_assert(std::is_same_v<decltype(copy.data()), int*>);
 
             ok::slice_t<const int> cint_1 =
-                make_slice_of_one<const int>(oneint[0]);
-            cint_1 = make_slice_of_one(oneint[0]);
+                slice_from_one<const int>(oneint[0]);
+            cint_1 = slice_from_one(oneint[0]);
             ok::slice_t<const int> cint_2(cint_1);
         }
 
@@ -158,7 +174,7 @@ TEST_SUITE("slice")
         {
             std::array<uint8_t, 512> mem;
 
-            slice_t<uint8_t> slice = make_subslice(mem, 0, 0);
+            slice_t<uint8_t> slice = subslice(mem, {0, 0});
             REQUIRE(slice.size() == 0);
 
             size_t index = 0;
@@ -215,7 +231,8 @@ TEST_SUITE("slice")
         {
             std::array<uint8_t, 128> mem;
             slice_t<uint8_t> sl(mem);
-            slice_t<uint8_t> subslice = make_subslice(sl, 10, 127);
+            slice_t<uint8_t> subslice =
+                ok::subslice(sl, {.start = 10, .length = 118});
 
             REQUIRE(subslice.size() < sl.size());
         }
@@ -224,7 +241,7 @@ TEST_SUITE("slice")
         {
             uint8_t mem[128];
             auto slice = raw_slice(mem[0], sizeof(mem));
-            REQUIRE(slice == slice_t<uint8_t>(mem));
+            REQUIRE(slice.is_alias_for(bytes_t(mem)));
             memfill(slice_t(mem), 0);
 
             ok_foreach(ok_pair(byte, index), enumerate(slice))

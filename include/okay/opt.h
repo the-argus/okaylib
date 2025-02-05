@@ -528,28 +528,6 @@ class opt_t<
         return unchecked_value();
     }
 
-    inline constexpr friend bool operator==(const opt_t& a, const opt_t& b)
-    {
-        if (a.has_value() != b.has_value())
-            return false;
-
-        return !a.has_value() || // both nullopt
-                                 // invoke slice == operator
-               a.unchecked_value() == b.unchecked_value();
-    }
-
-    inline constexpr friend bool operator==(const opt_t& a,
-                                            const wrapped_slice_t& b)
-    {
-        return a.has_value() && a.unchecked_value() == b;
-    }
-
-    // TODO: does c++17 allow autogenerating this or is it just c++20
-    inline constexpr friend bool operator!=(const opt_t& a, const opt_t& b)
-    {
-        return !(a == b);
-    }
-
     template <
         typename convert_from_t = wrapped_slice_t,
         requires_t<not_self<convert_from_t> && not_tag<convert_from_t> &&

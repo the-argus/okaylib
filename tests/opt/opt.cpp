@@ -49,6 +49,8 @@ TEST_SUITE("opt")
             REQUIRE(has.has_value());
             REQUIRE(has == 10);
             REQUIRE(has.value() == 10);
+            has = nullopt;
+            REQUIRE(has != 10);
         }
 
         SUBCASE("comparison")
@@ -381,7 +383,8 @@ TEST_SUITE("opt")
             opt_t<slice_t<uint8_t>> maybe_bytes(bytes);
 
             opt_t<slice_t<uint8_t>> other_maybe_bytes(maybe_bytes);
-            REQUIRE(other_maybe_bytes == maybe_bytes);
+            REQUIRE(
+                other_maybe_bytes.value().is_alias_for(maybe_bytes.value()));
 
             slice_t<uint8_t> bytes_slice = other_maybe_bytes.value();
         }
