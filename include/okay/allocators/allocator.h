@@ -12,10 +12,57 @@
 
 namespace ok {
 
-struct undefined_t
-{};
+class maybe_defined_memory_t
+{
+  public:
+    maybe_defined_memory_t() = delete;
 
-inline constexpr undefined_t undefined = {};
+    explicit maybe_defined_memory_t(bytes_t bytes) OKAYLIB_NOEXCEPT
+        : m_is_defined(true)
+    {
+        m_data.as_bytes = bytes;
+    }
+
+    explicit maybe_defined_memory_t(undefined_memory_t<uint8_t> undefined)
+        : m_is_defined(false) OKAYLIB_NOEXCEPT
+    {
+        m_data.as_undefined = undefined;
+    }
+
+    [[nodiscard]] bool is_defined() const OKAYLIB_NOEXCEPT
+    {
+        return m_is_defined;
+    }
+
+    [[nodiscard]] bytes_t as_bytes() const OKAYLIB_NOEXCEPT
+    {
+        if (!is_defined()) [[unlikely]] {
+            __ok_abort()
+        }
+
+        return m_data.as_bytes;
+    }
+
+    [[nodiscard]] undefined_memory_t<uint8_t>
+    as_undefined() const OKAYLIB_NOEXCEPT
+    {
+        if (is_defined()) [[unlikely]] {
+            __ok_abort()
+        }
+
+        return m_data.as_undefined;
+    }
+
+  private:
+    union maybe_undefined_slice_t
+    {
+        bytes_t as_bytes;
+        undefined_memory_t<uint8_t> as_undefined;
+        maybe_undefined_slice_t() OKAYLIB_NOEXCEPT {}
+    };
+    maybe_undefined_slice_t m_data;
+    bool m_is_defined;
+};
 
 /// Abstract virtual interface for allocators which can realloc
 class allocator_t
@@ -97,6 +144,8 @@ class allocator_t
         threadsafe      = 0x0100,
         // whether expanded / newly allocated memory will be a defined value
         // This value may be different in debug and release modes.
+        // TODO: maybe this isnt super useful if its not the same in all build
+        // modes? maybe change that spec
         initialized     = 0x0200,
         // whether this allocator supports clearing. if it does not support
         // clearing, then clear() is an empty function call in release mode
@@ -105,26 +154,28 @@ class allocator_t
         // If this is specified, then the allocator is guaranteed to never
         // throw exceptions.
         nothrow         = 0x0800,
-        // If this is specified, then the allocator supports registering
-        // destruction callbacks
-        callbacks       = 0x1000,
         // clang-format on
     };
 
     struct reallocate_options_t
     {
         bytes_t memory;
-        // no way to change the alignment of an allocation, you can
-        // manually realign within the buffer, or reallocate
-        size_t alignment = default_align;
-        size_t required_bytes_front;
-        size_t required_bytes_back;
-        size_t preferred_bytes_front;
-        size_t preferred_bytes_back;
+        size_t required_additional_bytes;
+        size_t preferred_additional_bytes = 0;
         flags flags;
     };
 
-    struct reallocation_t
+    struct reallocation_options_extended_t
+    {
+        bytes_t memory;
+        size_t required_bytes_back;
+        size_t required_bytes_front;
+        size_t preferred_bytes_back;
+        size_t preferred_bytes_front;
+        flags flags;
+    };
+
+    struct reallocation_extended_t
     {
         bytes_t memory;
         // pointer to the part of memory corresponding to what was originally
@@ -134,23 +185,14 @@ class allocator_t
         void* data_original_offset;
         bool kept;
 
-        constexpr reallocation_t(bytes_t _memory, void* _data_original_offset,
-                                 bool _kept) OKAYLIB_NOEXCEPT
+        constexpr reallocation_extended_t(bytes_t _memory,
+                                          void* _data_original_offset,
+                                          bool _kept) OKAYLIB_NOEXCEPT
             : memory(_memory),
               data_original_offset(_data_original_offset),
               kept(_kept)
         {
         }
-    };
-
-    using reallocation_result_t = result_t<reallocation_t>;
-
-    using destruction_callback_t = void (*)(void*);
-
-    struct destruction_callback_entry_t
-    {
-        void* user_data;
-        destruction_callback_t callback;
     };
 
     /// Allocate some amount of memory of size at least nbytes.
@@ -180,75 +222,19 @@ class allocator_t
     // If try_defragment is specified, then the allocator will prioritize
     // moving the allocation to a better fit spot, being more likely to
     // cause copying or new allocations.
-    [[nodiscard]] virtual reallocation_result_t
+    [[nodiscard]] virtual result_t<reallocation_extended_t>
+    reallocate_bytes_extended(const reallocate_options_t& options) = 0;
+
+    [[nodiscard]] virtual maybe_defined_memory_t
     reallocate_bytes(const reallocate_options_t& options) = 0;
 
     [[nodiscard]] virtual feature_flags features() const noexcept = 0;
-
-    [[nodiscard]] virtual result_t<destruction_callback_entry_t&>
-    register_destruction_callback(void*, destruction_callback_t) = 0;
 
     // Free all allocations in this allocator.
     virtual void clear() = 0;
 
     virtual void deallocate_bytes(bytes_t bytes,
                                   size_t alignment = default_align) = 0;
-
-  protected:
-    struct destruction_callback_entry_node_t
-    {
-        destruction_callback_entry_t entry;
-        destruction_callback_entry_node_t* previous = nullptr;
-    };
-
-    /// Given an allocator and some pointer to the end of a destruction callback
-    /// linked list, append one item to the list. This list can later be
-    /// traversed to call all callbacks. That should happen on clear and on
-    /// destruction.
-    /// Returns false on memory allocation failure.
-    template <typename T>
-    static inline constexpr result_t<destruction_callback_entry_t&>
-    append_destruction_callback(
-        T& allocator, destruction_callback_entry_node_t*& current_head,
-        void* user_data, destruction_callback_t callback)
-    {
-        static_assert(std::is_base_of_v<ok::allocator_t, T>,
-                      "Cannot append destruction callback to allocator which "
-                      "does not inherit from allocator_t");
-        auto result =
-            allocator.allocate_bytes(sizeof(destruction_callback_t),
-                                     alignof(destruction_callback_entry_t));
-        if (!result)
-            return error::oom;
-
-        if (!current_head) {
-            current_head =
-                static_cast<destruction_callback_entry_node_t*>(result.data());
-            current_head->previous = nullptr;
-        } else {
-            auto* const temp = current_head;
-            current_head =
-                static_cast<destruction_callback_entry_node_t*>(result.data());
-            current_head->previous = temp;
-        }
-
-        current_head->entry.callback = callback;
-        current_head->entry.user_data = user_data;
-        return current_head->entry;
-    }
-
-    // traverse a linked list of destruction callbacks and call each one of
-    // them. Does not deallocate the space used by the destruction callback.
-    // Intended to be called when an allocator is destroyed.
-    static inline constexpr void call_all_destruction_callbacks(
-        destruction_callback_entry_node_t* current_head)
-    {
-        destruction_callback_entry_node_t* iter = current_head;
-        while (iter != nullptr) {
-            iter->entry.callback(iter->entry.user_data);
-            iter = iter->previous;
-        }
-    }
 };
 
 /// Merge two sets of flags.
