@@ -19,8 +19,6 @@
 
 namespace ok {
 
-class allocator_interface_t;
-
 namespace detail {
 template <typename T, typename E>
 using res_enable_copy_move_for_type_t = detail::enable_copy_move<

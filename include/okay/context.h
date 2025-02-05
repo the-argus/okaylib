@@ -1,7 +1,7 @@
 #ifndef __OKAYLIB_CONTEXT_H__
 #define __OKAYLIB_CONTEXT_H__
 
-#include "okay/allocators/allocator_interface.h"
+#include "okay/allocators/allocator.h"
 #include "okay/allocators/c_allocator.h"
 
 namespace ok {
@@ -14,12 +14,12 @@ class context_t
 {
   public:
     context_t() = delete;
-    inline constexpr context_t(allocator_interface_t& allocator)
+    inline constexpr context_t(allocator_t& allocator)
         : m_allocator(allocator)
     {
     }
 
-    inline allocator_interface_t* allocator() const noexcept
+    inline allocator_t* allocator() const noexcept
     {
         return &m_allocator;
     }
@@ -29,14 +29,14 @@ class context_t
     friend context_switch_t;
 
   private:
-    allocator_interface_t& m_allocator;
+    allocator_t& m_allocator;
     const char* error_message = nullptr;
 };
 
 inline c_allocator_t __default_global_allocator;
 inline context_t __default_global_context{__default_global_allocator};
 static_assert(decltype(__default_global_allocator)::type_features &
-                  allocator_interface_t::feature_flags::threadsafe,
+                  allocator_t::feature_flags::threadsafe,
               "every part of default context must be threadsafe because all "
               "threads are initialized to use it.");
 

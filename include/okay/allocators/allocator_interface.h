@@ -1,5 +1,5 @@
-#ifndef __OKAYLIB_ALLOCATOR_INTERFACE_H__
-#define __OKAYLIB_ALLOCATOR_INTERFACE_H__
+#ifndef __OKAYLIB_ALLOCATORS_ALLOCATOR_H__
+#define __OKAYLIB_ALLOCATORS_ALLOCATOR_H__
 
 #include <cstddef>
 #include <cstdint>
@@ -9,7 +9,6 @@
 
 // pulls in slice and opt, and because of that also ranges and ordering
 #include "okay/res.h"
-#include "okay/status.h"
 
 namespace ok {
 
@@ -19,7 +18,7 @@ struct undefined_t
 inline constexpr undefined_t undefined = {};
 
 /// Abstract virtual interface for allocators which can realloc
-class allocator_interface_t
+class allocator_t
 {
   public:
     inline static constexpr size_t default_align = alignof(std::max_align_t);
@@ -33,7 +32,7 @@ class allocator_interface_t
         usage,
     };
 
-    template <typename T> using result_t = res_t<T, error>;
+    template <typename T> using result_t = ok::res_t<T, error>;
 
     enum class flags : uint8_t
     {
@@ -213,9 +212,9 @@ class allocator_interface_t
         T& allocator, destruction_callback_entry_node_t*& current_head,
         void* user_data, destruction_callback_t callback)
     {
-        static_assert(std::is_base_of_v<ok::allocator_interface_t, T>,
+        static_assert(std::is_base_of_v<ok::allocator_t, T>,
                       "Cannot append destruction callback to allocator which "
-                      "does not inherit from allocator_interface_t");
+                      "does not inherit from allocator_t");
         auto result =
             allocator.allocate_bytes(sizeof(destruction_callback_t),
                                      alignof(destruction_callback_entry_t));
@@ -253,36 +252,34 @@ class allocator_interface_t
 };
 
 /// Merge two sets of flags.
-inline constexpr allocator_interface_t::flags
-operator|(allocator_interface_t::flags a, allocator_interface_t::flags b)
+inline constexpr allocator_t::flags operator|(allocator_t::flags a,
+                                              allocator_t::flags b)
 {
-    using flags = allocator_interface_t::flags;
+    using flags = allocator_t::flags;
     return static_cast<flags>(static_cast<std::underlying_type_t<flags>>(a) |
                               static_cast<std::underlying_type_t<flags>>(b));
 }
 
-inline constexpr allocator_interface_t::feature_flags
-operator|(allocator_interface_t::feature_flags a,
-          allocator_interface_t::feature_flags b)
+inline constexpr allocator_t::feature_flags
+operator|(allocator_t::feature_flags a, allocator_t::feature_flags b)
 {
-    using flags = allocator_interface_t::feature_flags;
+    using flags = allocator_t::feature_flags;
     return static_cast<flags>(static_cast<std::underlying_type_t<flags>>(a) |
                               static_cast<std::underlying_type_t<flags>>(b));
 }
 
 /// Check if two sets of flags have anything in common.
-inline constexpr bool operator&(allocator_interface_t::flags a,
-                                allocator_interface_t::flags b)
+inline constexpr bool operator&(allocator_t::flags a, allocator_t::flags b)
 {
-    using flags = allocator_interface_t::flags;
+    using flags = allocator_t::flags;
     return static_cast<std::underlying_type_t<flags>>(a) &
            static_cast<std::underlying_type_t<flags>>(b);
 }
 
-inline constexpr bool operator&(allocator_interface_t::feature_flags a,
-                                allocator_interface_t::feature_flags b)
+inline constexpr bool operator&(allocator_t::feature_flags a,
+                                allocator_t::feature_flags b)
 {
-    using flags = allocator_interface_t::feature_flags;
+    using flags = allocator_t::feature_flags;
     return static_cast<std::underlying_type_t<flags>>(a) &
            static_cast<std::underlying_type_t<flags>>(b);
 }
@@ -290,9 +287,9 @@ inline constexpr bool operator&(allocator_interface_t::feature_flags a,
 } // namespace ok
 
 #ifdef OKAYLIB_USE_FMT
-template <> struct fmt::formatter<ok::allocator_interface_t::error>
+template <> struct fmt::formatter<ok::allocator_t::error>
 {
-    using error_t = ok::allocator_interface_t::error;
+    using error_t = ok::allocator_t::error;
 
     constexpr format_parse_context::iterator parse(format_parse_context& ctx)
     {
@@ -307,20 +304,16 @@ template <> struct fmt::formatter<ok::allocator_interface_t::error>
     {
         switch (err) {
         case error_t::okay:
-            return fmt::format_to(ctx.out(),
-                                  "allocator_interface_t::error::okay");
+            return fmt::format_to(ctx.out(), "allocator_t::error::okay");
         case error_t::unsupported:
-            return fmt::format_to(ctx.out(),
-                                  "allocator_interface_t::error::unsupported");
+            return fmt::format_to(ctx.out(), "allocator_t::error::unsupported");
         case error_t::oom:
-            return fmt::format_to(ctx.out(),
-                                  "allocator_interface_t::error::oom");
+            return fmt::format_to(ctx.out(), "allocator_t::error::oom");
         case error_t::result_released:
-            return fmt::format_to(
-                ctx.out(), "allocator_interface_t::error::result_released");
-        case error_t::usage:
             return fmt::format_to(ctx.out(),
-                                  "allocator_interface_t::error::usage");
+                                  "allocator_t::error::result_released");
+        case error_t::usage:
+            return fmt::format_to(ctx.out(), "allocator_t::error::usage");
         }
     }
 };

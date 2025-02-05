@@ -1,15 +1,15 @@
 #ifndef __OKAYLIB_ALLOCATOR_DISABLE_FREEING_H__
 #define __OKAYLIB_ALLOCATOR_DISABLE_FREEING_H__
 
-#include "okay/allocators/allocator_interface.h"
+#include "okay/allocators/allocator.h"
 
 namespace ok {
-template <typename T> class disable_freeing_t : public allocator_interface_t
+template <typename T> class disable_freeing_t : public allocator_t
 {
   public:
-    static_assert(std::is_base_of_v<allocator_interface_t, T>,
+    static_assert(std::is_base_of_v<allocator_t, T>,
                   "disable_freeing_t given a type which does not inherit from "
-                  "allocator_interface_t");
+                  "allocator_t");
 
     disable_freeing_t() = delete;
     disable_freeing_t(T& allocator) : m_backing_allocator(allocator) {}
@@ -23,7 +23,7 @@ template <typename T> class disable_freeing_t : public allocator_interface_t
     }
 
     [[nodiscard]] inline reallocation_result_t reallocate_bytes(
-        const allocator_interface_t::reallocate_options_t& options) final
+        const allocator_t::reallocate_options_t& options) final
     {
         return m_backing_allocator.reallocate_bytes(options);
     }

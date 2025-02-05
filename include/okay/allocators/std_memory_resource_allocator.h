@@ -1,13 +1,13 @@
 #ifndef __OKAYLIB_STD_MEMORY_RESOURCE_H__
 #define __OKAYLIB_STD_MEMORY_RESOURCE_H__
 
-#include "okay/allocators/allocator_interface.h"
+#include "okay/allocators/allocator.h"
 
 #include <memory_resource>
 
 namespace ok {
 
-class std_memory_resource_allocator_t : public allocator_interface_t
+class std_memory_resource_allocator_t : public allocator_t
 {
   public:
     static constexpr feature_flags type_features =
@@ -24,7 +24,7 @@ class std_memory_resource_allocator_t : public allocator_interface_t
     allocate_bytes(size_t nbytes, size_t alignment = default_align) final;
 
     [[nodiscard]] inline reallocation_result_t
-    reallocate_bytes(const allocator_interface_t::reallocate_options_t&) final;
+    reallocate_bytes(const allocator_t::reallocate_options_t&) final;
 
     inline void clear() noexcept final;
 
@@ -84,7 +84,7 @@ std_memory_resource_allocator_t::features() const noexcept -> feature_flags
 }
 
 inline auto std_memory_resource_allocator_t::reallocate_bytes(
-    const allocator_interface_t::reallocate_options_t& options)
+    const allocator_t::reallocate_options_t& options)
     -> reallocation_result_t
 {
     assert(((uintptr_t)options.data % options.alignment) == 0);

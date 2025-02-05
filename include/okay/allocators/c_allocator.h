@@ -1,11 +1,11 @@
 #ifndef __OKAYLIB_C_ALLOCATOR_H__
 #define __OKAYLIB_C_ALLOCATOR_H__
 
-#include "okay/allocators/allocator_interface.h"
+#include "okay/allocators/allocator.h"
 
 namespace ok {
 
-class c_allocator_t : public allocator_interface_t
+class c_allocator_t : public allocator_t
 {
   public:
     static constexpr feature_flags type_features =
@@ -18,7 +18,7 @@ class c_allocator_t : public allocator_interface_t
                    size_t alignment = default_align) noexcept final;
 
     [[nodiscard]] inline reallocation_result_t reallocate_bytes(
-        const allocator_interface_t::reallocate_options_t&) noexcept final;
+        const allocator_t::reallocate_options_t&) noexcept final;
 
     [[nodiscard]] inline feature_flags features() const noexcept final;
 
@@ -57,7 +57,7 @@ inline void c_allocator_t::deallocate_bytes(void* p, size_t nbytes,
 }
 
 inline auto c_allocator_t::reallocate_bytes(
-    const allocator_interface_t::reallocate_options_t& options) noexcept
+    const allocator_t::reallocate_options_t& options) noexcept
     -> reallocation_result_t
 {
     assert(((uintptr_t)options.data % options.alignment) == 0);

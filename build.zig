@@ -45,7 +45,7 @@ const okaylib_headers = &[_][]const u8{
     "stdmem.h",
     "try_copy.h",
 
-    "allocators/allocator_interface.h",
+    "allocators/allocator.h",
     "allocators/c_allocator.h",
     "allocators/disable_clearing.h",
     "allocators/disable_freeing.h",

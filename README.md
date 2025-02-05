@@ -59,12 +59,12 @@ This code makes use of a polymorphic allocator, conditional `defer` statements,
 the `res` (result) type, and formatting of error values.
 
 ```cpp
-auto make_three_buffers = [](ok::allocator_interface& allo)
-    -> ok::allocator_interface::res<std::array<ok::slice<u8>, 3>> {
+auto make_three_buffers = [](ok::allocator& allo)
+    -> ok::allocator::res<std::array<ok::slice<u8>, 3>> {
     using namespace ok;
     // require allocator feature
-    if (!(allo.features() & allocator_interface::feature_flags::threadsafe)) {
-        return allocator_interface::error::unsupported;
+    if (!(allo.features() & allocator::feature_flags::threadsafe)) {
+        return allocator::error::unsupported;
     }
 
     // do allocation using raw allocator, no owning ptrs. rare, but acceptable
