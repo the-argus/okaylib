@@ -64,106 +64,163 @@ class maybe_defined_memory_t
     bool m_is_defined;
 };
 
+namespace alloc {
+enum class error : uint8_t
+{
+    okay,
+    result_released,
+    oom,
+    unsupported,
+    usage,
+};
+
+inline constexpr size_t default_align = alignof(std::max_align_t);
+
+template <typename T> using result_t = ok::res_t<T, error>;
+
+enum class flags : uint8_t
+{
+    // clang-format off
+    expand_front    = 0b00000001,
+    expand_back     = 0b00000010,
+    shrink_front    = 0b00000100,
+    shrink_back     = 0b00001000,
+    keep_old_nocopy = 0b00010000,
+    try_defragment  = 0b00100000,
+    leave_nonzeroed = 0b01000000,
+    // clang-format on
+};
+
+enum class feature_flags : uint16_t
+{
+    // clang-format off
+    // Can this allocator expand or shrink an allocation in-place? ie. is
+    // it worth it to use the keep_old flag?
+    in_place        = 0x0001,
+    // arena allocators might not support this. if the allocator only
+    // supports freeing the most recent allocation, this will not be
+    // specified but "stacklike" will be. If this is not specified, then
+    // deallocate and will be an empty function, not an error. reallocate
+    // will always error (see nothrow feature flag for how error is
+    // propagated).
+    free_and_realloc= 0x0002,
+    // whether the allocator can make use of reclaimed memory after an
+    // allocation is shrunk. The allocator will never fail when
+    // shrinking, but this flag tells you if the shrinking is taken
+    // advantage of by the allocator.
+    shrinking       = 0x0004,
+    // whether this allocator supports expanding the allocation off the
+    // "back", in-place, as realloc() might. This flag should be 0 if
+    // in_place is not specified: if the allocator cannot reallocate in
+    // place then it will just always create and entire new allocation to
+    // achieve expand_back.
+    expand_back     = 0x0008,
+    // whether this allocator supports expanding the allocation off the
+    // "front", meaning before the data pointer. This is only relevant if
+    // in_place is specified, otherwise the allocator will always perform
+    // a new allocation to expand at the front, and this flag should be 0.
+    expand_front    = 0x0010,
+    // Whether *not* memcpy-ing is supported by this allocator. If this is
+    // not specified, it is possible to implement a wrapper which uses
+    // allocate and deallocate to emulate this functionality.
+    nocopy          = 0x0020,
+    // If this is specified, then the allocator is capable of keeping an
+    // older allocation when reallocate_bytes() is called. If this is not
+    // specified, it is possible to implement a wrapper which uses allocate
+    // and deallocate to emulate this functionality.
+    keep_old        = 0x0040,
+    // arena allocators might have this specified, if you can modify
+    // only the most recently made allocation. this is mutually exclusie
+    // with `threadsafe`.
+    stacklike       = 0x0080,
+    // whether it is valid to call allocator functions from multiple
+    // threads. Additionally requires that allocations do not have any
+    // state that can be modified from other threads threough the
+    // allocator, like a stacklike allocator where another thread can
+    // allocate between operations and change whether your allocation
+    // is on top of the stack.
+    threadsafe      = 0x0100,
+    // whether this allocator supports clearing. if it does not support
+    // clearing, then clear() is an empty function call in release mode
+    // and an assert() in debug mode.
+    clearing        = 0x0200,
+    // If this is specified, then the allocator is guaranteed to never
+    // throw exceptions.
+    nothrow         = 0x0400,
+    // clang-format on
+};
+
+/// Merge two sets of flags.
+inline constexpr flags operator|(flags a, flags b)
+{
+    using flags = flags;
+    return static_cast<flags>(static_cast<std::underlying_type_t<flags>>(a) |
+                              static_cast<std::underlying_type_t<flags>>(b));
+}
+
+inline constexpr feature_flags operator|(feature_flags a, feature_flags b)
+{
+    using flags = feature_flags;
+    return static_cast<flags>(static_cast<std::underlying_type_t<flags>>(a) |
+                              static_cast<std::underlying_type_t<flags>>(b));
+}
+
+/// Check if two sets of flags have anything in common.
+inline constexpr bool operator&(flags a, flags b)
+{
+    using flags = flags;
+    return static_cast<std::underlying_type_t<flags>>(a) &
+           static_cast<std::underlying_type_t<flags>>(b);
+}
+
+inline constexpr bool operator&(feature_flags a, feature_flags b)
+{
+    using flags = feature_flags;
+    return static_cast<std::underlying_type_t<flags>>(a) &
+           static_cast<std::underlying_type_t<flags>>(b);
+}
+
+struct request_t
+{
+    size_t num_bytes;
+    size_t alignment = alloc::default_align;
+};
+
+} // namespace alloc
+
+/// Baseline allocator: can allocate, and maybe clear.
+class arena_allocator_t
+{
+    /// Allocate some amount of memory of size at least nbytes.
+    /// Return pointer to memory and the size of the block.
+    /// The allocator will return at least nbytes but may make a decision to
+    /// arbitrarily return more, especially if there is extra space it cannot
+    /// reuse off the back of the allocation.
+    [[nodiscard]] virtual alloc::result_t<maybe_defined_memory_t>
+    allocate_bytes(const alloc::request_t&) = 0;
+
+    // Free all allocations in this allocator.
+    virtual void clear() = 0;
+
+    [[nodiscard]] virtual alloc::feature_flags features() const noexcept = 0;
+};
+
 /// Abstract virtual interface for allocators which can realloc
-class allocator_t
+class allocator_t : arena_allocator_t
 {
   public:
-    inline static constexpr size_t default_align = alignof(std::max_align_t);
-
-    enum class error : uint8_t
-    {
-        okay,
-        result_released,
-        oom,
-        unsupported,
-        usage,
-    };
-
-    template <typename T> using result_t = ok::res_t<T, error>;
-
-    enum class flags : uint8_t
-    {
-        // clang-format off
-        expand_front    = 0b00000001,
-        expand_back     = 0b00000010,
-        shrink_front    = 0b00000100,
-        shrink_back     = 0b00001000,
-        keep_old_nocopy = 0b00010000,
-        try_defragment  = 0b00100000,
-        // clang-format on
-    };
-
-    enum class feature_flags : uint16_t
-    {
-        // clang-format off
-        // Can this allocator expand or shrink an allocation in-place? ie. is
-        // it worth it to use the keep_old flag?
-        in_place        = 0x0001,
-        // arena allocators might not support this. if the allocator only
-        // supports freeing the most recent allocation, this will not be
-        // specified but "stacklike" will be. If this is not specified, then
-        // deallocate and will be an empty function, not an error. reallocate
-        // will always error (see nothrow feature flag for how error is
-        // propagated).
-        free_and_realloc= 0x0002,
-        // whether the allocator can make use of reclaimed memory after an
-        // allocation is shrunk. The allocator will never fail when
-        // shrinking, but this flag tells you if the shrinking is taken
-        // advantage of by the allocator.
-        shrinking       = 0x0004,
-        // whether this allocator supports expanding the allocation off the
-        // "back", in-place, as realloc() might. This flag should be 0 if
-        // in_place is not specified: if the allocator cannot reallocate in
-        // place then it will just always create and entire new allocation to
-        // achieve expand_back.
-        expand_back     = 0x0008,
-        // whether this allocator supports expanding the allocation off the
-        // "front", meaning before the data pointer. This is only relevant if
-        // in_place is specified, otherwise the allocator will always perform
-        // a new allocation to expand at the front, and this flag should be 0.
-        expand_front    = 0x0010,
-        // Whether *not* memcpy-ing is supported by this allocator. If this is
-        // not specified, it is possible to implement a wrapper which uses
-        // allocate and deallocate to emulate this functionality.
-        nocopy          = 0x0020,
-        // If this is specified, then the allocator is capable of keeping an
-        // older allocation when reallocate_bytes() is called. If this is not
-        // specified, it is possible to implement a wrapper which uses allocate
-        // and deallocate to emulate this functionality.
-        keep_old        = 0x0040,
-        // arena allocators might have this specified, if you can modify
-        // only the most recently made allocation. this is mutually exclusie
-        // with `threadsafe`.
-        stacklike       = 0x0080,
-        // whether it is valid to call allocator functions from multiple
-        // threads. Additionally requires that allocations do not have any
-        // state that can be modified from other threads threough the
-        // allocator, like a stacklike allocator where another thread can
-        // allocate between operations and change whether your allocation
-        // is on top of the stack.
-        threadsafe      = 0x0100,
-        // whether expanded / newly allocated memory will be a defined value
-        // This value may be different in debug and release modes.
-        // TODO: maybe this isnt super useful if its not the same in all build
-        // modes? maybe change that spec
-        initialized     = 0x0200,
-        // whether this allocator supports clearing. if it does not support
-        // clearing, then clear() is an empty function call in release mode
-        // and an assert() in debug mode.
-        clearing        = 0x0400,
-        // If this is specified, then the allocator is guaranteed to never
-        // throw exceptions.
-        nothrow         = 0x0800,
-        // clang-format on
-    };
+    virtual void deallocate_bytes(bytes_t bytes) = 0;
 
     struct reallocate_options_t
     {
         bytes_t memory;
         size_t required_additional_bytes;
         size_t preferred_additional_bytes = 0;
-        flags flags;
+        alloc::flags flags;
     };
+
+    [[nodiscard]] virtual maybe_defined_memory_t
+    reallocate_bytes(const reallocate_options_t& options) = 0;
 
     struct reallocation_options_extended_t
     {
@@ -172,36 +229,24 @@ class allocator_t
         size_t required_bytes_front;
         size_t preferred_bytes_back;
         size_t preferred_bytes_front;
-        flags flags;
+        alloc::flags flags;
     };
 
     struct reallocation_extended_t
     {
-        bytes_t memory;
-        // pointer to the part of memory corresponding to what was originally
-        // the pointer to the start of your allocation. Unless you shrink_front,
-        // in which case this is nullptr. If you don't expand_back, this is
-        // equal to data
-        void* data_original_offset;
-        bool kept;
-
-        constexpr reallocation_extended_t(bytes_t _memory,
-                                          void* _data_original_offset,
-                                          bool _kept) OKAYLIB_NOEXCEPT
-            : memory(_memory),
-              data_original_offset(_data_original_offset),
-              kept(_kept)
-        {
-        }
+        /// The area of memory which has been newly allocated. This will only
+        /// be defined if all of its contents are defined- ie. the allocator
+        /// performed a memcpy from the original slice, AND it zeroed any
+        /// additional memory. If you didn't call realloc with
+        /// flags::leave_nonzeroed, this memory must be defined.
+        maybe_defined_memory_t expanded_memory;
+        /// Subslice of the new memory where the old memory should be copied
+        /// into, based on specifications for growing / shrinking. If the front
+        /// of the allocation was shrunk forwards, then this is null because the
+        /// start of the original allocation will not have a corresponding
+        /// position in the shrunk allocation
+        opt_t<maybe_defined_memory_t> original_subslice;
     };
-
-    /// Allocate some amount of memory of size at least nbytes.
-    /// Return pointer to memory and the size of the block.
-    /// The allocator will return at least nbytes but may make a decision to
-    /// arbitrarily return more, especially if there is extra space it cannot
-    /// reuse off the back of the allocation.
-    [[nodiscard]] virtual result_t<undefined_memory_t<uint8_t>>
-    allocate_bytes(size_t nbytes, size_t alignment = default_align) = 0;
 
     // Given a live allocation specified by the "data" and "size" fields, alter
     // it by expanding or shrinking it from the front or back, or both in some
@@ -222,60 +267,16 @@ class allocator_t
     // If try_defragment is specified, then the allocator will prioritize
     // moving the allocation to a better fit spot, being more likely to
     // cause copying or new allocations.
-    [[nodiscard]] virtual result_t<reallocation_extended_t>
+    [[nodiscard]] virtual alloc::result_t<reallocation_extended_t>
     reallocate_bytes_extended(const reallocate_options_t& options) = 0;
-
-    [[nodiscard]] virtual maybe_defined_memory_t
-    reallocate_bytes(const reallocate_options_t& options) = 0;
-
-    [[nodiscard]] virtual feature_flags features() const noexcept = 0;
-
-    // Free all allocations in this allocator.
-    virtual void clear() = 0;
-
-    virtual void deallocate_bytes(bytes_t bytes,
-                                  size_t alignment = default_align) = 0;
 };
-
-/// Merge two sets of flags.
-inline constexpr allocator_t::flags operator|(allocator_t::flags a,
-                                              allocator_t::flags b)
-{
-    using flags = allocator_t::flags;
-    return static_cast<flags>(static_cast<std::underlying_type_t<flags>>(a) |
-                              static_cast<std::underlying_type_t<flags>>(b));
-}
-
-inline constexpr allocator_t::feature_flags
-operator|(allocator_t::feature_flags a, allocator_t::feature_flags b)
-{
-    using flags = allocator_t::feature_flags;
-    return static_cast<flags>(static_cast<std::underlying_type_t<flags>>(a) |
-                              static_cast<std::underlying_type_t<flags>>(b));
-}
-
-/// Check if two sets of flags have anything in common.
-inline constexpr bool operator&(allocator_t::flags a, allocator_t::flags b)
-{
-    using flags = allocator_t::flags;
-    return static_cast<std::underlying_type_t<flags>>(a) &
-           static_cast<std::underlying_type_t<flags>>(b);
-}
-
-inline constexpr bool operator&(allocator_t::feature_flags a,
-                                allocator_t::feature_flags b)
-{
-    using flags = allocator_t::feature_flags;
-    return static_cast<std::underlying_type_t<flags>>(a) &
-           static_cast<std::underlying_type_t<flags>>(b);
-}
 
 } // namespace ok
 
 #ifdef OKAYLIB_USE_FMT
-template <> struct fmt::formatter<ok::allocator_t::error>
+template <> struct fmt::formatter<ok::alloc::error>
 {
-    using error_t = ok::allocator_t::error;
+    using error_t = ok::alloc::error;
 
     constexpr format_parse_context::iterator parse(format_parse_context& ctx)
     {
@@ -290,16 +291,15 @@ template <> struct fmt::formatter<ok::allocator_t::error>
     {
         switch (err) {
         case error_t::okay:
-            return fmt::format_to(ctx.out(), "allocator_t::error::okay");
+            return fmt::format_to(ctx.out(), "alloc::error::okay");
         case error_t::unsupported:
-            return fmt::format_to(ctx.out(), "allocator_t::error::unsupported");
+            return fmt::format_to(ctx.out(), "alloc::error::unsupported");
         case error_t::oom:
-            return fmt::format_to(ctx.out(), "allocator_t::error::oom");
+            return fmt::format_to(ctx.out(), "alloc::error::oom");
         case error_t::result_released:
-            return fmt::format_to(ctx.out(),
-                                  "allocator_t::error::result_released");
+            return fmt::format_to(ctx.out(), "alloc::error::result_released");
         case error_t::usage:
-            return fmt::format_to(ctx.out(), "allocator_t::error::usage");
+            return fmt::format_to(ctx.out(), "alloc::error::usage");
         }
     }
 };

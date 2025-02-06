@@ -202,6 +202,7 @@ template <typename viewed_t> struct undefined_memory_t
   public:
     undefined_memory_t() = delete;
     undefined_memory_t& operator=(const undefined_memory_t&) = default;
+    undefined_memory_t(const undefined_memory_t&) = default;
     undefined_memory_t(undefined_memory_t&&) = default;
     undefined_memory_t& operator=(undefined_memory_t&&) = default;
     ~undefined_memory_t() = default;

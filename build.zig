@@ -115,6 +115,7 @@ const test_source_files = &[_][]const u8{
     "ordering/ordering.cpp",
     "join/join.cpp",
     "zip/zip.cpp",
+    "allocator/allocator.cpp",
 };
 
 const universal_tests_source_files = &[_][]const u8{};
