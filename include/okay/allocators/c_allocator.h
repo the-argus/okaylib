@@ -2,66 +2,78 @@
 #define __OKAYLIB_C_ALLOCATOR_H__
 
 #include "okay/allocators/allocator.h"
+#include "okay/stdmem.h"
 
 namespace ok {
 
 class c_allocator_t : public allocator_t
 {
   public:
-    static constexpr feature_flags type_features =
-        feature_flags::free_and_realloc | feature_flags::threadsafe;
+    static constexpr alloc::feature_flags type_features =
+        alloc::feature_flags::free_and_realloc |
+        alloc::feature_flags::threadsafe;
 
     c_allocator_t() = default;
 
-    [[nodiscard]] inline result_t<bytes_t>
-    allocate_bytes(size_t nbytes,
-                   size_t alignment = default_align) noexcept final;
-
-    [[nodiscard]] inline reallocation_result_t reallocate_bytes(
-        const allocator_t::reallocate_options_t&) noexcept final;
-
-    [[nodiscard]] inline feature_flags features() const noexcept final;
-
-    [[nodiscard]] inline status_t<error>
-    register_destruction_callback(void*, destruction_callback_t) noexcept final;
+    [[nodiscard]] inline alloc::result_t<maybe_defined_memory_t>
+    allocate_bytes(const alloc::request_t&) noexcept final;
 
     inline void clear() noexcept final;
 
-    inline void
-    deallocate_bytes(void* p, size_t nbytes,
-                     size_t alignment = default_align) noexcept final;
+    [[nodiscard]] inline alloc::feature_flags features() const noexcept final;
+
+    inline void deallocate_bytes(bytes_t) noexcept final;
+
+    [[nodiscard]] inline alloc::result_t<maybe_defined_memory_t>
+    reallocate_bytes(const allocator_t::reallocate_options_t&) noexcept final;
+
+    [[nodiscard]] virtual alloc::result_t<reallocation_extended_t>
+    reallocate_bytes_extended(
+        const reallocation_options_extended_t& options) noexcept final;
 };
 
 // definitions -----------------------------------------------------------------
 
-inline auto
-c_allocator_t::allocate_bytes(size_t nbytes,
-                              size_t alignment) noexcept -> result_t<bytes_t>
+[[nodiscard]] inline alloc::result_t<maybe_defined_memory_t>
+c_allocator_t::allocate_bytes(const alloc::request_t& request) noexcept
 {
     // NOTE: alignment over 16 is not possible on most platforms, I don't think?
     // TODO: figure out what platforms this is a problem for, maybe alloc more
     // and then align when alignment is big
-    assert(alignment <= 16);
-    if (alignment > 16) [[unlikely]]
-        return error::unsupported;
+    assert(request.alignment <= 16);
+    if (request.alignment > 16) [[unlikely]]
+        return alloc::error::unsupported;
+    const auto nbytes =
+#ifndef NDEBUG
+        // add one just in case you are mistakenly relying on the returned bytes
+        // being the same as requested
+        request.num_bytes + 1;
+#else
+        request.num_bytes;
+#endif
+
     uint8_t* const mem = static_cast<uint8_t*>(::malloc(nbytes));
-    assert(!mem || ((uintptr_t)mem % alignment) == 0);
-    return ok::raw_slice(*mem, nbytes);
+    assert(!mem || ((uintptr_t)mem % request.alignment) == 0);
+
+    auto out = ok::raw_slice(*mem, nbytes);
+
+    if (!(request.flags & alloc::flags::leave_nonzeroed)) [[unlikely]] {
+        memfill(out, 0);
+    }
+
+    return out;
 }
 
-inline void c_allocator_t::deallocate_bytes(void* p, size_t nbytes,
-                                            size_t alignment) noexcept
+inline void c_allocator_t::deallocate_bytes(bytes_t bytes) noexcept
 {
-    assert((uintptr_t)p % alignment == 0);
-    ::free(p);
+    ::free(bytes.data());
 }
 
-inline auto c_allocator_t::reallocate_bytes(
-    const allocator_t::reallocate_options_t& options) noexcept
-    -> reallocation_result_t
+inline auto c_allocator_t::reallocate_bytes_extended(
+    const allocator_t::reallocation_options_extended_t& options) noexcept
+    -> alloc::result_t<allocator_t::reallocation_extended_t>
 {
-    assert(((uintptr_t)options.data % options.alignment) == 0);
-
+    using namespace alloc;
     if (options.flags & flags::keep_old_nocopy) [[unlikely]] {
         assert(false);
         return error::unsupported;
@@ -83,30 +95,31 @@ inline auto c_allocator_t::reallocate_bytes(
         options.preferred_bytes_back < options.required_bytes_back) [[unlikely]]
         return error::usage;
 
+    const size_t new_size = options.memory.size() + options.required_bytes_back;
+
     // if we arent doing any weird business, we can use run of the mill realloc
     if (!shrinking_back && !shrinking_front && !expanding_front) [[likely]] {
-        void* mem =
-            ::realloc(options.data, options.size + options.required_bytes_back);
+        void* mem = ::realloc(options.memory.data(), new_size);
 
         if (!mem) [[unlikely]]
             return error::oom;
 
-        return reallocation_result_t{
-            ok::raw_slice(*static_cast<uint8_t*>(mem),
-                          options.size + options.required_bytes_back),
-            mem,
-            false,
+        uint8_t& start = *static_cast<uint8_t*>(mem);
+
+        return reallocation_extended_t{
+            // .expanded_memory = ok::raw_slice(start, new_size),
+            // .original_subslice = ok::raw_slice(start, options.memory.size()),
         };
     }
 
     // validate inputs- you cant shrink by more than the size of the original
     // allocation
     if (shrinking_front) [[unlikely]] {
-        if (options.required_bytes_front >= options.size) [[unlikely]]
+        if (options.required_bytes_front >= options.memory.size()) [[unlikely]]
             return error::usage;
         if (shrinking_back &&
             options.required_bytes_front + options.required_bytes_back >=
-                options.size) [[unlikely]]
+                options.memory.size()) [[unlikely]]
             return error::usage;
         // preferred bytes doesnt make sense when shrinking, setting this is
         // a mistake
@@ -114,7 +127,7 @@ inline auto c_allocator_t::reallocate_bytes(
     }
 
     if (shrinking_back) [[unlikely]] {
-        if (options.required_bytes_back >= options.size) [[unlikely]]
+        if (options.required_bytes_back >= options.memory.size()) [[unlikely]]
             return error::usage;
         // preferred bytes doesnt make sense when shrinking, setting this is
         // a mistake
@@ -125,7 +138,7 @@ inline auto c_allocator_t::reallocate_bytes(
                                options.required_bytes_front) [[unlikely]]
         return error::usage;
 
-    size_t newsize = options.size;
+    size_t newsize = options.memory.size();
     if (expanding_back)
         newsize += options.required_bytes_back;
     else if (shrinking_back)
@@ -145,21 +158,22 @@ inline auto c_allocator_t::reallocate_bytes(
 
     void* original = nullptr;
     if (shrinking_front) {
-        std::memcpy(mem, (uint8_t*)options.data + options.required_bytes_front,
-                    expanding_back ? newsize - options.required_bytes_back
-                                   : newsize);
+        std::memcpy(
+            mem, (uint8_t*)options.memory.data() + options.required_bytes_front,
+            expanding_back ? newsize - options.required_bytes_back : newsize);
         // original location is lost here, its not copied
     } else if (expanding_front) {
         original = (uint8_t*)mem + options.required_bytes_front;
-        std::memcpy(original, options.data,
-                    expanding_back ? options.size
+        std::memcpy(original, options.memory.data(),
+                    expanding_back ? options.memory.size()
                                    : newsize - options.required_bytes_front);
     } else [[likely]] {
         original = mem;
-        std::memcpy(original, options.data, std::min(options.size, newsize));
+        std::memcpy(original, options.memory.data(),
+                    std::min(options.memory.size(), newsize));
     }
 
-    ::free(options.data);
+    ::free(options.memory.data());
 
     return reallocation_result_t{
         ok::raw_slice(*static_cast<uint8_t*>(mem), newsize),
@@ -168,10 +182,8 @@ inline auto c_allocator_t::reallocate_bytes(
     };
 }
 
-auto c_allocator_t::features() const noexcept -> feature_flags
+alloc::feature_flags c_allocator_t::features() const noexcept
 {
-    // TODO: is there a way to check if malloc is guaranteed threadsafe on this
-    // platform? is that standardized?
     return type_features;
 }
 
@@ -181,16 +193,6 @@ inline void c_allocator_t::clear() noexcept
     assert(false);
 }
 
-inline auto c_allocator_t::register_destruction_callback(
-    void*, destruction_callback_t) noexcept -> status_t<error>
-{
-    // basic c allocator does not provide destruction callback registration so
-    // it can be zero-sized when used without vtable
-    // TODO: check codegen for this, maybe destruction callback list pointer is
-    // fine
-    assert(false);
-    return error::unsupported;
-}
 } // namespace ok
 
 #endif

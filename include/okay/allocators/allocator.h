@@ -17,13 +17,12 @@ class maybe_defined_memory_t
   public:
     maybe_defined_memory_t() = delete;
 
-    explicit maybe_defined_memory_t(bytes_t bytes) OKAYLIB_NOEXCEPT
-        : m_is_defined(true)
+    maybe_defined_memory_t(bytes_t bytes) OKAYLIB_NOEXCEPT : m_is_defined(true)
     {
         m_data.as_bytes = bytes;
     }
 
-    explicit maybe_defined_memory_t(undefined_memory_t<uint8_t> undefined)
+    maybe_defined_memory_t(undefined_memory_t<uint8_t> undefined)
         : m_is_defined(false) OKAYLIB_NOEXCEPT
     {
         m_data.as_undefined = undefined;
@@ -184,32 +183,32 @@ struct request_t
 {
     size_t num_bytes;
     size_t alignment = alloc::default_align;
+    void* future_compat = nullptr;
+    flags flags;
 };
 
 } // namespace alloc
 
-/// Baseline allocator: can allocate, and maybe clear.
-class arena_allocator_t
+/// Abstract/virtual interface for allocators. Not all functions may be
+/// implemented, depending on `features()`
+class allocator_t
 {
+  public:
     /// Allocate some amount of memory of size at least nbytes.
     /// Return pointer to memory and the size of the block.
-    /// The allocator will return at least nbytes but may make a decision to
-    /// arbitrarily return more, especially if there is extra space it cannot
-    /// reuse off the back of the allocation.
+    /// This will be undefined memory if the allocator is explicitly asked to
+    /// leave_nonzeroed. The allocator will return at least nbytes but may make
+    /// a decision to arbitrarily return more, especially if there is extra
+    /// space it cannot reuse off the back of the allocation.
     [[nodiscard]] virtual alloc::result_t<maybe_defined_memory_t>
     allocate_bytes(const alloc::request_t&) = 0;
 
     // Free all allocations in this allocator.
-    virtual void clear() = 0;
+    virtual void clear() noexcept = 0;
 
     [[nodiscard]] virtual alloc::feature_flags features() const noexcept = 0;
-};
 
-/// Abstract virtual interface for allocators which can realloc
-class allocator_t : arena_allocator_t
-{
-  public:
-    virtual void deallocate_bytes(bytes_t bytes) = 0;
+    virtual void deallocate_bytes(bytes_t bytes) noexcept = 0;
 
     struct reallocate_options_t
     {
@@ -219,7 +218,12 @@ class allocator_t : arena_allocator_t
         alloc::flags flags;
     };
 
-    [[nodiscard]] virtual maybe_defined_memory_t
+    /// Reallocate bytes- but any usage of expand_back or shrink_back will fail.
+    /// The returned memory will be uninitialized if any of the memory is
+    /// uninitialized: if expand_back and leave_nonzeroed are passed it will be
+    /// uninitialized, or if keep_old_nocopy was passed, and inplace expansion
+    /// failed.
+    [[nodiscard]] virtual alloc::result_t<maybe_defined_memory_t>
     reallocate_bytes(const reallocate_options_t& options) = 0;
 
     struct reallocation_options_extended_t
@@ -229,6 +233,7 @@ class allocator_t : arena_allocator_t
         size_t required_bytes_front;
         size_t preferred_bytes_back;
         size_t preferred_bytes_front;
+        void* future_compat = nullptr;
         alloc::flags flags;
     };
 
@@ -246,6 +251,7 @@ class allocator_t : arena_allocator_t
         /// start of the original allocation will not have a corresponding
         /// position in the shrunk allocation
         opt_t<maybe_defined_memory_t> original_subslice;
+        void* future_compat = nullptr;
     };
 
     // Given a live allocation specified by the "data" and "size" fields, alter
@@ -268,7 +274,8 @@ class allocator_t : arena_allocator_t
     // moving the allocation to a better fit spot, being more likely to
     // cause copying or new allocations.
     [[nodiscard]] virtual alloc::result_t<reallocation_extended_t>
-    reallocate_bytes_extended(const reallocate_options_t& options) = 0;
+    reallocate_bytes_extended(
+        const reallocation_options_extended_t& options) = 0;
 };
 
 } // namespace ok
