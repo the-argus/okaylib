@@ -79,32 +79,55 @@ inline auto c_allocator_t::reallocate_bytes_extended(
         return error::unsupported;
     }
 
+    constexpr auto required_flags = flags::shrink_back | flags::shrink_front |
+                                    flags::expand_front | flags::expand_back;
+
     const bool shrinking_back = options.flags & flags::shrink_back;
     const bool shrinking_front = options.flags & flags::shrink_front;
     const bool expanding_front = options.flags & flags::expand_front;
     const bool expanding_back = options.flags & flags::expand_back;
 
-    if ((shrinking_front && expanding_front) ||
-        (shrinking_back && expanding_back)) {
+    // at least one required flag and not conflicting flags
+    if (!(required_flags & options.flags) ||
+        ((shrinking_front && expanding_front) ||
+         (shrinking_back && expanding_back))) [[unlikely]] {
         assert(false);
         return error::usage;
     }
 
-    // validate expanding_back first- it can happen in early return
-    if (expanding_back &&
-        options.preferred_bytes_back < options.required_bytes_back) [[unlikely]]
+    // validate back params
+    // do this before shrink params- it can happen in early return
+    if ((expanding_back || shrinking_back) &&
+        options.preferred_bytes_back < options.required_bytes_back)
+        [[unlikely]] {
+        assert(false);
         return error::usage;
+    }
 
-    const size_t new_size = options.memory.size() + options.required_bytes_back;
+    // make sure youre not shrinking out of existence
+    if (shrinking_back && options.preferred_bytes_back >= options.memory.size())
+        [[unlikely]] {
+        assert(false);
+        return error::usage;
+    }
 
     // if we arent doing any weird business, we can use run of the mill realloc
-    if (!shrinking_back && !shrinking_front && !expanding_front) [[likely]] {
+    if (!shrinking_front && !expanding_front) [[likely]] {
+        const size_t new_size =
+            expanding_back
+                ? options.memory.size() + options.required_bytes_back
+                : options.memory.size() - options.required_bytes_back;
         void* mem = ::realloc(options.memory.data(), new_size);
 
         if (!mem) [[unlikely]]
             return error::oom;
 
-        uint8_t& start = *static_cast<uint8_t*>(mem);
+        uint8_t* start_ptr = static_cast<uint8_t*>(mem);
+        uint8_t& start = *start_ptr;
+
+        if (!(options.flags & flags::leave_nonzeroed)) [[unlikely]] {
+            std::memset(start_ptr + options.memory.size(), 0, );
+        }
 
         return reallocation_extended_t{
             // .expanded_memory = ok::raw_slice(start, new_size),

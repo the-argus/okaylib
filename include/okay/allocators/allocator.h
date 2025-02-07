@@ -230,9 +230,8 @@ class allocator_t
     {
         bytes_t memory;
         size_t required_bytes_back;
-        size_t required_bytes_front;
         size_t preferred_bytes_back;
-        size_t preferred_bytes_front;
+        size_t bytes_front;
         void* future_compat = nullptr;
         alloc::flags flags;
     };
