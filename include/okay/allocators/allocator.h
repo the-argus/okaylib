@@ -150,14 +150,14 @@ enum class feature_flags : uint16_t
 };
 
 /// Merge two sets of flags.
-inline constexpr flags operator|(flags a, flags b)
+constexpr flags operator|(flags a, flags b)
 {
     using flags = flags;
     return static_cast<flags>(static_cast<std::underlying_type_t<flags>>(a) |
                               static_cast<std::underlying_type_t<flags>>(b));
 }
 
-inline constexpr feature_flags operator|(feature_flags a, feature_flags b)
+constexpr feature_flags operator|(feature_flags a, feature_flags b)
 {
     using flags = feature_flags;
     return static_cast<flags>(static_cast<std::underlying_type_t<flags>>(a) |
@@ -165,14 +165,14 @@ inline constexpr feature_flags operator|(feature_flags a, feature_flags b)
 }
 
 /// Check if two sets of flags have anything in common.
-inline constexpr bool operator&(flags a, flags b)
+constexpr bool operator&(flags a, flags b)
 {
     using flags = flags;
     return static_cast<std::underlying_type_t<flags>>(a) &
            static_cast<std::underlying_type_t<flags>>(b);
 }
 
-inline constexpr bool operator&(feature_flags a, feature_flags b)
+constexpr bool operator&(feature_flags a, feature_flags b)
 {
     using flags = feature_flags;
     return static_cast<std::underlying_type_t<flags>>(a) &
@@ -185,6 +185,100 @@ struct request_t
     size_t alignment = alloc::default_align;
     void* future_compat = nullptr;
     flags flags;
+};
+
+struct reallocate_request_t
+{
+    bytes_t memory;
+    size_t required_bytes;
+    // ignored if shrinking or if zero
+    size_t preferred_bytes = 0;
+    alloc::flags flags;
+
+    [[nodiscard]] constexpr bool is_valid() const OKAYLIB_NOEXCEPT
+    {
+        constexpr alloc::flags forbidden =
+            flags::shrink_front | flags::expand_front;
+        // cannot expand or shrink front
+        return !(flags & forbidden) &&
+               // exactly one of expand_back or shrink_back
+               ((flags & flags::expand_back) != (flags & flags::shrink_back)) &&
+               // cant shrink more than the size of the existing allocation
+               (!(flags & flags::shrink_back) ||
+                required_bytes < memory.size()) &&
+               // some bytes need to be required; a no-op is assumed to be a
+               // mistake
+               (required_bytes != 0) &&
+               // preferred should be zero or be greater than required
+               (preferred_bytes > required_bytes || preferred_bytes == 0);
+    }
+};
+
+struct reallocate_extended_request_t
+{
+    bytes_t memory;
+    size_t required_bytes_back;
+    size_t preferred_bytes_back;
+    size_t required_bytes_front;
+    size_t preferred_bytes_front;
+    void* future_compat = nullptr;
+    alloc::flags flags;
+
+    [[nodiscard]] constexpr bool is_valid() const OKAYLIB_NOEXCEPT
+    {
+        const bool changing_back =
+            flags & flags::expand_back || flags & flags::shrink_back;
+        const bool changing_front =
+            flags & flags::expand_front || flags & flags::shrink_front;
+        // exactly one of expand_back or shrink_back, and one of shrink_back and
+        // expand_back
+        return ((flags & flags::expand_back) != (flags & flags::shrink_back) ||
+                (flags & flags::expand_front) !=
+                    (flags & flags::shrink_front)) &&
+               // cannot shrink more than size of allocation
+               (((flags & flags::shrink_back) * required_bytes_back) +
+                ((flags & flags::shrink_front) * required_bytes_front)) <
+                   memory.size() &&
+               // some bytes need to be required; a no-op is assumed to be a
+               // mistake
+               (!changing_back || required_bytes_back != 0) &&
+               (!changing_front || required_bytes_front != 0) &&
+               // preferred bytes should be either zero or greater than required
+               // bytes
+               (preferred_bytes_back > required_bytes_back ||
+                preferred_bytes_back == 0) &&
+               (preferred_bytes_front > required_bytes_front ||
+                preferred_bytes_front == 0);
+    }
+};
+
+struct reallocation_t
+{
+    struct
+    {
+        // number of bytes expanded/shrunk in back
+        size_t back_bytes;
+        // number of bytes expanded/shrunk off front
+        size_t front_bytes;
+        // start of the new allocation, only relevant if moving the front or if
+        // inplace reallocation failed.
+        uint8_t* new_memory;
+
+        bool kept = false;
+
+        void* future_compat = nullptr;
+    } inner;
+
+    /// Whether the original allocation is still live.
+    /// Will always be false if flags::keep_old_nocopy was not specified
+    constexpr bool original_was_kept() const OKAYLIB_NOEXCEPT
+    {
+        return inner.kept;
+    }
+
+    constexpr bool is_new_memory_zeroed() const OKAYLIB_NOEXCEPT {}
+
+    constexpr void new_memory(const request_t&)
 };
 
 } // namespace alloc
@@ -201,42 +295,14 @@ class allocator_t
     /// a decision to arbitrarily return more, especially if there is extra
     /// space it cannot reuse off the back of the allocation.
     [[nodiscard]] virtual alloc::result_t<maybe_defined_memory_t>
-    alloc(const alloc::request_t&) = 0;
+    allocate(const alloc::request_t&) = 0;
 
     // Free all allocations in this allocator.
     virtual void clear() noexcept = 0;
 
     [[nodiscard]] virtual alloc::feature_flags features() const noexcept = 0;
 
-    virtual void dealloc(bytes_t bytes) noexcept = 0;
-
-    struct reallocate_options_t
-    {
-        bytes_t memory;
-        size_t required_additional_bytes;
-        size_t preferred_additional_bytes = 0;
-        alloc::flags flags;
-    };
-
-    struct reallocation_t
-    {
-        /// The area of memory which has been newly allocated. This will only
-        /// be defined if all of its contents are defined- ie. the allocator
-        /// performed a memcpy from the original slice, AND it zeroed any
-        /// additional memory. If you didn't call realloc with
-        /// flags::leave_nonzeroed, this memory must be defined.
-        maybe_defined_memory_t expanded_memory;
-        /// Subslice of the new memory where the old memory should be copied
-        /// into, based on specifications for growing / shrinking. If the front
-        /// of the allocation was shrunk forwards, then this is null because the
-        /// start of the original allocation will not have a corresponding
-        /// position in the shrunk allocation. If the front of the allocation
-        /// is still in the new allocation, but the back is not (due to
-        /// shrinking back) then this will be defined memory, a slice pointing
-        /// to
-        opt_t<maybe_defined_memory_t> original_subslice;
-        void* future_compat = nullptr;
-    };
+    virtual void deallocate(bytes_t bytes) noexcept = 0;
 
     /// Reallocate bytes- but any usage of expand_back or shrink_back will fail.
     /// The returned memory will be uninitialized if any of the memory is
@@ -244,18 +310,7 @@ class allocator_t
     /// uninitialized, or if keep_old_nocopy was passed, and inplace expansion
     /// failed.
     [[nodiscard]] virtual alloc::result_t<reallocation_t>
-    realloc(const reallocate_options_t& options) = 0;
-
-    struct reallocation_options_extended_t
-    {
-        bytes_t memory;
-        size_t required_bytes_back;
-        size_t preferred_bytes_back;
-        size_t required_bytes_front;
-        size_t preferred_bytes_front;
-        void* future_compat = nullptr;
-        alloc::flags flags;
-    };
+    reallocate(const reallocate_options_t& options) = 0;
 
     // Given a live allocation specified by the "data" and "size" fields, alter
     // it by expanding or shrinking it from the front or back, or both in some
@@ -280,8 +335,7 @@ class allocator_t
     // allocator will prioritize moving the allocation to a better fit spot,
     // being more likely to cause copying or new allocations.
     [[nodiscard]] virtual alloc::result_t<reallocation_t>
-    realloc_extended(
-        const reallocation_options_extended_t& options) = 0;
+    reallocate_extended(const reallocation_options_extended_t& options) = 0;
 };
 
 } // namespace ok
