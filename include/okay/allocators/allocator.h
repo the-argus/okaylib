@@ -201,14 +201,14 @@ class allocator_t
     /// a decision to arbitrarily return more, especially if there is extra
     /// space it cannot reuse off the back of the allocation.
     [[nodiscard]] virtual alloc::result_t<maybe_defined_memory_t>
-    allocate_bytes(const alloc::request_t&) = 0;
+    alloc(const alloc::request_t&) = 0;
 
     // Free all allocations in this allocator.
     virtual void clear() noexcept = 0;
 
     [[nodiscard]] virtual alloc::feature_flags features() const noexcept = 0;
 
-    virtual void deallocate_bytes(bytes_t bytes) noexcept = 0;
+    virtual void dealloc(bytes_t bytes) noexcept = 0;
 
     struct reallocate_options_t
     {
@@ -218,25 +218,7 @@ class allocator_t
         alloc::flags flags;
     };
 
-    /// Reallocate bytes- but any usage of expand_back or shrink_back will fail.
-    /// The returned memory will be uninitialized if any of the memory is
-    /// uninitialized: if expand_back and leave_nonzeroed are passed it will be
-    /// uninitialized, or if keep_old_nocopy was passed, and inplace expansion
-    /// failed.
-    [[nodiscard]] virtual alloc::result_t<maybe_defined_memory_t>
-    reallocate_bytes(const reallocate_options_t& options) = 0;
-
-    struct reallocation_options_extended_t
-    {
-        bytes_t memory;
-        size_t required_bytes_back;
-        size_t preferred_bytes_back;
-        size_t bytes_front;
-        void* future_compat = nullptr;
-        alloc::flags flags;
-    };
-
-    struct reallocation_extended_t
+    struct reallocation_t
     {
         /// The area of memory which has been newly allocated. This will only
         /// be defined if all of its contents are defined- ie. the allocator
@@ -248,9 +230,31 @@ class allocator_t
         /// into, based on specifications for growing / shrinking. If the front
         /// of the allocation was shrunk forwards, then this is null because the
         /// start of the original allocation will not have a corresponding
-        /// position in the shrunk allocation
+        /// position in the shrunk allocation. If the front of the allocation
+        /// is still in the new allocation, but the back is not (due to
+        /// shrinking back) then this will be defined memory, a slice pointing
+        /// to
         opt_t<maybe_defined_memory_t> original_subslice;
         void* future_compat = nullptr;
+    };
+
+    /// Reallocate bytes- but any usage of expand_back or shrink_back will fail.
+    /// The returned memory will be uninitialized if any of the memory is
+    /// uninitialized: if expand_back and leave_nonzeroed are passed it will be
+    /// uninitialized, or if keep_old_nocopy was passed, and inplace expansion
+    /// failed.
+    [[nodiscard]] virtual alloc::result_t<reallocation_t>
+    realloc(const reallocate_options_t& options) = 0;
+
+    struct reallocation_options_extended_t
+    {
+        bytes_t memory;
+        size_t required_bytes_back;
+        size_t preferred_bytes_back;
+        size_t required_bytes_front;
+        size_t preferred_bytes_front;
+        void* future_compat = nullptr;
+        alloc::flags flags;
     };
 
     // Given a live allocation specified by the "data" and "size" fields, alter
@@ -258,22 +262,25 @@ class allocator_t
     // combination.
     // expand_front and shrink_front are mutually exclusive, along with
     // expand_back and shrink_back.
-    // The amount expanded in either direction will be between required_bytes_*
-    // and preferred_bytes_*, and if it cannot be done then a nullptr will be
-    // returned.
-    // If keep_old is specified, then the original allocation will still be
-    // live after the reallocation, *if* a new allocation had to be created. In
-    // this case, the "kept" boolean will be true in the returned
-    // allocation_result.
-    // If nocopy is specified, then a copy will not be performed. nocopy +
-    // keep_old together can be used to handle copying yourself, when it must
-    // happen. nocopy without keep_old is always invalid as it would result in
-    // data loss.
-    // If try_defragment is specified, then the allocator will prioritize
-    // moving the allocation to a better fit spot, being more likely to
-    // cause copying or new allocations.
-    [[nodiscard]] virtual alloc::result_t<reallocation_extended_t>
-    reallocate_bytes_extended(
+    // The amount expanded off the back/front will be greater than or equal to
+    // required_bytes_[back|front].
+    // If preferred_bytes_[back|front] are zero, then it is assumed that
+    // required == preferred. If preferred_bytes_[back|front] is nonzero but
+    // less than required_bytes_[back|front], then an assert fires and a usage
+    // error is returned.
+    // If keep_old_nocopy is specified, *and* a new allocation had to be created
+    // (ie. in-place reallocation failed) then the original allocation will
+    // still be live after the reallocation. In this case, `expanded_memory`
+    // will be undefined memory pointing to the new buffer, and
+    // `original_subslice` will be an alias for the memory passed in.
+    // allocation_result. If nocopy is specified, then a copy will not be
+    // performed. nocopy + keep_old together can be used to handle copying
+    // yourself, when it must happen. nocopy without keep_old is always invalid
+    // as it would result in data loss. If try_defragment is specified, then the
+    // allocator will prioritize moving the allocation to a better fit spot,
+    // being more likely to cause copying or new allocations.
+    [[nodiscard]] virtual alloc::result_t<reallocation_t>
+    realloc_extended(
         const reallocation_options_extended_t& options) = 0;
 };
 

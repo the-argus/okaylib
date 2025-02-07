@@ -125,13 +125,36 @@ inline auto c_allocator_t::reallocate_bytes_extended(
         uint8_t* start_ptr = static_cast<uint8_t*>(mem);
         uint8_t& start = *start_ptr;
 
-        if (!(options.flags & flags::leave_nonzeroed)) [[unlikely]] {
-            std::memset(start_ptr + options.memory.size(), 0, );
+        if (expanding_back) {
+            if (options.flags & flags::leave_nonzeroed) [[unlikely]] {
+                return reallocation_extended_t{
+                    .expanded_memory =
+                        undefined_memory_t<uint8_t>(start, new_size),
+                    .original_subslice =
+                        ok::raw_slice(start, options.memory.size()),
+                };
+            }
+
+            // zero memory after the original allocation by default
+            // TODO: have way to turn this off based on platform guarantees for
+            // zeroed memory?
+            std::memset(start_ptr + options.memory.size(), 0,
+                        options.required_bytes_back);
+
+            return reallocation_extended_t{
+                .expanded_memory = undefined_memory_t<uint8_t>(start, new_size),
+                .original_subslice =
+                    ok::raw_slice(start, options.memory.size()),
+            };
         }
 
+        // should only be here if we are shrinking or expanding back, and we
+        // already dealt with the expanding case
+        __ok_assert(shrinking_back);
+
         return reallocation_extended_t{
-            // .expanded_memory = ok::raw_slice(start, new_size),
-            // .original_subslice = ok::raw_slice(start, options.memory.size()),
+            .expanded_memory = ok::raw_slice(start, new_size),
+            .original_subslice = nullopt,
         };
     }
 
