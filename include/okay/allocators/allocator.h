@@ -190,27 +190,44 @@ struct request_t
 struct reallocate_request_t
 {
     bytes_t memory;
-    size_t required_bytes;
+    // size of the memory after reallocating
+    size_t new_size_bytes;
     // ignored if shrinking or if zero
-    size_t preferred_bytes = 0;
+    size_t preferred_size_bytes = 0;
+    // just for keep_old_nocopy, try_defragment, or leave_nonzeroed
     alloc::flags flags;
 
     [[nodiscard]] constexpr bool is_valid() const OKAYLIB_NOEXCEPT
     {
         constexpr alloc::flags forbidden =
-            flags::shrink_front | flags::expand_front;
+            flags::shrink_front | flags::expand_front | flags::expand_back |
+            flags::shrink_back;
+
         // cannot expand or shrink front
         return !(flags & forbidden) &&
-               // exactly one of expand_back or shrink_back
-               ((flags & flags::expand_back) != (flags & flags::shrink_back)) &&
-               // cant shrink more than the size of the existing allocation
-               (!(flags & flags::shrink_back) ||
-                required_bytes < memory.size()) &&
-               // some bytes need to be required; a no-op is assumed to be a
-               // mistake
-               (required_bytes != 0) &&
-               // preferred should be zero or be greater than required
-               (preferred_bytes > required_bytes || preferred_bytes == 0);
+               // no attempt to... free the memory?
+               (new_size_bytes != 0) &&
+               // preferred should be zero OR ( (we're growing OR staying the
+               // same size) + preferred is greater than required )
+               (preferred_size_bytes == 0 ||
+                (new_size_bytes >= memory.size() &&
+                 preferred_size_bytes > new_size_bytes));
+    }
+};
+
+class reallocate_request_valid_t
+{
+  private:
+    reallocate_request_t m_inner;
+
+  public:
+    // implicitly convertible from request
+    constexpr reallocate_request_valid_t(reallocate_request_t&& req)
+        OKAYLIB_NOEXCEPT : m_inner(std::forward<reallocate_request_t>(req))
+    {
+        if (!m_inner.is_valid()) [[unlikely]] {
+            __ok_abort();
+        }
     }
 };
 
@@ -254,31 +271,16 @@ struct reallocate_extended_request_t
 
 struct reallocation_t
 {
-    struct
-    {
-        // number of bytes expanded/shrunk in back
-        size_t back_bytes;
-        // number of bytes expanded/shrunk off front
-        size_t front_bytes;
-        // start of the new allocation, only relevant if moving the front or if
-        // inplace reallocation failed.
-        uint8_t* new_memory;
+    maybe_defined_memory_t new_memory;
+    bool is_original_allocation_live = false;
+    void* future_compat = nullptr;
+};
 
-        bool kept = false;
-
-        void* future_compat = nullptr;
-    } inner;
-
-    /// Whether the original allocation is still live.
-    /// Will always be false if flags::keep_old_nocopy was not specified
-    constexpr bool original_was_kept() const OKAYLIB_NOEXCEPT
-    {
-        return inner.kept;
-    }
-
-    constexpr bool is_new_memory_zeroed() const OKAYLIB_NOEXCEPT {}
-
-    constexpr void new_memory(const request_t&)
+struct extended_reallocation_t
+{
+    struct {
+    maybe_defined_memory_t overlap;
+    }m;
 };
 
 } // namespace alloc
@@ -309,8 +311,8 @@ class allocator_t
     /// uninitialized: if expand_back and leave_nonzeroed are passed it will be
     /// uninitialized, or if keep_old_nocopy was passed, and inplace expansion
     /// failed.
-    [[nodiscard]] virtual alloc::result_t<reallocation_t>
-    reallocate(const reallocate_options_t& options) = 0;
+    [[nodiscard]] virtual alloc::result_t<alloc::reallocation_t>
+    reallocate(const alloc::reallocate_request_valid_t& options) = 0;
 
     // Given a live allocation specified by the "data" and "size" fields, alter
     // it by expanding or shrinking it from the front or back, or both in some
