@@ -199,22 +199,6 @@ struct reallocate_request_t
     }
 };
 
-class reallocate_request_valid_t
-{
-  private:
-    reallocate_request_t m_inner;
-
-  public:
-    // implicitly convertible from request
-    constexpr reallocate_request_valid_t(reallocate_request_t&& req)
-        OKAYLIB_NOEXCEPT : m_inner(std::forward<reallocate_request_t>(req))
-    {
-        if (!m_inner.is_valid()) [[unlikely]] {
-            __ok_abort();
-        }
-    }
-};
-
 struct reallocate_extended_request_t
 {
     bytes_t memory;
@@ -256,50 +240,28 @@ struct reallocate_extended_request_t
     }
 };
 
-class reallocate_extended_request_valid_t
+namespace detail {
+template <typename T> class checked_is_valid_t
 {
   private:
-    reallocate_extended_request_t m_inner;
+    T m_inner;
 
   public:
-    constexpr reallocate_extended_request_valid_t(
-        reallocate_extended_request_t&& req) OKAYLIB_NOEXCEPT
-        : m_inner(std::forward<reallocate_extended_request_t>(req))
+    // implicitly convertible from request
+    constexpr checked_is_valid_t(T&& req) OKAYLIB_NOEXCEPT
+        : m_inner(std::forward<T>(req))
     {
         if (!m_inner.is_valid()) [[unlikely]] {
             __ok_abort();
         }
     }
 };
+} // namespace detail
 
-enum class realloc_flags : uint8_t
-{
-    // clang-format off
-    // if original_memory_live is specified, then the part of memory that was
-    // duplicated is NOT zeroed- it is assumed the user is going to copy into
-    // the memory immediately after this routine
-    original_memory_live    = 0x001,
-    // whether memcpying occurred
-    copied                  = 0x002,
-    // this expresses whether the additional memory was zeroed (stuff that was
-    // not a potential target for memcpy).
-    zeroed                  = 0x004,
-    // clang-format on
-};
-
-constexpr realloc_flags operator|(realloc_flags a, realloc_flags b)
-{
-    using flags = realloc_flags;
-    return static_cast<flags>(static_cast<std::underlying_type_t<flags>>(a) |
-                              static_cast<std::underlying_type_t<flags>>(b));
-}
-
-constexpr bool operator&(realloc_flags a, realloc_flags b)
-{
-    using flags = realloc_flags;
-    return static_cast<std::underlying_type_t<flags>>(a) &
-           static_cast<std::underlying_type_t<flags>>(b);
-}
+using valid_reallocate_extended_request_t =
+    detail::checked_is_valid_t<reallocate_extended_request_t>;
+using valid_reallocate_request_t =
+    detail::checked_is_valid_t<reallocate_request_t>;
 
 struct reallocation_t
 {
@@ -405,11 +367,11 @@ class allocator_t
     virtual void deallocate(bytes_t bytes) noexcept = 0;
 
     [[nodiscard]] virtual alloc::result_t<alloc::reallocation_t>
-    reallocate(const alloc::reallocate_request_valid_t& options) noexcept = 0;
+    reallocate(const alloc::valid_reallocate_request_t& options) noexcept = 0;
 
     [[nodiscard]] virtual alloc::result_t<alloc::reallocation_extended_t>
     reallocate_extended(
-        const alloc::reallocate_extended_request_valid_t& options) noexcept = 0;
+        const alloc::valid_reallocate_extended_request_t& options) noexcept = 0;
 };
 
 } // namespace ok
