@@ -46,7 +46,6 @@ template <typename viewed_t> class slice_t
   private:
     // NOTE: opt may rely on the layout of these items, changing order may cause
     // UB (or... trigger problems in what is already UB...)
-    // TODO: is the constexpr reinterpret_cast into a slice_t (in opt.h) valid
     size_t m_elements;
     viewed_t* m_data;
 

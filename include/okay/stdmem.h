@@ -26,7 +26,7 @@ memcopy_options_t(const slice_t<T>&, const slice_t<T>&) -> memcopy_options_t<T>;
 
 template <typename T> struct memcontains_options_t
 {
-    slice_t<T> containing;
+    slice_t<T> outer;
     slice_t<T> inner;
 };
 

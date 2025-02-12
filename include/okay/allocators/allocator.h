@@ -71,13 +71,14 @@ enum class error : uint8_t
     oom,
     unsupported,
     usage,
+    couldnt_expand_inplace,
 };
 
 inline constexpr size_t default_align = alignof(std::max_align_t);
 
 template <typename T> using result_t = ok::res_t<T, error>;
 
-enum class flags : uint8_t
+enum class flags : uint16_t
 {
     // clang-format off
     expand_front    = 0b00000001,
@@ -87,65 +88,48 @@ enum class flags : uint8_t
     keep_old_nocopy = 0b00010000,
     try_defragment  = 0b00100000,
     leave_nonzeroed = 0b01000000,
+    inplace_or_fail = 0b10000000,
     // clang-format on
 };
 
 enum class feature_flags : uint16_t
 {
     // clang-format off
-    // Can this allocator expand or shrink an allocation in-place? ie. is
-    // it worth it to use the keep_old flag?
-    in_place        = 0x0001,
-    // arena allocators might not support this. if the allocator only
-    // supports freeing the most recent allocation, this will not be
-    // specified but "stacklike" will be. If this is not specified, then
-    // deallocate and will be an empty function, not an error. reallocate
-    // will always error (see nothrow feature flag for how error is
-    // propagated).
-    free_and_realloc= 0x0002,
-    // whether the allocator can make use of reclaimed memory after an
-    // allocation is shrunk. The allocator will never fail when
-    // shrinking, but this flag tells you if the shrinking is taken
-    // advantage of by the allocator.
-    shrinking       = 0x0004,
-    // whether this allocator supports expanding the allocation off the
-    // "back", in-place, as realloc() might. This flag should be 0 if
-    // in_place is not specified: if the allocator cannot reallocate in
-    // place then it will just always create and entire new allocation to
-    // achieve expand_back.
-    expand_back     = 0x0008,
-    // whether this allocator supports expanding the allocation off the
-    // "front", meaning before the data pointer. This is only relevant if
-    // in_place is specified, otherwise the allocator will always perform
-    // a new allocation to expand at the front, and this flag should be 0.
-    expand_front    = 0x0010,
-    // Whether *not* memcpy-ing is supported by this allocator. If this is
-    // not specified, it is possible to implement a wrapper which uses
-    // allocate and deallocate to emulate this functionality.
-    nocopy          = 0x0020,
-    // If this is specified, then the allocator is capable of keeping an
-    // older allocation when reallocate_bytes() is called. If this is not
-    // specified, it is possible to implement a wrapper which uses allocate
-    // and deallocate to emulate this functionality.
-    keep_old        = 0x0040,
-    // arena allocators might have this specified, if you can modify
-    // only the most recently made allocation. this is mutually exclusie
-    // with `threadsafe`.
-    stacklike       = 0x0080,
     // whether it is valid to call allocator functions from multiple
     // threads. Additionally requires that allocations do not have any
     // state that can be modified from other threads threough the
     // allocator, like a stacklike allocator where another thread can
     // allocate between operations and change whether your allocation
     // is on top of the stack.
-    threadsafe      = 0x0100,
+    threadsafe      = 0x0001,
     // whether this allocator supports clearing. if it does not support
     // clearing, then clear() is an empty function call in release mode
     // and an assert() in debug mode.
-    clearing        = 0x0200,
-    // If this is specified, then the allocator is guaranteed to never
-    // throw exceptions.
-    nothrow         = 0x0400,
+    clearing        = 0x0002,
+    // Can this allocator expand or shrink an allocation in-place?
+    // If this flag is off, then it is not worth it to pass the keep_old_nocopy
+    // flag. If this flag is off, then passing inplace_or_fail will always
+    // return error::unsupported.
+    in_place        = 0x0004,
+    // whether this allocator supports leaving reallocated memory uninitialized,
+    // in the case that inplace reallocation failed (ie. whether you can pass
+    // alloc::flags::keep_old_nocopy).
+    keep_old_nocopy = 0x0008,
+    // If this is true, then the allocator can only allocate. Calling realloc on
+    // such an allocator will error with error::unsupported. Calling deallocate
+    // will do nothing.
+    only_alloc      = 0x0010,
+    // Similar to only_alloc (see above) except this allocator supports
+    // specifically freeing in LIFO order, and reallocating only the most
+    // recent allocation. `reallocate_extended()` is not guaranteed to be
+    // supported on any allocation (including the most recent allocation) if
+    // this flag is specified. This flag is mutually exclusive with
+    // feature_flags::only_alloc and feature_flags::threadsafe.
+    stacklike       = 0x0020,
+    expand_back     = 0x0040,
+    expand_front    = 0x0080,
+    // Whether shrinking provides any benefits for this allocator
+    can_reclaim     = 0x0100,
     // clang-format on
 };
 
@@ -235,9 +219,9 @@ struct reallocate_extended_request_t
 {
     bytes_t memory;
     size_t required_bytes_back;
-    size_t preferred_bytes_back;
+    size_t preferred_bytes_back = 0;
     size_t required_bytes_front;
-    size_t preferred_bytes_front;
+    size_t preferred_bytes_front = 0;
     void* future_compat = nullptr;
     alloc::flags flags;
 
@@ -247,97 +231,185 @@ struct reallocate_extended_request_t
             flags & flags::expand_back || flags & flags::shrink_back;
         const bool changing_front =
             flags & flags::expand_front || flags & flags::shrink_front;
-        // exactly one of expand_back or shrink_back, and one of shrink_back and
-        // expand_back
-        return ((flags & flags::expand_back) != (flags & flags::shrink_back) ||
-                (flags & flags::expand_front) !=
-                    (flags & flags::shrink_front)) &&
-               // cannot shrink more than size of allocation
-               (((flags & flags::shrink_back) * required_bytes_back) +
-                ((flags & flags::shrink_front) * required_bytes_front)) <
-                   memory.size() &&
-               // some bytes need to be required; a no-op is assumed to be a
-               // mistake
-               (!changing_back || required_bytes_back != 0) &&
-               (!changing_front || required_bytes_front != 0) &&
-               // preferred bytes should be either zero or greater than required
-               // bytes
-               (preferred_bytes_back > required_bytes_back ||
-                preferred_bytes_back == 0) &&
-               (preferred_bytes_front > required_bytes_front ||
-                preferred_bytes_front == 0);
+        return
+            // exactly one of expand_back or shrink_back, and one of shrink_back
+            // and expand_back
+            ((flags & flags::expand_back) != (flags & flags::shrink_back) ||
+             (flags & flags::expand_front) != (flags & flags::shrink_front)) &&
+            // preferred bytes should not be specified if shrinking
+            ((flags & flags::expand_front) || preferred_bytes_front == 0) &&
+            ((flags & flags::expand_back) || preferred_bytes_back == 0) &&
+            // cannot shrink more than size of allocation
+            (((flags & flags::shrink_back) * required_bytes_back) +
+             ((flags & flags::shrink_front) * required_bytes_front)) <
+                memory.size() &&
+            // some bytes need to be required; a no-op is assumed to be a
+            // mistake
+            (!changing_back || required_bytes_back != 0) &&
+            (!changing_front || required_bytes_front != 0) &&
+            // preferred bytes should be either zero or greater than required
+            // bytes
+            (preferred_bytes_back > required_bytes_back ||
+             preferred_bytes_back == 0) &&
+            (preferred_bytes_front > required_bytes_front ||
+             preferred_bytes_front == 0);
     }
 };
 
-struct reallocation_t
+class reallocate_extended_request_valid_t
 {
-    maybe_defined_memory_t new_memory;
-    bool is_original_allocation_live = false;
-    void* future_compat = nullptr;
+  private:
+    reallocate_extended_request_t m_inner;
+
+  public:
+    constexpr reallocate_extended_request_valid_t(
+        reallocate_extended_request_t&& req) OKAYLIB_NOEXCEPT
+        : m_inner(std::forward<reallocate_extended_request_t>(req))
+    {
+        if (!m_inner.is_valid()) [[unlikely]] {
+            __ok_abort();
+        }
+    }
 };
 
-struct extended_reallocation_t
+enum class realloc_flags : uint8_t
 {
-    struct {
-    maybe_defined_memory_t overlap;
-    }m;
+    // clang-format off
+    // if original_memory_live is specified, then the part of memory that was
+    // duplicated is NOT zeroed- it is assumed the user is going to copy into
+    // the memory immediately after this routine
+    original_memory_live    = 0x001,
+    // whether memcpying occurred
+    copied                  = 0x002,
+    // this expresses whether the additional memory was zeroed (stuff that was
+    // not a potential target for memcpy).
+    zeroed                  = 0x004,
+    // clang-format on
+};
+
+constexpr realloc_flags operator|(realloc_flags a, realloc_flags b)
+{
+    using flags = realloc_flags;
+    return static_cast<flags>(static_cast<std::underlying_type_t<flags>>(a) |
+                              static_cast<std::underlying_type_t<flags>>(b));
+}
+
+constexpr bool operator&(realloc_flags a, realloc_flags b)
+{
+    using flags = realloc_flags;
+    return static_cast<std::underlying_type_t<flags>>(a) &
+           static_cast<std::underlying_type_t<flags>>(b);
+}
+
+struct reallocation_t
+{
+    // callers job to keep track of whether the additionally allocated memory
+    // is initialized (beyond the zeroing allocators do by default)
+    bytes_t new_memory;
+    bool kept = false;
+};
+
+struct reallocation_extended_t
+{
+    bytes_t new_memory;
+    size_t bytes_offset_front = 0;
+    bool kept = false;
 };
 
 } // namespace alloc
+
+template <> class ok::res_t<alloc::reallocation_t, alloc::error>
+{
+  private:
+    using reallocation_t = alloc::reallocation_t;
+    using error_enum_t = alloc::error;
+
+    // mimic layout of bytes_t here so reinterpret_cast works
+    size_t size;
+    uint8_t* start;
+    bool kept;
+    error_enum_t error;
+
+  public:
+    [[nodiscard]] reallocation_t& release_ref() & OKAYLIB_NOEXCEPT
+    {
+        error = error_enum_t::result_released;
+        return *reinterpret_cast<reallocation_t*>(this);
+    }
+
+    [[nodiscard]] reallocation_t release() OKAYLIB_NOEXCEPT
+    {
+        // can be called as rvalue
+        error = error_enum_t::result_released;
+        return *reinterpret_cast<reallocation_t*>(this);
+    }
+
+    [[nodiscard]] constexpr opt_t<reallocation_t>
+    to_opt() const OKAYLIB_NOEXCEPT
+    {
+        return reallocation_t{
+            .new_memory = raw_slice(*start, size),
+            .kept = kept,
+        };
+    }
+
+    [[nodiscard]] constexpr error_enum_t err() const OKAYLIB_NOEXCEPT
+    {
+        return error;
+    }
+
+    [[nodiscard]] constexpr bool okay() const OKAYLIB_NOEXCEPT
+    {
+        return err() == error_enum_t::okay;
+    }
+
+    constexpr res_t(const reallocation_t& reallocation) OKAYLIB_NOEXCEPT
+        : size(reallocation.new_memory.size()),
+          start(reallocation.new_memory.data()),
+          kept(reallocation.kept),
+          error(error_enum_t::okay)
+    {
+    }
+
+    constexpr res_t(size_t _size, uint8_t& _start, bool _kept) OKAYLIB_NOEXCEPT
+        : size(_size),
+          start(ok::addressof(_start)),
+          kept(_kept),
+          error(error_enum_t::okay)
+    {
+    }
+
+    constexpr res_t(error_enum_t failure) OKAYLIB_NOEXCEPT : size(0),
+                                                             start(0),
+                                                             kept(false),
+                                                             error(failure)
+    {
+        if (failure == error_enum_t::okay) [[unlikely]] {
+            __ok_abort();
+        }
+    }
+};
 
 /// Abstract/virtual interface for allocators. Not all functions may be
 /// implemented, depending on `features()`
 class allocator_t
 {
   public:
-    /// Allocate some amount of memory of size at least nbytes.
-    /// Return pointer to memory and the size of the block.
-    /// This will be undefined memory if the allocator is explicitly asked to
-    /// leave_nonzeroed. The allocator will return at least nbytes but may make
-    /// a decision to arbitrarily return more, especially if there is extra
-    /// space it cannot reuse off the back of the allocation.
     [[nodiscard]] virtual alloc::result_t<maybe_defined_memory_t>
-    allocate(const alloc::request_t&) = 0;
+    allocate(const alloc::request_t&) noexcept = 0;
 
-    // Free all allocations in this allocator.
     virtual void clear() noexcept = 0;
 
     [[nodiscard]] virtual alloc::feature_flags features() const noexcept = 0;
 
     virtual void deallocate(bytes_t bytes) noexcept = 0;
 
-    /// Reallocate bytes- but any usage of expand_back or shrink_back will fail.
-    /// The returned memory will be uninitialized if any of the memory is
-    /// uninitialized: if expand_back and leave_nonzeroed are passed it will be
-    /// uninitialized, or if keep_old_nocopy was passed, and inplace expansion
-    /// failed.
     [[nodiscard]] virtual alloc::result_t<alloc::reallocation_t>
-    reallocate(const alloc::reallocate_request_valid_t& options) = 0;
+    reallocate(const alloc::reallocate_request_valid_t& options) noexcept = 0;
 
-    // Given a live allocation specified by the "data" and "size" fields, alter
-    // it by expanding or shrinking it from the front or back, or both in some
-    // combination.
-    // expand_front and shrink_front are mutually exclusive, along with
-    // expand_back and shrink_back.
-    // The amount expanded off the back/front will be greater than or equal to
-    // required_bytes_[back|front].
-    // If preferred_bytes_[back|front] are zero, then it is assumed that
-    // required == preferred. If preferred_bytes_[back|front] is nonzero but
-    // less than required_bytes_[back|front], then an assert fires and a usage
-    // error is returned.
-    // If keep_old_nocopy is specified, *and* a new allocation had to be created
-    // (ie. in-place reallocation failed) then the original allocation will
-    // still be live after the reallocation. In this case, `expanded_memory`
-    // will be undefined memory pointing to the new buffer, and
-    // `original_subslice` will be an alias for the memory passed in.
-    // allocation_result. If nocopy is specified, then a copy will not be
-    // performed. nocopy + keep_old together can be used to handle copying
-    // yourself, when it must happen. nocopy without keep_old is always invalid
-    // as it would result in data loss. If try_defragment is specified, then the
-    // allocator will prioritize moving the allocation to a better fit spot,
-    // being more likely to cause copying or new allocations.
-    [[nodiscard]] virtual alloc::result_t<reallocation_t>
-    reallocate_extended(const reallocation_options_extended_t& options) = 0;
+    [[nodiscard]] virtual alloc::result_t<alloc::reallocation_extended_t>
+    reallocate_extended(
+        const alloc::reallocate_extended_request_valid_t& options) noexcept = 0;
 };
 
 } // namespace ok
@@ -369,6 +441,9 @@ template <> struct fmt::formatter<ok::alloc::error>
             return fmt::format_to(ctx.out(), "alloc::error::result_released");
         case error_t::usage:
             return fmt::format_to(ctx.out(), "alloc::error::usage");
+        case error_t::couldnt_expand_inplace:
+            return fmt::format_to(ctx.out(),
+                                  "alloc::error::couldnt_expand_inplace");
         }
     }
 };
