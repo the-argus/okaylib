@@ -66,6 +66,15 @@ TEST_SUITE("range traits")
             }
         }
 
+        SUBCASE("iter_get_ref aborts when out of bounds")
+        {
+            std::vector<int> ints = {0, 1, 2, 3, 4};
+            int c_ints[] = {0, 1, 2, 3, 4};
+
+            REQUIREABORTS(auto& ref = ok::iter_get_ref(ints, 10));
+            REQUIREABORTS(auto& ref = ok::iter_get_ref(c_ints, 10));
+        }
+
         SUBCASE("iter_get_ref example range")
         {
             example_range_cstyle bytes;

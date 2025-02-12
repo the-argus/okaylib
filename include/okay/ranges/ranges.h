@@ -36,6 +36,8 @@
 
 namespace ok {
 
+template <typename viewed_t> class slice_t;
+
 template <typename range_t, typename enable = void> struct range_definition
 {
     // if a range definition includes a `static bool deleted = true`, then
@@ -75,14 +77,18 @@ struct range_definition<
 
     static constexpr value_type& get_ref(range_t& i, size_t c) OKAYLIB_NOEXCEPT
     {
-        __ok_assert(c < size(i), "out of bounds access into c-style array");
+        if (c >= size(i)) [[unlikely]] {
+            __ok_abort("out of bounds access into c-style array");
+        }
         return i[c];
     }
 
     static constexpr const value_type& get_ref(const range_t& i,
                                                size_t c) OKAYLIB_NOEXCEPT
     {
-        __ok_assert(c < size(i), "out of bounds access into c-style array");
+        if (c >= size(i)) [[unlikely]] {
+            __ok_abort("out of bounds access into c-style array");
+        }
         return i[c];
     }
 
@@ -142,12 +148,24 @@ struct range_definition<
         value_type&>
     get_ref(range_t& i, size_t c) OKAYLIB_NOEXCEPT
     {
+        // slices have bounds checking already
+        if constexpr (!detail::is_instance_v<range_t, ok::slice_t>) {
+            if (c >= i.size()) [[unlikely]] {
+                __ok_abort("Out of bounds access into arraylike container.");
+            }
+        }
         return i[c];
     }
 
     static constexpr const value_type& get_ref(const range_t& i,
                                                size_t c) OKAYLIB_NOEXCEPT
     {
+        // slices have bounds checking already
+        if constexpr (!detail::is_instance_v<range_t, ok::slice_t>) {
+            if (c >= i.size()) [[unlikely]] {
+                __ok_abort("Out of bounds access into arraylike container.");
+            }
+        }
         return i[c];
     }
 
