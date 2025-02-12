@@ -246,13 +246,13 @@ struct reallocation_t
 {
     // callers job to keep track of whether the additionally allocated memory
     // is initialized (beyond the zeroing allocators do by default)
-    bytes_t new_memory;
+    bytes_t memory;
     bool kept = false;
 };
 
 struct reallocation_extended_t
 {
-    bytes_t new_memory;
+    bytes_t memory;
     size_t bytes_offset_front = 0;
     bool kept = false;
 };
@@ -289,7 +289,7 @@ template <> class ok::res_t<alloc::reallocation_t, alloc::error>
     to_opt() const OKAYLIB_NOEXCEPT
     {
         return reallocation_t{
-            .new_memory = raw_slice(*start, size),
+            .memory = raw_slice(*start, size),
             .kept = kept,
         };
     }
@@ -305,8 +305,8 @@ template <> class ok::res_t<alloc::reallocation_t, alloc::error>
     }
 
     constexpr res_t(const reallocation_t& reallocation) OKAYLIB_NOEXCEPT
-        : size(reallocation.new_memory.size()),
-          start(reallocation.new_memory.data()),
+        : size(reallocation.memory.size()),
+          start(reallocation.memory.data()),
           kept(reallocation.kept),
           error(error_enum_t::okay)
     {
@@ -335,22 +335,24 @@ template <> class ok::res_t<alloc::reallocation_t, alloc::error>
 /// implemented, depending on `features()`
 class allocator_t
 {
-  public:
+  protected:
     [[nodiscard]] virtual alloc::result_t<maybe_defined_memory_t>
-    allocate(const alloc::request_t&) noexcept = 0;
+    impl_allocate(const alloc::request_t&) OKAYLIB_NOEXCEPT = 0;
 
-    virtual void clear() noexcept = 0;
+    virtual void impl_clear() OKAYLIB_NOEXCEPT = 0;
 
-    [[nodiscard]] virtual alloc::feature_flags features() const noexcept = 0;
+    [[nodiscard]] virtual alloc::feature_flags
+    impl_features() const OKAYLIB_NOEXCEPT = 0;
 
-    virtual void deallocate(bytes_t bytes) noexcept = 0;
+    virtual void impl_deallocate(bytes_t bytes) OKAYLIB_NOEXCEPT = 0;
 
     [[nodiscard]] virtual alloc::result_t<alloc::reallocation_t>
-    reallocate(const alloc::reallocate_request_t& options) noexcept = 0;
+    impl_reallocate(const alloc::reallocate_request_t& options)
+        OKAYLIB_NOEXCEPT = 0;
 
     [[nodiscard]] virtual alloc::result_t<alloc::reallocation_extended_t>
-    reallocate_extended(
-        const alloc::reallocate_extended_request_t& options) noexcept = 0;
+    impl_reallocate_extended(const alloc::reallocate_extended_request_t&
+                                 options) OKAYLIB_NOEXCEPT = 0;
 };
 
 } // namespace ok

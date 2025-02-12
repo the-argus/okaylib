@@ -16,26 +16,32 @@ class c_allocator_t : public allocator_t
     c_allocator_t() = default;
 
     [[nodiscard]] inline alloc::result_t<maybe_defined_memory_t>
-    allocate(const alloc::request_t&) noexcept final;
+    impl_allocate(const alloc::request_t&) OKAYLIB_NOEXCEPT final;
 
-    inline void clear() noexcept final;
+    inline void impl_clear() OKAYLIB_NOEXCEPT final;
 
-    [[nodiscard]] inline alloc::feature_flags features() const noexcept final;
+    [[nodiscard]] inline alloc::feature_flags
+    impl_features() const OKAYLIB_NOEXCEPT final;
 
-    inline void deallocate(bytes_t) noexcept final;
+    inline void impl_deallocate(bytes_t) OKAYLIB_NOEXCEPT final;
 
     [[nodiscard]] inline alloc::result_t<alloc::reallocation_t>
-    reallocate(const alloc::valid_reallocate_request_t&) noexcept final;
+    impl_reallocate(const alloc::reallocate_request_t&) OKAYLIB_NOEXCEPT final;
 
     [[nodiscard]] inline alloc::result_t<alloc::reallocation_extended_t>
-    reallocate_extended(const alloc::valid_reallocate_extended_request_t&
-                            options) noexcept final;
+    impl_reallocate_extended(const alloc::reallocate_extended_request_t&
+                                 options) OKAYLIB_NOEXCEPT final;
+
+  private:
+    [[nodiscard]] constexpr alloc::result_t<bytes_t>
+    realloc_inner(bytes_t memory, size_t new_size,
+                  bool zeroed) OKAYLIB_NOEXCEPT;
 };
 
 // definitions -----------------------------------------------------------------
 
 [[nodiscard]] inline alloc::result_t<maybe_defined_memory_t>
-c_allocator_t::allocate(const alloc::request_t& request) noexcept
+c_allocator_t::impl_allocate(const alloc::request_t& request) OKAYLIB_NOEXCEPT
 {
     // NOTE: alignment over 16 is not possible on most platforms, I don't think?
     // TODO: figure out what platforms this is a problem for, maybe alloc more
@@ -64,175 +70,153 @@ c_allocator_t::allocate(const alloc::request_t& request) noexcept
     return out;
 }
 
-inline void c_allocator_t::deallocate(bytes_t bytes) noexcept
+inline void c_allocator_t::impl_deallocate(bytes_t bytes) OKAYLIB_NOEXCEPT
 {
     ::free(bytes.data());
 }
 
-inline auto c_allocator_t::reallocate_extended(
-    const alloc::valid_reallocate_extended_request_t& options) noexcept
-    -> alloc::result_t<alloc::reallocation_extended_t>
+[[nodiscard]] inline alloc::result_t<alloc::reallocation_t>
+c_allocator_t::impl_reallocate(const alloc::reallocate_request_t& options)
+    OKAYLIB_NOEXCEPT
 {
     using namespace alloc;
-    if ((options.flags & flags::keep_old_nocopy) ||) [[unlikely]] {
-        __ok_assert(false, "keep_old_nocopy unsupported by c allocator");
+    if (!options.is_valid()) [[unlikely]] {
+        __ok_assert(false,
+                    "invalid reallocate_request_t passed to c allocator");
+        return error::usage;
+    }
+
+    if ((options.flags & flags::keep_old_nocopy) ||
+        (options.flags & flags::inplace_or_fail)) [[unlikely]] {
+        __ok_assert(false, "unsupported flag passed to c allocator");
         return error::unsupported;
     }
 
-    constexpr auto required_flags = flags::shrink_back | flags::shrink_front |
-                                    flags::expand_front | flags::expand_back;
+    const bool zeroed = !(options.flags & flags::leave_nonzeroed);
+
+    auto res = realloc_inner(options.memory, options.new_size_bytes, zeroed);
+    if (!res.okay()) [[unlikely]]
+        return res.err();
+
+    return reallocation_t{.memory = res.release_ref()};
+}
+
+[[nodiscard]] constexpr alloc::result_t<bytes_t>
+c_allocator_t::realloc_inner(bytes_t memory, size_t new_size,
+                             bool zeroed) OKAYLIB_NOEXCEPT
+{
+    using namespace alloc;
+    void* mem = ::realloc(memory.data(), new_size);
+
+    if (!mem) [[unlikely]]
+        return error::oom;
+
+    uint8_t* start_ptr = static_cast<uint8_t*>(mem);
+    uint8_t& start = *start_ptr;
+
+    const auto out = raw_slice(start, new_size);
+
+    const bool expanding = new_size > memory.size();
+
+    // usually realloc is expanding, optimize for that (likely marker)
+    if (expanding && zeroed) [[likely]] {
+        // TODO: have way to turn this off based on platform guarantees
+        // for zeroed memory?
+        std::memset(start_ptr + memory.size(), 0, new_size - memory.size());
+    }
+
+    return out;
+}
+
+[[nodiscard]] inline auto c_allocator_t::impl_reallocate_extended(
+    const alloc::reallocate_extended_request_t& options)
+    OKAYLIB_NOEXCEPT -> alloc::result_t<alloc::reallocation_extended_t>
+{
+    using namespace alloc;
+    if (!options.is_valid()) [[unlikely]] {
+        __ok_assert(
+            false,
+            "invalid reallocate_extended_request_t passed to c allocator");
+        return error::usage;
+    }
+
+    if ((options.flags & flags::keep_old_nocopy) ||
+        (options.flags & flags::inplace_or_fail)) [[unlikely]] {
+        __ok_assert(false, "unsupported flag passed to c allocator");
+        return error::unsupported;
+    }
 
     const bool shrinking_back = options.flags & flags::shrink_back;
     const bool shrinking_front = options.flags & flags::shrink_front;
     const bool expanding_front = options.flags & flags::expand_front;
     const bool expanding_back = options.flags & flags::expand_back;
+    const bool zeroed = !(options.flags & flags::leave_nonzeroed);
 
-    // at least one required flag and not conflicting flags
-    if (!(required_flags & options.flags) ||
-        ((shrinking_front && expanding_front) ||
-         (shrinking_back && expanding_back))) [[unlikely]] {
-        assert(false);
-        return error::usage;
+    const size_t amount_changed_back =
+        ok::max(options.required_bytes_back, options.preferred_bytes_back);
+    const size_t amount_changed_front =
+        ok::max(options.required_bytes_front, options.preferred_bytes_front);
+
+    // calculate the new size
+    size_t new_size;
+    {
+        new_size = options.memory.size();
+        if (expanding_back)
+            new_size += amount_changed_back;
+        else if (shrinking_back)
+            new_size -= amount_changed_back;
+
+        if (expanding_front)
+            new_size += amount_changed_front;
+        else if (shrinking_front)
+            new_size -= amount_changed_front;
     }
 
-    // validate back params
-    // do this before shrink params- it can happen in early return
-    if ((expanding_back || shrinking_back) &&
-        options.preferred_bytes_back < options.required_bytes_back)
-        [[unlikely]] {
-        assert(false);
-        return error::usage;
+    // early out if this looks like a regular realloc
+    if (amount_changed_front == 0) [[likely]] {
+        auto res = this->realloc_inner(options.memory, new_size, zeroed);
+        if (!res.okay()) [[unlikely]]
+            return res.err();
+
+        return reallocation_extended_t{.memory = res.release_ref()};
     }
 
-    // make sure youre not shrinking out of existence
-    if (shrinking_back && options.preferred_bytes_back >= options.memory.size())
-        [[unlikely]] {
-        assert(false);
-        return error::usage;
-    }
+    // if a change in the front is requested, we can do malloc/free to emulate
+    void* newmem = ::malloc(new_size);
 
-    // if we arent doing any weird business, we can use run of the mill realloc
-    if (!shrinking_front && !expanding_front) [[likely]] {
-        const size_t new_size =
-            expanding_back
-                ? options.memory.size() + options.required_bytes_back
-                : options.memory.size() - options.required_bytes_back;
-        void* mem = ::realloc(options.memory.data(), new_size);
-
-        if (!mem) [[unlikely]]
-            return error::oom;
-
-        uint8_t* start_ptr = static_cast<uint8_t*>(mem);
-        uint8_t& start = *start_ptr;
-
-        if (expanding_back) {
-            if (options.flags & flags::leave_nonzeroed) [[unlikely]] {
-                return reallocation_extended_t{
-                    .expanded_memory =
-                        undefined_memory_t<uint8_t>(start, new_size),
-                    .original_subslice =
-                        ok::raw_slice(start, options.memory.size()),
-                };
-            }
-
-            // zero memory after the original allocation by default
-            // TODO: have way to turn this off based on platform guarantees for
-            // zeroed memory?
-            std::memset(start_ptr + options.memory.size(), 0,
-                        options.required_bytes_back);
-
-            return reallocation_extended_t{
-                .expanded_memory = undefined_memory_t<uint8_t>(start, new_size),
-                .original_subslice =
-                    ok::raw_slice(start, options.memory.size()),
-            };
-        }
-
-        // should only be here if we are shrinking or expanding back, and we
-        // already dealt with the expanding case
-        __ok_assert(shrinking_back);
-
-        return reallocation_extended_t{
-            .expanded_memory = ok::raw_slice(start, new_size),
-            .original_subslice = nullopt,
-        };
-    }
-
-    // validate inputs- you cant shrink by more than the size of the original
-    // allocation
-    if (shrinking_front) [[unlikely]] {
-        if (options.required_bytes_front >= options.memory.size()) [[unlikely]]
-            return error::usage;
-        if (shrinking_back &&
-            options.required_bytes_front + options.required_bytes_back >=
-                options.memory.size()) [[unlikely]]
-            return error::usage;
-        // preferred bytes doesnt make sense when shrinking, setting this is
-        // a mistake
-        assert(options.preferred_bytes_front == 0);
-    }
-
-    if (shrinking_back) [[unlikely]] {
-        if (options.required_bytes_back >= options.memory.size()) [[unlikely]]
-            return error::usage;
-        // preferred bytes doesnt make sense when shrinking, setting this is
-        // a mistake
-        assert(options.preferred_bytes_back == 0);
-    }
-
-    if (expanding_front && options.preferred_bytes_front <
-                               options.required_bytes_front) [[unlikely]]
-        return error::usage;
-
-    size_t newsize = options.memory.size();
-    if (expanding_back)
-        newsize += options.required_bytes_back;
-    else if (shrinking_back)
-        newsize -= options.required_bytes_back;
-
-    if (expanding_front)
-        newsize += options.required_bytes_front;
-    else if (shrinking_front)
-        newsize -= options.required_bytes_front;
-
-    __ok_internal_assert(newsize != 0);
-
-    void* const mem = ::malloc(newsize);
-    if (!mem) [[unlikely]]
+    if (!newmem) [[unlikely]]
         return error::oom;
 
-    void* original = nullptr;
+    uint8_t* copy_dest = static_cast<uint8_t*>(newmem);
+    uint8_t* copy_src = options.memory.data();
+    size_t size = options.memory.size();
+
     if (shrinking_front) {
-        std::memcpy(
-            mem, (uint8_t*)options.memory.data() + options.required_bytes_front,
-            expanding_back ? newsize - options.required_bytes_back : newsize);
-        // original location is lost here, its not copied
-    } else if (expanding_front) {
-        original = (uint8_t*)mem + options.required_bytes_front;
-        std::memcpy(original, options.memory.data(),
-                    expanding_back ? options.memory.size()
-                                   : newsize - options.required_bytes_front);
-    } else [[likely]] {
-        original = mem;
-        std::memcpy(original, options.memory.data(),
-                    std::min(options.memory.size(), newsize));
+        copy_src += amount_changed_front;
+        size -= amount_changed_front;
+    } else {
+        __ok_internal_assert(expanding_front);
+        copy_dest += amount_changed_front;
     }
+
+    if (shrinking_back)
+        size -= amount_changed_back;
+
+    std::memcpy(copy_dest, copy_src, size);
 
     ::free(options.memory.data());
 
-    return reallocation_result_t{
-        ok::raw_slice(*static_cast<uint8_t*>(mem), newsize),
-        original,
-        false,
-    };
+    return reallocation_extended_t{
+        .memory = raw_slice(*static_cast<uint8_t*>(newmem), new_size)};
 }
 
-alloc::feature_flags c_allocator_t::features() const noexcept
+[[nodiscard]] alloc::feature_flags
+c_allocator_t::impl_features() const OKAYLIB_NOEXCEPT
 {
     return type_features;
 }
 
-inline void c_allocator_t::clear() noexcept
+inline void c_allocator_t::impl_clear() OKAYLIB_NOEXCEPT
 {
     __ok_assert(false,
                 "Potential leak: trying to clear allocator but it does not "
