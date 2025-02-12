@@ -256,8 +256,8 @@ class res_t<contained_t, enum_t,
 
     [[nodiscard]] constexpr enum_t err() const OKAYLIB_NOEXCEPT
     {
-        __ok_assert(okay() ||
-                    m_elements <= std::numeric_limits<enum_int_t>::max());
+        __ok_internal_assert(
+            okay() || m_elements <= std::numeric_limits<enum_int_t>::max());
         return okay() ? enum_t::okay : enum_t(enum_int_t(m_elements));
     }
 

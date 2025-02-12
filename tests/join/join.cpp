@@ -98,7 +98,8 @@ TEST_SUITE("join")
 
             while (ok::is_inbounds(evens_keep_if, begin_keep_if)) {
                 __ok_assert(
-                    ok::is_inbounds(evens_opt_transform, begin_transform));
+                    ok::is_inbounds(evens_opt_transform, begin_transform),
+                    "keep_if and transform -> opt | join are not equivalent");
 
                 auto&& a =
                     ok::iter_get_temporary_ref(evens_keep_if, begin_keep_if);

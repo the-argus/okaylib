@@ -198,7 +198,9 @@ struct range_definition<detail::reversed_view_t<input_range_t>,
         const auto& parent_ref =
             range.template get_view_reference<reversed_t, range_t>();
         const size_t size = ok::size(parent_ref);
-        __ok_assert(cursor < size);
+        __ok_assert(
+            cursor < size,
+            "Bad cursor passed to reverse_view_t::get(), overflow will occur");
         return ok::iter_copyout(parent_ref, size - (cursor + 1));
     }
 
@@ -209,7 +211,9 @@ struct range_definition<detail::reversed_view_t<input_range_t>,
         auto& parent_ref =
             range.template get_view_reference<reversed_t, range_t>();
         const size_t size = ok::size(parent_ref);
-        __ok_assert(cursor < size);
+        __ok_assert(cursor < size,
+                    "Bad cursor passed to reverse_view_t::get_ref() const, "
+                    "overflow will occur");
         return ok::iter_get_ref(parent_ref, size - (cursor + 1));
     }
 
@@ -220,7 +224,9 @@ struct range_definition<detail::reversed_view_t<input_range_t>,
         const auto& parent_ref =
             range.template get_view_reference<reversed_t, range_t>();
         const size_t size = ok::size(parent_ref);
-        __ok_assert(cursor < size);
+        __ok_assert(cursor < size,
+                    "Bad cursor passed to reverse_view_t::get_ref(), overflow "
+                    "will occur");
         return ok::iter_get_ref(parent_ref, size - (cursor + 1));
     }
 
@@ -231,7 +237,9 @@ struct range_definition<detail::reversed_view_t<input_range_t>,
         const auto& parent_ref =
             range.template get_view_reference<reversed_t, range_t>();
         const size_t size = ok::size(parent_ref);
-        __ok_assert(cursor < size);
+        __ok_assert(
+            cursor < size,
+            "Bad cursor passed to reverse_view_t::set(), overflow will occur");
         ok::iter_set(parent_ref, size - (cursor + 1),
                      std::forward<value_type_for<range_t>>(value));
     }

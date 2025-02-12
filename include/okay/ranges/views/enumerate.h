@@ -80,7 +80,10 @@ class ok::orderable_definition<detail::enumerated_cursor_t<parent_range_t>>
                                   const self_t& rhs) OKAYLIB_NOEXCEPT
     {
         const auto ordering = ok::cmp(lhs.inner(), rhs.inner());
-        __ok_assert(ordering == ok::cmp(lhs.m_index, rhs.m_index));
+        __ok_assert(ordering == ok::cmp(lhs.m_index, rhs.m_index),
+                    "Comparing two enumerated cursors resulted in a different "
+                    "comparison than the indices. This may indicate a broken "
+                    "range implementation.");
         return ordering;
     }
 };

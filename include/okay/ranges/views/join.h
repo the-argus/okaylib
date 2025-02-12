@@ -175,7 +175,7 @@ struct range_definition<detail::joined_view_t<input_range_t>>
 
         auto& inner_cursor = cursor.inner();
         auto& inner_view = cursor.view();
-        __ok_assert(ok::is_inbounds(inner_view, inner_cursor));
+        __ok_internal_assert(ok::is_inbounds(inner_view, inner_cursor));
         ok::increment(inner_view, inner_cursor);
 
         // if good after increment, then we just did a valid increment and
@@ -223,12 +223,14 @@ struct range_definition<detail::joined_view_t<input_range_t>>
                           value_type_for<view_t>)
         get(const T& joined, const cursor_t& cursor) OKAYLIB_NOEXCEPT
     {
-        __ok_assert(cursor.has_value());
+        __ok_assert(cursor.has_value(), "Invalid cursor passed to join view, "
+                                        "it seems to be uninitialized.");
 
         const auto& outer_ref =
             joined.template get_view_reference<joined_t, outer_range_t>();
 
-        __ok_assert(ok::is_inbounds(outer_ref, cursor.outer()));
+        __ok_assert(ok::is_inbounds(outer_ref, cursor.outer()),
+                    "Out of bounds cursor passed to join_view's get method.");
 
         return ok::iter_copyout(cursor.view(), cursor.inner());
     }
@@ -237,12 +239,14 @@ struct range_definition<detail::joined_view_t<input_range_t>>
                           value_type_for<view_t>&)
         get_ref(T& joined, const cursor_t& cursor) OKAYLIB_NOEXCEPT
     {
-        __ok_assert(cursor.has_value());
+        __ok_assert(cursor.has_value(), "Invalid cursor passed to join view, "
+                                        "it seems to be uninitialized.");
 
         auto& outer_ref =
             joined.template get_view_reference<joined_t, outer_range_t>();
 
-        __ok_assert(ok::is_inbounds(outer_ref, cursor.outer()));
+        __ok_assert(ok::is_inbounds(outer_ref, cursor.outer()),
+                    "Out of bounds cursor passed to join_view's get method.");
 
         return ok::iter_get_ref(cursor.view(), cursor.inner());
     }
@@ -251,12 +255,14 @@ struct range_definition<detail::joined_view_t<input_range_t>>
                           const value_type_for<view_t>&)
         get_ref(const T& joined, const cursor_t& cursor) OKAYLIB_NOEXCEPT
     {
-        __ok_assert(cursor.has_value());
+        __ok_assert(cursor.has_value(), "Invalid cursor passed to join view, "
+                                        "it seems to be uninitialized.");
 
         const auto& outer_ref =
             joined.template get_view_reference<joined_t, outer_range_t>();
 
-        __ok_assert(ok::is_inbounds(outer_ref, cursor.outer()));
+        __ok_assert(ok::is_inbounds(outer_ref, cursor.outer()),
+                    "Out of bounds cursor passed to join_view's get method.");
 
         return ok::iter_get_ref(cursor.view(), cursor.inner());
     }

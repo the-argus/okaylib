@@ -11,7 +11,8 @@ allocators by default, and error by value instead of using exceptions. Additiona
 provide multithreading primitives for C++20 users, such as a thread pool and coroutine
 runtime. Optionally make use of C++20 modules for improved compile times without
 waiting for C++23 `import std`. Provide serialization to string and JSON for all
-types.
+types. Do bounds / error checking in both release and debug mode specifically to
+detect undefined behavior (with an `OKAYLIB_FAST_UNSAFE` macro to disable it).
 
 okaylib is a personal project which is intended to focus many disparate
 efforts of mine to make C and C++ libraries into one mega-project. I have plan to
@@ -222,8 +223,8 @@ printed: Hello, world! in slice [0x23c15380 -> 100]
 ## misc improvements / backlog
 
 - [ ] Remove dependency on `<memory>` header from `okay/detail/addressof.h`
-- [ ] Add better macro customization for some checking / assert behavior, like
-      optionally removing slice bounds checks in release mode
+- [ ] Add option to disable undefined behavior checks which are normally on in
+      both release and debug mode (such as array bounds checks on iterators)
 - [ ] Create "minimum viable" ranges for forward, multipass, bidirectional,
       random access, and contiguous ranges, to test conformance of all the views
 - [ ] Add tests for all the views with a finite + random access range

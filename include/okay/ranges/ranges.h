@@ -75,14 +75,14 @@ struct range_definition<
 
     static constexpr value_type& get_ref(range_t& i, size_t c) OKAYLIB_NOEXCEPT
     {
-        __ok_assert(c < size(i)); // out of bounds on c style array
+        __ok_assert(c < size(i), "out of bounds access into c-style array");
         return i[c];
     }
 
     static constexpr const value_type& get_ref(const range_t& i,
                                                size_t c) OKAYLIB_NOEXCEPT
     {
-        __ok_assert(c < size(i)); // out of bounds on c style array
+        __ok_assert(c < size(i), "out of bounds access into c-style array");
         return i[c];
     }
 

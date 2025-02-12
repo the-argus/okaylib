@@ -788,7 +788,8 @@ struct clamp_fn_t
                                 std::is_copy_constructible_v<LHS>,
                             LHS>
     {
-        __ok_assert(min < max);
+        __ok_assert(min < max,
+                    "min and max passed to clamp are in the wrong order");
         constexpr no_primitive_definitions_assert<LHS> asserts;
         constexpr orderable_asserts_t<LHS> orderable_asserts;
         constexpr minmaxclamp_asserts_t<LHS, false> nonpartial_clamp_asserts;
@@ -814,7 +815,8 @@ struct partial_clamp_fn_t
                                 std::is_copy_constructible_v<LHS>,
                             LHS>
     {
-        __ok_assert(min < max);
+        __ok_assert(min < max,
+                    "min and max passed to clamp are in the wrong order");
         constexpr no_primitive_definitions_assert<LHS> asserts;
         constexpr partially_orderable_asserts_t<LHS>
             partially_orderable_asserts;
@@ -856,7 +858,9 @@ struct unchecked_clamp_fn_t
                             LHS>
     {
         // min != min protects from NaN causing this assert to fire
-        __ok_assert(min != min || max != max || min < max);
+        __ok_assert(min != min || max != max || min < max,
+                    "Floating-point NaN or swapped min/max arguments to clamp "
+                    "detected");
         constexpr no_primitive_definitions_assert<LHS> asserts;
         constexpr partially_orderable_asserts_t<LHS>
             partially_orderable_asserts;

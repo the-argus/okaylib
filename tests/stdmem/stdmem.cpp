@@ -84,16 +84,16 @@ TEST_SUITE("stdmem")
             bytes_t a = subslice(bytes, {.start = 0, .length = 512});
             bytes_t b = subslice(bytes, {.start = 256, .length = 256});
             bytes_t c = subslice(bytes, {.start = 255, .length = 256});
-            REQUIRE(ok_memcontains(.containing = a, .inner = b));
+            REQUIRE(ok_memcontains(.outer = a, .inner = b));
             REQUIRE(ok_memcontains(a, c));
             // nothing can contain A!
             REQUIRE(!ok_memcontains(b, a));
-            REQUIRE(!ok_memcontains(.containing = c, .inner = a));
+            REQUIRE(!ok_memcontains(.outer = c, .inner = a));
 
             // no way for b or c to contain the other, they are the same size
             // just offset
             REQUIRE(!ok_memcontains(b, c));
-            REQUIRE(!ok_memcontains(.containing = c, .inner = b));
+            REQUIRE(!ok_memcontains(.outer = c, .inner = b));
         }
 
         SUBCASE("memcontains")
@@ -106,7 +106,7 @@ TEST_SUITE("stdmem")
             std::array<Test, 200> tests_arr;
             slice_t tests = tests_arr;
 
-            bool c = ok_memcontains(.containing = tests,
+            bool c = ok_memcontains(.outer = tests,
                                     .inner = slice_from_one(tests[100]));
             // manually do slice_from_one
             REQUIRE(ok_memcontains(

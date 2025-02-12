@@ -5,7 +5,6 @@
 #include "okay/ranges/views/drop.h"
 #include "testing_types.h"
 #include <array>
-#include <vector>
 
 using namespace ok;
 

@@ -106,10 +106,12 @@ enum class feature_flags : uint16_t
     // clearing, then clear() is an empty function call in release mode
     // and an assert() in debug mode.
     clearing        = 0x0002,
-    // Can this allocator expand or shrink an allocation in-place?
+    // Can this allocator expand an allocation in-place, guaranteed?
+    // (if it can only sometimes do this, then it is not considered in_place,
+    // and the in-placeness is only a nice and totally random speedup).
     // If this flag is off, then it is not worth it to pass the keep_old_nocopy
-    // flag. If this flag is off, then passing inplace_or_fail will always
-    // return error::unsupported.
+    // flag. Also, passing inplace_or_fail will always return
+    // error::unsupported.
     in_place        = 0x0004,
     // whether this allocator supports leaving reallocated memory uninitialized,
     // in the case that inplace reallocation failed (ie. whether you can pass
@@ -240,29 +242,6 @@ struct reallocate_extended_request_t
     }
 };
 
-namespace detail {
-template <typename T> class checked_is_valid_t
-{
-  private:
-    T m_inner;
-
-  public:
-    // implicitly convertible from request
-    constexpr checked_is_valid_t(T&& req) OKAYLIB_NOEXCEPT
-        : m_inner(std::forward<T>(req))
-    {
-        if (!m_inner.is_valid()) [[unlikely]] {
-            __ok_abort();
-        }
-    }
-};
-} // namespace detail
-
-using valid_reallocate_extended_request_t =
-    detail::checked_is_valid_t<reallocate_extended_request_t>;
-using valid_reallocate_request_t =
-    detail::checked_is_valid_t<reallocate_request_t>;
-
 struct reallocation_t
 {
     // callers job to keep track of whether the additionally allocated memory
@@ -367,11 +346,11 @@ class allocator_t
     virtual void deallocate(bytes_t bytes) noexcept = 0;
 
     [[nodiscard]] virtual alloc::result_t<alloc::reallocation_t>
-    reallocate(const alloc::valid_reallocate_request_t& options) noexcept = 0;
+    reallocate(const alloc::reallocate_request_t& options) noexcept = 0;
 
     [[nodiscard]] virtual alloc::result_t<alloc::reallocation_extended_t>
     reallocate_extended(
-        const alloc::valid_reallocate_extended_request_t& options) noexcept = 0;
+        const alloc::reallocate_extended_request_t& options) noexcept = 0;
 };
 
 } // namespace ok

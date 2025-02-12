@@ -56,7 +56,7 @@ template <typename T>
                                         slice_t<T> b) OKAYLIB_NOEXCEPT;
 
 /// Check if slice "inner" points only to items also pointed at by slice
-/// "containing"
+/// "outer"
 template <typename T>
 [[nodiscard]] constexpr bool
 memcontains(const memcontains_options_t<T>&) OKAYLIB_NOEXCEPT;
@@ -137,8 +137,8 @@ template <typename T>
 [[nodiscard]] constexpr bool
 ok::memcontains(const memcontains_options_t<T>& options) OKAYLIB_NOEXCEPT
 {
-    return options.containing.data() <= options.inner.data() &&
-           options.containing.data() + options.containing.size() >=
+    return options.outer.data() <= options.inner.data() &&
+           options.outer.data() + options.outer.size() >=
                options.inner.data() + options.inner.size();
 }
 

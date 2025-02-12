@@ -10,32 +10,32 @@ class c_allocator_t : public allocator_t
 {
   public:
     static constexpr alloc::feature_flags type_features =
-        alloc::feature_flags::free_and_realloc |
+        alloc::feature_flags::expand_back | alloc::feature_flags::can_reclaim |
         alloc::feature_flags::threadsafe;
 
     c_allocator_t() = default;
 
     [[nodiscard]] inline alloc::result_t<maybe_defined_memory_t>
-    allocate_bytes(const alloc::request_t&) noexcept final;
+    allocate(const alloc::request_t&) noexcept final;
 
     inline void clear() noexcept final;
 
     [[nodiscard]] inline alloc::feature_flags features() const noexcept final;
 
-    inline void deallocate_bytes(bytes_t) noexcept final;
+    inline void deallocate(bytes_t) noexcept final;
 
-    [[nodiscard]] inline alloc::result_t<maybe_defined_memory_t>
-    reallocate_bytes(const allocator_t::reallocate_options_t&) noexcept final;
+    [[nodiscard]] inline alloc::result_t<alloc::reallocation_t>
+    reallocate(const alloc::valid_reallocate_request_t&) noexcept final;
 
-    [[nodiscard]] virtual alloc::result_t<reallocation_extended_t>
-    reallocate_bytes_extended(
-        const reallocation_options_extended_t& options) noexcept final;
+    [[nodiscard]] inline alloc::result_t<alloc::reallocation_extended_t>
+    reallocate_extended(const alloc::valid_reallocate_extended_request_t&
+                            options) noexcept final;
 };
 
 // definitions -----------------------------------------------------------------
 
 [[nodiscard]] inline alloc::result_t<maybe_defined_memory_t>
-c_allocator_t::allocate_bytes(const alloc::request_t& request) noexcept
+c_allocator_t::allocate(const alloc::request_t& request) noexcept
 {
     // NOTE: alignment over 16 is not possible on most platforms, I don't think?
     // TODO: figure out what platforms this is a problem for, maybe alloc more
@@ -64,18 +64,18 @@ c_allocator_t::allocate_bytes(const alloc::request_t& request) noexcept
     return out;
 }
 
-inline void c_allocator_t::deallocate_bytes(bytes_t bytes) noexcept
+inline void c_allocator_t::deallocate(bytes_t bytes) noexcept
 {
     ::free(bytes.data());
 }
 
-inline auto c_allocator_t::reallocate_bytes_extended(
-    const allocator_t::reallocation_options_extended_t& options) noexcept
-    -> alloc::result_t<allocator_t::reallocation_extended_t>
+inline auto c_allocator_t::reallocate_extended(
+    const alloc::valid_reallocate_extended_request_t& options) noexcept
+    -> alloc::result_t<alloc::reallocation_extended_t>
 {
     using namespace alloc;
-    if (options.flags & flags::keep_old_nocopy) [[unlikely]] {
-        assert(false);
+    if ((options.flags & flags::keep_old_nocopy) ||) [[unlikely]] {
+        __ok_assert(false, "keep_old_nocopy unsupported by c allocator");
         return error::unsupported;
     }
 
@@ -195,8 +195,7 @@ inline auto c_allocator_t::reallocate_bytes_extended(
     else if (shrinking_front)
         newsize -= options.required_bytes_front;
 
-    // assert for implementor. this should never fire if implementation is good
-    assert(newsize != 0);
+    __ok_internal_assert(newsize != 0);
 
     void* const mem = ::malloc(newsize);
     if (!mem) [[unlikely]]
@@ -235,8 +234,9 @@ alloc::feature_flags c_allocator_t::features() const noexcept
 
 inline void c_allocator_t::clear() noexcept
 {
-    // c allocator cannot clear all allocations
-    assert(false);
+    __ok_assert(false,
+                "Potential leak: trying to clear allocator but it does not "
+                "support clearing. Check features() before calling clear?");
 }
 
 } // namespace ok
