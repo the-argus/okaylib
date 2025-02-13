@@ -10,10 +10,8 @@ namespace ok {
 class std_memory_resource_allocator_t : public allocator_t
 {
   public:
-    static constexpr feature_flags type_features =
-        feature_flags::free_and_realloc | feature_flags::nocopy |
-        feature_flags::keep_old | feature_flags::nothrow |
-        feature_flags::shrinking;
+    static constexpr alloc::feature_flags type_features =
+        alloc::feature_flags::clearing | alloc::feature_flags::expand_back | alloc::feature_flags::expand_front;
 
     std_memory_resource_allocator_t() = delete;
 

@@ -23,7 +23,7 @@ struct destruction_callback_entry_node_t
 /// destruction.
 /// Returns false on memory allocation failure.
 template <typename T>
-static inline constexpr allocator_t::result_t<context_callback_t&>
+constexpr alloc::result_t<context_callback_t&>
 append_destruction_callback(T& allocator,
                             destruction_callback_entry_node_t*& current_head,
                             context_callback_t& callback)
@@ -35,7 +35,7 @@ append_destruction_callback(T& allocator,
         allocator.allocate_bytes(sizeof(destruction_callback_entry_node_t),
                                  alignof(destruction_callback_entry_node_t));
     if (!result)
-        return allocator_t::error::oom;
+        return alloc::error::oom;
 
     if (!current_head) {
         current_head =

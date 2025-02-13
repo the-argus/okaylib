@@ -3,6 +3,7 @@
 
 #include "okay/allocators/allocator.h"
 #include "okay/allocators/c_allocator.h"
+#include "okay/allocators/emulate_unsupported_features.h"
 
 namespace ok {
 
@@ -14,14 +15,13 @@ class context_t
 {
   public:
     context_t() = delete;
-    inline constexpr context_t(allocator_t& allocator)
-        : m_allocator(allocator)
+    inline constexpr context_t(allocator_t& allocator) : m_allocator(allocator)
     {
     }
 
     inline allocator_t* allocator() const noexcept
     {
-        return &m_allocator;
+        return ok::addressof(m_allocator);
     }
 
     friend const char* ok::context_error_message();
@@ -33,15 +33,16 @@ class context_t
     const char* error_message = nullptr;
 };
 
-inline c_allocator_t __default_global_allocator;
+inline alloc::emulate_expand_front<c_allocator_t> __default_global_allocator;
 inline context_t __default_global_context{__default_global_allocator};
 static_assert(decltype(__default_global_allocator)::type_features &
-                  allocator_t::feature_flags::threadsafe,
+                  alloc::feature_flags::is_threadsafe,
               "every part of default context must be threadsafe because all "
               "threads are initialized to use it.");
 
 // name of this variable is implementation defined
-inline thread_local context_t* __context = &__default_global_context;
+inline thread_local context_t* __context =
+    ok::addressof(__default_global_context);
 
 inline context_t& context() noexcept { return *__context; }
 
@@ -56,7 +57,7 @@ class context_switch_t
     inline ~context_switch_t() noexcept
     {
         // check if somebody set and forgot to restore the context
-        assert(&m_context == &context());
+        assert(ok::addressof(m_context) == ok::addressof(context()));
         const char* msg = __context->error_message;
         // only propagate error message upwards if one exists, dont overwrite
         // parent with null
