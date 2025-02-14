@@ -161,7 +161,7 @@ template <typename viewed_t> class slice_t
             __ok_abort("Attempt to create subslice but the starting value is "
                        "out of bounds.");
         }
-        if (options.start + options.length >= m_elements) [[unlikely]] {
+        if (options.start + options.length > m_elements) [[unlikely]] {
             __ok_abort("Attempt to create subslice but the ending value is out "
                        "of bounds.");
         }
