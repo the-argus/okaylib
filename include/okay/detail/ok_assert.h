@@ -8,13 +8,13 @@
 
 #ifndef __ok_assert
 
-#define __ok_assert(expr, msg)                                               \
-    {                                                                        \
-        if (!(expr)) {                                                       \
-            ::fprintf(stderr, "Assert " #expr " triggered at %s:%d in %s\n", \
-                      __FILE__, __LINE__, __FUNCTION__);                     \
-            __ok_abort();                                                    \
-        }                                                                    \
+#define __ok_assert(expr, msg)                                            \
+    {                                                                     \
+        if (!(expr)) {                                                    \
+            ::fprintf(stderr, "Assert %s triggered at %s:%d in %s: %s\n", \
+                      #expr, __FILE__, __LINE__, __FUNCTION__, msg);      \
+            __ok_abort();                                                 \
+        }                                                                 \
     }
 
 // internal assert has a different error message and does not go through

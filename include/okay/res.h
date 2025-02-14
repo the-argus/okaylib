@@ -123,8 +123,8 @@ class res_t<contained_t, enum_t,
     constexpr res_t() = delete;
     constexpr res_t(res_t&& other) = delete;
     constexpr res_t(const res_t& other) = delete;
-    constexpr res_t& operator=(res_t&& other) = delete;
-    constexpr res_t& operator=(const res_t& other) = delete;
+    constexpr res_t& operator=(res_t&& other) = default;
+    constexpr res_t& operator=(const res_t& other) = default;
 
     template <typename T = contained_t>
     constexpr res_t(

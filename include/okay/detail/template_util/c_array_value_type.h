@@ -7,8 +7,7 @@ namespace ok::detail {
 
 template <typename T>
 using c_array_value_type =
-    std::enable_if_t<std::is_array_v<T>,
-                     std::remove_reference_t<decltype(std::declval<T>()[0])>>;
+    std::remove_reference_t<decltype(std::declval<T>()[0])>;
 
 } // namespace ok::detail
 

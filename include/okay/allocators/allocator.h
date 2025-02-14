@@ -9,6 +9,7 @@
 
 // pulls in slice and opt, and because of that also ranges and ordering
 #include "okay/res.h"
+#include "okay/stdmem.h"
 
 namespace ok {
 
@@ -16,6 +17,10 @@ class maybe_defined_memory_t
 {
   public:
     maybe_defined_memory_t() = delete;
+    maybe_defined_memory_t(const maybe_defined_memory_t&) = default;
+    maybe_defined_memory_t& operator=(const maybe_defined_memory_t&) = default;
+    maybe_defined_memory_t(maybe_defined_memory_t&&) = default;
+    maybe_defined_memory_t& operator=(maybe_defined_memory_t&&) = default;
 
     maybe_defined_memory_t(bytes_t bytes) OKAYLIB_NOEXCEPT : m_is_defined(true)
     {
@@ -50,6 +55,26 @@ class maybe_defined_memory_t
         }
 
         return m_data.as_undefined;
+    }
+
+    /// get data directly without resolving whether or not this is defined
+    /// using this is a bad idea, just do as_undefined() or as_bytes()
+    [[nodiscard]] uint8_t* data_maybe_defined() const OKAYLIB_NOEXCEPT
+    {
+        if (m_is_defined) {
+            return m_data.as_bytes.data();
+        } else {
+            return m_data.as_undefined.data();
+        }
+    }
+
+    [[nodiscard]] size_t size_maybe_defined() const OKAYLIB_NOEXCEPT
+    {
+        if (m_is_defined) {
+            return m_data.as_bytes.size();
+        } else {
+            return m_data.as_undefined.size();
+        }
     }
 
   private:
@@ -419,6 +444,68 @@ reallocate_in_place_orelse_keep_old_nocopy(
     }
 }
 } // namespace alloc
+
+template <typename T, typename allocator_impl_t, typename... args_t>
+constexpr std::enable_if_t<
+    ok::detail::is_derived_from_v<allocator_impl_t, allocator_t> &&
+        std::is_constructible_v<T, args_t...>,
+    alloc::result_t<T&>>
+make(allocator_impl_t& ally, args_t&&...) OKAYLIB_NOEXCEPT
+{
+    static_assert(std::is_nothrow_constructible_v<T, args_t...>,
+                  "The constructor you're attempting to call with ok::make is "
+                  "not marked noexcept.");
+    auto res = ally.allocate(alloc::request_t{
+        .num_bytes = sizeof(T),
+        .alignment = alignof(T),
+        .flags = alloc::flags::leave_nonzeroed,
+    });
+
+    if (!res.okay()) [[unlikely]] {
+        return res.err();
+    }
+
+    maybe_defined_memory_t& bytes = res.release_ref();
+
+    uint8_t* object_start = bytes.data_maybe_defined();
+
+    __ok_assert(uintptr_t(object_start) % alignof(T),
+                "Misaligned memory produced by allocator");
+
+    return *reinterpret_cast<T*>(object_start);
+}
+
+template <typename T, typename allocator_impl_t>
+constexpr auto free(allocator_impl_t& ally, T& object) OKAYLIB_NOEXCEPT
+    -> std::enable_if_t<
+        detail::is_derived_from_v<allocator_impl_t, allocator_t> &&
+        (std::is_destructible_v<T> ||
+         (std::is_array_v<T> && std::is_destructible_v<std::remove_reference_t<
+                                    decltype(object[0])>>))>
+{
+    static_assert(std::is_nothrow_destructible_v<T>,
+                  "The destructor you're trying to call with ok::free is not "
+                  "marked nothrow.");
+    static_assert(!std::is_array_v<T> ||
+                      std::is_nothrow_destructible_v<
+                          std::remove_reference_t<decltype(object[0])>>,
+                  "The destructor of items within the given array are not "
+                  "marked noexcept.");
+    static_assert(
+        !std::is_pointer_v<T>,
+        "Reference to pointer passed to ok::free(). This is a potential "
+        "indication of array decay. Call allocator.deallocate() directly if "
+        "this is actually a pointer.");
+    if constexpr (std::is_array_v<T>) {
+        for (size_t i = 0; i < ok::detail::c_array_length(object); ++i) {
+            using VT = detail::c_array_value_type<T>;
+            object[i].~VT();
+        }
+    } else {
+        object.~T();
+    }
+    ally.deallocate(ok::reinterpret_as_bytes(ok::slice_from_one(object)));
+}
 
 } // namespace ok
 
