@@ -91,11 +91,14 @@ const okaylib_headers = &[_][]const u8{
 
     "ranges/views/drop.h",
     "ranges/views/enumerate.h",
+    "ranges/views/join.h",
     "ranges/views/keep_if.h",
     "ranges/views/reverse.h",
+    // "ranges/views/sliding_window.h",
     "ranges/views/std_for.h",
     "ranges/views/take_at_most.h",
     "ranges/views/transform.h",
+    "ranges/views/zip.h",
 };
 
 const test_source_files = &[_][]const u8{
