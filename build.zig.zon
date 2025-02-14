@@ -1,5 +1,5 @@
 .{
-    .name = "allo",
+    .name = "okaylib",
     .version = "0.0.1",
     .paths = .{
         "include/",
