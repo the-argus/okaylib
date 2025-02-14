@@ -140,11 +140,6 @@ pub fn build(b: *std.Build) !void {
         .install_subdir = "okay/",
     });
 
-    for (okaylib_headers) |header_filename| {
-        const install = b.addInstallHeaderFile(b.path(b.pathJoin(&.{ "include", std.fs.path.dirname(header_filename) orelse "", header_filename })), header_filename);
-        b.getInstallStep().dependOn(&install.step);
-    }
-
     const fmt = b.dependency("fmt", .{});
     const fmt_include_path = b.pathJoin(&.{ fmt.builder.install_path, "include" });
     try flags.append(b.fmt("-I{s}", .{fmt_include_path}));
