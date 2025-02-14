@@ -23,7 +23,7 @@ class maybe_defined_memory_t
     }
 
     maybe_defined_memory_t(undefined_memory_t<uint8_t> undefined)
-        : m_is_defined(false) OKAYLIB_NOEXCEPT
+        OKAYLIB_NOEXCEPT : m_is_defined(false)
     {
         m_data.as_undefined = undefined;
     }

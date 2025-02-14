@@ -74,9 +74,8 @@ template <typename callable_t> struct range_adaptor_t
 template <typename callable_t>
 struct range_adaptor_closure_t : range_adaptor_t<callable_t>
 {
-    constexpr range_adaptor_closure_t(callable_t&& c)
-        OKAYLIB_NOEXCEPT : range_adaptor_t<callable_t>(
-              std::forward<callable_t>(c))
+    constexpr range_adaptor_closure_t(callable_t&& c) OKAYLIB_NOEXCEPT
+        : range_adaptor_t<callable_t>(std::forward<callable_t>(c))
     {
     }
 
@@ -84,10 +83,10 @@ struct range_adaptor_closure_t : range_adaptor_t<callable_t>
 
     // support for C(R)
     template <typename range_t>
-    constexpr auto operator()(range_t&& range) const
-        -> std::enable_if_t<is_range_v<range_t>,
-                            decltype(this->callable(
-                                std::forward<range_t>(range)))> OKAYLIB_NOEXCEPT
+    constexpr auto
+    operator()(range_t&& range) const OKAYLIB_NOEXCEPT->std::enable_if_t<
+        is_range_v<range_t>,
+        decltype(this->callable(std::forward<range_t>(range)))>
     {
         return this->callable(std::forward<range_t>(range));
     }
