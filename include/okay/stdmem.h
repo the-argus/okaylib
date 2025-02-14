@@ -100,7 +100,8 @@ ok::memcopy(const memcopy_options_t<T>& options) OKAYLIB_NOEXCEPT -> slice_t<T>
                   "Cannot memcopy non-trivially copyable type.");
     if (options.to.size() < options.from.size() ||
         memoverlaps(options.to, options.from)) [[unlikely]] {
-        __ok_abort();
+        __ok_abort(
+            "Attempt to memcopy between two slices of memory which overlap.");
     }
 
     std::memcpy(options.to.data(), options.from.data(),

@@ -8,6 +8,119 @@ namespace ok {
 
 namespace alloc {
 
+template <typename allocator_impl_t> class disable_freeing : public allocator_t
+{
+  public:
+    static_assert(std::is_base_of_v<allocator_t, allocator_impl_t>,
+                  "disable_freeing_t given a type which does not inherit from "
+                  "allocator_t");
+
+    constexpr static feature_flags type_features =
+        allocator_impl_t::type_features | feature_flags::can_expand_front;
+
+    template <typename... args_t>
+    constexpr explicit disable_freeing(args_t&&... args) OKAYLIB_NOEXCEPT
+        : m_inner(std::forward<args_t>(args)...)
+    {
+        static_assert(
+            std::is_nothrow_constructible_v<allocator_impl_t, args_t...>,
+            "Attempt to use in-place constructor of emulate_expand_front, but "
+            "the underlying object is not nothrow constructible with the given "
+            "arguments.");
+    }
+
+  protected:
+    [[nodiscard]] inline result_t<maybe_defined_memory_t>
+    impl_allocate(const request_t& request) OKAYLIB_NOEXCEPT final
+    {
+        return m_inner.impl_allocate(request);
+    }
+
+    inline void impl_clear() OKAYLIB_NOEXCEPT final { m_inner.impl_clear(); }
+
+    [[nodiscard]] inline feature_flags
+    impl_features() const OKAYLIB_NOEXCEPT final
+    {
+        return m_inner.impl_features() & feature_flags::can_expand_front;
+    }
+
+    inline void impl_deallocate(bytes_t bytes) OKAYLIB_NOEXCEPT final {}
+
+    [[nodiscard]] inline result_t<maybe_defined_memory_t>
+    impl_reallocate(const reallocate_request_t& options) OKAYLIB_NOEXCEPT final
+    {
+        return m_inner.impl_reallocate(options);
+    }
+
+    [[nodiscard]] inline result_t<reallocation_extended_t>
+    impl_reallocate_extended(const reallocate_extended_request_t& options)
+        OKAYLIB_NOEXCEPT final
+    {
+        return m_inner.impl_reallocate_extended(options);
+    }
+
+  private:
+    allocator_impl_t m_inner;
+};
+
+template <typename allocator_impl_t> class disable_clearing : public allocator_t
+{
+  public:
+    static_assert(std::is_base_of_v<allocator_t, allocator_impl_t>,
+                  "disable_freeing_t given a type which does not inherit from "
+                  "allocator_t");
+
+    constexpr static feature_flags type_features =
+        allocator_impl_t::type_features | feature_flags::can_expand_front;
+
+    template <typename... args_t>
+    constexpr explicit disable_clearing(args_t&&... args) OKAYLIB_NOEXCEPT
+        : m_inner(std::forward<args_t>(args)...)
+    {
+        static_assert(
+            std::is_nothrow_constructible_v<allocator_impl_t, args_t...>,
+            "Attempt to use in-place constructor of emulate_expand_front, but "
+            "the underlying object is not nothrow constructible with the given "
+            "arguments.");
+    }
+
+  protected:
+    [[nodiscard]] inline result_t<maybe_defined_memory_t>
+    impl_allocate(const request_t& request) OKAYLIB_NOEXCEPT final
+    {
+        return m_inner.impl_allocate(request);
+    }
+
+    inline void impl_clear() OKAYLIB_NOEXCEPT final {}
+
+    [[nodiscard]] inline feature_flags
+    impl_features() const OKAYLIB_NOEXCEPT final
+    {
+        return m_inner.impl_features() & feature_flags::can_expand_front;
+    }
+
+    inline void impl_deallocate(bytes_t bytes) OKAYLIB_NOEXCEPT final
+    {
+        m_inner.impl_deallocate(bytes);
+    }
+
+    [[nodiscard]] inline result_t<maybe_defined_memory_t>
+    impl_reallocate(const reallocate_request_t& options) OKAYLIB_NOEXCEPT final
+    {
+        return m_inner.impl_reallocate(options);
+    }
+
+    [[nodiscard]] inline result_t<reallocation_extended_t>
+    impl_reallocate_extended(const reallocate_extended_request_t& options)
+        OKAYLIB_NOEXCEPT final
+    {
+        return m_inner.impl_reallocate_extended(options);
+    }
+
+  private:
+    allocator_impl_t m_inner;
+};
+
 /// Template wrapper around an allocator to pretend that it supports
 /// expand_front. This will never happen in-place/it will always behave like
 /// an allocator with expand_front which was not able to reallocate in-place.
@@ -22,7 +135,7 @@ class emulate_expand_front : public allocator_t
         allocator_impl_t::type_features | feature_flags::can_expand_front;
 
     template <typename... args_t>
-    constexpr explicit emulate_expand_front(args_t&&... args)
+    constexpr explicit emulate_expand_front(args_t&&... args) OKAYLIB_NOEXCEPT
         : m_inner(std::forward<args_t>(args)...)
     {
         static_assert(

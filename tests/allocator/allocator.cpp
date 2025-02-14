@@ -1,8 +1,8 @@
 #include "test_header.h"
 // test header must be first
 #include "okay/allocators/allocator.h"
-#include "okay/allocators/c_allocator.h"
 #include "okay/allocators/arena.h"
+#include "okay/allocators/c_allocator.h"
 
 using namespace ok;
 
@@ -13,7 +13,6 @@ struct test
 
     test() = default;
     explicit test(int num) noexcept : a(num), b(num) {}
-    ~test() { __ok_assert(false, "this should have been caught at compile time"); }
 };
 
 TEST_SUITE("abstract allocator")
@@ -25,8 +24,10 @@ TEST_SUITE("abstract allocator")
 
         arena_t arena(reinterpret_as_bytes(slice_t(buf)));
 
-        test& mytest = ok::make<test>(arena).release();
-        test& test2 = ok::make<test>(arena, 1).release();
+        auto mytest = ok::make<test>(arena);
+        auto test2 = ok::make<test>(arena, 1);
+
+        arena.destroy();
 
         ok::free(allocator, buf);
     }

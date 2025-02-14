@@ -270,7 +270,7 @@ class opt_t : private detail::opt_base_t<payload_t>,
     [[nodiscard]] inline payload_t& value() & OKAYLIB_NOEXCEPT
     {
         if (!has_value()) [[unlikely]] {
-            __ok_abort();
+            __ok_abort("Attempt to get value from a null optional.");
         }
         return this->_get();
     }
@@ -278,7 +278,7 @@ class opt_t : private detail::opt_base_t<payload_t>,
     [[nodiscard]] inline payload_t&& value() && OKAYLIB_NOEXCEPT
     {
         if (!has_value()) [[unlikely]] {
-            __ok_abort();
+            __ok_abort("Attempt to get value from a null optional.");
         }
         return std::move(this->_get());
     }
@@ -286,7 +286,7 @@ class opt_t : private detail::opt_base_t<payload_t>,
     inline const payload_t& value() const& OKAYLIB_NOEXCEPT
     {
         if (!has_value()) [[unlikely]] {
-            __ok_abort();
+            __ok_abort("Attempt to get value from a null optional.");
         }
         return this->_get();
     }
@@ -404,7 +404,7 @@ class opt_t<payload_t, std::enable_if_t<std::is_lvalue_reference_v<payload_t>>>
     [[nodiscard]] inline constexpr payload_t value() const OKAYLIB_NOEXCEPT
     {
         if (!has_value()) [[unlikely]] {
-            __ok_abort();
+            __ok_abort("Attempt to get value from a null optional.");
         }
         return *pointer;
     }
@@ -511,7 +511,7 @@ class opt_t<
     [[nodiscard]] inline constexpr wrapped_slice_t& value() OKAYLIB_NOEXCEPT
     {
         if (!has_value()) [[unlikely]] {
-            __ok_abort();
+            __ok_abort("Attempt to get value from a null optional.");
         }
         return unchecked_value();
     }
@@ -520,7 +520,7 @@ class opt_t<
     value() const OKAYLIB_NOEXCEPT
     {
         if (!has_value()) [[unlikely]] {
-            __ok_abort();
+            __ok_abort("Attempt to get value from a null optional.");
         }
         return unchecked_value();
     }

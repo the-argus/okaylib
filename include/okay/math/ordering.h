@@ -700,7 +700,8 @@ struct partial_min_fn_t
         case partial_ordering_enum::greater:
             return rhs;
         case partial_ordering_enum::unordered:
-            __ok_abort();
+            __ok_abort("Attempt to find the minimum of some values which are "
+                       "unordered (floating point NaNs, or similar?)");
         }
     }
 };
@@ -750,7 +751,8 @@ struct partial_max_fn_t
         case partial_ordering_enum::less:
             return rhs;
         case partial_ordering_enum::unordered:
-            __ok_abort();
+            __ok_abort("Attempt to find the maximum of some values which are "
+                       "unordered (floating point NaNs, or similar?)");
         }
     }
 };
@@ -829,7 +831,8 @@ struct partial_clamp_fn_t
         case partial_ordering_enum::less:
             return min;
         case partial_ordering_enum::unordered:
-            __ok_abort();
+            __ok_abort("Attempt to clamp two values which are unordered "
+                       "(floating point NaNs, or similar?)");
         default:
             break;
         }
@@ -840,7 +843,8 @@ struct partial_clamp_fn_t
         case partial_ordering_enum::greater:
             return max;
         case partial_ordering_enum::unordered:
-            __ok_abort();
+            __ok_abort("Attempt to clamp two values which are unordered "
+                       "(floating point NaNs, or similar?)");
         default:
             break;
         }

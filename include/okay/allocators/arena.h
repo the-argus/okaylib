@@ -26,6 +26,9 @@ class arena_t : public allocator_t
           m_available_memory(other.m_available_memory),
           m_backing(std::exchange(other.m_backing, nullopt))
     {
+#ifndef NDEBUG
+        other.is_destroyed = true;
+#endif
     }
 
     constexpr arena_t& operator=(arena_t&& other) OKAYLIB_NOEXCEPT
@@ -34,6 +37,10 @@ class arena_t : public allocator_t
         m_memory = other.m_memory;
         m_available_memory = other.m_available_memory;
         m_backing = std::exchange(other.m_backing, nullopt);
+#ifndef NDEBUG
+        is_destroyed = false;
+        other.is_destroyed = true;
+#endif
         return *this;
     }
 
@@ -43,9 +50,9 @@ class arena_t : public allocator_t
     constexpr void destroy() OKAYLIB_NOEXCEPT;
 
 #ifndef NDEBUG
-    inline ~arena_t() OKAYLIB_NOEXCEPT
+    inline ~arena_t() OKAYLIB_NOEXCEPT_FORCE
     {
-        __ok_assert(destroyed,
+        __ok_assert(is_destroyed,
                     "arena allowed to go out of scope without being destroyed");
     }
 #endif
@@ -79,7 +86,7 @@ class arena_t : public allocator_t
 
   private:
 #ifndef NDEBUG
-    bool destroyed = false;
+    bool is_destroyed = false;
 #endif
     bytes_t m_memory;
     bytes_t m_available_memory;
@@ -103,7 +110,7 @@ constexpr arena_t::arena_t(bytes_t&& initial_buffer,
 constexpr void arena_t::destroy() OKAYLIB_NOEXCEPT
 {
 #ifndef NDEBUG
-    destroyed = true;
+    is_destroyed = true;
 #endif
     if (m_backing) {
         auto& backing = m_backing.value();

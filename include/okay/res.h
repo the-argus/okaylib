@@ -95,7 +95,7 @@ class res_t<contained_t, enum_t,
     release() OKAYLIB_NOEXCEPT
     {
         if (!okay()) [[unlikely]] {
-            __ok_abort();
+            __ok_abort("Attempt to release actual value from error result");
         }
 
         this->get_error_payload() = enum_int_t(enum_t::result_released);
@@ -114,7 +114,7 @@ class res_t<contained_t, enum_t,
         release_ref() & OKAYLIB_NOEXCEPT
     {
         if (!okay()) [[unlikely]] {
-            __ok_abort();
+            __ok_abort("Attempt to release_ref actual value from error result");
         }
         this->get_error_payload() = enum_int_t(enum_t::result_released);
         return this->get_value_unchecked_payload();
@@ -166,7 +166,7 @@ class res_t<contained_t, enum_t,
     constexpr res_t(enum_t failure) OKAYLIB_NOEXCEPT
     {
         if (failure == enum_t::okay) [[unlikely]] {
-            __ok_abort();
+            __ok_abort("Attempt to construct a result with an okay value");
         }
 
         this->get_error_payload() = enum_int_t(failure);
@@ -239,7 +239,7 @@ class res_t<contained_t, enum_t,
     constexpr res_t(enum_t failure) OKAYLIB_NOEXCEPT
     {
         if (failure == enum_t::okay) [[unlikely]] {
-            __ok_abort();
+            __ok_abort("Attempt to construct a result with an okay value.");
         }
 
         m_data = nullptr;
@@ -272,7 +272,7 @@ class res_t<contained_t, enum_t,
     [[nodiscard]] constexpr unqualified_t release() OKAYLIB_NOEXCEPT
     {
         if (!okay()) [[unlikely]] {
-            __ok_abort();
+            __ok_abort("Attempt to get an actual value from an error result.");
         }
 
         unqualified_t out = *reinterpret_cast<unqualified_t*>(this);
@@ -284,7 +284,7 @@ class res_t<contained_t, enum_t,
     [[nodiscard]] constexpr contained_t& release_ref() & OKAYLIB_NOEXCEPT
     {
         if (!okay()) [[unlikely]] {
-            __ok_abort();
+            __ok_abort("Attempt to get an actual value from an error result.");
         }
 
         // NOTE: release_ref for slice_t is special: because the error is stored

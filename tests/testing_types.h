@@ -81,7 +81,7 @@ class example_range_cstyle
     value_type& operator[](size_t index) OKAYLIB_NOEXCEPT
     {
         if (index >= num_bytes) {
-            __ok_abort();
+            __ok_abort("Out of bounds access in example_range_cstyle");
         }
         return bytes[index];
     }
@@ -128,7 +128,8 @@ class example_range_bidirectional
         constexpr cursor_t& operator--() OKAYLIB_NOEXCEPT
         {
             if (m_inner == 0)
-                __ok_abort();
+                __ok_abort("Integer overflow funny business in "
+                           "example_range_bidirectional");
             --m_inner;
             return *this;
         }
@@ -142,7 +143,8 @@ class example_range_bidirectional
     constexpr value_type& get(cursor_t index) OKAYLIB_NOEXCEPT
     {
         if (index.inner() >= num_bytes)
-            __ok_abort();
+            __ok_abort("Out of bounds access into bytes of "
+                       "example_range_bidirectional");
         return bytes[index.inner()];
     }
 

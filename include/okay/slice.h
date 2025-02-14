@@ -4,6 +4,7 @@
 #include "okay/detail/abort.h"
 #include "okay/detail/addressof.h"
 #include "okay/detail/noexcept.h"
+#include "okay/detail/ok_assert.h"
 #include "okay/detail/template_util/remove_cvref.h"
 #include "okay/detail/traits/is_container.h"
 #include "okay/detail/traits/is_instance.h"
@@ -48,8 +49,11 @@ template <typename viewed_t> class slice_t
 
     constexpr slice_t(viewed_t* data, size_t size) OKAYLIB_NOEXCEPT
     {
-        if (!data) [[unlikely]]
-            __ok_abort();
+        __ok_internal_assert(data);
+        if (!data) [[unlikely]] {
+            __ok_abort("Something has gone horrible wrong with slice_t "
+                       "implementation");
+        }
         m_data = data;
         m_elements = size;
     }
@@ -142,7 +146,7 @@ template <typename viewed_t> class slice_t
     operator[](size_t idx) const OKAYLIB_NOEXCEPT
     {
         if (idx >= m_elements) [[unlikely]] {
-            __ok_abort();
+            __ok_abort("Out of bounds access into slice.");
         }
         return m_data[idx];
     }
@@ -154,10 +158,12 @@ template <typename viewed_t> class slice_t
         // happen...
         // TODO: 128 width math here?
         if (options.start >= m_elements) [[unlikely]] {
-            __ok_abort();
+            __ok_abort("Attempt to create subslice but the starting value is "
+                       "out of bounds.");
         }
         if (options.start + options.length >= m_elements) [[unlikely]] {
-            __ok_abort();
+            __ok_abort("Attempt to create subslice but the ending value is out "
+                       "of bounds.");
         }
 
         return slice_t(m_data + options.start, options.length);
@@ -221,10 +227,15 @@ template <typename viewed_t> struct undefined_memory_t
     from_bytes(const bytes_t& bytes) OKAYLIB_NOEXCEPT
     {
         if (bytes.size() % sizeof(viewed_t) != 0) [[unlikely]] {
-            __ok_abort();
+            __ok_abort(
+                "Attempt to construct an undefined_memory_t from a bytes_t, "
+                "but the given number of bytes is not divisible by sizeof(T) "
+                "(ie. there would be some extra space).");
         }
         if (uintptr_t(bytes.data()) % alignof(viewed_t) != 0) [[unlikely]] {
-            __ok_abort();
+            __ok_abort("Attempt to construct an undefined_memory_t of a type T "
+                       "from a bytes_t, but the given bytes are not aligned "
+                       "properly to store type T.");
         }
 
         return undefined_memory_t(*reinterpret_cast<viewed_t*>(bytes.data()),
@@ -283,10 +294,12 @@ subslice(container_t& container,
         slice_t<std::remove_reference_t<decltype(*container.data())>>>
 {
     if (options.start >= container.size()) [[unlikely]] {
-        __ok_abort();
+        __ok_abort("Attempt to get a subslice of a container but the starting "
+                   "value is out of range.");
     }
     if (options.start + options.length > container.size()) [[unlikely]] {
-        __ok_abort();
+        __ok_abort("Attempt to get a subslice of a container but the ending "
+                   "value is out of range.");
     }
 
     return raw_slice(*(container.data() + options.start), options.length);

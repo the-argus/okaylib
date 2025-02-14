@@ -126,7 +126,7 @@ template <typename... ranges_t> struct zipped_view_t
                     // stop before overflow
                     if (actual_size > std::numeric_limits<int64_t>::max())
                         [[unlikely]] {
-                        __ok_abort();
+                        __ok_abort("Integer overflow in zip view");
                     }
 
                     if (size == -1) {
@@ -158,7 +158,10 @@ template <typename... ranges_t> struct zipped_view_t
             if (!find_expected_size()) [[unlikely]] {
                 // cannot zip these ranges- one of the sized ranges is shorter
                 // than the starting range
-                __ok_abort();
+                __ok_abort(
+                    "Attempt to zip some ranges of known size, and one of them "
+                    "seems to be shorter than the first range (the first range "
+                    "in the zip determines the length of the whole zip)");
             }
         }
     }
@@ -245,7 +248,10 @@ struct range_definition<
             ...);
 
         if (any_out_of_bounds) [[unlikely]]
-            __ok_abort();
+            __ok_abort(
+                "Mismatched sizes of ranges in a zip() view. One of the "
+                "secondary ranges when out of bounds before the first range "
+                "did (the first range determines how long to iterate for!)");
 
         return true;
     }

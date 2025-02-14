@@ -41,7 +41,9 @@ class maybe_defined_memory_t
     [[nodiscard]] bytes_t as_bytes() const OKAYLIB_NOEXCEPT
     {
         if (!is_defined()) [[unlikely]] {
-            __ok_abort()
+            __ok_abort(
+                "Attempt to get bytes_t from a maybe_defined_memory_t, but the "
+                "memory was undefined. Use as_undefined() instead.")
         }
 
         return m_data.as_bytes;
@@ -51,7 +53,9 @@ class maybe_defined_memory_t
     as_undefined() const OKAYLIB_NOEXCEPT
     {
         if (is_defined()) [[unlikely]] {
-            __ok_abort()
+            __ok_abort("Attempt to get an undefined_memory_t from a "
+                       "maybe_defined_memory_t, but the memory was already "
+                       "defined. Use as_bytes() instead.")
         }
 
         return m_data.as_undefined;
@@ -469,7 +473,7 @@ make(allocator_impl_t& ally, args_t&&...) OKAYLIB_NOEXCEPT
 
     uint8_t* object_start = bytes.data_maybe_defined();
 
-    __ok_assert(uintptr_t(object_start) % alignof(T),
+    __ok_assert(uintptr_t(object_start) % alignof(T) == 0,
                 "Misaligned memory produced by allocator");
 
     return *reinterpret_cast<T*>(object_start);

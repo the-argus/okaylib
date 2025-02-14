@@ -46,10 +46,11 @@ const okaylib_headers = &[_][]const u8{
     "try_copy.h",
 
     "allocators/allocator.h",
+    "allocators/arena.h",
     "allocators/c_allocator.h",
-    "allocators/disable_clearing.h",
-    "allocators/disable_freeing.h",
+    "allocators/destruction_callbacks.h",
     "allocators/std_memory_resource_allocator.h",
+    "allocators/wrappers.h",
 
     "detail/template_util/c_array_length.h",
     "detail/template_util/c_array_value_type.h",
