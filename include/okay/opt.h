@@ -9,6 +9,7 @@
 #include "okay/detail/traits/is_nonthrowing.h"
 #include "okay/ranges/ranges.h"
 #include "okay/slice.h"
+#include <cstring> // memcpy
 
 #ifdef OKAYLIB_USE_FMT
 #include <fmt/core.h>

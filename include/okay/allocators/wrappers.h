@@ -3,6 +3,7 @@
 
 #include "okay/allocators/allocator.h"
 #include "okay/detail/traits/is_derived_from.h"
+#include <cstring>
 namespace ok {
 
 namespace alloc {

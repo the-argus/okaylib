@@ -3,6 +3,7 @@
 
 #include "okay/allocators/allocator.h"
 
+#include <cstring>
 #include <memory_resource>
 
 namespace ok {
@@ -11,7 +12,8 @@ class std_memory_resource_allocator_t : public allocator_t
 {
   public:
     static constexpr alloc::feature_flags type_features =
-        alloc::feature_flags::clearing | alloc::feature_flags::expand_back | alloc::feature_flags::expand_front;
+        alloc::feature_flags::clearing | alloc::feature_flags::expand_back |
+        alloc::feature_flags::expand_front;
 
     std_memory_resource_allocator_t() = delete;
 
@@ -82,8 +84,7 @@ std_memory_resource_allocator_t::features() const noexcept -> feature_flags
 }
 
 inline auto std_memory_resource_allocator_t::reallocate_bytes(
-    const allocator_t::reallocate_options_t& options)
-    -> reallocation_result_t
+    const allocator_t::reallocate_options_t& options) -> reallocation_result_t
 {
     assert(((uintptr_t)options.data % options.alignment) == 0);
 

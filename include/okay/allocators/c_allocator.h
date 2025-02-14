@@ -3,6 +3,7 @@
 
 #include "okay/allocators/allocator.h"
 #include "okay/stdmem.h"
+#include <cstring>
 
 namespace ok {
 
