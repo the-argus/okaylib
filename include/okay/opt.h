@@ -351,10 +351,10 @@ class opt_t<payload_t, std::enable_if_t<std::is_lvalue_reference_v<payload_t>>>
     inline constexpr opt_t(nullopt_t) OKAYLIB_NOEXCEPT {};
 
     // allow pointer conversion
-    inline constexpr opt_t(pointer_t* p) : OKAYLIB_NOEXCEPT pointer(p) {}
+    inline constexpr opt_t(pointer_t* p) OKAYLIB_NOEXCEPT : pointer(p) {}
     // allow non-const reference construction
-    inline constexpr opt_t(std::remove_const_t<payload_t> p)
-        : OKAYLIB_NOEXCEPT pointer(ok::addressof(p))
+    inline constexpr opt_t(std::remove_const_t<payload_t> p) OKAYLIB_NOEXCEPT
+        : pointer(ok::addressof(p))
     {
     }
 
@@ -364,8 +364,8 @@ class opt_t<payload_t, std::enable_if_t<std::is_lvalue_reference_v<payload_t>>>
                   std::is_convertible_v<other_t, payload_t> &&
                       !std::is_same_v<detail::remove_cvref_t<other_t>, opt_t>,
                   bool> = false>
-    inline constexpr opt_t(const opt_t<other_t>& other)
-        : OKAYLIB_NOEXCEPT pointer(other.as_ptr())
+    inline constexpr opt_t(const opt_t<other_t>& other) OKAYLIB_NOEXCEPT
+        : pointer(other.as_ptr())
     {
     }
 

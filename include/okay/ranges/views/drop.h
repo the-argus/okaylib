@@ -48,8 +48,10 @@ struct drop_cursor_bidir_t
     constexpr void decrement() OKAYLIB_NOEXCEPT { --m_consumed; }
 
   public:
-    explicit constexpr drop_cursor_bidir_t(parent_cursor_t&& c, size_t consumed)
-        : OKAYLIB_NOEXCEPT m_consumed(consumed), wrapper_t(std::move(c))
+    explicit constexpr drop_cursor_bidir_t(parent_cursor_t&& c,
+                                           size_t consumed) OKAYLIB_NOEXCEPT
+        : m_consumed(consumed),
+          wrapper_t(std::move(c))
     {
     }
 
@@ -93,8 +95,8 @@ struct drop_view_t : public underlying_view_type<input_range_t>::type
     drop_view_t(drop_view_t&&) = default;
     drop_view_t& operator=(drop_view_t&&) = default;
 
-    constexpr drop_view_t(input_range_t&& range, size_t amount)
-        : OKAYLIB_NOEXCEPT underlying_view_type<input_range_t>::type(
+    constexpr drop_view_t(input_range_t&& range, size_t amount) OKAYLIB_NOEXCEPT
+        : underlying_view_type<input_range_t>::type(
               std::forward<input_range_t>(range))
     {
         if constexpr (range_can_size_v<range_t>) {

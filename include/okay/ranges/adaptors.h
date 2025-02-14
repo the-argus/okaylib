@@ -75,7 +75,7 @@ template <typename callable_t>
 struct range_adaptor_closure_t : range_adaptor_t<callable_t>
 {
     constexpr range_adaptor_closure_t(callable_t&& c)
-        : OKAYLIB_NOEXCEPT range_adaptor_t<callable_t>(
+        OKAYLIB_NOEXCEPT : range_adaptor_t<callable_t>(
               std::forward<callable_t>(c))
     {
     }

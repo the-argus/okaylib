@@ -78,8 +78,9 @@ struct transformed_view_t : public underlying_view_type<range_t>::type
         return m_transformer_callable.value();
     }
 
-    constexpr transformed_view_t(range_t&& range, callable_t&& callable)
-        : OKAYLIB_NOEXCEPT m_transformer_callable(std::move(callable)),
+    constexpr transformed_view_t(range_t&& range,
+                                 callable_t&& callable) OKAYLIB_NOEXCEPT
+        : m_transformer_callable(std::move(callable)),
           underlying_view_type<range_t>::type(std::forward<range_t>(range))
     {
     }

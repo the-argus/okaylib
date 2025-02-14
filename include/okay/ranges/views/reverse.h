@@ -33,8 +33,8 @@ template <typename input_parent_range_t> struct reversed_cursor_t
     using self_t = reversed_cursor_t;
 
   public:
-    explicit constexpr reversed_cursor_t(parent_cursor_t&& c)
-        : OKAYLIB_NOEXCEPT m_inner(std::move(c))
+    explicit constexpr reversed_cursor_t(parent_cursor_t&& c) OKAYLIB_NOEXCEPT
+        : m_inner(std::move(c))
     {
     }
 

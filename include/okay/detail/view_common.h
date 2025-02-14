@@ -260,8 +260,8 @@ class owning_view<
     range_t m_range;
 
   public:
-    constexpr owning_view(range_t&& range)
-        : OKAYLIB_NOEXCEPT m_range(std::move(range))
+    constexpr owning_view(range_t&& range) OKAYLIB_NOEXCEPT
+        : m_range(std::move(range))
     {
     }
 
@@ -340,9 +340,8 @@ class ref_view<
         std::enable_if_t<!std::is_same_v<ref_view, T> &&
                              is_convertible_to_v<decltype(t), range_t&> &&
                              is_referenceable<decltype(t)>::value,
-                         empty_t> = {})
-        : OKAYLIB_NOEXCEPT m_range(
-              ok::addressof(static_cast<range_t&>(std::forward<T>(t))))
+                         empty_t> = {}) OKAYLIB_NOEXCEPT
+        : m_range(ok::addressof(static_cast<range_t&>(std::forward<T>(t))))
     {
     }
 
@@ -538,8 +537,8 @@ template <typename derived_t, typename parent_range_t> struct cursor_wrapper_t
     }
 
   public:
-    explicit constexpr cursor_wrapper_t(parent_cursor_t&& c)
-        : OKAYLIB_NOEXCEPT m_inner(std::move(c))
+    explicit constexpr cursor_wrapper_t(parent_cursor_t&& c) OKAYLIB_NOEXCEPT
+        : m_inner(std::move(c))
     {
     }
 

@@ -74,7 +74,7 @@ template <typename input_range_t> struct joined_cursor_t
 
     constexpr joined_cursor_t(outer_cursor_t&& outer_cursor,
                               recieved_range_type_t&& inner_range)
-        : OKAYLIB_NOEXCEPT m(std::in_place, std::move(outer_cursor),
+        OKAYLIB_NOEXCEPT : m(std::in_place, std::move(outer_cursor),
                              std::forward<recieved_range_type_t>(inner_range))
     {
     }

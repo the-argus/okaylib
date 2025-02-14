@@ -49,8 +49,9 @@ struct enumerated_cursor_t
     }
 
   public:
-    explicit constexpr enumerated_cursor_t(parent_cursor_t&& c)
-        : OKAYLIB_NOEXCEPT m_index(0), wrapper_t(std::move(c))
+    explicit constexpr enumerated_cursor_t(parent_cursor_t&& c) OKAYLIB_NOEXCEPT
+        : m_index(0),
+          wrapper_t(std::move(c))
     {
     }
 

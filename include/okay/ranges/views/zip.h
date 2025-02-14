@@ -151,8 +151,8 @@ template <typename... ranges_t> struct zipped_view_t
         return find_expected_size_impl(std::make_index_sequence<num_ranges>());
     }
 
-    constexpr zipped_view_t(ranges_t&&... ranges)
-        : OKAYLIB_NOEXCEPT m_views(std::forward<ranges_t>(ranges)...)
+    constexpr zipped_view_t(ranges_t&&... ranges) OKAYLIB_NOEXCEPT
+        : m_views(std::forward<ranges_t>(ranges)...)
     {
         if constexpr (is_sized) {
             if (!find_expected_size()) [[unlikely]] {
@@ -174,8 +174,8 @@ template <typename... ranges_t> struct zipped_cursor_t
 
   private:
     constexpr zipped_cursor_t(cursor_type_for<ranges_t>&&... ranges)
-        : OKAYLIB_NOEXCEPT m_cursors(
-              std::forward<cursor_type_for<ranges_t>>(ranges)...)
+        OKAYLIB_NOEXCEPT
+        : m_cursors(std::forward<cursor_type_for<ranges_t>>(ranges)...)
     {
     }
 

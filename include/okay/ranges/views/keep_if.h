@@ -79,8 +79,9 @@ struct keep_if_view_t : public underlying_view_type<range_t>::type
         return m_filter_predicate.value();
     }
 
-    constexpr keep_if_view_t(range_t&& range, predicate_t&& filter_predicate)
-        : OKAYLIB_NOEXCEPT m_filter_predicate(std::move(filter_predicate)),
+    constexpr keep_if_view_t(range_t&& range,
+                             predicate_t&& filter_predicate) OKAYLIB_NOEXCEPT
+        : m_filter_predicate(std::move(filter_predicate)),
           underlying_view_type<range_t>::type(std::forward<range_t>(range))
     {
     }

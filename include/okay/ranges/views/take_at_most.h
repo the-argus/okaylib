@@ -47,7 +47,8 @@ struct take_at_most_cursor_t
 
   public:
     explicit constexpr take_at_most_cursor_t(parent_cursor_t&& c)
-        : OKAYLIB_NOEXCEPT m_consumed(0), wrapper_t(std::move(c))
+        OKAYLIB_NOEXCEPT : m_consumed(0),
+                           wrapper_t(std::move(c))
     {
     }
 
@@ -85,9 +86,9 @@ struct take_at_most_view_t : public underlying_view_type<range_t>::type
     take_at_most_view_t(take_at_most_view_t&&) = default;
     take_at_most_view_t& operator=(take_at_most_view_t&&) = default;
 
-    constexpr take_at_most_view_t(range_t&& range, size_t amount)
-        : OKAYLIB_NOEXCEPT underlying_view_type<range_t>::type(
-              std::forward<range_t>(range))
+    constexpr take_at_most_view_t(range_t&& range,
+                                  size_t amount) OKAYLIB_NOEXCEPT
+        : underlying_view_type<range_t>::type(std::forward<range_t>(range))
     {
         if constexpr (detail::range_can_size_v<range_t>) {
             auto& parent_range =
