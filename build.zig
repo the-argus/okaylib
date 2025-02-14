@@ -138,9 +138,9 @@ pub fn build(b: *std.Build) !void {
 
     // actual public installation step
     b.installDirectory(.{
-        .source_dir = b.path("include/okay/"),
+        .source_dir = b.path("include/"),
         .install_dir = .header,
-        .install_subdir = "okay/",
+        .install_subdir = "",
     });
 
     const fmt = b.dependency("fmt", .{});
