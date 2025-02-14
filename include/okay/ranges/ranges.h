@@ -1,7 +1,7 @@
 #ifndef __OKAYLIB_RANGES_RANGES_H__
 #define __OKAYLIB_RANGES_RANGES_H__
 
-#include "okay/detail/ok_assert.h"
+#include "okay/detail/noexcept.h"
 #include "okay/detail/template_util/c_array_length.h"
 #include "okay/detail/template_util/c_array_value_type.h"
 #include "okay/detail/template_util/remove_cvref.h"
@@ -29,10 +29,6 @@
  * `begin()`
  * `is_inbounds()`
  */
-
-#ifndef OKAYLIB_NOEXCEPT
-#define OKAYLIB_NOEXCEPT noexcept
-#endif
 
 namespace ok {
 

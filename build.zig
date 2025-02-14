@@ -73,6 +73,7 @@ const okaylib_headers = &[_][]const u8{
     "detail/get_best.h",
     "detail/invoke.h",
     "detail/is_lvalue.h",
+    "detail/noexcept",
     "detail/no_unique_add",
     "detail/ok_assert.h",
     "detail/ok_enable_if.h",

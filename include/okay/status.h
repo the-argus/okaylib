@@ -1,12 +1,9 @@
 #ifndef __OKAYLIB_STATUS_H__
 #define __OKAYLIB_STATUS_H__
 
+#include "okay/detail/noexcept.h"
 #include "okay/detail/traits/is_status_enum.h"
 #include <type_traits>
-
-#ifndef OKAYLIB_NOEXCEPT
-#define OKAYLIB_NOEXCEPT noexcept
-#endif
 
 #ifdef OKAYLIB_USE_FMT
 #include <fmt/core.h>

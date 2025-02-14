@@ -2,6 +2,7 @@
 #define __OKAYLIB_RES_H__
 
 #include "okay/detail/abort.h"
+#include "okay/detail/noexcept.h"
 #include "okay/detail/res.h"
 #include "okay/detail/template_util/enable_copy_move.h"
 #include "okay/detail/traits/is_nonthrowing.h"
@@ -11,10 +12,6 @@
 
 #ifdef OKAYLIB_USE_FMT
 #include <fmt/core.h>
-#endif
-
-#ifndef OKAYLIB_NOEXCEPT
-#define OKAYLIB_NOEXCEPT noexcept
 #endif
 
 namespace ok {

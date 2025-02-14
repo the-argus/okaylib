@@ -3,7 +3,7 @@
 
 #include "okay/allocators/allocator.h"
 #include "okay/allocators/c_allocator.h"
-#include "okay/allocators/emulate_unsupported_features.h"
+#include "okay/allocators/wrappers.h"
 
 namespace ok {
 

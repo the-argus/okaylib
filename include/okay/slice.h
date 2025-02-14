@@ -3,6 +3,7 @@
 
 #include "okay/detail/abort.h"
 #include "okay/detail/addressof.h"
+#include "okay/detail/noexcept.h"
 #include "okay/detail/template_util/remove_cvref.h"
 #include "okay/detail/traits/is_container.h"
 #include "okay/detail/traits/is_instance.h"
@@ -10,10 +11,6 @@
 
 #ifdef OKAYLIB_USE_FMT
 #include <fmt/core.h>
-#endif
-
-#ifndef OKAYLIB_NOEXCEPT
-#define OKAYLIB_NOEXCEPT noexcept
 #endif
 
 namespace ok {

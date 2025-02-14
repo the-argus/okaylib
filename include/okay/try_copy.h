@@ -2,13 +2,10 @@
 #define __OKAYLIB_COPY_H__
 
 #include "okay/detail/addressof.h"
+#include "okay/detail/noexcept.h"
 #include "okay/detail/traits/is_complete.h"
 #include <type_traits>
 #include <utility> // addressof
-
-#ifndef OKAYLIB_NOEXCEPT
-#define OKAYLIB_NOEXCEPT noexcept
-#endif
 
 namespace ok {
 

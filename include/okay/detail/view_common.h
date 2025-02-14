@@ -2,6 +2,7 @@
 #define __OKAYLIB_DETAIL_VIEW_COMMON_H__
 
 #include "okay/detail/addressof.h"
+#include "okay/detail/noexcept.h"
 #include "okay/detail/ok_enable_if.h"
 #include "okay/detail/template_util/empty.h"
 #include "okay/detail/template_util/uninitialized_storage.h"

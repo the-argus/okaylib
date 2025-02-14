@@ -2,7 +2,7 @@
 #define __OKAYLIB_DETAIL_RES_H__
 
 #include "okay/detail/addressof.h"
-#include "okay/detail/template_util/first_type_in_pack.h"
+#include "okay/detail/noexcept.h"
 #include "okay/detail/template_util/uninitialized_storage.h"
 #include "okay/detail/traits/is_instance.h"
 #include <cassert>

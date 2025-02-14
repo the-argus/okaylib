@@ -1,13 +1,10 @@
 #ifndef __OKAYLIB_ANYSTATUS_H__
 #define __OKAYLIB_ANYSTATUS_H__
 
+#include "okay/detail/noexcept.h"
 #include "okay/res.h"
 #include "okay/status.h"
 #include <cstdint>
-
-#ifndef OKAYLIB_NOEXCEPT
-#define OKAYLIB_NOEXCEPT noexcept
-#endif
 
 #ifdef OKAYLIB_USE_FMT
 #include <fmt/core.h>

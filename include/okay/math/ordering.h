@@ -2,6 +2,7 @@
 #define __OKAYLIB_MATH_ORDERING_H__
 
 #include "okay/detail/abort.h"
+#include "okay/detail/noexcept.h"
 #include "okay/detail/ok_assert.h"
 #include "okay/detail/traits/is_complete.h"
 #include <cstdint>

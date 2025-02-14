@@ -1,7 +1,7 @@
 #ifndef __OKAYLIB_OPT_H__
 #define __OKAYLIB_OPT_H__
 
-#include "okay/detail/ok_enable_if.h"
+#include "okay/detail/noexcept.h"
 #include "okay/detail/opt.h"
 #include "okay/detail/template_util/enable_copy_move.h"
 #include "okay/detail/template_util/remove_cvref.h"
@@ -12,10 +12,6 @@
 
 #ifdef OKAYLIB_USE_FMT
 #include <fmt/core.h>
-#endif
-
-#ifndef OKAYLIB_NOEXCEPT
-#define OKAYLIB_NOEXCEPT noexcept
 #endif
 
 namespace ok {

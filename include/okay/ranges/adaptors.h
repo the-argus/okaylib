@@ -3,6 +3,7 @@
 
 #include "okay/detail/invoke.h"
 #include "okay/detail/no_unique_addr.h"
+#include "okay/detail/noexcept.h"
 #include "okay/ranges/ranges.h"
 #include <tuple>
 #include <utility>

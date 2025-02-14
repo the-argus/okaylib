@@ -3,6 +3,7 @@
 
 #include "okay/detail/addressof.h"
 #include "okay/detail/template_util/uninitialized_storage.h"
+#include "okay/detail/noexcept.h"
 #include <cassert>
 #include <type_traits>
 #include <utility>

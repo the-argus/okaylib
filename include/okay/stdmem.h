@@ -2,6 +2,7 @@
 #define __OKAYLIB_STDMEM_H__
 
 #include "okay/detail/addressof.h"
+#include "okay/detail/noexcept.h"
 #include "okay/slice.h"
 #include <cstdint>
 #include <cstring>

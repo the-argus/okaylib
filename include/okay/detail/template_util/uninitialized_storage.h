@@ -2,6 +2,7 @@
 #define __OKAYLIB_DETAIL_TEMPLATE_UTIL_UNINITIALIZED_STORAGE_H__
 
 #include "okay/detail/template_util/empty.h"
+#include "okay/detail/noexcept.h"
 #include <type_traits>
 #include <utility>
 
