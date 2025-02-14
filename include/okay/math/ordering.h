@@ -560,7 +560,7 @@ template <typename T, bool checking_partial> struct minmaxclamp_asserts_t
 #define __okaylib_convertible_relop_decl(rettype)               \
     template <typename LHS, typename RHS>                       \
     constexpr auto operator()(const LHS& lhs,                   \
-                              RHS&& rhs) OKAYLIB_NOEXCEPT const \
+                              RHS&& rhs) const OKAYLIB_NOEXCEPT \
         ->std::enable_if_t<std::is_convertible_v<decltype(rhs), LHS>, rettype>
 
 struct compare_fn_t
@@ -634,10 +634,10 @@ struct is_partially_equal_fn_t
 struct min_fn_t
 {
     template <typename LHS, typename RHS>
-    constexpr auto operator()(const LHS& lhs, RHS&& rhs) OKAYLIB_NOEXCEPT const
-        -> std::enable_if_t<std::is_convertible_v<decltype(rhs), LHS> &&
-                                std::is_copy_constructible_v<LHS>,
-                            LHS>
+    constexpr auto operator()(const LHS& lhs, RHS&& rhs) const OKAYLIB_NOEXCEPT
+        ->std::enable_if_t<std::is_convertible_v<decltype(rhs), LHS> &&
+                               std::is_copy_constructible_v<LHS>,
+                           LHS>
     {
         constexpr no_primitive_definitions_assert<LHS> asserts;
         constexpr orderable_asserts_t<LHS> orderable_asserts;
@@ -657,10 +657,10 @@ struct min_fn_t
 struct unchecked_min_fn_t
 {
     template <typename LHS, typename RHS>
-    constexpr auto operator()(const LHS& lhs, RHS&& rhs) OKAYLIB_NOEXCEPT const
-        -> std::enable_if_t<std::is_convertible_v<decltype(rhs), LHS> &&
-                                std::is_copy_constructible_v<LHS>,
-                            LHS>
+    constexpr auto operator()(const LHS& lhs, RHS&& rhs) const OKAYLIB_NOEXCEPT
+        ->std::enable_if_t<std::is_convertible_v<decltype(rhs), LHS> &&
+                               std::is_copy_constructible_v<LHS>,
+                           LHS>
     {
         constexpr no_primitive_definitions_assert<LHS> asserts;
         constexpr partially_orderable_asserts_t<LHS> orderable_asserts;
@@ -682,10 +682,10 @@ struct unchecked_min_fn_t
 struct partial_min_fn_t
 {
     template <typename LHS, typename RHS>
-    constexpr auto operator()(const LHS& lhs, RHS&& rhs) OKAYLIB_NOEXCEPT const
-        -> std::enable_if_t<std::is_convertible_v<decltype(rhs), LHS> &&
-                                std::is_copy_constructible_v<LHS>,
-                            LHS>
+    constexpr auto operator()(const LHS& lhs, RHS&& rhs) const OKAYLIB_NOEXCEPT
+        ->std::enable_if_t<std::is_convertible_v<decltype(rhs), LHS> &&
+                               std::is_copy_constructible_v<LHS>,
+                           LHS>
     {
         constexpr no_primitive_definitions_assert<LHS> asserts;
         constexpr partially_orderable_asserts_t<LHS> orderable_asserts;
@@ -708,10 +708,10 @@ struct partial_min_fn_t
 struct max_fn_t
 {
     template <typename LHS, typename RHS>
-    constexpr auto operator()(const LHS& lhs, RHS&& rhs) OKAYLIB_NOEXCEPT const
-        -> std::enable_if_t<std::is_convertible_v<decltype(rhs), LHS> &&
-                                std::is_copy_constructible_v<LHS>,
-                            LHS>
+    constexpr auto operator()(const LHS& lhs, RHS&& rhs) const OKAYLIB_NOEXCEPT
+        ->std::enable_if_t<std::is_convertible_v<decltype(rhs), LHS> &&
+                               std::is_copy_constructible_v<LHS>,
+                           LHS>
     {
         constexpr no_primitive_definitions_assert<LHS> asserts;
         constexpr orderable_asserts_t<LHS> orderable_asserts;
@@ -731,10 +731,10 @@ struct max_fn_t
 struct partial_max_fn_t
 {
     template <typename LHS, typename RHS>
-    constexpr auto operator()(const LHS& lhs, RHS&& rhs) OKAYLIB_NOEXCEPT const
-        -> std::enable_if_t<std::is_convertible_v<decltype(rhs), LHS> &&
-                                std::is_copy_constructible_v<LHS>,
-                            LHS>
+    constexpr auto operator()(const LHS& lhs, RHS&& rhs) const OKAYLIB_NOEXCEPT
+        ->std::enable_if_t<std::is_convertible_v<decltype(rhs), LHS> &&
+                               std::is_copy_constructible_v<LHS>,
+                           LHS>
     {
         constexpr no_primitive_definitions_assert<LHS> asserts;
         constexpr partially_orderable_asserts_t<LHS>
@@ -758,10 +758,10 @@ struct partial_max_fn_t
 struct unchecked_max_fn_t
 {
     template <typename LHS, typename RHS>
-    constexpr auto operator()(const LHS& lhs, RHS&& rhs) OKAYLIB_NOEXCEPT const
-        -> std::enable_if_t<std::is_convertible_v<decltype(rhs), LHS> &&
-                                std::is_copy_constructible_v<LHS>,
-                            LHS>
+    constexpr auto operator()(const LHS& lhs, RHS&& rhs) const OKAYLIB_NOEXCEPT
+        ->std::enable_if_t<std::is_convertible_v<decltype(rhs), LHS> &&
+                               std::is_copy_constructible_v<LHS>,
+                           LHS>
     {
         constexpr no_primitive_definitions_assert<LHS> asserts;
         constexpr partially_orderable_asserts_t<LHS> orderable_asserts;
@@ -784,10 +784,10 @@ struct clamp_fn_t
 {
     template <typename LHS, typename arg_t>
     constexpr auto operator()(const LHS& lhs, arg_t&& min,
-                              arg_t&& max) OKAYLIB_NOEXCEPT const
-        -> std::enable_if_t<std::is_convertible_v<decltype(min), LHS> &&
-                                std::is_copy_constructible_v<LHS>,
-                            LHS>
+                              arg_t&& max) const OKAYLIB_NOEXCEPT
+        ->std::enable_if_t<std::is_convertible_v<decltype(min), LHS> &&
+                               std::is_copy_constructible_v<LHS>,
+                           LHS>
     {
         __ok_assert(min < max,
                     "min and max passed to clamp are in the wrong order");
@@ -811,10 +811,10 @@ struct partial_clamp_fn_t
 {
     template <typename LHS, typename arg_t>
     constexpr auto operator()(const LHS& lhs, arg_t&& min,
-                              arg_t&& max) OKAYLIB_NOEXCEPT const
-        -> std::enable_if_t<std::is_convertible_v<decltype(min), LHS> &&
-                                std::is_copy_constructible_v<LHS>,
-                            LHS>
+                              arg_t&& max) const OKAYLIB_NOEXCEPT
+        ->std::enable_if_t<std::is_convertible_v<decltype(min), LHS> &&
+                               std::is_copy_constructible_v<LHS>,
+                           LHS>
     {
         __ok_assert(min < max,
                     "min and max passed to clamp are in the wrong order");
@@ -853,10 +853,10 @@ struct unchecked_clamp_fn_t
 {
     template <typename LHS, typename arg_t>
     constexpr auto operator()(const LHS& lhs, arg_t&& min,
-                              arg_t&& max) OKAYLIB_NOEXCEPT const
-        -> std::enable_if_t<std::is_convertible_v<decltype(min), LHS> &&
-                                std::is_copy_constructible_v<LHS>,
-                            LHS>
+                              arg_t&& max) const OKAYLIB_NOEXCEPT
+        ->std::enable_if_t<std::is_convertible_v<decltype(min), LHS> &&
+                               std::is_copy_constructible_v<LHS>,
+                           LHS>
     {
         // min != min protects from NaN causing this assert to fire
         __ok_assert(min != min || max != max || min < max,
