@@ -15,7 +15,7 @@ template <typename enum_t> struct status_t
 {
   public:
     static_assert(
-        detail::is_status_enum<enum_t>(),
+        detail::is_status_enum_v<enum_t>,
         "Bad enum errorcode type provided to status_t. Make sure it is only a "
         "byte in size, and that the okay entry is = 0.");
 

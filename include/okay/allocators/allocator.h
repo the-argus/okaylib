@@ -8,6 +8,7 @@
 #include <type_traits>
 
 // pulls in slice and opt, and because of that also ranges and ordering
+#include "okay/anystatus.h"
 #include "okay/res.h"
 #include "okay/stdmem.h"
 
@@ -72,7 +73,7 @@ class maybe_defined_memory_t
         }
     }
 
-    [[nodiscard]] size_t size_maybe_defined() const OKAYLIB_NOEXCEPT
+    [[nodiscard]] size_t size() const OKAYLIB_NOEXCEPT
     {
         if (m_is_defined) {
             return m_data.as_bytes.size();
@@ -454,7 +455,7 @@ constexpr std::enable_if_t<
     ok::detail::is_derived_from_v<allocator_impl_t, allocator_t> &&
         std::is_constructible_v<T, args_t...>,
     alloc::result_t<T&>>
-make(allocator_impl_t& ally, args_t&&...) OKAYLIB_NOEXCEPT
+make(allocator_impl_t& ally, args_t&&... args) OKAYLIB_NOEXCEPT
 {
     static_assert(std::is_nothrow_constructible_v<T, args_t...>,
                   "The constructor you're attempting to call with ok::make is "
@@ -476,7 +477,87 @@ make(allocator_impl_t& ally, args_t&&...) OKAYLIB_NOEXCEPT
     __ok_assert(uintptr_t(object_start) % alignof(T) == 0,
                 "Misaligned memory produced by allocator");
 
-    return *reinterpret_cast<T*>(object_start);
+    T* made = reinterpret_cast<T*>(object_start);
+
+    new (made) T(std::forward<args_t>(args)...);
+
+    return *made;
+}
+
+// template <typename payload_t, typename status_t> struct factory_result_t
+// {
+
+//   private:
+//     payload_t* object;
+// };
+
+// namespace detail {
+
+// template <typename T> struct factory_functor
+// {
+//     template <res_t<T, alloc::error> (*initializer)(),
+//               typename allocator_impl_t>
+//     constexpr std::enable_if_t<
+//         ok::detail::is_derived_from_v<allocator_impl_t, allocator_t> &&
+//             std::is_default_constructible_v<T>,
+//         alloc::result_t<T&>>
+//     operator()(allocator_impl_t& ally) const OKAYLIB_NOEXCEPT
+//     {
+//     }
+// };
+
+// } // namespace detail
+
+template <typename factory_t, typename allocator_impl_t, typename... args_t>
+constexpr decltype(auto) try_make(allocator_impl_t& ally,
+                                  args_t&&... args) OKAYLIB_NOEXCEPT
+// -> ok::opt_t<decltype(std::declval<factory_t&>()(
+//     std::declval<anystatus_t&>(), std::forward<args_t>(args)...))&>
+{
+    static_assert(
+        std::is_trivially_default_constructible_v<factory_t>,
+        "Given factory function is not trivially default constructible.");
+    static_assert(std::is_invocable_v<factory_t, anystatus_t&, args_t...>,
+                  "Given factory function is not invocable with an anystatus "
+                  "and the given arguments.");
+    using T = decltype(std::declval<factory_t&>()(std::declval<anystatus_t&>(),
+                                                  std::declval<args_t>()...));
+    static_assert(!std::is_reference_v<T> && !std::is_pointer_v<T> &&
+                      !std::is_array_v<T> && !std::is_void_v<T>,
+                  "Factory function given returns an invalid type");
+
+    static_assert(
+        std::is_nothrow_invocable_v<factory_t, anystatus_t&, args_t...>,
+        "Given factory function may throw when called.");
+
+    auto res = ally.allocate(alloc::request_t{
+        .num_bytes = sizeof(T),
+        .alignment = alignof(T),
+#ifdef NDEBUG
+        .flags = alloc::flags::leave_nonzeroed,
+#endif
+    });
+
+    if (!res.okay()) [[unlikely]] {
+        return opt_t<T&>{nullopt};
+    }
+
+    maybe_defined_memory_t& bytes = res.release_ref();
+    uint8_t* object_start = bytes.data_maybe_defined();
+    __ok_assert(uintptr_t(object_start) % alignof(T) == 0,
+                "Misaligned memory produced by allocator");
+
+    auto& out = *reinterpret_cast<T*>(object_start);
+
+    anystatus_t status = anystatus_t::failure; // assume failure
+    out = factory_t()(status, std::forward<args_t>(args)...);
+
+    if (!status.okay()) [[unlikely]] {
+        ally.deallocate(reinterpret_as_bytes(slice_from_one(out)));
+        return opt_t<T&>{nullopt};
+    }
+
+    return opt_t<T&>{out};
 }
 
 template <typename T, typename allocator_impl_t>
@@ -500,13 +581,14 @@ constexpr auto free(allocator_impl_t& ally, T& object) OKAYLIB_NOEXCEPT
         "Reference to pointer passed to ok::free(). This is a potential "
         "indication of array decay. Call allocator.deallocate() directly if "
         "this is actually a pointer.");
-    if constexpr (std::is_array_v<T>) {
-        for (size_t i = 0; i < ok::detail::c_array_length(object); ++i) {
-            using VT = detail::c_array_value_type<T>;
+
+    if constexpr (!std::is_array_v<std::remove_reference_t<T>>) {
+        object.~T();
+    } else {
+        using VT = detail::c_array_value_type<T>;
+        for (size_t i = 0; i < detail::c_array_length(object); ++i) {
             object[i].~VT();
         }
-    } else {
-        object.~T();
     }
     ally.deallocate(ok::reinterpret_as_bytes(ok::slice_from_one(object)));
 }

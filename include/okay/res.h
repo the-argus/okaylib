@@ -58,7 +58,7 @@ class res_t<contained_t, enum_t,
         !std::is_same_v<std::remove_cv_t<contained_t>,
                         std::remove_cv_t<enum_t>>,
         "Result cannot store an the same enum as payload as for statuscode.");
-    static_assert(detail::is_status_enum<enum_t>(),
+    static_assert(detail::is_status_enum_v<enum_t>,
                   OKAYLIB_IS_STATUS_ENUM_ERRMSG);
     static_assert(!std::is_constructible_v<contained_t, const enum_t&>,
                   "Cannot store type in res if it is constructible from its "
@@ -213,7 +213,7 @@ class res_t<contained_t, enum_t,
         !std::is_same_v<std::remove_cv_t<contained_t>,
                         std::remove_cv_t<enum_t>>,
         "Result cannot store an the same enum as payload as for statuscode.");
-    static_assert(detail::is_status_enum<enum_t>(),
+    static_assert(detail::is_status_enum_v<enum_t>,
                   OKAYLIB_IS_STATUS_ENUM_ERRMSG);
 
     constexpr res_t() = delete;

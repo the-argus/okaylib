@@ -16,6 +16,11 @@ struct anystatus_t
   private:
     uint8_t m_status;
 
+    constexpr anystatus_t(bool is_okay) OKAYLIB_NOEXCEPT
+        : m_status(is_okay ? 0 : 255)
+    {
+    }
+
   public:
     [[nodiscard]] inline constexpr bool okay() const OKAYLIB_NOEXCEPT
     {
@@ -46,25 +51,24 @@ struct anystatus_t
 
     /// Can be constructed from a raw result errcode enum, which effectively
     /// just casts the enum value to a uint8_t.
-    template <typename enum_t>
-    inline constexpr anystatus_t(
-        typename std::enable_if_t<detail::is_status_enum<enum_t>(), enum_t>
-            status) OKAYLIB_NOEXCEPT
+    template <typename enum_t,
+              std::enable_if_t<detail::is_status_enum_v<enum_t>, bool> = true>
+    inline constexpr anystatus_t(enum_t status) OKAYLIB_NOEXCEPT
     {
         m_status = uint8_t(status);
     }
 
-    /// Can be implicitly constructed from a bool, true being okay and false
-    /// being not
-    inline constexpr anystatus_t(bool status) OKAYLIB_NOEXCEPT
-        : m_status(status ? 0 : 255)
-    {
-    }
+    static const anystatus_t success;
+    static const anystatus_t failure;
 
 #ifdef OKAYLIB_USE_FMT
     friend struct fmt::formatter<anystatus_t>;
 #endif
 };
+
+inline const anystatus_t anystatus_t::success{true};
+inline const anystatus_t anystatus_t::failure{false};
+
 } // namespace ok
 
 #ifdef OKAYLIB_USE_FMT
