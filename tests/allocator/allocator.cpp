@@ -6,6 +6,8 @@
 #include "okay/allocators/wrappers.h"
 #include "okay/containers/array.h"
 #include "okay/containers/array_list.h"
+#include "okay/macros/foreach.h"
+#include "okay/ranges/views/zip.h"
 
 #include <array>
 
@@ -51,6 +53,8 @@ void virtual_tests_array_list(allocator_t& ally)
 
     array_list_t array_list =
         array_list_t<int>::try_make_by_copying(ally, array).release();
+
+    ok_foreach(ok_pair(a, al), zip(array, array_list)) { REQUIRE(a == al); }
 }
 
 TEST_SUITE("abstract allocator")

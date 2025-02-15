@@ -40,6 +40,35 @@ class array_list_t
         "Type given to array_list_t must be either trivially copyable or move "
         "constructible, otherwise it cannot move the items when reallocating.");
 
+    using value_type = T;
+
+    const T* data() const& OKAYLIB_NOEXCEPT
+    {
+        return m.allocated_spots ? m.allocated_spots.value().data() : nullptr;
+    }
+
+    T* data() & OKAYLIB_NOEXCEPT
+    {
+        return m.allocated_spots ? m.allocated_spots.value().data() : nullptr;
+    }
+
+    size_t size() const OKAYLIB_NOEXCEPT { return m.spots_occupied; }
+
+    const T& operator[](size_t index) const& OKAYLIB_NOEXCEPT
+    {
+        if (index >= m.spots_occupied) [[unlikely]] {
+            __ok_abort("Out of bounds access to ok::array_list_t");
+        }
+        return m.allocated_spots.value().data()[index];
+    }
+    T& operator[](size_t index) & OKAYLIB_NOEXCEPT
+    {
+        if (index >= m.spots_occupied) [[unlikely]] {
+            __ok_abort("Out of bounds access to ok::array_list_t");
+        }
+        return m.allocated_spots.value().data()[index];
+    }
+
     // no default constructor or copy, but can move
     array_list_t() = delete;
     array_list_t(const array_list_t&) = delete;
@@ -95,7 +124,8 @@ class array_list_t
         }
 
         auto& maybe_undefined = res.release_ref();
-        uint8_t* const memory = maybe_undefined.data_maybe_defined();
+        T* const memory =
+            reinterpret_cast<T*>(maybe_undefined.data_maybe_defined());
         const size_t bytes_allocated = maybe_undefined.size();
 
         // TODO: if contiguous range and trivially copyable, do memcpy
@@ -104,7 +134,8 @@ class array_list_t
              ok::is_inbounds(range, cursor, ok::prefer_after_bounds_check);
              ok::increment(range, cursor)) {
             // perform a copy either through
-            new (memory + i) T(ok::iter_get_temporary_ref(range, cursor));
+            const auto& item = ok::iter_get_temporary_ref(range, cursor);
+            new (memory + i) T(item);
             ++i;
         }
 

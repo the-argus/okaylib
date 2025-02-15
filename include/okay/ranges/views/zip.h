@@ -15,11 +15,11 @@ template <typename... ranges_t> struct zipped_view_t;
 struct zip_fn_t
 {
     template <typename... ranges_t>
-    constexpr auto operator()(ranges_t&&... ranges) const OKAYLIB_NOEXCEPT
-        ->std::enable_if_t<sizeof...(ranges_t) >= 2, zipped_view_t<ranges_t...>>
+    constexpr auto operator()(ranges_t&&... ranges) const
+        OKAYLIB_NOEXCEPT->std::enable_if_t<(... && is_range_v<ranges_t>) &&
+                                               sizeof...(ranges_t) >= 2,
+                                           zipped_view_t<ranges_t...>>
     {
-        static_assert((... && is_range_v<ranges_t>),
-                      "Cannot zip given types- they are not all ranges");
         // zip puts the output of each range (the input from the view) into
         // tuples. if no get() or get_ref() is provided, then there's nothing to
         // put in the tuple.

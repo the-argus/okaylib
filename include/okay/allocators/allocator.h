@@ -330,7 +330,7 @@ class allocator_t
     [[nodiscard]] constexpr alloc::feature_flags
     features() const OKAYLIB_NOEXCEPT
     {
-        return features();
+        return impl_features();
     }
 
     constexpr void deallocate(bytes_t bytes) OKAYLIB_NOEXCEPT
