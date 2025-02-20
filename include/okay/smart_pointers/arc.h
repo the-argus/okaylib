@@ -37,6 +37,7 @@ struct unique_rw_arc_t
 
     friend ro_arc_t<T, allocator_impl_t>;
     friend variant_arc_t<T, allocator_impl_t>;
+    friend unique_rw_arc_t<T, ok::allocator_t>;
     struct make;
     friend struct make;
 
@@ -47,6 +48,20 @@ struct unique_rw_arc_t
     {
         __ok_assert(m_payload,
                     "Use-after-move (or to_readonly) of unique_rw_arc_t");
+    }
+
+    /// Allow converting any unique_rw_arc_t into one with an abstract allocator
+    template <
+        typename other_allocator_t,
+        std::enable_if_t<!std::is_same_v<other_allocator_t, allocator_impl_t> &&
+                             std::is_same_v<allocator_impl_t, ok::allocator_t>,
+                         bool> = true>
+    constexpr unique_rw_arc_t(unique_rw_arc_t<T, other_allocator_t>&& other)
+        OKAYLIB_NOEXCEPT
+        : m_payload(
+              reinterpret_cast<detail::arc_payload_t<T, ok::allocator_t>*>(
+                  std::exchange(other.m_payload, nullptr)))
+    {
     }
 
     constexpr unique_rw_arc_t&
@@ -107,7 +122,7 @@ struct unique_rw_arc_t
         // case where a weak reference promotes itself when thie strong refcount
         // is zero, so we can rule out the possibility of any weak refs
         // existing)
-        if (m_payload->weak_refcount.load() == 1) {
+        if (m_payload->weak_refcount.fetch_sub(1) == 1) {
             m_payload->allocator->deallocate(
                 reinterpret_as_bytes(slice_from_one(*m_payload)));
         }
@@ -138,6 +153,7 @@ struct ro_arc_t
     friend unique_rw_arc_t<T, allocator_impl_t>;
     friend variant_arc_t<T, allocator_impl_t>;
     friend weak_arc_t<T, allocator_impl_t>;
+    friend ro_arc_t<T, ok::allocator_t>;
 
     [[nodiscard]] constexpr ro_arc_t duplicate() const OKAYLIB_NOEXCEPT
     {
@@ -153,6 +169,19 @@ struct ro_arc_t
         // unlock
         m_payload->strong_refcount.fetch_and(~detail::lock_bit);
         return *this;
+    }
+
+    /// Allow converting any ro_arc_t into one with an abstract allocator
+    template <
+        typename other_allocator_t,
+        std::enable_if_t<!std::is_same_v<other_allocator_t, allocator_impl_t> &&
+                             std::is_same_v<allocator_impl_t, ok::allocator_t>,
+                         bool> = true>
+    constexpr ro_arc_t(ro_arc_t<T, other_allocator_t>&& other) OKAYLIB_NOEXCEPT
+        : m_payload(
+              reinterpret_cast<detail::arc_payload_t<T, ok::allocator_t>*>(
+                  std::exchange(other.m_payload, nullptr)))
+    {
     }
 
     constexpr ro_arc_t(ro_arc_t&& other) OKAYLIB_NOEXCEPT
@@ -202,7 +231,7 @@ struct ro_arc_t
         // means the unique ref is active
         __ok_internal_assert(old != detail::lock_bit);
 
-        if (old == detail::lock_bit + 1) {
+        if (old == 1) {
             // looks like we were the only reference
             ok::opt_t<unique_rw_arc_t<T, allocator_impl_t>> out =
                 unique_rw_arc_t<T, allocator_impl_t>(m_payload);
@@ -257,7 +286,7 @@ struct ro_arc_t
         // additionally, if weak ref is one, then no weak refs exist (nor
         // are any spinning + waiting to promote) so we can deallocate
         // everything
-        if (m_payload->weak_refcount.load() == 1) {
+        if (m_payload->weak_refcount.fetch_sub(1) == 1) {
             m_payload->allocator->deallocate(
                 ok::reinterpret_as_bytes(ok::slice_from_one(*m_payload)));
         } else {
@@ -279,6 +308,7 @@ struct weak_arc_t
 {
     friend unique_rw_arc_t<T, allocator_impl_t>;
     friend ro_arc_t<T, allocator_impl_t>;
+    friend weak_arc_t<T, ok::allocator_t>;
     friend variant_arc_t<T, allocator_impl_t>;
 
     [[nodiscard]] constexpr weak_arc_t duplicate() const OKAYLIB_NOEXCEPT
@@ -294,6 +324,21 @@ struct weak_arc_t
 
     constexpr weak_arc_t(weak_arc_t&& other) OKAYLIB_NOEXCEPT
         : m_payload(std::exchange(other.m_payload, nullptr))
+    {
+    }
+
+    // allow converting a weak arc with any allocator to a weak arc with
+    // abstract allocator
+    template <
+        typename other_allocator_t,
+        std::enable_if_t<!std::is_same_v<other_allocator_t, allocator_impl_t> &&
+                             std::is_same_v<allocator_impl_t, ok::allocator_t>,
+                         bool> = true>
+    constexpr weak_arc_t(weak_arc_t<T, other_allocator_t>&& other)
+        OKAYLIB_NOEXCEPT
+        : m_payload(
+              reinterpret_cast<detail::arc_payload_t<T, ok::allocator_t>*>(
+                  std::exchange(other.m_payload, nullptr)))
     {
     }
 
@@ -314,7 +359,7 @@ struct weak_arc_t
     /// If this function returns success, it is not valid to access this
     /// weak_arc_t afterwards.
     [[nodiscard]] constexpr ok::opt_t<ro_arc_t<T, allocator_impl_t>>
-    try_spawn_readonly() OKAYLIB_NOEXCEPT
+    try_spawn_readonly() const OKAYLIB_NOEXCEPT
     {
         if (!m_payload) {
             return nullopt;
@@ -334,15 +379,15 @@ struct weak_arc_t
         // no refcounts, the object has been destroyed, so release lock and fail
         if (old == 0) {
             m_payload->strong_refcount.store(old);
-            m_payload = nullptr;
             return nullopt;
         }
 
         // increment refcount and convert ourselves to a const pointer,
         // releasing the lock at the same time
         m_payload->strong_refcount.store(old + 1);
+        // NOTE: allow weak refcount to be decremented at destruction
         using ro_arc_t = ro_arc_t<T, allocator_impl_t>;
-        return ok::opt_t<ro_arc_t>(ro_arc_t(std::exchange(m_payload, nullptr)));
+        return ok::opt_t<ro_arc_t>(ro_arc_t(m_payload));
     }
 
     ~weak_arc_t() OKAYLIB_NOEXCEPT { destroy(); }
@@ -392,6 +437,9 @@ unique_rw_arc_t<T, allocator_impl_t>::demote_to_readonly() OKAYLIB_NOEXCEPT
                 "Use-after-move (or to_readonly) of unique_rw_arc_t");
     __ok_internal_assert(m_payload->strong_refcount.load() == detail::lock_bit);
     ro_arc_t<T, allocator_impl_t> out(m_payload);
+    // now there is one strong refcount, and its unlocked for access by other
+    // const refs and weak refs
+    m_payload->strong_refcount.store(1);
     m_payload = nullptr;
     return out;
 }
@@ -429,29 +477,44 @@ enum class arc_ownership : uint8_t
     weak,
 };
 
-template <typename T, typename allocator_impl_t> struct variant_arc_t
+template <typename T, typename allocator_impl_t = ok::allocator_t>
+struct variant_arc_t
 {
+    friend variant_arc_t<T, ok::allocator_t>;
     using ro_arc_t = ro_arc_t<T, allocator_impl_t>;
     using unique_rw_arc_t = unique_rw_arc_t<T, allocator_impl_t>;
     using weak_arc_t = weak_arc_t<T, allocator_impl_t>;
 
     constexpr variant_arc_t(unique_rw_arc_t&& other) OKAYLIB_NOEXCEPT
-        : m_payload(other.m_payload),
+        : m_payload(std::exchange(other.m_payload, nullptr)),
           m_mode(arc_ownership::unique_rw)
     {
-        other.m_payload = nullptr;
     }
     constexpr variant_arc_t(ro_arc_t&& other) OKAYLIB_NOEXCEPT
-        : m_payload(other.m_payload),
+        : m_payload(std::exchange(other.m_payload, nullptr)),
           m_mode(arc_ownership::shared_ro)
     {
-        other.m_payload = nullptr;
     }
     constexpr variant_arc_t(weak_arc_t&& other) OKAYLIB_NOEXCEPT
-        : m_payload(other.m_payload),
+        : m_payload(std::exchange(other.m_payload, nullptr)),
           m_mode(arc_ownership::weak)
     {
-        other.m_payload = nullptr;
+    }
+
+    // allow converting a variant arc with any allocator to a variant arc with
+    // abstract allocator
+    template <
+        typename other_allocator_t,
+        std::enable_if_t<!std::is_same_v<other_allocator_t, allocator_impl_t> &&
+                             std::is_same_v<allocator_impl_t, ok::allocator_t>,
+                         bool> = true>
+    constexpr variant_arc_t(variant_arc_t<T, other_allocator_t>&& other)
+        OKAYLIB_NOEXCEPT
+        : m_payload(
+              reinterpret_cast<detail::arc_payload_t<T, ok::allocator_t>*>(
+                  std::exchange(other.m_payload, nullptr))),
+          m_mode(other.m_mode)
+    {
     }
 
     [[nodiscard]] constexpr arc_ownership
@@ -659,13 +722,15 @@ template <typename T, typename allocator_impl_t> struct variant_arc_t
     }
 
     constexpr variant_arc_t(variant_arc_t&& other) OKAYLIB_NOEXCEPT
-        : m_payload(std::exchange(other.m_payload, nullptr))
+        : m_payload(std::exchange(other.m_payload, nullptr)),
+          m_mode(other.m_mode)
     {
     }
     constexpr variant_arc_t& operator=(variant_arc_t&& other) OKAYLIB_NOEXCEPT
     {
         destroy();
         m_payload = std::exchange(other.m_payload, nullptr);
+        m_mode = other.m_mode;
         return *this;
     }
 
