@@ -662,7 +662,8 @@ struct variant_arc_t
             weak_arc_t actual(m_payload);
             if (auto result = actual.try_spawn_readonly()) {
                 m_payload = nullptr;
-                actual.m_payload = nullptr;
+                // allow our "actual" form to be destroyed, as successful
+                // creation of a readonly arc means we are consumed
                 return result;
             }
             actual.m_payload = nullptr;
