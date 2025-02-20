@@ -2,8 +2,6 @@
 #define __OKAYLIB_SMART_POINTERS_ARC_H___
 
 #include "okay/allocators/allocator.h"
-#include "okay/defer.h"
-#include "okay/detail/noexcept.h"
 #include "okay/detail/ok_unreachable.h"
 #include "okay/opt.h"
 #include <atomic>
