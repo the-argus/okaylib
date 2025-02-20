@@ -23,6 +23,8 @@ const testing_flags = &[_][]const u8{
     // "-DOKAYLIB_ALLOCATORS_USE_RTTI",
     // "-DOKAYLIB_ALLOCATORS_DISABLE_TYPECHECKING",
     "-fno-rtti",
+    "-Werror",
+    "-Wno-deprecated",
 
     "-I./tests/",
     "-I./include/",
@@ -121,6 +123,7 @@ const test_source_files = &[_][]const u8{
     "join/join.cpp",
     "zip/zip.cpp",
     "allocator/allocator.cpp",
+    "arc/arc.cpp",
 };
 
 const universal_tests_source_files = &[_][]const u8{};
