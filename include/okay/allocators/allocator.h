@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <type_traits>
+#include <utility> // for std::forward
 
 // pulls in res, then slice and opt, and because of that also ranges and
 // ordering
