@@ -4,6 +4,14 @@
 #include "okay/allocators/allocator.h"
 
 namespace ok {
+
+struct empty_tag
+{};
+struct spots_preallocated_tag
+{};
+struct copy_items_from_range_tag
+{};
+
 template <typename T, typename backing_allocator_t = ok::allocator_t>
 class array_list_t
 {
@@ -17,15 +25,26 @@ class array_list_t
     {
         opt_t<slice_t<T>> allocated_spots;
         size_t spots_occupied;
-        backing_allocator_t& backing_allocator;
+        backing_allocator_t* backing_allocator;
     };
 
     constexpr array_list_t(M members) OKAYLIB_NOEXCEPT : m(members) {}
 
+    // for use in factory functions but not public API. this effectively creates
+    // an uninitialized array list object (at least, invariants are not upheld)
+    array_list_t() = default;
+
     constexpr void destroy() OKAYLIB_NOEXCEPT
     {
         if (m.allocated_spots) {
-            m.backing_allocator.deallocate(
+            if (!std::is_trivially_destructible_v<T>) {
+                T* mem = m.allocated_spots.value().data();
+                for (size_t i = 0; i < m.spots_occupied; ++i) {
+                    mem[i].~T();
+                }
+            }
+
+            m.backing_allocator->deallocate(
                 reinterpret_as_bytes(m.allocated_spots.value()));
         }
     }
@@ -36,11 +55,12 @@ class array_list_t
     static_assert(!std::is_void_v<T>, "cannot create an array list of void.");
     static_assert(
         std::is_trivially_copyable_v<T> || std::is_move_constructible_v<T> ||
-            std::is_constructible_v<T, T&&>,
+            is_std_constructible_v<T, T&&>,
         "Type given to array_list_t must be either trivially copyable or move "
         "constructible, otherwise it cannot move the items when reallocating.");
 
     using value_type = T;
+    using out_error_type = status_t<alloc::error>;
 
     const T* data() const& OKAYLIB_NOEXCEPT
     {
@@ -70,11 +90,10 @@ class array_list_t
     }
 
     // no default constructor or copy, but can move
-    array_list_t() = delete;
     array_list_t(const array_list_t&) = delete;
     array_list_t& operator=(const array_list_t&) = delete;
 
-    constexpr array_list_t(array_list_t&& other) : m(other.m)
+    constexpr array_list_t(array_list_t&& other) : m(std::move(other.m))
     {
         other.m.allocated_spots = nullopt;
     }
@@ -82,27 +101,64 @@ class array_list_t
     constexpr array_list_t& operator=(array_list_t&& other)
     {
         this->destroy();
-        this->m = other.m;
+        this->m = std::move(other.m);
         other.m.allocated_spots = nullopt;
+        return *this;
+    }
+
+    constexpr array_list_t(empty_tag,
+                           backing_allocator_t& allocator) OKAYLIB_NOEXCEPT
+        : m(M{
+              .allocated_spots = nullopt,
+              .spots_occupied = 0,
+              .backing_allocator = ok::addressof(allocator),
+          })
+    {
+    }
+
+    constexpr array_list_t(spots_preallocated_tag, out_error_type& out_error,
+                           backing_allocator_t& allocator,
+                           size_t num_spots_preallocated) OKAYLIB_NOEXCEPT
+    {
+        auto res = allocator.allocate(alloc::request_t{
+            .num_bytes = sizeof(T) * num_spots_preallocated,
+            .alignment = alignof(T),
+            .flags = alloc::flags::leave_nonzeroed,
+        });
+
+        if (!res.okay()) [[unlikely]] {
+            out_error = res.err();
+            return;
+        }
+
+        maybe_defined_memory_t& maybe_defined = res.release_ref();
+        auto& start = *reinterpret_cast<T*>(maybe_defined.data_maybe_defined());
+        const size_t num_bytes_allocated = maybe_defined.size();
+
+        out_error = alloc::error::okay;
+        m = {
+            .allocated_spots =
+                ok::raw_slice(start, num_bytes_allocated / sizeof(T)),
+            .spots_occupied = 0,
+            .backing_allocator = ok::addressof(allocator),
+        };
     }
 
     template <typename input_range_t>
-    [[nodiscard]] static constexpr alloc::result_t<array_list_t>
-    try_make_by_copying(backing_allocator_t& allocator,
-                        const input_range_t& range) OKAYLIB_NOEXCEPT
+    constexpr array_list_t(copy_items_from_range_tag, out_error_type& out_error,
+                           backing_allocator_t& allocator,
+                           const input_range_t& range) OKAYLIB_NOEXCEPT
     {
+        static_assert(ok::is_range_v<input_range_t>,
+                      "Argument given to try_make_from_range is not a range.");
+        static_assert(ok::detail::range_definition_has_size_v<input_range_t>,
+                      "Size of range unknown, refusing to copy out its items.");
         static_assert(
-            ok::is_range_v<input_range_t>,
-            "Second argument given to try_make_from_range is not a range.");
-        static_assert(
-            ok::detail::range_definition_has_size_v<input_range_t>,
-            "Size of range unknown, not valid for try_make_by_copying.");
-        static_assert(
-            std::is_constructible_v<T, const typename ok::range_def_for<
-                                           input_range_t>::value_type&>,
+            is_std_constructible_v<T, const typename ok::range_def_for<
+                                          input_range_t>::value_type&>,
             "Attempt to use try_make_by_copying but the type held by the "
-            "array_list_t is not constructible from the type outputted by the "
-            "range.");
+            "array_list_t is not constructible from the type outputted by "
+            "the range.");
 
         // TODO: make this a warning
         __ok_assert(
@@ -120,7 +176,8 @@ class array_list_t
             });
 
         if (!res.okay()) [[unlikely]] {
-            return res.err();
+            out_error = res.err();
+            return;
         }
 
         auto& maybe_undefined = res.release_ref();
@@ -139,128 +196,36 @@ class array_list_t
             ++i;
         }
 
-        return array_list_t(M{
+        out_error = alloc::error::okay;
+        m = {
             .allocated_spots = raw_slice(*reinterpret_cast<T*>(memory),
                                          bytes_allocated / sizeof(T)),
             .spots_occupied = num_items,
-            .backing_allocator = allocator,
-        });
+            .backing_allocator = ok::addressof(allocator),
+        };
     }
 
-    /// Append a new item and construct it with the given args. Return the
-    /// status of the allocation.
+    /// Append a new item and return either a status_t representing whether the
+    /// allocation succeeded or T's error type.
     template <typename... args_t>
-    [[nodiscard]] constexpr status_t<alloc::error>
+    [[nodiscard]] constexpr out_error_type
     append(args_t&&... args) OKAYLIB_NOEXCEPT
     {
-        static_assert(std::is_nothrow_constructible_v<T, args_t...>,
-                      "Constructor invoked by array_list_t::append may throw.");
+        static_assert(is_std_constructible_v<T, args_t...>,
+                      "No matching constructor found for internal type.");
 
         // if else handles initial allocation and then future reallocation
         if (!m.allocated_spots) {
-            alloc::result_t<maybe_defined_memory_t> res =
-                m.backing_allocator.allocate(alloc::request_t{
-                    .num_bytes = sizeof(T) * 4,
-                    .alignment = alignof(T),
-                    .flags = alloc::flags::leave_nonzeroed,
-                });
-
-            if (!res.okay()) [[unlikely]] {
-                return res.err();
-            }
-
-            auto& maybe_defined = res.release_ref();
-            uint8_t* memory = maybe_defined.data_maybe_defined();
-            const size_t bytes_allocated = maybe_defined.size();
-
-            const size_t spots_allocated = bytes_allocated / sizeof(T);
-
-            m.allocated_spots = raw_slice(*memory, spots_allocated);
+            first_allocation();
         } else if (slice_t<T>& spots = m.allocated_spots.value();
                    spots.size() <= m.spots_occupied) {
-            // realloc case
-            using namespace alloc;
-            const auto realloc_flags =
-                flags::leave_nonzeroed | flags::expand_back;
-
-            if constexpr (!std::is_trivially_copyable_v<T>) {
-                // if we're not trivially copyable, dont let the allocator do
-                // the memcpying, we will do it ourselves after
-
-                result_t<potentially_in_place_reallocation_t> res =
-                    reallocate_in_place_orelse_keep_old_nocopy(
-                        m.backing_allocator,
-                        reallocate_extended_request_t{
-                            .required_bytes_back = sizeof(T),
-                            // 2x grow rate
-                            .preferred_bytes_back = sizeof(T) * spots.size(),
-                            .memory = reinterpret_as_bytes(spots),
-                            .flags =
-                                realloc_flags | flags::in_place_orelse_fail,
-                        });
-
-                if (!res.okay()) [[unlikely]] {
-                    return res.err();
-                }
-
-                auto& reallocation = res.release_ref();
-                if (reallocation.was_in_place) {
-                    // sanity checks
-                    __ok_assert(
-                        spots.data() ==
-                            reinterpret_cast<T*>(reallocation.memory.data()),
-                        "Reallocation was supposedly in-place, but returned a "
-                        "different pointer.");
-                    __ok_assert(
-                        reallocation.bytes_offset_front == 0,
-                        "No front reallocation was done in array_list_t but "
-                        "some byte offset was given by allocator.");
-
-                    spots = raw_slice(
-                        *reinterpret_cast<T*>(reallocation.memory.data()),
-                        reallocation.memory.size() / sizeof(T));
-                } else {
-                    // perform copy
-                    const T* const src = spots.data();
-                    T* const dest =
-                        reinterpret_cast<T*>(reallocation.memory.data());
-
-                    for (size_t i = 0; i < m.spots_occupied; ++i) {
-                        new (dest + i) T(std::move(src[i]));
-                    }
-
-                    // free old allocation
-                    m.backing_allocator.deallocate(reinterpret_as_bytes(spots));
-
-                    spots = raw_slice(*dest,
-                                      reallocation.memory.size() / sizeof(T));
-                }
-            } else {
-                result_t<maybe_defined_memory_t> res =
-                    m.backing_allocator.reallocate(reallocate_request_t{
-                        .new_size_bytes = (spots.size() + 1) * sizeof(T),
-                        .preferred_size_bytes = (spots.size() * 2) * sizeof(T),
-                        .flags = realloc_flags,
-                    });
-
-                if (!res.okay()) [[unlikely]] {
-                    return res.err();
-                }
-
-                auto& maybe_defined = res.release_ref();
-                T* mem =
-                    reinterpret_cast<T*>(maybe_defined.data_maybe_defined());
-                const size_t bytes_allocated = maybe_defined.size();
-
-                m.allocated_spots =
-                    raw_slice(*mem, bytes_allocated / sizeof(T));
-            }
+            reallocate(spots);
         }
 
         auto& spots = m.allocated_spots.value();
 
         // this fires if the allocator given to this array_list is misbehaving
-        if (!spots.size() > m.spots_occupied) [[unlikely]] {
+        if (spots.size() <= m.spots_occupied) [[unlikely]] {
             __ok_assert(
                 false, "Allocator did not give back expected amount of memory");
             return alloc::error::oom;
@@ -275,6 +240,108 @@ class array_list_t
     inline ~array_list_t() { destroy(); }
 
   private:
+    constexpr status_t<alloc::error> first_allocation()
+    {
+        alloc::result_t<maybe_defined_memory_t> res =
+            m.backing_allocator->allocate(alloc::request_t{
+                .num_bytes = sizeof(T) * 4,
+                .alignment = alignof(T),
+                .flags = alloc::flags::leave_nonzeroed,
+            });
+
+        if (!res.okay()) [[unlikely]] {
+            return res.err();
+        }
+
+        auto& maybe_defined = res.release_ref();
+        uint8_t* memory = maybe_defined.data_maybe_defined();
+        const size_t bytes_allocated = maybe_defined.size();
+
+        const size_t spots_allocated = bytes_allocated / sizeof(T);
+
+        m.allocated_spots =
+            raw_slice(*reinterpret_cast<T*>(memory), spots_allocated);
+        return alloc::error::okay;
+    }
+
+    constexpr status_t<alloc::error> reallocate(slice_t<T>& spots)
+    {
+        using namespace alloc;
+        const auto realloc_flags = flags::leave_nonzeroed | flags::expand_back;
+
+        if constexpr (!std::is_trivially_copyable_v<T>) {
+            // if we're not trivially copyable, dont let the allocator do
+            // the memcpying, we will do it ourselves after
+
+            result_t<potentially_in_place_reallocation_t> res =
+                reallocate_in_place_orelse_keep_old_nocopy(
+                    *m.backing_allocator,
+                    reallocate_extended_request_t{
+                        .required_bytes_back = sizeof(T),
+                        // 2x grow rate
+                        .preferred_bytes_back = sizeof(T) * spots.size(),
+                        .memory = reinterpret_as_bytes(spots),
+                        .flags = realloc_flags | flags::in_place_orelse_fail,
+                    });
+
+            if (!res.okay()) [[unlikely]] {
+                return res.err();
+            }
+
+            auto& reallocation = res.release_ref();
+            if (reallocation.was_in_place) {
+                // sanity checks
+                __ok_assert(
+                    spots.data() ==
+                        reinterpret_cast<T*>(reallocation.memory.data()),
+                    "Reallocation was supposedly in-place, but returned a "
+                    "different pointer.");
+                __ok_assert(
+                    reallocation.bytes_offset_front == 0,
+                    "No front reallocation was done in array_list_t but "
+                    "some byte offset was given by allocator.");
+
+                spots =
+                    raw_slice(*reinterpret_cast<T*>(reallocation.memory.data()),
+                              reallocation.memory.size() / sizeof(T));
+            } else {
+                // perform copy
+                const T* const src = spots.data();
+                T* const dest =
+                    reinterpret_cast<T*>(reallocation.memory.data());
+
+                for (size_t i = 0; i < m.spots_occupied; ++i) {
+                    new (dest + i) T(std::move(src[i]));
+                }
+
+                // free old allocation
+                m.backing_allocator->deallocate(reinterpret_as_bytes(spots));
+
+                spots =
+                    raw_slice(*dest, reallocation.memory.size() / sizeof(T));
+            }
+        }
+
+        result_t<maybe_defined_memory_t> res =
+            m.backing_allocator->reallocate(reallocate_request_t{
+                .memory = reinterpret_as_bytes(spots),
+                .new_size_bytes = (spots.size() + 1) * sizeof(T),
+                .preferred_size_bytes = (spots.size() * 2) * sizeof(T),
+                .flags = realloc_flags,
+            });
+
+        if (!res.okay()) [[unlikely]] {
+            return res.err();
+        }
+
+        auto& maybe_defined = res.release_ref();
+        T* mem = reinterpret_cast<T*>(maybe_defined.data_maybe_defined());
+        const size_t bytes_allocated = maybe_defined.size();
+
+        spots = raw_slice(*mem, bytes_allocated / sizeof(T));
+        return alloc::error::okay;
+    }
+
     M m;
 };
 } // namespace ok

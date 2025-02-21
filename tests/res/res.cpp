@@ -98,13 +98,13 @@ TEST_SUITE("res")
             REQUIRE(result.okay());
             REQUIRE(result.release().whatever == 19);
             REQUIRE(!result.okay());
-            REQUIRE(result.err() == StatusCodeB::result_released);
+            REQUIRE(result.err() == StatusCodeB::no_value);
         }
 
         enum class VectorCreationStatusCode : uint8_t
         {
             okay,
-            result_released,
+            no_value,
             oom,
         };
 
@@ -141,7 +141,7 @@ TEST_SUITE("res")
             enum TestCode : uint8_t
             {
                 okay,
-                result_released,
+                no_value,
                 error
             };
 
@@ -160,7 +160,7 @@ TEST_SUITE("res")
             enum class ReferenceCreationStatusCode : uint8_t
             {
                 okay,
-                result_released,
+                no_value,
                 null_reference,
             };
 
@@ -216,7 +216,7 @@ TEST_SUITE("res")
             enum class ReferenceCreationStatusCode : uint8_t
             {
                 okay,
-                result_released,
+                no_value,
                 null_reference,
             };
 
@@ -297,7 +297,7 @@ TEST_SUITE("res")
             enum class dummy_status_code_e : uint8_t
             {
                 okay,
-                result_released,
+                no_value,
                 dummy_error,
             };
 
@@ -379,7 +379,7 @@ TEST_SUITE("res")
 
         // this would mean slice is default constructible
         static_assert(
-            !std::is_constructible_v<slice_int_result, std::in_place_t>);
+            !is_std_constructible_v<slice_int_result, std::in_place_t>);
 
         SUBCASE("slice res to opt")
         {
@@ -396,7 +396,7 @@ TEST_SUITE("res")
         enum class ExampleError : uint8_t
         {
             okay,
-            result_released,
+            no_value,
             error,
         };
         SUBCASE("try with matching return type")

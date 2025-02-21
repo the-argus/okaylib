@@ -10,7 +10,7 @@
 enum class StatusCodeA : uint8_t
 {
     okay,
-    result_released,
+    no_value,
     whatever,
     oom,
     bad_access,
@@ -19,7 +19,7 @@ enum class StatusCodeA : uint8_t
 enum class StatusCodeB : uint8_t
 {
     okay = 0,
-    result_released,
+    no_value,
     nothing = 250,
     more_nothing = 100,
 };

@@ -775,7 +775,7 @@ struct unique_rw_arc_t<T, allocator_impl_t>::make
     static constexpr auto with =
         [](status_t<alloc::error>& out_status, allocator_impl_t& allocator,
            auto&&... constructor_args) -> unique_rw_arc_t {
-        static_assert(std::is_constructible_v<T, decltype(constructor_args)...>,
+        static_assert(is_std_constructible_v<T, decltype(constructor_args)...>,
                       "Cannot make a unique_rw_arc_t with the given arguments- "
                       "there is no matching constructor for T.");
         using payload_t = detail::arc_payload_t<T, allocator_impl_t>;

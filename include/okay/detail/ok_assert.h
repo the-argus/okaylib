@@ -38,7 +38,7 @@
                       "okaylib v" __ok_version_str                            \
                       " implementor assert " #expr                            \
                       " triggered at %s:%d in function %s, file an issue at " \
-                      "github.com/the-argus/okaylib\n",                       \
+                      "https://github.com/the-argus/okaylib\n",               \
                       __FILE__, __LINE__, __FUNCTION__);                      \
             std::abort();                                                     \
         }                                                                     \

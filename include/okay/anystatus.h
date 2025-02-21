@@ -2,8 +2,7 @@
 #define __OKAYLIB_ANYSTATUS_H__
 
 #include "okay/detail/noexcept.h"
-#include "okay/res.h"
-#include "okay/status.h"
+#include "okay/detail/traits/is_status_enum.h"
 #include <cstdint>
 
 #ifdef OKAYLIB_USE_FMT
@@ -11,6 +10,13 @@
 #endif
 
 namespace ok {
+
+enum class nondescriptive_error : uint8_t
+{
+    okay = 0,
+    no_value = 1,
+};
+
 struct anystatus_t
 {
   private:
@@ -22,41 +28,50 @@ struct anystatus_t
     }
 
   public:
-    [[nodiscard]] inline constexpr bool okay() const OKAYLIB_NOEXCEPT
+    using enum_type = nondescriptive_error;
+
+    [[nodiscard]] constexpr bool okay() const OKAYLIB_NOEXCEPT
     {
         return m_status == 0;
     }
 
-    [[nodiscard]] inline constexpr uint8_t err() const OKAYLIB_NOEXCEPT
+    /// Type is erased but we can at least give a number that could be mapped to
+    /// the possible input error values.
+    [[nodiscard]] constexpr uint8_t errcode() const OKAYLIB_NOEXCEPT
     {
         return m_status;
     }
 
-    /// Can be constructed from a result, discarding the contents of the result
-    /// and basically just storing the byte error code.
-    template <typename payload_t, typename enum_t>
-    inline constexpr anystatus_t(const res_t<payload_t, enum_t>& result)
-        OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr enum_type err() const OKAYLIB_NOEXCEPT
     {
-        m_status = uint8_t(result.err());
+        return m_status == 0 ? nondescriptive_error::okay
+                             : nondescriptive_error::no_value;
     }
 
-    /// Can be constructed from a status, removing the type information of the
-    /// status.
-    template <typename enum_t>
-    inline constexpr anystatus_t(status_t<enum_t> status) OKAYLIB_NOEXCEPT
+    /// Can be constructed from a result or status
+    template <typename T,
+              std::enable_if_t<
+                  detail::is_status_enum_v<
+                      decltype(std::declval<const T&>().err())> &&
+                      std::is_same_v<typename T::enum_type,
+                                     decltype(std::declval<const T&>().err())>,
+                  bool> = true>
+    constexpr anystatus_t(const T& result) OKAYLIB_NOEXCEPT
     {
-        m_status = uint8_t(status.err());
+        m_status = uint8_t(result.err());
     }
 
     /// Can be constructed from a raw result errcode enum, which effectively
     /// just casts the enum value to a uint8_t.
     template <typename enum_t,
               std::enable_if_t<detail::is_status_enum_v<enum_t>, bool> = true>
-    inline constexpr anystatus_t(enum_t status) OKAYLIB_NOEXCEPT
+    constexpr anystatus_t(enum_t status) OKAYLIB_NOEXCEPT
     {
         m_status = uint8_t(status);
     }
+
+    // no_value constructor
+    constexpr explicit anystatus_t() OKAYLIB_NOEXCEPT : m_status(1) {}
 
     static const anystatus_t success;
     static const anystatus_t failure;
@@ -90,7 +105,8 @@ template <> struct fmt::formatter<ok::anystatus_t>
         if (result.okay()) {
             return fmt::format_to(ctx.out(), "[anystatus_t::okay]");
         } else {
-            return fmt::format_to(ctx.out(), "[anystatus_t::{}]", result.err());
+            return fmt::format_to(ctx.out(), "[anystatus_t::{}]",
+                                  uint8_t(result.err()));
         }
     }
 };

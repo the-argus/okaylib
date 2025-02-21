@@ -79,7 +79,7 @@ class opt_t : private detail::opt_base_t<payload_t>,
     template <
         typename convert_from_t = payload_t,
         requires_t<not_self<convert_from_t> && not_tag<convert_from_t> &&
-                   std::is_constructible_v<payload_t, convert_from_t> &&
+                   is_std_constructible_v<payload_t, convert_from_t> &&
                    std::is_convertible_v<convert_from_t, payload_t>> = true>
     inline constexpr opt_t(convert_from_t&& t) OKAYLIB_NOEXCEPT
         : base_t(std::in_place, std::forward<convert_from_t>(t))
@@ -91,7 +91,7 @@ class opt_t : private detail::opt_base_t<payload_t>,
     template <
         typename convert_from_t = payload_t,
         requires_t<not_self<convert_from_t> && not_tag<convert_from_t> &&
-                   std::is_constructible_v<payload_t, convert_from_t> &&
+                   is_std_constructible_v<payload_t, convert_from_t> &&
                    !std::is_convertible_v<convert_from_t, payload_t>> = false>
     inline explicit constexpr opt_t(convert_from_t&& t) OKAYLIB_NOEXCEPT
         : base_t(std::in_place, std::forward<convert_from_t>(t))
@@ -102,7 +102,7 @@ class opt_t : private detail::opt_base_t<payload_t>,
     template <
         typename incoming_t,
         requires_t<!std::is_same_v<payload_t, incoming_t> &&
-                   std::is_constructible_v<payload_t, const incoming_t&> &&
+                   is_std_constructible_v<payload_t, const incoming_t&> &&
                    std::is_convertible_v<const incoming_t&, payload_t> &&
                    !detail::converts_from_opt<payload_t, incoming_t>> = true>
     inline constexpr opt_t(const opt_t<incoming_t>& t) OKAYLIB_NOEXCEPT
@@ -116,7 +116,7 @@ class opt_t : private detail::opt_base_t<payload_t>,
     template <
         typename incoming_t,
         requires_t<!std::is_same_v<payload_t, incoming_t> &&
-                   std::is_constructible_v<payload_t, const incoming_t&> &&
+                   is_std_constructible_v<payload_t, const incoming_t&> &&
                    !std::is_convertible_v<const incoming_t&, payload_t> &&
                    !detail::converts_from_opt<payload_t, incoming_t>> = false>
     inline explicit constexpr opt_t(const opt_t<incoming_t>& t) OKAYLIB_NOEXCEPT
@@ -129,7 +129,7 @@ class opt_t : private detail::opt_base_t<payload_t>,
     template <
         typename incoming_t,
         requires_t<!std::is_same_v<payload_t, incoming_t> &&
-                   std::is_constructible_v<payload_t, incoming_t> &&
+                   is_std_constructible_v<payload_t, incoming_t> &&
                    std::is_convertible_v<incoming_t, payload_t> &&
                    !detail::converts_from_opt<payload_t, incoming_t>> = true>
     inline constexpr opt_t(opt_t<incoming_t>&& t) OKAYLIB_NOEXCEPT
@@ -144,7 +144,7 @@ class opt_t : private detail::opt_base_t<payload_t>,
     template <
         typename incoming_t,
         requires_t<!std::is_same_v<payload_t, incoming_t> &&
-                   std::is_constructible_v<payload_t, incoming_t> &&
+                   is_std_constructible_v<payload_t, incoming_t> &&
                    !std::is_convertible_v<incoming_t, payload_t> &&
                    !detail::converts_from_opt<payload_t, incoming_t>> = false>
     inline explicit constexpr opt_t(opt_t<incoming_t>&& t) OKAYLIB_NOEXCEPT
@@ -156,7 +156,7 @@ class opt_t : private detail::opt_base_t<payload_t>,
 
     // emplacement constructor
     template <typename... args_t,
-              requires_t<std::is_constructible_v<payload_t, args_t...>> = false>
+              requires_t<is_std_constructible_v<payload_t, args_t...>> = false>
     explicit constexpr opt_t(std::in_place_t, args_t&&... args) OKAYLIB_NOEXCEPT
         : base_t(std::in_place, std::forward<args_t>(args)...)
     {
@@ -169,14 +169,13 @@ class opt_t : private detail::opt_base_t<payload_t>,
     }
 
     template <typename incoming_t>
-    // TODO: _GLIBCXX20_CONSTEXPR here?
-    std::enable_if_t<
+    constexpr std::enable_if_t<
         not_self<incoming_t> &&
             // TODO: cant have payload and decayed incoming_t be the same, only
             // if scalar though. why? copied this from STL implementation
             !(std::is_scalar_v<payload_t> &&
               std::is_same_v<payload_t, std::decay_t<incoming_t>>) &&
-            std::is_constructible_v<payload_t, incoming_t> &&
+            is_std_constructible_v<payload_t, incoming_t> &&
             std::is_assignable_v<payload_t&, incoming_t>,
         opt_t&>
     operator=(incoming_t&& incoming) OKAYLIB_NOEXCEPT
@@ -192,13 +191,12 @@ class opt_t : private detail::opt_base_t<payload_t>,
     // converting opt constructor: if the inner types of two opts can
     // be converted, allow the opts to be converted
     template <typename incoming_t>
-    std::enable_if_t<
-        !std::is_same_v<payload_t, incoming_t> &&
-            std::is_constructible_v<payload_t, const incoming_t&> &&
-            std::is_assignable_v<payload_t&, const incoming_t&> &&
-            !detail::converts_from_opt<payload_t, incoming_t> &&
-            !detail::assigns_from_opt<payload_t, incoming_t>,
-        opt_t&>
+    std::enable_if_t<!std::is_same_v<payload_t, incoming_t> &&
+                         is_std_constructible_v<payload_t, const incoming_t&> &&
+                         std::is_assignable_v<payload_t&, const incoming_t&> &&
+                         !detail::converts_from_opt<payload_t, incoming_t> &&
+                         !detail::assigns_from_opt<payload_t, incoming_t>,
+                     opt_t&>
     operator=(const opt_t<incoming_t>& incoming) OKAYLIB_NOEXCEPT
     {
         if (incoming) {
@@ -216,7 +214,7 @@ class opt_t : private detail::opt_base_t<payload_t>,
     // variant of above converting opt constructor which performs move
     template <typename incoming_t>
     std::enable_if_t<!std::is_same_v<payload_t, incoming_t> &&
-                         std::is_constructible_v<payload_t, incoming_t> &&
+                         is_std_constructible_v<payload_t, incoming_t> &&
                          std::is_assignable_v<payload_t&, incoming_t> &&
                          !detail::converts_from_opt<payload_t, incoming_t> &&
                          !detail::assigns_from_opt<payload_t, incoming_t>,
@@ -237,7 +235,7 @@ class opt_t : private detail::opt_base_t<payload_t>,
 
     template <typename... args_t>
     // TODO: _GLIBCXX20_CONSTEXPR? is enable_if here better than static-assert?
-    std::enable_if_t<std::is_constructible_v<payload_t, args_t...>, payload_t&>
+    std::enable_if_t<is_std_constructible_v<payload_t, args_t...>, payload_t&>
     emplace(args_t&&... args) OKAYLIB_NOEXCEPT
     {
         this->_reset();
@@ -498,6 +496,7 @@ class opt_t<
     operator=(const wrapped_slice_t& ref) OKAYLIB_NOEXCEPT
     {
         emplace(ref);
+        return *this;
     }
 
     inline constexpr opt_t& operator=(nullopt_t) OKAYLIB_NOEXCEPT
@@ -528,7 +527,7 @@ class opt_t<
     template <
         typename convert_from_t = wrapped_slice_t,
         requires_t<not_self<convert_from_t> && not_tag<convert_from_t> &&
-                   std::is_constructible_v<wrapped_slice_t, convert_from_t> &&
+                   is_std_constructible_v<wrapped_slice_t, convert_from_t> &&
                    std::is_convertible_v<convert_from_t, wrapped_slice_t>> =
             true>
     inline constexpr opt_t(convert_from_t&& t) OKAYLIB_NOEXCEPT
@@ -543,7 +542,7 @@ class opt_t<
     template <
         typename convert_from_t = wrapped_slice_t,
         requires_t<not_self<convert_from_t> && not_tag<convert_from_t> &&
-                   std::is_constructible_v<wrapped_slice_t, convert_from_t> &&
+                   is_std_constructible_v<wrapped_slice_t, convert_from_t> &&
                    !std::is_convertible_v<convert_from_t, wrapped_slice_t>> =
             false>
     inline explicit constexpr opt_t(convert_from_t&& t) OKAYLIB_NOEXCEPT
@@ -555,11 +554,11 @@ class opt_t<
     // converting constructor which takes optional of another convertible type
     template <
         typename incoming_t,
-        requires_t<
-            !std::is_same_v<wrapped_slice_t, incoming_t> &&
-            std::is_constructible_v<wrapped_slice_t, const incoming_t&> &&
-            std::is_convertible_v<const incoming_t&, wrapped_slice_t> &&
-            !detail::converts_from_opt<wrapped_slice_t, incoming_t>> = true>
+        requires_t<!std::is_same_v<wrapped_slice_t, incoming_t> &&
+                   is_std_constructible_v<wrapped_slice_t, const incoming_t&> &&
+                   std::is_convertible_v<const incoming_t&, wrapped_slice_t> &&
+                   !detail::converts_from_opt<wrapped_slice_t, incoming_t>> =
+            true>
     inline constexpr opt_t(const opt_t<incoming_t>& t) OKAYLIB_NOEXCEPT
     {
         if (t)
@@ -570,11 +569,11 @@ class opt_t<
     // should be explicit
     template <
         typename incoming_t,
-        requires_t<
-            !std::is_same_v<wrapped_slice_t, incoming_t> &&
-            std::is_constructible_v<wrapped_slice_t, const incoming_t&> &&
-            !std::is_convertible_v<const incoming_t&, wrapped_slice_t> &&
-            !detail::converts_from_opt<wrapped_slice_t, incoming_t>> = false>
+        requires_t<!std::is_same_v<wrapped_slice_t, incoming_t> &&
+                   is_std_constructible_v<wrapped_slice_t, const incoming_t&> &&
+                   !std::is_convertible_v<const incoming_t&, wrapped_slice_t> &&
+                   !detail::converts_from_opt<wrapped_slice_t, incoming_t>> =
+            false>
     inline explicit constexpr opt_t(const opt_t<incoming_t>& t) OKAYLIB_NOEXCEPT
     {
         if (t)

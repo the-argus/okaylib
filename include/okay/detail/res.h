@@ -5,6 +5,7 @@
 #include "okay/detail/noexcept.h"
 #include "okay/detail/template_util/uninitialized_storage.h"
 #include "okay/detail/traits/is_instance.h"
+#include "okay/detail/traits/special_member_traits.h"
 #include <cassert>
 #include <type_traits>
 #include <utility>
@@ -299,7 +300,7 @@ struct res_base_t : res_base_common_t<input_contained_t, enum_int_t,
 
     template <
         typename... args_t,
-        std::enable_if_t<std::is_constructible_v<input_contained_t, args_t...>,
+        std::enable_if_t<is_std_constructible_v<input_contained_t, args_t...>,
                          bool> = false>
     inline constexpr explicit res_base_t(std::in_place_t, args_t&&... args)
         : payload(std::in_place, std::forward<args_t>(args)...)
@@ -331,7 +332,7 @@ struct res_base_t<input_contained_t, enum_int_t, false, true, false>
 
     template <
         typename... args_t,
-        std::enable_if_t<std::is_constructible_v<input_contained_t, args_t...>,
+        std::enable_if_t<is_std_constructible_v<input_contained_t, args_t...>,
                          bool> = false>
     inline constexpr explicit res_base_t(std::in_place_t, args_t&&... args)
         : payload(std::in_place, std::forward<args_t>(args)...)
@@ -361,7 +362,7 @@ struct res_base_t<input_contained_t, enum_int_t, true, false, false>
 
     template <
         typename... args_t,
-        std::enable_if_t<std::is_constructible_v<input_contained_t, args_t...>,
+        std::enable_if_t<is_std_constructible_v<input_contained_t, args_t...>,
                          bool> = false>
     inline constexpr explicit res_base_t(std::in_place_t, args_t&&... args)
         : payload(std::in_place, std::forward<args_t>(args)...)
@@ -391,7 +392,7 @@ struct res_base_t<input_contained_t, enum_int_t, true, true, false>
 
     template <
         typename... args_t,
-        std::enable_if_t<std::is_constructible_v<input_contained_t, args_t...>,
+        std::enable_if_t<is_std_constructible_v<input_contained_t, args_t...>,
                          bool> = false>
     inline constexpr explicit res_base_t(std::in_place_t,
                                          args_t&&... args) OKAYLIB_NOEXCEPT
@@ -410,7 +411,7 @@ struct res_base_t<input_contained_t, enum_int_t, true, true, false>
 };
 
 // overload for when contained type is a reference type
-// does not mark as result_released when moved, because guaranteed trivially
+// does not mark as no_value when moved, because guaranteed trivially
 // movable, same as opt
 template <typename input_contained_t, typename enum_int_t, bool move, bool copy>
 struct res_base_t<input_contained_t, enum_int_t, copy, move, true>
@@ -483,12 +484,12 @@ template <typename T> inline constexpr bool is_result = is_instance<T, res_t>();
 
 template <typename target_t, typename res_contained_t, typename res_enum_t>
 inline constexpr bool converts_from_res =
-    std::is_constructible_v<target_t,
-                            const res_t<res_contained_t, res_enum_t>&> ||
-    std::is_constructible_v<target_t, res_t<res_contained_t, res_enum_t>&> ||
-    std::is_constructible_v<target_t,
-                            const res_t<res_contained_t, res_enum_t>&&> ||
-    std::is_constructible_v<target_t, res_t<res_contained_t, res_enum_t>&&> ||
+    is_std_constructible_v<target_t,
+                           const res_t<res_contained_t, res_enum_t>&> ||
+    is_std_constructible_v<target_t, res_t<res_contained_t, res_enum_t>&> ||
+    is_std_constructible_v<target_t,
+                           const res_t<res_contained_t, res_enum_t>&&> ||
+    is_std_constructible_v<target_t, res_t<res_contained_t, res_enum_t>&&> ||
     std::is_convertible_v<const res_t<res_contained_t, res_enum_t>&,
                           target_t> ||
     std::is_convertible_v<res_t<res_contained_t, res_enum_t>&, target_t> ||

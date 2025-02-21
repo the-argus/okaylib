@@ -10,13 +10,13 @@ using namespace ok;
 enum class GenericError : uint8_t
 {
     okay,
-    result_released,
+    no_value,
     evil,
 };
 enum class OtherError : uint8_t
 {
     okay,
-    result_released,
+    no_value,
     oom,
     not_allowed,
 };

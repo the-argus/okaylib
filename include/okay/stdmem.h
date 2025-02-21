@@ -11,7 +11,7 @@ namespace ok {
 enum class mem_error : uint8_t
 {
     okay,
-    result_released,
+    no_value,
     unsupported,
     usage,
 };

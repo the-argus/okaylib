@@ -23,19 +23,22 @@ template <typename enum_t> struct status_t
     enum_t m_status;
 
   public:
-    [[nodiscard]] inline constexpr bool okay() const OKAYLIB_NOEXCEPT
+    using enum_type = enum_t;
+
+    [[nodiscard]] constexpr bool okay() const OKAYLIB_NOEXCEPT
     {
         return m_status == enum_t::okay;
     }
-    [[nodiscard]] inline constexpr enum_t err() const OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr enum_t err() const OKAYLIB_NOEXCEPT
     {
         return m_status;
     }
-    inline constexpr status_t(enum_t failure) OKAYLIB_NOEXCEPT
+    constexpr status_t(enum_t failure) OKAYLIB_NOEXCEPT { m_status = failure; }
+
+    constexpr explicit status_t() OKAYLIB_NOEXCEPT
     {
-        m_status = failure;
+        m_status = enum_t::no_value;
     }
-    status_t() = delete;
 
 #ifdef OKAYLIB_USE_FMT
     friend struct fmt::formatter<status_t>;

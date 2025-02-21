@@ -24,7 +24,13 @@ using res_enable_copy_move_for_type_t = detail::enable_copy_move<
     std::is_move_constructible_v<T>,
     std::is_move_constructible_v<T> && std::is_move_assignable_v<T>,
     res_t<T, E>>; // unique tag
-}
+
+template <typename T, typename E>
+void make_res_into_error_without_destruction(res_t<T, E>& res, E error);
+
+} // namespace detail
+
+template <typename T, typename E> struct res_internals_modifier_t;
 
 template <typename contained_t, typename enum_t>
 class res_t<contained_t, enum_t,
@@ -60,7 +66,8 @@ class res_t<contained_t, enum_t,
         "Result cannot store an the same enum as payload as for statuscode.");
     static_assert(detail::is_status_enum_v<enum_t>,
                   OKAYLIB_IS_STATUS_ENUM_ERRMSG);
-    static_assert(!std::is_constructible_v<contained_t, const enum_t&>,
+    static_assert(!is_infallible_constructible_v<
+                      contained_t, default_constructor_tag, const enum_t&>,
                   "Cannot store type in res if it is constructible from its "
                   "own status code- this makes what assigning the statuscode "
                   "to the res will do ambiguous.");
@@ -98,7 +105,7 @@ class res_t<contained_t, enum_t,
             __ok_abort("Attempt to release actual value from error result");
         }
 
-        this->get_error_payload() = enum_int_t(enum_t::result_released);
+        this->get_error_payload() = enum_int_t(enum_t::no_value);
         if constexpr (is_reference) {
             return *this->pointer;
         } else {
@@ -116,15 +123,33 @@ class res_t<contained_t, enum_t,
         if (!okay()) [[unlikely]] {
             __ok_abort("Attempt to release_ref actual value from error result");
         }
-        this->get_error_payload() = enum_int_t(enum_t::result_released);
+        this->get_error_payload() = enum_int_t(enum_t::no_value);
         return this->get_value_unchecked_payload();
     }
 
-    constexpr res_t() = delete;
-    constexpr res_t(res_t&& other) = delete;
-    constexpr res_t(const res_t& other) = delete;
-    constexpr res_t& operator=(res_t&& other) = default;
-    constexpr res_t& operator=(const res_t& other) = default;
+    res_t(const res_t& other) = delete;
+    res_t& operator=(const res_t& other) = default;
+    res_t& operator=(res_t&& other) = delete;
+
+    // move construction is possible but not move assignment
+    template <typename T = res_t,
+              std::enable_if_t<std::is_same_v<T, res_t> &&
+                                   (detail::is_moveable_v<contained_t> ||
+                                    is_reference),
+                               bool> = true>
+    constexpr res_t(T&& other) OKAYLIB_NOEXCEPT
+    {
+        if (other.okay()) {
+            if constexpr (is_reference) {
+                this->construct_no_destroy_payload(
+                    other.get_value_unchecked_payload());
+            } else {
+                this->construct_no_destroy_payload(
+                    std::move(other.get_value_unchecked_payload()));
+            }
+        }
+        this->get_error_payload() = std::exchange(other.get_error_payload(), 1);
+    };
 
     template <typename T = contained_t>
     constexpr res_t(
@@ -136,19 +161,23 @@ class res_t<contained_t, enum_t,
     }
 
     template <
+        typename constructor_tag_t = ok::default_constructor_tag,
         typename... args_t,
         std::enable_if_t<!is_reference && sizeof...(args_t) != 0 &&
-                             std::is_constructible_v<contained_t, args_t...>,
+                             is_infallible_constructible_v<
+                                 contained_t, constructor_tag_t, args_t...>,
                          bool> = true>
     constexpr res_t(args_t&&... args) OKAYLIB_NOEXCEPT
     {
-#ifndef OKAYLIB_TESTING
-        static_assert(std::is_nothrow_constructible_v<contained_t, args_t...>,
-                      "Attempt to construct in place but constructor invoked "
-                      "can throw exceptions.");
-#endif
         this->get_error_payload() = 0;
-        this->construct_no_destroy_payload(std::forward<args_t>(args)...);
+        if constexpr (is_std_constructible_v<contained_t, args_t...>) {
+            this->construct_no_destroy_payload(std::forward<args_t>(args)...);
+        } else {
+            static_assert(is_std_constructible_v<contained_t, constructor_tag_t,
+                                                 args_t...>);
+            this->construct_no_destroy_payload(constructor_tag_t{},
+                                               std::forward<args_t>(args)...);
+        }
     }
 
     // reference from-reference constructor
@@ -171,6 +200,15 @@ class res_t<contained_t, enum_t,
 
         this->get_error_payload() = enum_int_t(failure);
     }
+
+    constexpr explicit res_t() OKAYLIB_NOEXCEPT
+    {
+        this->get_error_payload() = enum_int_t(enum_t::no_value);
+    }
+
+    friend void
+    ok::detail::make_res_into_error_without_destruction(res_t& res,
+                                                        enum_t error);
 
 #ifdef OKAYLIB_USE_FMT
     friend struct fmt::formatter<res_t>;
@@ -200,10 +238,11 @@ class res_t<contained_t, enum_t,
     using type = contained_t;
     using enum_type = enum_t;
 
-    static_assert(!std::is_constructible_v<contained_t, const enum_t&>,
+    static_assert(!is_infallible_constructible_v<
+                      contained_t, default_constructor_tag, const enum_t&>,
                   "Cannot store type in res if it is constructible from its "
-                  "own status code- this makes what assigning the statuscode "
-                  "to the res will do ambiguous.");
+                  "own status code- this makes assigning the statuscode "
+                  "to the res ambiguous.");
     static_assert(
         std::is_enum_v<enum_t>,
         "The second type parameter to res_t must be a statuscode enum.");
@@ -216,7 +255,6 @@ class res_t<contained_t, enum_t,
     static_assert(detail::is_status_enum_v<enum_t>,
                   OKAYLIB_IS_STATUS_ENUM_ERRMSG);
 
-    constexpr res_t() = delete;
     constexpr res_t(res_t&& other) = delete;
     constexpr res_t(const res_t& other) = delete;
     constexpr res_t& operator=(res_t&& other) = delete;
@@ -225,15 +263,16 @@ class res_t<contained_t, enum_t,
     // NOTE: not defining std::in_place constructor here because slice cannot
     // default construct. If it could, then this would enable default
     // construction of the res
-    template <typename... args_t,
-              std::enable_if_t<std::is_constructible_v<contained_t, args_t...>,
+    template <typename constructor_tag_t = ok::default_constructor_tag,
+              typename... args_t,
+              std::enable_if_t<is_infallible_constructible_v<
+                                   contained_t, constructor_tag_t, args_t...>,
                                bool> = true>
     constexpr res_t(args_t&&... args) OKAYLIB_NOEXCEPT
     {
-        static_assert(std::is_constructible_v<contained_t, args_t...>,
-                      "No matching constructor for res_t<slice_t<...>, ...>");
-        new (reinterpret_cast<unqualified_t*>(this))
-            unqualified_t(std::forward<args_t>(args)...);
+        detail::construct_into_uninitialized_infallible(
+            reinterpret_cast<unqualified_t*>(this), constructor_tag_t{},
+            std::forward<args_t>(args)...);
     }
 
     constexpr res_t(enum_t failure) OKAYLIB_NOEXCEPT
@@ -244,6 +283,12 @@ class res_t<contained_t, enum_t,
 
         m_data = nullptr;
         m_elements = enum_int_t(failure);
+    }
+
+    constexpr explicit res_t() OKAYLIB_NOEXCEPT
+        : m_data(nullptr),
+          m_elements(enum_int_t(enum_t::no_value))
+    {
     }
 
     [[nodiscard]] constexpr bool okay() const OKAYLIB_NOEXCEPT
@@ -276,7 +321,7 @@ class res_t<contained_t, enum_t,
         }
 
         unqualified_t out = *reinterpret_cast<unqualified_t*>(this);
-        m_elements = enum_int_t(enum_t::result_released);
+        m_elements = enum_int_t(enum_t::no_value);
         m_data = nullptr;
         return out;
     }
@@ -288,7 +333,7 @@ class res_t<contained_t, enum_t,
         }
 
         // NOTE: release_ref for slice_t is special: because the error is stored
-        // in the type itself, we do not mark it result_released because that
+        // in the type itself, we do not mark it no_value because that
         // would mean overwriting the data. so you can call release_ref on a
         // res<slice_t<>> as many times as you want.
         return *reinterpret_cast<unqualified_t*>(this);

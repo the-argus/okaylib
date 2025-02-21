@@ -136,7 +136,11 @@ printed: Hello, world! in slice [0x23c15380 -> 100]
 - [x] modify context with `context_switch` type, which always restores changes when
       it is destroyed. it cannot be moved.
 - [x] polymorphic allocator interface
-- [ ] implementations for arena, block, slab, page, and remapping page allocators
+- [x] arena allocator
+- [ ] block allocator
+- [ ] slab allocator
+- [ ] page allocator
+- [ ] remapping page allocator
 - [ ] wrapper / import of jemalloc for the allocator interface.
 - [x] "result" type: optional with enum error value. like `std::expected`, kind of
 - [x] "opt" type: optional but supports reference types with rebinding assignment
@@ -158,9 +162,9 @@ printed: Hello, world! in slice [0x23c15380 -> 100]
       when the viewed type is array-like.
 - [ ] More views (which will require allocation + error handling): sliding window,
       chunking view, split view.
-- [ ] "hresult" type: like result but instead of storing its error value, it points
-      to a more complex (optionally polymorphic) error type. stands for "heavy
-      result"
+- [ ] Add user-defined error values to the result. Also add some kind of anyhow
+      error type result, and some initialization at program startup to pre-reserve
+      space for errors.
 - [ ] "cresult" type, exactly like optional internally but with a different interface.
       On construction, it stores an info string in the thread context. Has a getter
       which returns a reference to the string in the context. Stands for "context
@@ -200,8 +204,6 @@ printed: Hello, world! in slice [0x23c15380 -> 100]
 - [ ] threadpool compatibility for some views which are embarassingly parellel,
       like `count*` or `max_element`. Specific threadsafe container iterator type?
       iterables are all extremely templated, so this will be interesting.
-- [ ] reimplementation of `<thread>` and `<atomic>` ? avoid exceptions where
-      possible, and avoid implicit atomic load/stores
 - [ ] standard coroutine types: task, generator
 - [ ] coroutines which can use thread's context allocator
 - [ ] coroutine-running threadpool with work queues and task stealing, for
@@ -225,6 +227,9 @@ printed: Hello, world! in slice [0x23c15380 -> 100]
 - [ ] Remove dependency on `<memory>` header from `okay/detail/addressof.h`
 - [ ] Add option to disable undefined behavior checks which are normally on in
       both release and debug mode (such as array bounds checks on iterators)
+- [ ] Offer alternative version of (or redo) `*_arc_t` types so that weak pointers
+      also keep the object alive. Maybe change the name of "weak" arc to
+      something like "frozen" arc.
 - [ ] Create "minimum viable" ranges for forward, multipass, bidirectional,
       random access, and contiguous ranges, to test conformance of all the views
 - [ ] Add tests for all the views with a finite + random access range
@@ -232,6 +237,6 @@ printed: Hello, world! in slice [0x23c15380 -> 100]
       have test coverage
 - [ ] Add better static asserts for when you use an invalid range with a pipe operator-
       right now errors come from inside the range adaptor closure
-- [ ] Add some concept of being infinite *and* arraylike. Currently infinite ranges
+- [ ] Add some concept of being infinite _and_ arraylike. Currently infinite ranges
       like `ok::indices` are not arraylike, which makes `enumerate(array)` more
       space efficient than `zip(array, indices)`.

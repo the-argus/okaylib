@@ -2,8 +2,9 @@
 #define __OKAYLIB_DETAIL_OPT_H__
 
 #include "okay/detail/addressof.h"
-#include "okay/detail/template_util/uninitialized_storage.h"
 #include "okay/detail/noexcept.h"
+#include "okay/detail/template_util/uninitialized_storage.h"
+#include "okay/detail/traits/special_member_traits.h"
 #include <cassert>
 #include <type_traits>
 #include <utility>
@@ -280,8 +281,7 @@ struct opt_base_t
 
     template <
         typename... args_t,
-        // TODO: enable_if better than static_assert here? is sfinae used later
-        std::enable_if_t<std::is_constructible_v<input_contained_t, args_t...>,
+        std::enable_if_t<is_std_constructible_v<input_contained_t, args_t...>,
                          bool> = false>
     inline constexpr explicit opt_base_t(std::in_place_t, args_t&&... args)
         : payload(std::in_place, std::forward<args_t>(args)...)
@@ -312,8 +312,7 @@ struct opt_base_t<input_contained_t, false, true>
 
     template <
         typename... args_t,
-        // TODO: enable_if better than static_assert here? is sfinae used later
-        std::enable_if_t<std::is_constructible_v<input_contained_t, args_t...>,
+        std::enable_if_t<is_std_constructible_v<input_contained_t, args_t...>,
                          bool> = false>
     inline constexpr explicit opt_base_t(std::in_place_t, args_t&&... args)
         : payload(std::in_place, std::forward<args_t>(args)...)
@@ -342,8 +341,7 @@ struct opt_base_t<input_contained_t, true, false>
 
     template <
         typename... args_t,
-        // TODO: enable_if better than static_assert here? is sfinae used later
-        std::enable_if_t<std::is_constructible_v<input_contained_t, args_t...>,
+        std::enable_if_t<is_std_constructible_v<input_contained_t, args_t...>,
                          bool> = false>
     inline constexpr explicit opt_base_t(std::in_place_t, args_t&&... args)
         : payload(std::in_place, std::forward<args_t>(args)...)
@@ -372,8 +370,7 @@ struct opt_base_t<input_contained_t, true, true>
 
     template <
         typename... args_t,
-        // TODO: enable_if better than static_assert here? is sfinae used later
-        std::enable_if_t<std::is_constructible_v<input_contained_t, args_t...>,
+        std::enable_if_t<is_std_constructible_v<input_contained_t, args_t...>,
                          bool> = false>
     inline constexpr explicit opt_base_t(std::in_place_t, args_t&&... args)
         : payload(std::in_place, std::forward<args_t>(args)...)
@@ -404,10 +401,10 @@ template <typename T> inline constexpr bool is_optional<opt_t<T>> = true;
 template <typename target_t, typename opt_payload_t>
 inline constexpr bool converts_from_opt =
     // check if can construct target from optional
-    std::is_constructible_v<target_t, const opt_t<opt_payload_t>&> ||
-    std::is_constructible_v<target_t, opt_t<opt_payload_t>&> ||
-    std::is_constructible_v<target_t, const opt_t<opt_payload_t>&&> ||
-    std::is_constructible_v<target_t, opt_t<opt_payload_t>&&> ||
+    is_std_constructible_v<target_t, const opt_t<opt_payload_t>&> ||
+    is_std_constructible_v<target_t, opt_t<opt_payload_t>&> ||
+    is_std_constructible_v<target_t, const opt_t<opt_payload_t>&&> ||
+    is_std_constructible_v<target_t, opt_t<opt_payload_t>&&> ||
     // check if can convert optional to target
     std::is_convertible_v<const opt_t<opt_payload_t>&, target_t> ||
     std::is_convertible_v<opt_t<opt_payload_t>&, target_t> ||
