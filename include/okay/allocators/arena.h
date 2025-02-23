@@ -123,40 +123,35 @@ arena_t::impl_allocate(const alloc::request_t& request) OKAYLIB_NOEXCEPT
 {
     using namespace alloc;
     const bool should_zero = !(request.flags & flags::leave_nonzeroed);
-    void* new_start = m_available_memory.data();
-    size_t remaining_space = m_available_memory.size();
-    if (!std::align(request.alignment, request.num_bytes, new_start,
-                    remaining_space)) {
+    void* aligned_start_voidptr = m_available_memory.data();
+    size_t space_remaining_after_alignment = m_available_memory.size();
+    if (!std::align(request.alignment, request.num_bytes, aligned_start_voidptr,
+                    space_remaining_after_alignment)) {
         return error::oom;
     }
-
-    uint8_t* const allocated_start = static_cast<uint8_t*>(new_start);
+    uint8_t* const aligned_start = static_cast<uint8_t*>(aligned_start_voidptr);
     const size_t allocated_size = request.num_bytes;
 
-    if (should_zero) {
-        std::memset(allocated_start, 0, allocated_size);
-
-        m_available_memory = m_available_memory.subslice({
-            .start = static_cast<size_t>(allocated_start -
-                                         m_available_memory.data()),
-            .length = remaining_space,
-        });
-
-        return maybe_defined_memory_t(
-            raw_slice(*allocated_start, allocated_size));
-    }
-
-    // not zeroing
     const size_t amount_moved_to_be_aligned =
-        static_cast<size_t>(allocated_start - m_available_memory.data());
+        aligned_start - m_available_memory.data();
     __ok_internal_assert(amount_moved_to_be_aligned < request.alignment);
-    __ok_internal_assert(request.num_bytes <= remaining_space);
+    __ok_internal_assert(request.num_bytes <= space_remaining_after_alignment);
+
+    const size_t start_index =
+        (aligned_start + allocated_size) - m_available_memory.data();
+
     m_available_memory = m_available_memory.subslice({
-        .start = amount_moved_to_be_aligned + request.num_bytes,
-        .length = remaining_space - request.num_bytes,
+        .start = start_index,
+        .length = m_available_memory.size() - start_index,
     });
 
-    return undefined_memory_t<uint8_t>(*allocated_start, allocated_size);
+    if (should_zero) {
+        std::memset(aligned_start, 0, allocated_size);
+        return maybe_defined_memory_t(
+            raw_slice(*aligned_start, allocated_size));
+    } else {
+        return undefined_memory_t<uint8_t>(*aligned_start, allocated_size);
+    }
 }
 
 inline void arena_t::impl_clear() OKAYLIB_NOEXCEPT
