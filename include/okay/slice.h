@@ -58,16 +58,6 @@ template <typename viewed_t> class slice_t
         m_elements = size;
     }
 
-    /// Struct whose only purpose to exist in parameter lists as a way of doing
-    /// enable_if...
-    struct uninstantiable_t
-    {
-        friend struct slice_t;
-
-      private:
-        uninstantiable_t() = default;
-    };
-
   public:
     slice_t(const slice_t&) = default;
     slice_t& operator=(const slice_t&) = default;
@@ -89,34 +79,35 @@ template <typename viewed_t> class slice_t
 
     // implicitly take a slice of something with data() and size() functions
     // which is not also a slice.
-    template <typename U>
-    constexpr slice_t(
-        const U& other,
-        std::enable_if_t<detail::is_container_v<U> &&
-                             !detail::is_instance<U, ok::slice_t>() &&
-                             std::is_same_v<decltype(*other.data()), viewed_t&>,
-                         uninstantiable_t> = {}) OKAYLIB_NOEXCEPT
+    template <typename U,
+              std::enable_if_t<
+                  detail::is_container_v<U> &&
+                      !detail::is_instance<U, ok::slice_t>() &&
+                      std::is_same_v<decltype(*std::declval<const U&>().data()),
+                                     viewed_t&>,
+                  bool> = false>
+    constexpr slice_t(const U& other) OKAYLIB_NOEXCEPT
         : m_data(other.data()),
           m_elements(other.size())
     {
     }
 
     // take slice of thing with data() and size(), nonconst variant
-    template <typename U>
-    constexpr slice_t(
-        U& other, std::enable_if_t<
-                      // has data() and size()
-                      detail::is_container_v<U> &&
-                          !detail::is_instance<U, ok::slice_t>() &&
-                          // either the value type of the container is the
-                          // same as our value type, or it is nonconst and
-                          // we are const
-                          (std::is_same_v<decltype(*other.data()), viewed_t&> ||
-                           std::is_same_v<decltype(*other.data()),
-                                          std::remove_cv_t<viewed_t>&>),
-                      uninstantiable_t> = {}) OKAYLIB_NOEXCEPT
-        : m_data(other.data()),
-          m_elements(other.size())
+    template <typename U,
+              std::enable_if_t<
+                  // has data() and size()
+                  detail::is_container_v<U> &&
+                      !detail::is_instance<U, ok::slice_t>() &&
+                      // either the value type of the container is the
+                      // same as our value type, or it is nonconst and
+                      // we are const
+                      (std::is_same_v<decltype(*std::declval<U&>().data()),
+                                      viewed_t&> ||
+                       std::is_same_v<decltype(*std::declval<U&>().data()),
+                                      std::remove_cv_t<viewed_t>&>),
+                  bool> = false>
+    constexpr slice_t(U& other) OKAYLIB_NOEXCEPT : m_data(other.data()),
+                                                   m_elements(other.size())
     {
     }
 
