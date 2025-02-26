@@ -5,7 +5,7 @@
 #include "okay/allocators/c_allocator.h"
 #include "okay/allocators/wrappers.h"
 #include "okay/containers/array.h"
-#include "okay/containers/array_list.h"
+#include "okay/containers/arraylist.h"
 #include "okay/macros/foreach.h"
 #include "okay/ranges/views/zip.h"
 
@@ -54,18 +54,18 @@ void virtual_tests_array_list(allocator_t& ally)
 
     auto undefined = array_t<int, 5>::make::undefined();
 
-    using T = array_list_t<int>;
+    using T = arraylist_t<int>;
 
     {
         auto& array2d_on_heap =
-            ally.make<array_list_t<array_list_t<int>>, spots_preallocated_tag>(
+            ally.make<arraylist_t<arraylist_t<int>>, spots_preallocated_tag>(
                     ally, 50UL)
                 .release();
 
         ok::free(ally, array2d_on_heap);
     }
 
-    array_list_t empty_on_stack = ok::make<array_list_t<int>, empty_tag>(ally);
+    arraylist_t empty_on_stack = ok::make<arraylist_t<int>, empty_tag>(ally);
 
     if (!empty_on_stack.append(1).okay()) {
         __ok_assert(false, "couldnt append");
@@ -73,7 +73,7 @@ void virtual_tests_array_list(allocator_t& ally)
     }
 
     auto arraylist =
-        ok::make<array_list_t<int>, copy_items_from_range_tag>(ally, array)
+        ok::make<arraylist_t<int>, copy_items_from_range_tag>(ally, array)
             .release();
 
     ok_foreach(ok_pair(a, al), zip(array, arraylist)) { REQUIRE(a == al); }

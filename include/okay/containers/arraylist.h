@@ -13,7 +13,7 @@ struct copy_items_from_range_tag
 {};
 
 template <typename T, typename backing_allocator_t = ok::allocator_t>
-class array_list_t
+class arraylist_t
 {
   private:
     // arraylist is 32 bytes on the stack:
@@ -28,11 +28,11 @@ class array_list_t
         backing_allocator_t* backing_allocator;
     };
 
-    constexpr array_list_t(M members) OKAYLIB_NOEXCEPT : m(members) {}
+    constexpr arraylist_t(M members) OKAYLIB_NOEXCEPT : m(members) {}
 
     // for use in factory functions but not public API. this effectively creates
     // an uninitialized array list object (at least, invariants are not upheld)
-    array_list_t() = default;
+    arraylist_t() = default;
 
     constexpr void destroy() OKAYLIB_NOEXCEPT
     {
@@ -51,12 +51,12 @@ class array_list_t
 
   public:
     static_assert(!std::is_reference_v<T>,
-                  "array_list_t cannot store references.");
+                  "arraylist_t cannot store references.");
     static_assert(!std::is_void_v<T>, "cannot create an array list of void.");
     static_assert(
         std::is_trivially_copyable_v<T> || std::is_move_constructible_v<T> ||
             is_std_constructible_v<T, T&&>,
-        "Type given to array_list_t must be either trivially copyable or move "
+        "Type given to arraylist_t must be either trivially copyable or move "
         "constructible, otherwise it cannot move the items when reallocating.");
 
     using value_type = T;
@@ -77,28 +77,28 @@ class array_list_t
     const T& operator[](size_t index) const& OKAYLIB_NOEXCEPT
     {
         if (index >= m.spots_occupied) [[unlikely]] {
-            __ok_abort("Out of bounds access to ok::array_list_t");
+            __ok_abort("Out of bounds access to ok::arraylist_t");
         }
         return m.allocated_spots.value().data()[index];
     }
     T& operator[](size_t index) & OKAYLIB_NOEXCEPT
     {
         if (index >= m.spots_occupied) [[unlikely]] {
-            __ok_abort("Out of bounds access to ok::array_list_t");
+            __ok_abort("Out of bounds access to ok::arraylist_t");
         }
         return m.allocated_spots.value().data()[index];
     }
 
     // no default constructor or copy, but can move
-    array_list_t(const array_list_t&) = delete;
-    array_list_t& operator=(const array_list_t&) = delete;
+    arraylist_t(const arraylist_t&) = delete;
+    arraylist_t& operator=(const arraylist_t&) = delete;
 
-    constexpr array_list_t(array_list_t&& other) : m(std::move(other.m))
+    constexpr arraylist_t(arraylist_t&& other) : m(std::move(other.m))
     {
         other.m.allocated_spots = nullopt;
     }
 
-    constexpr array_list_t& operator=(array_list_t&& other)
+    constexpr arraylist_t& operator=(arraylist_t&& other)
     {
         this->destroy();
         this->m = std::move(other.m);
@@ -106,7 +106,7 @@ class array_list_t
         return *this;
     }
 
-    constexpr array_list_t(empty_tag,
+    constexpr arraylist_t(empty_tag,
                            backing_allocator_t& allocator) OKAYLIB_NOEXCEPT
         : m(M{
               .allocated_spots = nullopt,
@@ -116,7 +116,7 @@ class array_list_t
     {
     }
 
-    constexpr array_list_t(spots_preallocated_tag, out_error_type& out_error,
+    constexpr arraylist_t(spots_preallocated_tag, out_error_type& out_error,
                            backing_allocator_t& allocator,
                            size_t num_spots_preallocated) OKAYLIB_NOEXCEPT
     {
@@ -145,7 +145,7 @@ class array_list_t
     }
 
     template <typename input_range_t>
-    constexpr array_list_t(copy_items_from_range_tag, out_error_type& out_error,
+    constexpr arraylist_t(copy_items_from_range_tag, out_error_type& out_error,
                            backing_allocator_t& allocator,
                            const input_range_t& range) OKAYLIB_NOEXCEPT
     {
@@ -157,13 +157,13 @@ class array_list_t
             is_std_constructible_v<T, const typename ok::range_def_for<
                                           input_range_t>::value_type&>,
             "Attempt to use try_make_by_copying but the type held by the "
-            "array_list_t is not constructible from the type outputted by "
+            "arraylist_t is not constructible from the type outputted by "
             "the range.");
 
         // TODO: make this a warning
         __ok_assert(
             allocator.features() & alloc::feature_flags::can_expand_back,
-            "Allocator given to array_list_t cannot expand_back, which will "
+            "Allocator given to arraylist_t cannot expand_back, which will "
             "cause an error after appending some number of elements.");
 
         const size_t num_items = ok::size(range);
@@ -237,7 +237,7 @@ class array_list_t
         return alloc::error::okay;
     }
 
-    inline ~array_list_t() { destroy(); }
+    inline ~arraylist_t() { destroy(); }
 
   private:
     constexpr status_t<alloc::error> first_allocation()
@@ -298,7 +298,7 @@ class array_list_t
                     "different pointer.");
                 __ok_assert(
                     reallocation.bytes_offset_front == 0,
-                    "No front reallocation was done in array_list_t but "
+                    "No front reallocation was done in arraylist_t but "
                     "some byte offset was given by allocator.");
 
                 spots =
