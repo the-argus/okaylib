@@ -11,6 +11,53 @@
 
 using namespace ok;
 
+struct child
+{
+  private:
+    struct childimpl
+    {
+        float a;
+        float b;
+        void* allocation;
+    };
+    childimpl impl;
+
+  public:
+    struct options
+    {
+        using out_error_type = status_t<alloc::error>;
+        float a;
+        float b;
+        size_t size;
+    };
+
+    using impl_type = childimpl;
+
+    child(const options& options, options::out_error_type& outerr)
+    {
+        void* malloced = malloc(options.size);
+        if (!malloced) {
+            outerr = alloc::error::oom;
+            return;
+        }
+
+        this->impl = {
+            .a = options.a,
+            .b = options.b,
+            .allocation = malloced,
+        };
+
+        outerr = alloc::error::okay;
+    }
+
+    child(const child&) = delete;
+    child& operator=(const child&) = delete;
+    child(child&&) = delete;
+    child& operator=(child&&) = delete;
+
+    ~child() { free(impl.allocation); }
+};
+
 struct test
 {
     int a;
