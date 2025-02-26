@@ -26,28 +26,16 @@ class arraylist_t
         opt_t<slice_t<T>> allocated_spots;
         size_t spots_occupied;
         backing_allocator_t* backing_allocator;
-    };
+    } m;
 
-    constexpr arraylist_t(M members) OKAYLIB_NOEXCEPT : m(members) {}
+    constexpr arraylist_t(M&& members) OKAYLIB_NOEXCEPT
+        : m(std::forward<M>(members))
+    {
+    }
 
     // for use in factory functions but not public API. this effectively creates
     // an uninitialized array list object (at least, invariants are not upheld)
     arraylist_t() = default;
-
-    constexpr void destroy() OKAYLIB_NOEXCEPT
-    {
-        if (m.allocated_spots) {
-            if (!std::is_trivially_destructible_v<T>) {
-                T* mem = m.allocated_spots.value().data();
-                for (size_t i = 0; i < m.spots_occupied; ++i) {
-                    mem[i].~T();
-                }
-            }
-
-            m.backing_allocator->deallocate(
-                reinterpret_as_bytes(m.allocated_spots.value()));
-        }
-    }
 
   public:
     static_assert(!std::is_reference_v<T>,
@@ -107,7 +95,7 @@ class arraylist_t
     }
 
     constexpr arraylist_t(empty_tag,
-                           backing_allocator_t& allocator) OKAYLIB_NOEXCEPT
+                          backing_allocator_t& allocator) OKAYLIB_NOEXCEPT
         : m(M{
               .allocated_spots = nullopt,
               .spots_occupied = 0,
@@ -117,8 +105,8 @@ class arraylist_t
     }
 
     constexpr arraylist_t(spots_preallocated_tag, out_error_type& out_error,
-                           backing_allocator_t& allocator,
-                           size_t num_spots_preallocated) OKAYLIB_NOEXCEPT
+                          backing_allocator_t& allocator,
+                          size_t num_spots_preallocated) OKAYLIB_NOEXCEPT
     {
         auto res = allocator.allocate(alloc::request_t{
             .num_bytes = sizeof(T) * num_spots_preallocated,
@@ -146,8 +134,8 @@ class arraylist_t
 
     template <typename input_range_t>
     constexpr arraylist_t(copy_items_from_range_tag, out_error_type& out_error,
-                           backing_allocator_t& allocator,
-                           const input_range_t& range) OKAYLIB_NOEXCEPT
+                          backing_allocator_t& allocator,
+                          const input_range_t& range) OKAYLIB_NOEXCEPT
     {
         static_assert(ok::is_range_v<input_range_t>,
                       "Argument given to try_make_from_range is not a range.");
@@ -296,10 +284,9 @@ class arraylist_t
                         reinterpret_cast<T*>(reallocation.memory.data()),
                     "Reallocation was supposedly in-place, but returned a "
                     "different pointer.");
-                __ok_assert(
-                    reallocation.bytes_offset_front == 0,
-                    "No front reallocation was done in arraylist_t but "
-                    "some byte offset was given by allocator.");
+                __ok_assert(reallocation.bytes_offset_front == 0,
+                            "No front reallocation was done in arraylist_t but "
+                            "some byte offset was given by allocator.");
 
                 spots =
                     raw_slice(*reinterpret_cast<T*>(reallocation.memory.data()),
@@ -342,7 +329,20 @@ class arraylist_t
         return alloc::error::okay;
     }
 
-    M m;
+    constexpr void destroy() OKAYLIB_NOEXCEPT
+    {
+        if (m.allocated_spots) {
+            if (!std::is_trivially_destructible_v<T>) {
+                T* mem = m.allocated_spots.value().data();
+                for (size_t i = 0; i < m.spots_occupied; ++i) {
+                    mem[i].~T();
+                }
+            }
+
+            m.backing_allocator->deallocate(
+                reinterpret_as_bytes(m.allocated_spots.value()));
+        }
+    }
 };
 } // namespace ok
 
