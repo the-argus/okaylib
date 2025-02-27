@@ -24,7 +24,7 @@ template <typename callable_t> class maydefer_t
 
     inline constexpr void cancel() { statement = nullptr; }
 
-    ~maydefer_t()
+    inline ~maydefer_t()
     {
         if (statement)
             (*statement)();
@@ -48,7 +48,7 @@ template <typename callable_t> class defer_t
     defer_t& operator=(defer_t&&) = delete;
     defer_t(defer_t&&) = delete;
 
-    ~defer_t() { statement(); }
+    inline ~defer_t() { statement(); }
 };
 
 } // namespace ok

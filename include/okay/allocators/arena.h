@@ -44,8 +44,8 @@ class arena_t : public allocator_t
         return *this;
     }
 
-    constexpr arena_t& operator=(const arena_t&) = delete;
-    constexpr arena_t(const arena_t&) = delete;
+    arena_t& operator=(const arena_t&) = delete;
+    arena_t(const arena_t&) = delete;
 
     constexpr void destroy() OKAYLIB_NOEXCEPT;
 

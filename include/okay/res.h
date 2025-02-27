@@ -34,7 +34,7 @@ template <typename T> struct owning_ref_trivial_members
 template <typename T>
 struct owning_ref_nontrivial_members : public owning_ref_trivial_members<T>
 {
-    ~owning_ref_nontrivial_members()
+    inline ~owning_ref_nontrivial_members()
     {
         if (this->value) {
             this->value->~T();

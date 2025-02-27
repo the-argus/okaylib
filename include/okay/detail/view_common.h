@@ -515,7 +515,7 @@ struct assignment_op_wrapper_t
         return *this;
     }
 
-    ~assignment_op_wrapper_t() { value().~payload_t(); }
+    inline ~assignment_op_wrapper_t() { value().~payload_t(); }
 };
 
 // extend an arbitrary cursor type with additional members or functionality,
