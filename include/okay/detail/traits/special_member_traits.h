@@ -1,14 +1,15 @@
 #ifndef __OKAYLIB_DETAIL_TRAITS_SPECIAL_MEMBER_TRAITS_H__
 #define __OKAYLIB_DETAIL_TRAITS_SPECIAL_MEMBER_TRAITS_H__
 
-#include "okay/anystatus.h"
+#include "okay/detail/template_util/first_type_in_pack.h"
+#include "okay/detail/template_util/uninitialized_storage.h"
 #include "okay/detail/traits/is_instance.h"
-#include "okay/status.h"
 #include <type_traits>
 
 namespace ok {
-struct default_constructor_tag
-{};
+
+template <typename, typename, typename> class res_t;
+template <typename T> class owning_ref;
 
 template <typename T, typename... args_t>
 constexpr bool is_std_constructible_v =
@@ -51,99 +52,6 @@ constexpr bool is_std_invocable_r_v =
 #endif
 
 namespace detail {
-
-template <typename T, typename = void>
-struct is_valid_memberfunc_error_type : public std::false_type
-{};
-
-template <typename T>
-struct is_valid_memberfunc_error_type<
-    T, std::enable_if_t<detail::is_instance_v<T, ok::status_t> ||
-                        std::is_same_v<T, anystatus_t>>> : public std::true_type
-{};
-
-template <typename T>
-constexpr bool is_valid_memberfunc_error_type_v =
-    is_valid_memberfunc_error_type<T>::value;
-
-template <typename T, typename error_type_t = void> struct memberfunc_error_type
-{
-    static_assert(
-        std::is_class_v<T>,
-        "There is no memberfunc_error_type for a non class/struct type.");
-    using type = void;
-};
-
-template <typename T>
-struct memberfunc_error_type<
-    T, std::enable_if_t<
-           is_valid_memberfunc_error_type_v<typename T::out_error_type>>>
-{
-    template <typename U, typename = void>
-    struct has_enum_type_def : public std::false_type
-    {};
-
-    template <typename U>
-    struct has_enum_type_def<U, std::void_t<typename U::enum_type>>
-        : public std::true_type
-    {};
-
-    using type = typename T::out_error_type;
-    static_assert(is_std_default_constructible_v<type> &&
-                      has_enum_type_def<typename T::out_error_type>::value,
-                  "internal assert fired, templates are broken");
-};
-
-template <typename T>
-using memberfunc_error_type_t = typename memberfunc_error_type<T>::type;
-
-template <typename... args_t> struct is_fallible_constructible
-{
-    template <typename T, typename constructor_tag_t, typename = void>
-    struct inner : std::false_type
-    {};
-    template <typename T, typename constructor_tag_t>
-    struct inner<T, constructor_tag_t,
-                 std::enable_if_t<is_std_constructible_v<
-                     T, constructor_tag_t, detail::memberfunc_error_type_t<T>&,
-                     args_t...>>> : std::true_type
-    {};
-};
-
-} // namespace detail
-
-template <typename T, typename constructor_tag_t, typename... args_t>
-constexpr bool is_infallible_constructible_v =
-    is_std_constructible_v<T, constructor_tag_t, args_t...> ||
-    is_std_constructible_v<T, args_t...>;
-
-template <typename T, typename constructor_tag_t, typename... args_t>
-constexpr bool is_fallible_constructible_v = detail::is_fallible_constructible<
-    args_t...>::template inner<T, constructor_tag_t>::value;
-
-template <typename T, typename constructor_tag_t, typename... args_t>
-constexpr bool is_constructible_v =
-    is_fallible_constructible_v<T, constructor_tag_t, args_t...> ||
-    is_infallible_constructible_v<T, constructor_tag_t, args_t...>;
-
-namespace detail {
-
-template <typename T, typename constructor_tag_t, typename... args_t>
-constexpr void
-construct_into_uninitialized_infallible(T* uninit, constructor_tag_t tag,
-                                        args_t&&... args) OKAYLIB_NOEXCEPT
-{
-    static_assert(
-        is_infallible_constructible_v<T, constructor_tag_t, args_t...>,
-        "Cannot construct with the given args");
-    if constexpr (is_std_constructible_v<T, constructor_tag_t, args_t...>) {
-        new (uninit) T(tag, std::forward<args_t>(args)...);
-    } else {
-        static_assert(is_std_constructible_v<T, args_t...>);
-        new (uninit) T(std::forward<args_t>(args)...);
-    }
-}
-
 template <typename from_t, typename to_t, typename = void>
 class is_convertible_to : public std::false_type
 {};
@@ -177,7 +85,123 @@ inline constexpr bool is_moveable_v =
     // is_assignable_from_v<T&, T>
     && is_swappable_v<T>;
 
+template <typename maybe_res_t, typename expected_contained_t, typename = void>
+struct is_type_res_and_contains : std::false_type
+{};
+template <typename maybe_res_t, typename expected_contained_t>
+struct is_type_res_and_contains<
+    maybe_res_t, expected_contained_t,
+    std::enable_if_t<
+        detail::is_instance_v<maybe_res_t, res_t> &&
+        std::is_same_v<typename maybe_res_t::type, expected_contained_t>>>
+    : std::true_type
+{};
+
+template <typename T, typename constructor_args_t, typename = void>
+struct has_fallible_construct_for_args : public std::false_type
+{
+    static constexpr bool is_return_type_valid = false;
+};
+
+template <typename T, typename constructor_args_t>
+struct has_fallible_construct_for_args<
+    T, constructor_args_t,
+    std::void_t<decltype(T::construct(
+        std::declval<uninitialized_storage_t<T>&>(),
+        std::declval<const constructor_args_t&>()))>> : public std::true_type
+{
+    using return_type =
+        decltype(T::construct(std::declval<uninitialized_storage_t<T>&>(),
+                              std::declval<const constructor_args_t&>()));
+    static constexpr bool is_return_type_valid =
+        is_type_res_and_contains<return_type, owning_ref<T>>::value;
+};
+
+template <typename T, typename constructor_args_t, typename = void>
+struct has_infallible_construct_for_args : public std::false_type
+{
+    static constexpr bool is_return_type_valid = false;
+};
+
+template <typename T, typename constructor_args_t>
+struct has_infallible_construct_for_args<
+    T, constructor_args_t,
+    std::void_t<decltype(T::construct(
+        std::declval<const constructor_args_t&>()))>> : public std::true_type
+{
+    using return_type =
+        decltype(T::construct(std::declval<const constructor_args_t&>()));
+    static constexpr bool is_return_type_valid = std::is_same_v<return_type, T>;
+};
+
+template <typename T, typename = void>
+struct has_default_infallible_construct : public std::false_type
+{
+    static constexpr bool is_return_type_valid = false;
+};
+
+template <typename T>
+struct has_default_infallible_construct<T,
+                                        std::void_t<decltype(T::construct())>>
+    : public std::true_type
+{
+    using return_type = decltype(T::construct());
+    static constexpr bool is_return_type_valid = std::is_same_v<return_type, T>;
+};
+
+template <typename T, typename constructor_args_t>
+inline constexpr bool has_construct_for_args_v =
+    has_fallible_construct_for_args<T, constructor_args_t>::value ||
+    has_infallible_construct_for_args<T, constructor_args_t>::value;
+
+template <typename... args_t> struct is_infallible_constructible
+{
+    template <typename T, typename = void> struct inner : public std::false_type
+    {};
+
+    template <typename T>
+    struct inner<T, std::enable_if_t<is_std_constructible_v<T, args_t...>>>
+        : public std::true_type
+    {};
+
+    template <typename T>
+    struct inner<
+        T, std::enable_if_t<sizeof...(args_t) == 1 &&
+                            has_infallible_construct_for_args<
+                                T, first_type_in_pack_t<args_t...>>::value>>
+        : public std::true_type
+    {};
+};
+
+template <typename... args_t> struct is_fallible_constructible
+{
+    template <typename T, typename = void> struct inner : public std::false_type
+    {};
+
+    template <typename T>
+    struct inner<
+        T, std::enable_if_t<sizeof...(args_t) == 1 &&
+                            has_fallible_construct_for_args<
+                                T, first_type_in_pack_t<args_t...>>::value>>
+        : public std::true_type
+    {};
+};
+
 } // namespace detail
+template <typename T, typename... args_t>
+inline constexpr bool is_infallible_constructible_v =
+    detail::is_infallible_constructible<args_t...>::template inner<T>::value ||
+    (sizeof...(args_t) == 0 &&
+     detail::has_default_infallible_construct<T>::value);
+
+template <typename T, typename... args_t>
+inline constexpr bool is_fallible_constructible_v =
+    detail::is_fallible_constructible<args_t...>::template inner<T>::value;
+
+template <typename T, typename... args_t>
+inline constexpr bool is_constructible_v =
+    is_infallible_constructible_v<T, args_t...> ||
+    is_fallible_constructible_v<T, args_t...>;
 } // namespace ok
 
 #endif

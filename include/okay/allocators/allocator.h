@@ -12,9 +12,12 @@
 // ordering
 #include "okay/construct.h"
 // for reinterpret_as_bytes
+#include "okay/detail/template_util/first_type_in_pack.h"
 #include "okay/stdmem.h"
 
 namespace ok {
+
+class allocator_t;
 
 class maybe_defined_memory_t
 {
@@ -314,6 +317,66 @@ struct reallocation_extended_t
     size_t bytes_offset_front = 0;
 };
 
+template <typename T, typename allocator_impl_t = ok::allocator_t> struct owned
+{
+    friend class ok::allocator_t;
+
+    [[nodiscard]] constexpr T& operator*() const
+    {
+        return *reinterpret_cast<T*>(m_allocation);
+    }
+    [[nodiscard]] constexpr T* operator->() const
+    {
+        return reinterpret_cast<T*>(m_allocation);
+    }
+    [[nodiscard]] constexpr T& value() const
+    {
+        return *reinterpret_cast<T*>(m_allocation);
+    }
+
+    owned() = delete;
+    owned(const owned&) = delete;
+    owned& operator=(const owned&) = delete;
+
+    constexpr owned(owned&& other)
+        : m_allocation(std::exchange(other.m_allocation, nullptr)),
+          m_allocator(other.m_allocator)
+    {
+    }
+
+    constexpr owned& operator=(owned&& other)
+    {
+        destroy();
+        m_allocation = std::exchange(other.m_allocation, nullptr);
+        m_allocator = other.m_allocator;
+    }
+
+    [[nodiscard]] constexpr T& release()
+    {
+        return *static_cast<T*>(std::exchange(m_allocation, nullptr));
+    }
+
+    ~owned() { destroy(); }
+
+  private:
+    constexpr void destroy() noexcept
+    {
+        if (m_allocation) {
+            m_allocator->deallocate(
+                reinterpret_as_bytes(slice_from_one(value())));
+        }
+    }
+
+    constexpr owned(T& allocation, allocator_impl_t& allocator) noexcept
+        : m_allocation(ok::addressof(allocation)),
+          m_allocator(ok::addressof(allocator))
+    {
+    }
+
+    void* m_allocation;
+    allocator_impl_t* m_allocator;
+};
+
 } // namespace alloc
 
 /// Abstract/virtual interface for allocators. Not all functions may be
@@ -361,14 +424,70 @@ class allocator_t
         return impl_reallocate_extended(options);
     }
 
-    template <typename T, typename constructor_tag_t, typename... args_t>
+    template <typename... args_t, typename T>
     [[nodiscard]] constexpr decltype(auto)
     make(args_t&&... args) OKAYLIB_NOEXCEPT;
 
-    template <typename factory_t, typename... args_t>
-    [[nodiscard]] constexpr decltype(auto)
-    make_using_factory(const factory_t& factory,
-                       args_t&&... args) OKAYLIB_NOEXCEPT;
+    /// Version of make which can only call regular constructors, not
+    /// T::construct() functions.
+    template <typename T, typename... args_t>
+    [[nodiscard]] constexpr alloc::result_t<alloc::owned<T>>
+    make_trivial(args_t&&... args) OKAYLIB_NOEXCEPT
+    {
+        static_assert(is_std_constructible_v<T, args_t...>,
+                      "Cannot call make_trivial with the given arguments, "
+                      "there is no matching constructor.");
+        auto allocation_result = allocate(alloc::request_t{
+            .num_bytes = sizeof(T),
+            .alignment = alignof(T),
+            .flags = alloc::flags::leave_nonzeroed,
+        });
+        if (!allocation_result.okay()) [[unlikely]] {
+            return allocation_result.err();
+        }
+        uint8_t* object_start =
+            allocation_result.release_ref().data_maybe_defined();
+
+        __ok_assert(uintptr_t(object_start) % alignof(T) == 0,
+                    "Misaligned memory produced by allocator");
+
+        T* made = reinterpret_cast<T*>(object_start);
+
+        new (made) T(std::forward<args_t>(args)...);
+        return alloc::owned(*made, *this);
+    }
+
+    /// "Leaky" version of make which can only call regular constructors
+    template <typename T, typename... args_t>
+    [[nodiscard]] constexpr alloc::result_t<T&>
+    malloc(args_t&&... args) OKAYLIB_NOEXCEPT
+    {
+        static_assert(is_std_constructible_v<T, args_t...>,
+                      "Cannot call make_trivial with the given arguments, "
+                      "there is no matching constructor.");
+        __ok_assert(features() & alloc::feature_flags::can_clear,
+                    "Using make_simple on an allocator which cannot clear, "
+                    "this may lead to memory leaks. Try "
+                    "make_trivial().release().release() instead.");
+        auto allocation_result = allocate(alloc::request_t{
+            .num_bytes = sizeof(T),
+            .alignment = alignof(T),
+            .flags = alloc::flags::leave_nonzeroed,
+        });
+        if (!allocation_result.okay()) [[unlikely]] {
+            return allocation_result.err();
+        }
+        uint8_t* object_start =
+            allocation_result.release_ref().data_maybe_defined();
+
+        __ok_assert(uintptr_t(object_start) % alignof(T) == 0,
+                    "Misaligned memory produced by allocator");
+
+        T* made = reinterpret_cast<T*>(object_start);
+
+        new (made) T(std::forward<args_t>(args)...);
+        return *made;
+    }
 
   protected:
     [[nodiscard]] virtual alloc::result_t<maybe_defined_memory_t>
@@ -493,129 +612,137 @@ constexpr void free(allocator_impl_t& ally, T& object) OKAYLIB_NOEXCEPT
 }
 
 namespace detail {
-template <typename T, typename = void> struct memberfunc_error_enum_type_or_void
+template <typename T> struct make_into_uninitialized_fn_t
 {
-    using type = void;
-};
-
-template <typename T>
-struct memberfunc_error_enum_type_or_void<
-    T, std::void_t<typename detail::memberfunc_error_type_t<T>::enum_type>>
-{
-    using type = typename detail::memberfunc_error_type_t<T>::enum_type;
-};
-
-template <typename... args_t> struct make_return_type
-{
-    template <typename T, typename constructor_tag_t, typename = void>
-    struct inner
+    template <typename... args_t>
+    constexpr auto operator()
+        [[nodiscard]] (T& uninitialized,
+                       args_t&&... args) const OKAYLIB_NOEXCEPT
     {
-        using type = alloc::result_t<T&>;
-    };
-    template <typename T, typename constructor_tag_t>
-    struct inner<
-        T, constructor_tag_t,
-        std::enable_if_t<
-            !std::is_void_v<detail::memberfunc_error_type_t<T>> &&
-            is_fallible_constructible_v<T, constructor_tag_t, args_t...>>>
-    {
-        using type =
-            res_t<T&, typename detail::memberfunc_error_type_t<T>::enum_type>;
-    };
+        constexpr bool is_std = is_std_constructible_v<T, args_t...>;
+        if constexpr (sizeof...(args_t) >= 1) {
+            using is_fallible = detail::has_fallible_construct_for_args<
+                T, detail::first_type_in_pack_t<args_t...>>;
+            using is_infallible = detail::has_infallible_construct_for_args<
+                T, detail::first_type_in_pack_t<args_t...>>;
+            static_assert(
+                is_fallible::value || is_infallible::value || is_std,
+                "Cannot construct given type with the given arguments.");
+
+            static_assert(
+                int(is_fallible::value) + int(is_infallible::value) +
+                        int(is_std) ==
+                    1,
+                "Ambiguous constructor selection. the given args could address "
+                "multiple constructors or `construct()` functions.");
+
+            if constexpr (is_fallible::value) {
+                static_assert(sizeof(T) ==
+                              sizeof(detail::uninitialized_storage_t<T>));
+                static_assert(alignof(T) ==
+                              alignof(detail::uninitialized_storage_t<T>));
+                auto construction_result = T::construct(
+                    *reinterpret_cast<detail::uninitialized_storage_t<T>*>(
+                        ok::addressof(uninitialized)),
+                    std::forward<args_t>(args)...);
+
+                auto out = construction_result.err();
+                if (!construction_result.okay()) [[unlikely]] {
+                    return out;
+                }
+
+                // release from result then release ownership of the constructed
+                // thing
+                T& unused_mem = construction_result.release().release();
+
+                return out;
+            } else if constexpr (is_infallible::value) {
+                new (ok::addressof(uninitialized))
+                    T(T::construct(std::forward<args_t>(args)...));
+                return;
+            } else {
+                static_assert(is_std);
+                new (ok::addressof(uninitialized))
+                    T(std::forward<args_t>(args)...);
+                return;
+            }
+        } else {
+            if constexpr (detail::has_default_infallible_construct<T>::value) {
+                static_assert(
+                    !std::is_default_constructible_v<T>,
+                    "Ambiguous default constructor selection for given type: "
+                    "do I call `T::construct()` or the default constructor?");
+                // TODO: should probably check that type is trivially move
+                // constructible here? returning T directly from the construct()
+                // function means moving it into its destination
+                new (ok::addressof(uninitialized)) T(T::construct());
+                return;
+            } else {
+                // zero constructor args_passed in, duplicate case where we dont
+                // do any of the template stuff and static assert checks
+                static_assert(is_std, "Cannot default construct the type given "
+                                      "to `allocator.make()`.");
+                new (ok::addressof(uninitialized)) T();
+                return;
+            }
+        }
+    }
 };
 } // namespace detail
 
-template <typename T, typename constructor_tag_t = ok::default_constructor_tag,
-          typename... args_t>
+template <typename T>
+constexpr inline detail::make_into_uninitialized_fn_t<T>
+    make_into_uninitialized;
+
+template <typename... args_t,
+          typename T =
+              typename detail::first_type_in_pack_t<args_t...>::associated_type>
 [[nodiscard]] constexpr decltype(auto)
 ok::allocator_t::make(args_t&&... args) OKAYLIB_NOEXCEPT
 {
-    using out_t = typename detail::make_return_type<args_t...>::template inner<
-        T, constructor_tag_t>::type;
-    constexpr bool is_fallible =
-        is_fallible_constructible_v<T, constructor_tag_t, args_t...>;
-    constexpr bool is_infallible =
-        is_std_constructible_v<T, constructor_tag_t, args_t...>;
-    constexpr bool is_std = is_std_constructible_v<T, args_t...>;
-    static_assert(is_fallible || is_infallible || is_std,
-                  "Cannot construct given type with the given arguments.");
-    static_assert(
-        !is_fallible ||
-            std::is_convertible_v<
-                alloc::error,
-                typename detail::memberfunc_error_enum_type_or_void<T>::type>,
-        "When allocating and calling a fallible constructor with "
-        "ok::make, the enum type needs to define a conversion from "
-        "an ok::alloc::error.");
-    static_assert(
-        int(is_fallible) + int(is_infallible) + int(is_std) == 1,
-        "Ambiguous constructor selection. the given args could address "
-        "multiple constructors with different tags or out errors.");
-
-    auto res = allocate(alloc::request_t{
+    auto allocation_result = allocate(alloc::request_t{
         .num_bytes = sizeof(T),
         .alignment = alignof(T),
         .flags = alloc::flags::leave_nonzeroed,
     });
 
-    if (!res.okay()) [[unlikely]] {
-        return out_t(res.err());
+    using initialization_return_type = decltype(make_into_uninitialized<T>(
+        std::declval<T&>(), std::forward<args_t>(args)...));
+    constexpr bool returns_status = !std::is_void_v<initialization_return_type>;
+
+    if (!allocation_result.okay()) [[unlikely]] {
+        if constexpr (returns_status) {
+            static_assert(
+                std::is_convertible_v<alloc::error, initialization_return_type>,
+                "Cannot call potentially failing constructor from "
+                "allocator_t::make() if the error type returned from the "
+                "constructor does not define a conversion from alloc::error.");
+            return res_t<alloc::owned<T>, initialization_return_type>(
+                allocation_result.err());
+        } else {
+            return alloc::result_t<alloc::owned<T>>(allocation_result.err());
+        }
     }
 
-    uint8_t* object_start = res.release_ref().data_maybe_defined();
+    uint8_t* object_start =
+        allocation_result.release_ref().data_maybe_defined();
 
     __ok_assert(uintptr_t(object_start) % alignof(T) == 0,
                 "Misaligned memory produced by allocator");
 
     T* made = reinterpret_cast<T*>(object_start);
 
-    if constexpr (is_fallible) {
-        return make_into_uninitialized<constructor_tag_t>(
-            made, std::forward<args_t>(args)...);
+    if constexpr (returns_status) {
+        auto result =
+            make_into_uninitialized<T>(*made, std::forward<args_t>(args)...);
+        static_assert(detail::is_status_enum_v<decltype(result)>);
+        return res_t<alloc::owned<T>, decltype(result)>(
+            alloc::owned<T>(*made, *this));
     } else {
-        return out_t(make_into_uninitialized<constructor_tag_t>(
-            made, std::forward<args_t>(args)...));
+        make_into_uninitialized<T>(*made, std::forward<args_t>(args)...);
+        return alloc::result_t<alloc::owned<T>>(alloc::owned<T>(*made, *this));
     }
 }
-
-template <typename factory_t, typename... args_t>
-[[nodiscard]] constexpr decltype(auto)
-ok::allocator_t::make_using_factory(const factory_t& factory,
-                                    args_t&&... args) OKAYLIB_NOEXCEPT
-{
-    static_assert(is_std_invocable_v<factory_t, args_t...>,
-                  "Type given as first argument to make_using_factory is not "
-                  "invokable with the given args.");
-    using T = decltype(factory(std::forward<args_t>(args)...));
-    static_assert(
-        !std::is_reference_v<T>,
-        "Given factory function is invalid- it returns a reference type.");
-    static_assert(std::is_class_v<T>,
-                  "Given factory function is invalid- it does not return a "
-                  "class or struct type.");
-
-    auto res = allocate(alloc::request_t{
-        .num_bytes = sizeof(T),
-        .alignment = alignof(T),
-        .flags = alloc::flags::leave_nonzeroed,
-    });
-
-    if (!res.okay()) [[unlikely]] {
-        return alloc::result_t<T&>(res.err());
-    }
-
-    uint8_t* object_start = res.release_ref().data_maybe_defined();
-
-    __ok_assert(uintptr_t(object_start) % alignof(T) == 0,
-                "Misaligned memory produced by allocator");
-
-    T* made = reinterpret_cast<T*>(object_start);
-
-    *made = factory(std::forward<args_t>(args)...);
-
-    return alloc::result_t<T&>(*made);
-}
-
 } // namespace ok
 
 #ifdef OKAYLIB_USE_FMT

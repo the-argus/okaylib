@@ -15,8 +15,106 @@
 #endif
 
 namespace ok {
+namespace detail {
+
+template <typename T> struct make_inner_fn_t;
+
+template <typename T, typename E>
+constexpr void set_result_error_byte(res_t<T, E>&, uint8_t byte) noexcept;
+
+template <typename T> struct owning_ref_trivial_members
+{
+    T* value;
+
+    constexpr owning_ref_trivial_members(T& in) noexcept
+        : value(ok::addressof(in))
+    {
+    }
+};
+template <typename T>
+struct owning_ref_nontrivial_members : public owning_ref_trivial_members<T>
+{
+    ~owning_ref_nontrivial_members()
+    {
+        if (this->value) {
+            this->value->~T();
+        }
+    }
+    constexpr owning_ref_nontrivial_members(T& in) noexcept
+        : owning_ref_trivial_members<T>(in)
+    {
+    }
+};
+}; // namespace detail
+
+template <typename T>
+class owning_ref
+    : protected std::conditional_t<std::is_trivially_destructible_v<T>,
+                                   detail::owning_ref_trivial_members<T>,
+                                   detail::owning_ref_nontrivial_members<T>>
+{
+    using parent_t =
+        std::conditional_t<std::is_trivially_destructible_v<T>,
+                           detail::owning_ref_trivial_members<T>,
+                           detail::owning_ref_nontrivial_members<T>>;
+    constexpr parent_t& upcast() { return *static_cast<parent_t*>(this); }
+    constexpr const parent_t& upcast() const
+    {
+        return *static_cast<const parent_t*>(this);
+    }
+
+  public:
+    constexpr T* operator->() OKAYLIB_NOEXCEPT
+    {
+        __ok_assert(upcast().value, "use-after-release of owning_ref");
+        return upcast().value;
+    }
+    constexpr const T* operator->() const OKAYLIB_NOEXCEPT
+    {
+        __ok_assert(upcast().value, "use-after-release of owning_ref");
+        return upcast().value;
+    }
+    constexpr T& operator*() OKAYLIB_NOEXCEPT
+    {
+        __ok_assert(upcast().value, "use-after-release of owning_ref");
+        return *upcast().value;
+    }
+    constexpr const T& operator*() const OKAYLIB_NOEXCEPT
+    {
+        __ok_assert(upcast().value, "use-after-release of owning_ref");
+        return *upcast().value;
+    }
+
+    constexpr T& value() OKAYLIB_NOEXCEPT
+    {
+        __ok_assert(upcast().value, "use-after-release of owning_ref");
+        return **this;
+    }
+    constexpr const T& value() const OKAYLIB_NOEXCEPT
+    {
+        __ok_assert(upcast().value, "use-after-release of owning_ref");
+        return **this;
+    }
+
+    constexpr T& release() OKAYLIB_NOEXCEPT
+    {
+        __ok_assert(upcast().value, "use-after-release of owning_ref");
+        return *std::exchange(upcast().value, nullptr);
+    }
+
+    constexpr owning_ref(T& ref) : parent_t(ref) {}
+
+    // no moving or copying an owning ref. instead, move or copy the internal
+    // value
+    owning_ref(owning_ref&& other) = delete;
+    owning_ref& operator=(owning_ref&& other) = delete;
+    owning_ref(const owning_ref& other) = delete;
+    owning_ref& operator=(const owning_ref& other) = delete;
+};
 
 namespace detail {
+struct uninitialized_result_tag
+{};
 template <typename T, typename E>
 using res_enable_copy_move_for_type_t = detail::enable_copy_move<
     std::is_copy_constructible_v<T>,
@@ -25,8 +123,7 @@ using res_enable_copy_move_for_type_t = detail::enable_copy_move<
     std::is_move_constructible_v<T> && std::is_move_assignable_v<T>,
     res_t<T, E>>; // unique tag
 
-template <typename T, typename E>
-void make_res_into_error_without_destruction(res_t<T, E>& res, E error);
+template <typename T> struct make_inner_fn_t;
 
 } // namespace detail
 
@@ -43,6 +140,8 @@ class res_t<contained_t, enum_t,
 
     inline static constexpr bool is_reference =
         std::is_lvalue_reference_v<contained_t>;
+
+    constexpr res_t(detail::uninitialized_result_tag) OKAYLIB_NOEXCEPT {}
 
   public:
     using type = contained_t;
@@ -66,8 +165,7 @@ class res_t<contained_t, enum_t,
         "Result cannot store an the same enum as payload as for statuscode.");
     static_assert(detail::is_status_enum_v<enum_t>,
                   OKAYLIB_IS_STATUS_ENUM_ERRMSG);
-    static_assert(!is_infallible_constructible_v<
-                      contained_t, default_constructor_tag, const enum_t&>,
+    static_assert(!is_infallible_constructible_v<contained_t, const enum_t&>,
                   "Cannot store type in res if it is constructible from its "
                   "own status code- this makes what assigning the statuscode "
                   "to the res will do ambiguous.");
@@ -160,23 +258,19 @@ class res_t<contained_t, enum_t,
         this->construct_no_destroy_payload();
     }
 
-    template <
-        typename constructor_tag_t = ok::default_constructor_tag,
-        typename... args_t,
-        std::enable_if_t<!is_reference && sizeof...(args_t) != 0 &&
-                             is_infallible_constructible_v<
-                                 contained_t, constructor_tag_t, args_t...>,
-                         bool> = true>
+    template <typename... args_t,
+              std::enable_if_t<
+                  !is_reference && sizeof...(args_t) != 0 &&
+                      is_infallible_constructible_v<contained_t, args_t...>,
+                  bool> = true>
     constexpr res_t(args_t&&... args) OKAYLIB_NOEXCEPT
     {
         this->get_error_payload() = 0;
         if constexpr (is_std_constructible_v<contained_t, args_t...>) {
             this->construct_no_destroy_payload(std::forward<args_t>(args)...);
         } else {
-            static_assert(is_std_constructible_v<contained_t, constructor_tag_t,
-                                                 args_t...>);
-            this->construct_no_destroy_payload(constructor_tag_t{},
-                                               std::forward<args_t>(args)...);
+            this->get_value_unchecked_payload() =
+                contained_t::construct(std::forward<args_t>(args)...);
         }
     }
 
@@ -206,9 +300,10 @@ class res_t<contained_t, enum_t,
         this->get_error_payload() = enum_int_t(enum_t::no_value);
     }
 
-    friend void
-    ok::detail::make_res_into_error_without_destruction(res_t& res,
-                                                        enum_t error);
+    friend constexpr void
+    ok::detail::set_result_error_byte(res_t&, uint8_t byte) noexcept;
+
+    friend struct detail::make_inner_fn_t<contained_t>;
 
 #ifdef OKAYLIB_USE_FMT
     friend struct fmt::formatter<res_t>;
@@ -226,23 +321,11 @@ class res_t<contained_t, enum_t,
     using unqualified_t = std::remove_cv_t<contained_t>;
     using enum_int_t = std::underlying_type_t<enum_t>;
 
-    struct uninstantiable_t
-    {
-        friend class res_t;
-
-      private:
-        uninstantiable_t() = default;
-    };
-
   public:
     using type = contained_t;
     using enum_type = enum_t;
 
-    static_assert(!is_infallible_constructible_v<
-                      contained_t, default_constructor_tag, const enum_t&>,
-                  "Cannot store type in res if it is constructible from its "
-                  "own status code- this makes assigning the statuscode "
-                  "to the res ambiguous.");
+    static_assert(!is_std_constructible_v<contained_t, const enum_t&>);
     static_assert(
         std::is_enum_v<enum_t>,
         "The second type parameter to res_t must be a statuscode enum.");
@@ -261,18 +344,16 @@ class res_t<contained_t, enum_t,
     constexpr res_t& operator=(const res_t& other) = delete;
 
     // NOTE: not defining std::in_place constructor here because slice cannot
-    // default construct. If it could, then this would enable default
-    // construction of the res
-    template <typename constructor_tag_t = ok::default_constructor_tag,
-              typename... args_t,
-              std::enable_if_t<is_infallible_constructible_v<
-                                   contained_t, constructor_tag_t, args_t...>,
-                               bool> = true>
+    // default construct
+    template <
+        typename... args_t,
+        std::enable_if_t<sizeof...(args_t) != 0 &&
+                             is_std_constructible_v<contained_t, args_t...>,
+                         bool> = true>
     constexpr res_t(args_t&&... args) OKAYLIB_NOEXCEPT
     {
-        detail::construct_into_uninitialized_infallible(
-            reinterpret_cast<unqualified_t*>(this), constructor_tag_t{},
-            std::forward<args_t>(args)...);
+        new (reinterpret_cast<unqualified_t*>(this))
+            unqualified_t(std::forward<args_t>(args)...);
     }
 
     constexpr res_t(enum_t failure) OKAYLIB_NOEXCEPT

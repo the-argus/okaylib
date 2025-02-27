@@ -4,6 +4,7 @@
 #include "okay/allocators/allocator.h"
 #include "okay/detail/ok_unreachable.h"
 #include "okay/opt.h"
+#include "okay/status.h"
 #include <atomic>
 
 namespace ok {
@@ -142,8 +143,6 @@ struct ro_arc_t
     static_assert(detail::is_derived_from_v<allocator_impl_t, allocator_t>,
                   "Allocator type parameter to ro_arc_t must be derived from "
                   "ok::allocator_t");
-
-    using out_error_type = status_t<alloc::error>;
 
     struct make;
     friend struct make;
