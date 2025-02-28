@@ -204,7 +204,7 @@ struct request_t
     size_t num_bytes;
     size_t alignment = alloc::default_align;
     void* future_compat = nullptr;
-    flags flags;
+    flags flags; // only for leave_nonzeroed, all other flags do nothing
 };
 
 struct reallocate_request_t
@@ -221,8 +221,7 @@ struct reallocate_request_t
     [[nodiscard]] constexpr bool is_valid() const OKAYLIB_NOEXCEPT
     {
         constexpr alloc::flags forbidden =
-            flags::shrink_front | flags::expand_front | flags::expand_back |
-            flags::shrink_back;
+            flags::shrink_front | flags::expand_front;
 
         // cannot expand or shrink front
         return !(flags & forbidden) &&
