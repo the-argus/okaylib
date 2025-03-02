@@ -13,6 +13,7 @@
 #include "okay/construct.h"
 // for reinterpret_as_bytes
 #include "okay/detail/template_util/first_type_in_pack.h"
+#include "okay/status.h"
 #include "okay/stdmem.h"
 
 namespace ok {
@@ -611,6 +612,45 @@ constexpr void free(allocator_impl_t& ally, T& object) OKAYLIB_NOEXCEPT
 }
 
 namespace detail {
+
+template <typename... args_t> struct inplace_return_type_or_void
+{
+
+    template <typename T, typename constructor_t, typename = void> struct inner
+    {
+        using type = void;
+    };
+
+    template <typename T, typename constructor_t>
+    struct inner<T, constructor_t,
+                 std::void_t<decltype(std::declval<const constructor_t&>()(
+                     std::declval<T&>(), std::declval<args_t>()...))>>
+    {
+        using type = decltype(std::declval<const constructor_t&>()(
+            std::declval<T&>(), std::declval<args_t>()...));
+    };
+};
+
+template <typename T, typename constructor_t, typename... args_t>
+using inplace_return_type_or_void_t = typename inplace_return_type_or_void<
+    args_t...>::template inner<T, constructor_t>::type;
+
+template <typename callable_t, typename... pack_t>
+constexpr decltype(auto)
+call_first_argument_with_the_rest_of_the_arguments(callable_t&& callable,
+                                                   pack_t&&... pack)
+{
+    return callable(std::forward<pack_t>(pack)...);
+}
+
+template <typename T, typename callable_t, typename... pack_t>
+constexpr decltype(auto)
+call_first_argument_with_T_ref_and_the_rest_of_the_arguments(
+    T& item, callable_t&& callable, pack_t&&... pack)
+{
+    return callable(item, std::forward<pack_t>(pack)...);
+}
+
 template <typename T> struct make_into_uninitialized_fn_t
 {
     template <typename... args_t>
@@ -620,38 +660,72 @@ template <typename T> struct make_into_uninitialized_fn_t
     {
         constexpr bool is_std = is_std_constructible_v<T, args_t...>;
         if constexpr (sizeof...(args_t) >= 1) {
-            using is_fallible = detail::has_fallible_construct_for_args<
-                T, detail::first_type_in_pack_t<args_t...>>;
-            using is_infallible = detail::has_infallible_construct_for_args<
-                T, detail::first_type_in_pack_t<args_t...>>;
-            static_assert(
-                is_fallible::value || is_infallible::value || is_std,
-                "Cannot construct given type with the given arguments.");
+            using constructor_t = detail::first_type_in_pack_t<args_t...>;
 
-            static_assert(
-                int(is_fallible::value) + int(is_infallible::value) +
-                        int(is_std) ==
-                    1,
-                "Ambiguous constructor selection. the given args could address "
-                "multiple constructors or `construct()` functions.");
+            constexpr bool is_inplace =
+                std::is_invocable_v<constructor_t, T&, args_t...>;
+            constexpr bool is_not_inplace =
+                std::is_invocable_v<constructor_t, args_t...>;
+            static_assert(is_inplace || is_not_inplace || is_std,
+                          "No valid way of calling given constructor.");
+            static_assert(int(is_inplace) + int(is_not_inplace) + int(is_std) ==
+                              1,
+                          "Ambiguous constructor selection. the given args "
+                          "could address multiple functions.");
+
+            using inplace_return =
+                inplace_return_type_or_void_t<T, constructor_t, args_t...>;
+
+            constexpr bool is_fallible =
+                (is_inplace && !std::is_void_v<inplace_return>);
+
+            if constexpr (is_fallible) {
+                using return_type =
+                    decltype(call_first_argument_with_T_ref_and_the_rest_of_the_arguments(
+                        uninitialized, std::forward<args_t>(args)...));
+                static_assert(detail::is_instance_v<return_type, status_t> ||
+                              std::is_void_v<return_type>);
+
+            }
+            // infallible + inplace
+            else if constexpr (is_inplace && std::is_void_v<inplace_return>) {
+                using return_type =
+                    decltype(call_first_argument_with_T_ref_and_the_rest_of_the_arguments(
+                        uninitialized, std::forward<args_t>(args)...));
+                static_assert(std::is_void_v<return_type>);
+                call_first_argument_with_T_ref_and_the_rest_of_the_arguments(
+                    uninitialized, std::forward<args_t>(args)...);
+                return;
+            }
+            // infallible
+            else if constexpr (is_not_inplace) {
+                using return_type =
+                    decltype(call_first_argument_with_the_rest_of_the_arguments(
+                        std::forward<args_t>(args)...));
+                static_assert(is_std_constructible_v<T, return_type>,
+                              "Given factory function does not return "
+                              "something which can be used to construct a T.");
+                new (ok::addressof(uninitialized))
+                    T(call_first_argument_with_the_rest_of_the_arguments(
+                        std::forward<args_t>(args)...));
+                return;
+            } else if constexpr (is_std) {
+                new (ok::addressof(uninitialized))
+                    T(std::forward<args_t>(args)...);
+                return;
+            } else {
+                static_assert(false, "No valid constructor found for the given arguments.");
+            }
 
             if constexpr (is_fallible::value) {
-                static_assert(sizeof(T) ==
-                              sizeof(detail::uninitialized_storage_t<T>));
-                static_assert(alignof(T) ==
-                              alignof(detail::uninitialized_storage_t<T>));
-                auto construction_result = T::construct(
-                    *reinterpret_cast<detail::uninitialized_storage_t<T>*>(
-                        ok::addressof(uninitialized)),
-                    std::forward<args_t>(args)...);
 
                 auto out = construction_result.err();
                 if (!construction_result.okay()) [[unlikely]] {
                     return out;
                 }
 
-                // release from result then release ownership of the constructed
-                // thing
+                // release from result then release ownership of the
+                // constructed thing
                 T& unused_mem = construction_result.release().release();
 
                 return out;
@@ -667,18 +741,20 @@ template <typename T> struct make_into_uninitialized_fn_t
             }
         } else {
             if constexpr (detail::has_default_infallible_construct<T>::value) {
-                static_assert(
-                    !std::is_default_constructible_v<T>,
-                    "Ambiguous default constructor selection for given type: "
-                    "do I call `T::construct()` or the default constructor?");
+                static_assert(!std::is_default_constructible_v<T>,
+                              "Ambiguous default constructor selection for "
+                              "given type: "
+                              "do I call `T::construct()` or the default "
+                              "constructor?");
                 // TODO: should probably check that type is trivially move
-                // constructible here? returning T directly from the construct()
-                // function means moving it into its destination
+                // constructible here? returning T directly from the
+                // construct() function means moving it into its destination
                 new (ok::addressof(uninitialized)) T(T::construct());
                 return;
             } else {
-                // zero constructor args_passed in, duplicate case where we dont
-                // do any of the template stuff and static assert checks
+                // zero constructor args_passed in, duplicate case where we
+                // dont do any of the template stuff and static assert
+                // checks
                 static_assert(is_std, "Cannot default construct the type given "
                                       "to `allocator.make()`.");
                 new (ok::addressof(uninitialized)) T();

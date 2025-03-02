@@ -65,6 +65,8 @@ void virtual_tests_array_list(allocator_t& ally)
         array_t<int, 5>::construct(array_t<int, 5>::undefined{});
     undefined = ok::make(array_t<int, 5>::undefined{});
 
+    auto alist1 = arraylist::empty<int>{}(ally)();
+
     arraylist_t alist = ok::make(arraylist_t<int>::empty{.allocator = ally});
 
     auto arraylist =
