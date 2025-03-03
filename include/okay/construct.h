@@ -227,8 +227,12 @@ template <typename T> struct make_fn_t
 ///     binding together the in-place constructed target of the constructor
 ///     function and the returned status into one object.
 ///   - Otherwise, ok::make() will just return the in-place constructed object.
-template <typename T = detail::deduced_t>
-inline constexpr detail::make_fn_t<T> make;
+template <typename T = detail::deduced_t, typename... args_t>
+constexpr auto make(args_t&&... args) OKAYLIB_NOEXCEPT
+{
+    constexpr detail::make_fn_t<T> fn;
+    return fn(std::forward<args_t>(args)...);
+}
 
 } // namespace ok
 

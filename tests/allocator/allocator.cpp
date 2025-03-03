@@ -60,11 +60,10 @@ void virtual_tests_array_list(allocator_t& ally)
     ok::array_t zeroed = array::defaulted_or_zeroed<int, 5>();
     zeroed = ok::make(array::defaulted_or_zeroed<int, 5>);
 
-    ok::array_t undefined =
-        array_t<int, 5>::construct(array_t<int, 5>::undefined{});
-    undefined = ok::make(array_t<int, 5>::undefined{});
+    ok::array_t undefined = array::undefined<int, 5>();
+    undefined = ok::make(ok::array::undefined<int, 5>);
 
-    auto alist1 = arraylist::empty<int>{}(ally)();
+    auto alist1 = arraylist::empty<int>(ally);
 
     arraylist_t alist = ok::make(arraylist_t<int>::empty{.allocator = ally});
 
