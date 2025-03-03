@@ -400,7 +400,7 @@ struct copy_items_from_range
         return alloc::error::okay;
     };
 };
-};
+}; // namespace arraylist
 
 // template <typename T, typename backing_allocator_t> struct empty
 // {
@@ -424,8 +424,6 @@ struct copy_items_from_range
 //     backing_allocator_t& allocator;
 //     size_t num_spots_preallocated;
 // };
-
-} // namespace arraylist
 
 } // namespace ok
 

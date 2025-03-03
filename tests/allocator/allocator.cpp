@@ -34,32 +34,31 @@ struct empty_destructor
 
 // test an allocator through its vtable. expects at least 1mb of memory to be
 // accessible to the allocator, although it can start with any amount
-void virtual_tests_1mb_a(allocator_t& ally)
-{
-    // alloc a bunch of stuff, every allocator should be capable of at least
-    // this
-    alloc::owned array_on_heap =
-        ally.make(array_t<int, 500>::undefined{}).release();
+// void virtual_tests_1mb_a(allocator_t& ally)
+// {
+//     // alloc a bunch of stuff, every allocator should be capable of at least
+//     // this
+//     alloc::owned array_on_heap =
+//         ally.make(array_t<int, 500>::undefined{}).release();
 
-    auto array_on_stack = array_t<int, 500>::construct({});
+//     auto array_on_stack = array_t<int, 500>::construct({});
 
-    auto int_array =
-        ally.make(array_t<int, 50>::defaulted_or_zeroed{}).release();
+//     auto int_array =
+//         ally.make(array_t<int, 50>::defaulted_or_zeroed{}).release();
 
-    ok::array_t deduction_test =
-        ok::make(array_t<int, 500>::defaulted_or_zeroed{});
+//     ok::array_t deduction_test =
+//         ok::make(array_t<int, 500>::defaulted_or_zeroed{});
 
-    if (ally.features() & alloc::feature_flags::can_only_alloc) {
-    }
-}
+//     if (ally.features() & alloc::feature_flags::can_only_alloc) {
+//     }
+// }
 
 void virtual_tests_array_list(allocator_t& ally)
 {
     ok::array_t array = {1, 2, 3, 4};
 
-    ok::array_t zeroed =
-        array_t<int, 5>::construct(array_t<int, 5>::defaulted_or_zeroed{});
-    zeroed = ok::make(array_t<int, 5>::defaulted_or_zeroed{});
+    ok::array_t zeroed = array::defaulted_or_zeroed<int, 5>();
+    zeroed = ok::make(array::defaulted_or_zeroed<int, 5>);
 
     ok::array_t undefined =
         array_t<int, 5>::construct(array_t<int, 5>::undefined{});

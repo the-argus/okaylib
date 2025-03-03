@@ -10,6 +10,13 @@
 
 namespace ok {
 
+namespace array {
+namespace detail {
+template <typename T, size_t num_items> struct defaulted_or_zeroed_t;
+template <typename T, size_t num_items> struct undefined_t;
+} // namespace detail
+} // namespace array
+
 template <typename T, size_t num_items> class array_t
 {
   private:
@@ -29,42 +36,9 @@ template <typename T, size_t num_items> class array_t
     constexpr array_t(array_t&&) = default;
     constexpr array_t& operator=(array_t&&) = default;
 
-    template <typename U = array_t, typename = void> struct undefined
-    {
-        static_assert(false,
-                      "Cannot use the undefined array constructor for an array "
-                      "whose type is not trivially constructible.");
-    };
-
-    template <typename U>
-    struct undefined<
-        U, std::enable_if_t<std::is_same_v<U, array_t> &&
-                            std::is_trivially_default_constructible_v<T>>>
-    {
-        using associated_type = array_t;
-    };
-    struct defaulted_or_zeroed
-    {
-        using associated_type = array_t;
-    };
-
-    constexpr static array_t
-    construct(const defaulted_or_zeroed&) OKAYLIB_NOEXCEPT
-    {
-        array_t out;
-        if constexpr (std::is_trivially_constructible_v<T>) {
-            std::memset(out.__m_items, 0, num_items * sizeof(T));
-        }
-        return out;
-    };
-
-    template <
-        typename U = undefined<array_t>,
-        std::enable_if_t<std::is_same_v<U, undefined<array_t>>, bool> = true>
-    constexpr static array_t construct(const U&) OKAYLIB_NOEXCEPT
-    {
-        return array_t();
-    };
+    // factory functions
+    friend struct ok::array::detail::defaulted_or_zeroed_t<T, num_items>;
+    friend struct ok::array::detail::undefined_t<T, num_items>;
 
     constexpr value_type& operator[](size_t index) & OKAYLIB_NOEXCEPT
     {
@@ -109,6 +83,35 @@ template <typename T, typename... pack>
 array_t(T, pack...)
     -> array_t<std::enable_if_t<(std::is_same_v<T, pack> && ...), T>,
                1 + sizeof...(pack)>;
+
+namespace array {
+namespace detail {
+template <typename T, size_t num_items> struct defaulted_or_zeroed_t
+{
+    inline static constexpr auto impl = []() {
+        array_t<T, num_items> out;
+        if constexpr (std::is_trivially_constructible_v<T>) {
+            std::memset(out.__m_items, 0, num_items * sizeof(T));
+        }
+        return out;
+    };
+};
+template <typename T, size_t num_items> struct undefined_t
+{
+    inline static constexpr auto impl = []() {
+        return array_t<T, num_items>();
+    };
+};
+} // namespace detail
+
+template <typename T, size_t num_items>
+inline constexpr auto defaulted_or_zeroed =
+    detail::defaulted_or_zeroed_t<T, num_items>::impl;
+
+template <typename T, size_t num_items>
+inline constexpr auto undefined = detail::undefined_t<T, num_items>::impl;
+
+} // namespace array
 
 } // namespace ok
 

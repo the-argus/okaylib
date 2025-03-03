@@ -19,8 +19,7 @@ namespace detail {
 
 template <typename T> struct make_inner_fn_t;
 
-template <typename T, typename E>
-constexpr void set_result_error_byte(res_t<T, E>&, uint8_t byte) noexcept;
+template <typename T, typename E> struct res_accessor_t;
 
 template <typename T> struct owning_ref_trivial_members
 {
@@ -165,7 +164,7 @@ class res_t<contained_t, enum_t,
         "Result cannot store an the same enum as payload as for statuscode.");
     static_assert(detail::is_status_enum_v<enum_t>,
                   OKAYLIB_IS_STATUS_ENUM_ERRMSG);
-    static_assert(!is_infallible_constructible_v<contained_t, const enum_t&>,
+    static_assert(!is_std_constructible_v<contained_t, const enum_t&>,
                   "Cannot store type in res if it is constructible from its "
                   "own status code- this makes what assigning the statuscode "
                   "to the res will do ambiguous.");
@@ -300,10 +299,7 @@ class res_t<contained_t, enum_t,
         this->get_error_payload() = enum_int_t(enum_t::no_value);
     }
 
-    friend constexpr void
-    ok::detail::set_result_error_byte(res_t&, uint8_t byte) noexcept;
-
-    friend struct detail::make_inner_fn_t<contained_t>;
+    friend struct ok::detail::res_accessor_t<contained_t, enum_t>;
 
 #ifdef OKAYLIB_USE_FMT
     friend struct fmt::formatter<res_t>;
