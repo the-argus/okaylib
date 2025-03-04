@@ -16,15 +16,15 @@ struct big
     int i[100];
 };
 static_assert(!std::is_convertible_v<std::optional<big>, const int&>);
-static_assert(!std::is_convertible_v<opt_t<big>, const int&>);
+static_assert(!std::is_convertible_v<opt<big>, const int&>);
 static_assert(!std::is_convertible_v<int*, const int&>);
 static_assert(!std::is_convertible_v<std::optional<int*>, const int&>);
-static_assert(!std::is_convertible_v<opt_t<int&>, const int&>);
+static_assert(!std::is_convertible_v<opt<int&>, const int&>);
 
-static_assert(sizeof(opt_t<slice_t<int>>) == sizeof(slice_t<int>),
+static_assert(sizeof(opt<slice_t<int>>) == sizeof(slice_t<int>),
               "Optional slice types are a different size than slices");
 
-static_assert(sizeof(opt_t<int&>) == sizeof(int*),
+static_assert(sizeof(opt<int&>) == sizeof(int*),
               "Optional reference types are a different size than pointers");
 
 TEST_SUITE("opt")
@@ -33,7 +33,7 @@ TEST_SUITE("opt")
     {
         SUBCASE("Default construction")
         {
-            opt_t<int> def;
+            opt<int> def;
             REQUIRE((!def.has_value()));
             REQUIRE((def != 0));
             REQUIRE((0 != def));
@@ -45,7 +45,7 @@ TEST_SUITE("opt")
 
         SUBCASE("Construction with value")
         {
-            opt_t<int> has = 10;
+            opt<int> has = 10;
             REQUIRE(has.has_value());
             REQUIRE(has == 10);
             REQUIRE(has.value() == 10);
@@ -55,8 +55,8 @@ TEST_SUITE("opt")
 
         SUBCASE("comparison")
         {
-            opt_t<int> one = 100;
-            opt_t<int> two;
+            opt<int> one = 100;
+            opt<int> two;
             REQUIRE(one != two);
             REQUIRE(two != one);
             two = 200;
@@ -80,15 +80,15 @@ TEST_SUITE("opt")
 
         SUBCASE("convertible to bool")
         {
-            opt_t<int> nothing;
+            opt<int> nothing;
             REQUIRE(!nothing);
             REQUIRE(!nothing.has_value());
-            opt_t<int> something = 1;
+            opt<int> something = 1;
             REQUIRE(something);
             REQUIRE(something.has_value());
 
-            auto bool_to_optional = [](bool input) -> opt_t<int> {
-                return input ? opt_t<int>(3478) : opt_t<int>{};
+            auto bool_to_optional = [](bool input) -> opt<int> {
+                return input ? opt<int>(3478) : opt<int>{};
             };
 
             if (auto result = bool_to_optional(true)) {
@@ -96,9 +96,9 @@ TEST_SUITE("opt")
                 REQUIRE(result.value() == 3478);
                 REQUIRE(result == 3478);
 
-                REQUIRE(result != opt_t<int>(3477));
+                REQUIRE(result != opt<int>(3477));
                 REQUIRE(result != 3477);
-                REQUIRE(result != opt_t<int>{});
+                REQUIRE(result != opt<int>{});
             }
 
             if (auto result = bool_to_optional(false)) {
@@ -109,13 +109,13 @@ TEST_SUITE("opt")
         SUBCASE("non owning slice")
         {
             std::vector<uint8_t> bytes = {20, 32, 124, 99, 1};
-            opt_t<slice_t<uint8_t>> maybe_array;
+            opt<slice_t<uint8_t>> maybe_array;
             REQUIRE(!maybe_array.has_value());
 
-            // opt_t<std::vector<uint8_t>> optional_vector_copy(bytes);
+            // opt<std::vector<uint8_t>> optional_vector_copy(bytes);
             // maybe_array = optional_vector_copy;
 
-            // TODO: make sure slice and opt_t<slice_t> cannot assume ownership
+            // TODO: make sure slice and opt<slice_t> cannot assume ownership
             // of objects that are not trivially moveable
         }
 
@@ -125,23 +125,23 @@ TEST_SUITE("opt")
         {
             std::vector<int> nums = {1203, 12390, 12930, 430};
 
-            auto consume = [](opt_t<std::vector<int>>&& maybe_moved) {
+            auto consume = [](opt<std::vector<int>>&& maybe_moved) {
                 if (!maybe_moved)
                     return;
 
                 REQUIRE(!maybe_moved.value().empty());
-                opt_t<std::vector<int>> our_nums = std::move(maybe_moved);
+                opt<std::vector<int>> our_nums = std::move(maybe_moved);
                 REQUIRE(!maybe_moved.has_value());
                 REQUIRE(!our_nums.value().empty());
                 our_nums.value().resize(0);
             };
 
-            opt_t<std::vector<int>> maybe_copy;
+            opt<std::vector<int>> maybe_copy;
             REQUIRE(!maybe_copy);
             consume(std::move(maybe_copy));
             REQUIRE(!maybe_copy); // this is defined behavior with checked moves
 
-            opt_t<std::vector<int>> maybe_moved = std::move(nums);
+            opt<std::vector<int>> maybe_moved = std::move(nums);
             REQUIRE(maybe_moved);
             REQUIRE(!maybe_moved.value().empty());
             consume(std::move(maybe_moved));
@@ -156,7 +156,7 @@ TEST_SUITE("opt")
         SUBCASE("Resetting")
         {
 #ifndef OKAYLIB_DISALLOW_EXCEPTIONS
-            opt_t<std::vector<int>> vec;
+            opt<std::vector<int>> vec;
             // null by default
             REQUIRE(!vec.has_value());
             vec.emplace();
@@ -170,7 +170,7 @@ TEST_SUITE("opt")
 
         SUBCASE("Aborts on null")
         {
-            opt_t<int> nope;
+            opt<int> nope;
             REQUIREABORTS(++nope.value());
         }
 
@@ -179,7 +179,7 @@ TEST_SUITE("opt")
             moveable_t moveguy;
             int bytes = std::snprintf(moveguy.nothing, 50, "nope");
 
-            opt_t<moveable_t> maybe_moveguy = std::move(moveguy);
+            opt<moveable_t> maybe_moveguy = std::move(moveguy);
             REQUIRE(maybe_moveguy.has_value());
             // and this shouldnt work
             // opt<moveable_t> maybe_moveguy = moveguy;
@@ -189,14 +189,14 @@ TEST_SUITE("opt")
 
         SUBCASE("null optional references are not aliases for each other")
         {
-            opt_t<int&> a;
-            opt_t<int&> b;
+            opt<int&> a;
+            opt<int&> b;
             REQUIRE(!a.is_alias_for(b));
         }
 
         SUBCASE("pointer convertible to optional reference")
         {
-            opt_t<int&> iref = nullptr;
+            opt<int&> iref = nullptr;
             REQUIRE(!iref);
             iref = nullptr;
             REQUIRE(!iref);
@@ -211,15 +211,15 @@ TEST_SUITE("opt")
         {
             // cannot go from const to nonconst
             static_assert(
-                !std::is_convertible_v<opt_t<const int&>, opt_t<int&>>);
+                !std::is_convertible_v<opt<const int&>, opt<int&>>);
             // can go from nonconst to const
             static_assert(
-                std::is_convertible_v<opt_t<int&>, opt_t<const int&>>);
+                std::is_convertible_v<opt<int&>, opt<const int&>>);
             int i = 10;
-            opt_t<int&> mut_iref = i;
-            opt_t<const int&> iref = i;
+            opt<int&> mut_iref = i;
+            opt<const int&> iref = i;
 
-            opt_t<const int&> iref_2 = mut_iref;
+            opt<const int&> iref_2 = mut_iref;
         }
 
         SUBCASE("optional of reference to derived can be converted to optional "
@@ -238,29 +238,29 @@ TEST_SUITE("opt")
             test_base t{0};
             test_derived td{0, true};
 
-            opt_t<test_base&> tref = t;
+            opt<test_base&> tref = t;
             REQUIRE(tref.is_alias_for(t));
             tref = td;
             REQUIRE(tref.is_alias_for(td));
 
             // cannot go from base to derived
-            static_assert(!std::is_convertible_v<opt_t<test_base&>,
-                                                 opt_t<test_derived&>>);
+            static_assert(!std::is_convertible_v<opt<test_base&>,
+                                                 opt<test_derived&>>);
         }
 
         SUBCASE("optional reference types")
         {
             int test = 10;
-            opt_t<const int&> testref;
-            opt_t<int&> testref2;
+            opt<const int&> testref;
+            opt<int&> testref2;
             REQUIRE(!testref.has_value());
             REQUIRE(!testref2.has_value());
             testref = test;
             REQUIRE(testref.value() == test);
             REQUIRE(testref.is_alias_for(test));
             static_assert(
-                std::is_same_v<opt_t<const int&>::pointer_t, const int>);
-            static_assert(!std::is_convertible_v<opt_t<int&>, const int>);
+                std::is_same_v<opt<const int&>::pointer_t, const int>);
+            static_assert(!std::is_convertible_v<opt<int&>, const int>);
             REQUIRE(!testref.is_alias_for(testref2));
 
             int test2 = 10;
@@ -290,15 +290,15 @@ TEST_SUITE("opt")
             };
 
             auto try_make_big_thing =
-                [](bool should_succeed) -> opt_t<BigThing> {
+                [](bool should_succeed) -> opt<BigThing> {
                 if (should_succeed)
-                    return opt_t<BigThing>{std::in_place};
+                    return opt<BigThing>{std::in_place};
                 else
                     return {};
             };
 
-            opt_t<BigThing> maybe_thing = try_make_big_thing(true);
-            opt_t<BigThing> maybe_not_thing = try_make_big_thing(true);
+            opt<BigThing> maybe_thing = try_make_big_thing(true);
+            opt<BigThing> maybe_not_thing = try_make_big_thing(true);
             REQUIRE(copy_count == 0);
             // one copy required to get it out of the optional
             BigThing thing = try_make_big_thing(true).value();
@@ -308,7 +308,7 @@ TEST_SUITE("opt")
         SUBCASE("emplace")
         {
 #ifndef OKAYLIB_DISALLOW_EXCEPTIONS
-            opt_t<std::vector<int>> mvec;
+            opt<std::vector<int>> mvec;
             REQUIRE(!mvec.has_value());
             mvec.emplace();
             REQUIRE(mvec.has_value());
@@ -317,7 +317,7 @@ TEST_SUITE("opt")
 
         SUBCASE("safely return copies from value optionals")
         {
-            const auto get_maybe_int = []() -> opt_t<int> { return 1; };
+            const auto get_maybe_int = []() -> opt<int> { return 1; };
 
             static_assert(
                 std::is_same_v<decltype(get_maybe_int().value()), int&&>);
@@ -331,7 +331,7 @@ TEST_SUITE("opt")
         SUBCASE("safely return copies from slice optionals")
         {
             std::array<uint8_t, 512> mem;
-            const auto get_maybe_slice = [&mem]() -> opt_t<slice_t<uint8_t>> {
+            const auto get_maybe_slice = [&mem]() -> opt<slice_t<uint8_t>> {
                 return slice_t<uint8_t>(mem);
             };
 
@@ -352,7 +352,7 @@ TEST_SUITE("opt")
         //         byte = index;
         //     }
 
-        //     opt_t<slice_t<uint8_t>> maybe_bytes;
+        //     opt<slice_t<uint8_t>> maybe_bytes;
         //     maybe_bytes.emplace(bytes);
 
         //     for (auto [byte, index] : enumerate(maybe_bytes.value())) {
@@ -369,9 +369,9 @@ TEST_SUITE("opt")
             };
 
             thing copyguy;
-            opt_t<thing> maybe_copyguy = copyguy;
+            opt<thing> maybe_copyguy = copyguy;
             // identical to:
-            opt_t<thing> maybe_copyguy_moved = std::move(copyguy); // NOLINT
+            opt<thing> maybe_copyguy_moved = std::move(copyguy); // NOLINT
 
             REQUIRE(maybe_copyguy.has_value());
             REQUIRE(maybe_copyguy_moved.has_value());
@@ -380,9 +380,9 @@ TEST_SUITE("opt")
         SUBCASE("copying slice")
         {
             std::array<uint8_t, 128> bytes;
-            opt_t<slice_t<uint8_t>> maybe_bytes(bytes);
+            opt<slice_t<uint8_t>> maybe_bytes(bytes);
 
-            opt_t<slice_t<uint8_t>> other_maybe_bytes(maybe_bytes);
+            opt<slice_t<uint8_t>> other_maybe_bytes(maybe_bytes);
             REQUIRE(
                 other_maybe_bytes.value().is_alias_for(maybe_bytes.value()));
 
@@ -392,20 +392,20 @@ TEST_SUITE("opt")
 #ifdef OKAYLIB_USE_FMT
         SUBCASE("formattable")
         {
-            opt_t<std::string_view> str;
+            opt<std::string_view> str;
             str = "yello";
             fmt::println("optional string BEFORE: {}", str);
             str.reset();
             fmt::println("optional string AFTER: {}", str);
 
             std::string_view target = "reference yello";
-            opt_t<std::string_view&> refstr(target);
+            opt<std::string_view&> refstr(target);
             fmt::println("optional reference string BEFORE: {}", refstr);
             refstr.reset();
             fmt::println("optional reference string AFTER: {}", refstr);
 
             std::array<uint8_t, 128> bytes;
-            opt_t<slice_t<uint8_t>> maybe_bytes;
+            opt<slice_t<uint8_t>> maybe_bytes;
             maybe_bytes.emplace(bytes);
             fmt::println("optional slice: {}", maybe_bytes);
         }
@@ -416,7 +416,7 @@ TEST_SUITE("opt")
     {
         SUBCASE("can get size of opt")
         {
-            opt_t<char> optchar;
+            opt<char> optchar;
             REQUIRE(ok::size(optchar) == 0);
             optchar = 'c';
             REQUIRE(ok::size(optchar) == 1);
@@ -424,7 +424,7 @@ TEST_SUITE("opt")
 
         SUBCASE("can ok_foreach over opt")
         {
-            opt_t<char> maybechar;
+            opt<char> maybechar;
 
             ok_foreach(auto c, maybechar)
             {
@@ -453,7 +453,7 @@ TEST_SUITE("opt")
         SUBCASE("ok_foreach over optional reference has the same semantics as "
                 "optional value")
         {
-            opt_t<char&> maybechar_ref;
+            opt<char&> maybechar_ref;
 
             ok_foreach(auto c, maybechar_ref)
             {
@@ -482,8 +482,8 @@ TEST_SUITE("opt")
 
         SUBCASE("ok_foreach over const ref or value")
         {
-            const opt_t<char> maybechar;
-            opt_t<const char&> maybechar_ref;
+            const opt<char> maybechar;
+            opt<const char&> maybechar_ref;
 
             ok_foreach(auto c, maybechar_ref)
             {
@@ -527,7 +527,7 @@ TEST_SUITE("opt")
         SUBCASE("nested ok_foreach for optional slice")
         {
             std::array<uint8_t, 12> bytes;
-            opt_t<slice_t<uint8_t>> opt_bytes = bytes;
+            opt<slice_t<uint8_t>> opt_bytes = bytes;
             // fill with indices
             ok_foreach(auto& slice, opt_bytes)
             {

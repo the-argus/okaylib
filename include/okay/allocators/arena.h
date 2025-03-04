@@ -90,7 +90,7 @@ class arena_t : public allocator_t
 #endif
     bytes_t m_memory;
     bytes_t m_available_memory;
-    opt_t<allocator_t&> m_backing;
+    opt<allocator_t&> m_backing;
 };
 
 constexpr arena_t::arena_t(bytes_t static_buffer) OKAYLIB_NOEXCEPT

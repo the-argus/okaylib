@@ -16,100 +16,9 @@
 
 namespace ok {
 namespace detail {
-
 template <typename T> struct make_inner_fn_t;
-
 template <typename T, typename E> struct res_accessor_t;
-
-template <typename T> struct owning_ref_trivial_members
-{
-    T* value;
-
-    constexpr owning_ref_trivial_members(T& in) noexcept
-        : value(ok::addressof(in))
-    {
-    }
-};
-template <typename T>
-struct owning_ref_nontrivial_members : public owning_ref_trivial_members<T>
-{
-    inline ~owning_ref_nontrivial_members()
-    {
-        if (this->value) {
-            this->value->~T();
-        }
-    }
-    constexpr owning_ref_nontrivial_members(T& in) noexcept
-        : owning_ref_trivial_members<T>(in)
-    {
-    }
-};
-}; // namespace detail
-
-template <typename T>
-class owning_ref
-    : protected std::conditional_t<std::is_trivially_destructible_v<T>,
-                                   detail::owning_ref_trivial_members<T>,
-                                   detail::owning_ref_nontrivial_members<T>>
-{
-    using parent_t =
-        std::conditional_t<std::is_trivially_destructible_v<T>,
-                           detail::owning_ref_trivial_members<T>,
-                           detail::owning_ref_nontrivial_members<T>>;
-    constexpr parent_t& upcast() { return *static_cast<parent_t*>(this); }
-    constexpr const parent_t& upcast() const
-    {
-        return *static_cast<const parent_t*>(this);
-    }
-
-  public:
-    constexpr T* operator->() OKAYLIB_NOEXCEPT
-    {
-        __ok_assert(upcast().value, "use-after-release of owning_ref");
-        return upcast().value;
-    }
-    constexpr const T* operator->() const OKAYLIB_NOEXCEPT
-    {
-        __ok_assert(upcast().value, "use-after-release of owning_ref");
-        return upcast().value;
-    }
-    constexpr T& operator*() OKAYLIB_NOEXCEPT
-    {
-        __ok_assert(upcast().value, "use-after-release of owning_ref");
-        return *upcast().value;
-    }
-    constexpr const T& operator*() const OKAYLIB_NOEXCEPT
-    {
-        __ok_assert(upcast().value, "use-after-release of owning_ref");
-        return *upcast().value;
-    }
-
-    constexpr T& value() OKAYLIB_NOEXCEPT
-    {
-        __ok_assert(upcast().value, "use-after-release of owning_ref");
-        return **this;
-    }
-    constexpr const T& value() const OKAYLIB_NOEXCEPT
-    {
-        __ok_assert(upcast().value, "use-after-release of owning_ref");
-        return **this;
-    }
-
-    constexpr T& release() OKAYLIB_NOEXCEPT
-    {
-        __ok_assert(upcast().value, "use-after-release of owning_ref");
-        return *std::exchange(upcast().value, nullptr);
-    }
-
-    constexpr owning_ref(T& ref) : parent_t(ref) {}
-
-    // no moving or copying an owning ref. instead, move or copy the internal
-    // value
-    owning_ref(owning_ref&& other) = delete;
-    owning_ref& operator=(owning_ref&& other) = delete;
-    owning_ref(const owning_ref& other) = delete;
-    owning_ref& operator=(const owning_ref& other) = delete;
-};
+} // namespace detail
 
 namespace detail {
 struct uninitialized_result_tag
@@ -152,7 +61,7 @@ class res_t<contained_t, enum_t,
     static_assert(std::is_same_v<std::decay_t<enum_t>, enum_t>,
                   "Do not cv or ref qualify statuscode type.");
     static_assert(!std::is_rvalue_reference_v<contained_t>,
-                  "opt_t cannot store rvalue references");
+                  "opt cannot store rvalue references");
     static_assert(is_reference || (std::is_object_v<contained_t> &&
                                    !std::is_array_v<contained_t>),
                   "Results can only store objects, and not c-style arrays.");
@@ -177,7 +86,7 @@ class res_t<contained_t, enum_t,
     // cheaply convert to opt if reference type
     template <typename T = contained_t>
     [[nodiscard]] constexpr std::enable_if_t<
-        std::is_same_v<T, contained_t> && is_reference, opt_t<contained_t>>
+        std::is_same_v<T, contained_t> && is_reference, opt<contained_t>>
     to_opt() const OKAYLIB_NOEXCEPT
     {
         if (this->okay_payload()) {
@@ -381,13 +290,13 @@ class res_t<contained_t, enum_t,
     }
 
     // perform copy of slice as optional slice
-    [[nodiscard]] constexpr opt_t<contained_t> to_opt() const OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr opt<contained_t> to_opt() const OKAYLIB_NOEXCEPT
     {
         // opt<slice>, slice, and res<slice> should all have the same layout
-        static_assert(sizeof(opt_t<contained_t>) == sizeof(*this));
+        static_assert(sizeof(opt<contained_t>) == sizeof(*this));
         static_assert(sizeof(contained_t) == sizeof(*this));
         // we have the same layout and abi as opt, no need to cast
-        return *reinterpret_cast<const opt_t<contained_t>*>(this);
+        return *reinterpret_cast<const opt<contained_t>*>(this);
     }
 
     // copy inner slice out

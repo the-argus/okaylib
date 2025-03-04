@@ -7,9 +7,7 @@
 #include <type_traits>
 
 namespace ok {
-
-template <typename, typename, typename> class res_t;
-template <typename T> class owning_ref;
+template <typename contained_t, typename enum_t, typename> class res_t;
 
 template <typename T, typename... args_t>
 constexpr bool is_std_constructible_v =

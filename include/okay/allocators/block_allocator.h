@@ -9,7 +9,7 @@ class block_allocator_t : public ok::allocator_t
 {
     private:
 
-        opt_t<allocator_t&> m_backing;
+        opt<allocator_t&> m_backing;
 };
 }
 

@@ -107,7 +107,7 @@ template <typename input_range_t> struct joined_cursor_t
         }
     };
 
-    opt_t<members_t> m;
+    opt<members_t> m;
 };
 
 } // namespace detail

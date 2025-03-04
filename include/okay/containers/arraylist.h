@@ -25,7 +25,7 @@ class arraylist_t
     // - 8 bytes: backing_allocator pointer
     struct members_t
     {
-        opt_t<slice_t<T>> allocated_spots;
+        opt<slice_t<T>> allocated_spots;
         size_t spots_occupied;
         backing_allocator_t* backing_allocator;
     };

@@ -83,7 +83,7 @@ TEST_SUITE("join")
                 myints | keep_if([](int i) { return i % 2 == 0; });
 
             const auto empty_range_or_even_number =
-                transform([](int i) -> opt_t<int> {
+                transform([](int i) -> opt<int> {
                     if (i % 2 == 0)
                         return i;
                     else

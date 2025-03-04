@@ -214,7 +214,7 @@ struct ro_arc_t
     /// If this function succeeds, it is no longer valid to access the original
     /// ro_arc_t object. If it fails (returns null) the original object is
     /// still valid
-    [[nodiscard]] constexpr ok::opt_t<unique_rw_arc_t<T, allocator_impl_t>>
+    [[nodiscard]] constexpr ok::opt<unique_rw_arc_t<T, allocator_impl_t>>
     try_promote_and_consume_into_unique() OKAYLIB_NOEXCEPT
     {
         __ok_assert(m_payload,
@@ -230,7 +230,7 @@ struct ro_arc_t
 
         if (old == 1) {
             // looks like we were the only reference
-            ok::opt_t<unique_rw_arc_t<T, allocator_impl_t>> out =
+            ok::opt<unique_rw_arc_t<T, allocator_impl_t>> out =
                 unique_rw_arc_t<T, allocator_impl_t>(m_payload);
             // when a unique rw arc is active, lock bit is the only thing set
             m_payload->strong_refcount.store(detail::lock_bit);
@@ -355,7 +355,7 @@ struct weak_arc_t
     /// pointer payload, and if so this weak reference becomes another const.
     /// If this function returns success, it is not valid to access this
     /// weak_arc_t afterwards.
-    [[nodiscard]] constexpr ok::opt_t<ro_arc_t<T, allocator_impl_t>>
+    [[nodiscard]] constexpr ok::opt<ro_arc_t<T, allocator_impl_t>>
     try_spawn_readonly() const OKAYLIB_NOEXCEPT
     {
         if (!m_payload) {
@@ -384,7 +384,7 @@ struct weak_arc_t
         m_payload->strong_refcount.store(old + 1);
         // NOTE: allow weak refcount to be decremented at destruction
         using ro_arc_t = ro_arc_t<T, allocator_impl_t>;
-        return ok::opt_t<ro_arc_t>(ro_arc_t(m_payload));
+        return ok::opt<ro_arc_t>(ro_arc_t(m_payload));
     }
 
     inline ~weak_arc_t() OKAYLIB_NOEXCEPT { destroy(); }
@@ -551,7 +551,7 @@ struct variant_arc_t
         __ok_unreachable;
     }
 
-    [[nodiscard]] constexpr opt_t<variant_arc_t>
+    [[nodiscard]] constexpr opt<variant_arc_t>
     try_duplicate() const OKAYLIB_NOEXCEPT
     {
         if (!m_payload) [[unlikely]] {
@@ -577,7 +577,7 @@ struct variant_arc_t
         __ok_unreachable;
     }
 
-    [[nodiscard]] constexpr opt_t<T&> try_deref_nonconst() OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr opt<T&> try_deref_nonconst() OKAYLIB_NOEXCEPT
     {
         if (m_mode != arc_ownership::unique_rw || !m_payload) [[unlikely]] {
             return nullopt;
@@ -588,7 +588,7 @@ struct variant_arc_t
         return deref;
     }
 
-    [[nodiscard]] constexpr opt_t<const T&> try_deref() OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr opt<const T&> try_deref() OKAYLIB_NOEXCEPT
     {
         if (!m_payload) [[unlikely]] {
             return nullopt;
@@ -611,38 +611,38 @@ struct variant_arc_t
         }
     }
 
-    [[nodiscard]] constexpr opt_t<ro_arc_t>
+    [[nodiscard]] constexpr opt<ro_arc_t>
     try_consume_into_contained_readonly_arc() OKAYLIB_NOEXCEPT
     {
         if (ownership_mode() != arc_ownership::shared_ro || !m_payload)
             [[unlikely]] {
             return nullopt;
         }
-        return opt_t<ro_arc_t>(ro_arc_t(std::exchange(m_payload, nullptr)));
+        return opt<ro_arc_t>(ro_arc_t(std::exchange(m_payload, nullptr)));
     }
 
-    [[nodiscard]] constexpr opt_t<weak_arc_t>
+    [[nodiscard]] constexpr opt<weak_arc_t>
     try_consume_into_contained_weak_arc() OKAYLIB_NOEXCEPT
     {
         if (ownership_mode() != arc_ownership::weak || !m_payload)
             [[unlikely]] {
             return nullopt;
         }
-        return opt_t<weak_arc_t>(weak_arc_t(std::exchange(m_payload, nullptr)));
+        return opt<weak_arc_t>(weak_arc_t(std::exchange(m_payload, nullptr)));
     }
 
-    [[nodiscard]] constexpr opt_t<unique_rw_arc_t>
+    [[nodiscard]] constexpr opt<unique_rw_arc_t>
     try_consume_into_contained_unique_arc() OKAYLIB_NOEXCEPT
     {
         if (ownership_mode() != arc_ownership::unique_rw || !m_payload)
             [[unlikely]] {
             return nullopt;
         }
-        return opt_t<unique_rw_arc_t>(
+        return opt<unique_rw_arc_t>(
             unique_rw_arc_t(std::exchange(m_payload, nullptr)));
     }
 
-    [[nodiscard]] constexpr opt_t<ro_arc_t>
+    [[nodiscard]] constexpr opt<ro_arc_t>
     try_convert_and_consume_into_readonly_arc() OKAYLIB_NOEXCEPT
     {
         if (!m_payload) {
@@ -670,7 +670,7 @@ struct variant_arc_t
         return nullopt;
     }
 
-    [[nodiscard]] constexpr opt_t<unique_rw_arc_t>
+    [[nodiscard]] constexpr opt<unique_rw_arc_t>
     try_convert_and_consume_into_unique_arc() OKAYLIB_NOEXCEPT
     {
         if (!m_payload) [[unlikely]] {

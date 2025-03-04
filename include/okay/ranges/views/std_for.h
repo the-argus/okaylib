@@ -41,7 +41,7 @@ class std_for_view : public detail::underlying_view_type<T>::type
             T& parent;
             cursor_t cursor;
         };
-        opt_t<members_t> m;
+        opt<members_t> m;
 
       public:
         using iterator_category = std::input_iterator_tag;
@@ -122,7 +122,7 @@ class std_for_view : public detail::underlying_view_type<T>::type
             const T& parent;
             cursor_t cursor;
         };
-        opt_t<members_t> m;
+        opt<members_t> m;
 
       public:
         using iterator_category = std::input_iterator_tag;

@@ -76,7 +76,7 @@ TEST_SUITE("defer")
 
             auto getmems =
                 [fakemalloc,
-                 fakefree](bool fail_halfway) -> opt_t<std::array<void*, 3>> {
+                 fakefree](bool fail_halfway) -> opt<std::array<void*, 3>> {
                 void* first_mem = fakemalloc(100);
                 if (!first_mem)
                     return {};
