@@ -67,7 +67,7 @@ TEST_SUITE("stdmem")
             for (auto& b : bytes)
                 b = 1;
 
-            memfill(slice<u8>(bytes), u8(0));
+            memfill<u8>(bytes, 0);
             for (u8 byte : bytes) {
                 REQUIRE(byte == 0);
             }

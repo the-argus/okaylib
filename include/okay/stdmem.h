@@ -1,8 +1,10 @@
 #ifndef __OKAYLIB_STDMEM_H__
 #define __OKAYLIB_STDMEM_H__
 
+#include "okay/construct.h"
 #include "okay/detail/addressof.h"
 #include "okay/detail/noexcept.h"
+#include "okay/detail/traits/special_member_traits.h"
 #include "okay/slice.h"
 #include <cstdint>
 #include <cstring>
@@ -112,8 +114,7 @@ ok::memcopy(const memcopy_options_t<T>& options) OKAYLIB_NOEXCEPT -> slice<T>
 
 template <typename T>
 [[nodiscard]] constexpr bool
-ok::memcompare(ok::slice<T> memory_1,
-               ok::slice<T> memory_2) OKAYLIB_NOEXCEPT
+ok::memcompare(ok::slice<T> memory_1, ok::slice<T> memory_2) OKAYLIB_NOEXCEPT
 {
     if (memory_1.size() != memory_2.size()) {
         return false;
@@ -155,29 +156,31 @@ template <typename slice_viewed_t, typename... constructor_args_t>
 constexpr void ok::memfill(ok::slice<slice_viewed_t> slice,
                            constructor_args_t&&... args) OKAYLIB_NOEXCEPT
 {
-    static_assert(std::is_nothrow_constructible_v<slice_viewed_t,
-                                                  constructor_args_t...> &&
-                      std::is_nothrow_destructible_v<slice_viewed_t>,
-                  "Cannot memfill a type which can throw when destructed or "
-                  "copy constructed.");
     static_assert(!std::is_const_v<slice_viewed_t>,
                   "Cannot memfill a slice of const memory.");
+    if constexpr (std::is_same_v<slice_viewed_t, uint8_t>) {
+        static_assert(
+            is_std_constructible_v<uint8_t, constructor_args_t...>,
+            "No matching conversion from given arguments to a uint8_t.");
+        std::memset(slice.data(),
+                    uint8_t(std::forward<constructor_args_t>(args)...),
+                    slice.size());
+    } else {
+        static_assert(is_infallible_constructible_v<slice_viewed_t,
+                                                    constructor_args_t...> &&
+                          std::is_nothrow_destructible_v<slice_viewed_t>,
+                      "Refusing to call memfill if type is not able to (in a "
+                      "non-failing way) be constructed or destroyed.");
 
-    for (size_t i = 0; i < slice.size(); ++i) {
-        auto& item = slice.data()[i];
-        if constexpr (!std::is_trivially_destructible_v<slice_viewed_t>) {
-            item.~slice_viewed_t();
+        for (size_t i = 0; i < slice.size(); ++i) {
+            auto& item = slice.data()[i];
+            if constexpr (!std::is_trivially_destructible_v<slice_viewed_t>) {
+                item.~slice_viewed_t();
+            }
+            ok::make_into_uninitialized<slice_viewed_t>(
+                item, std::forward<constructor_args_t>(args)...);
         }
-        new ((void*)ok::addressof(item))
-            slice_viewed_t(std::forward<constructor_args_t>(args)...);
     }
-}
-
-template <>
-constexpr void ok::memfill(bytes_t bytes,
-                           const uint8_t& original) OKAYLIB_NOEXCEPT
-{
-    std::memset(bytes.data(), original, bytes.size());
 }
 
 template <typename T>

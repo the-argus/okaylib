@@ -46,8 +46,7 @@ TEST_SUITE("slice")
             REQUIRE(sl.data() == mem.data());
 
             auto subslice_a = subslice(mem, {.start = 10, .length = 110});
-            static_assert(
-                std::is_same_v<decltype(subslice_a), slice<uint8_t>>);
+            static_assert(std::is_same_v<decltype(subslice_a), slice<uint8_t>>);
 
             REQUIREABORTS(auto&& _ =
                               subslice(mem, {.start = 10, .length = 600}));
@@ -164,8 +163,7 @@ TEST_SUITE("slice")
             auto copy = get_nonconst_by_const_ref(ints);
             static_assert(std::is_same_v<decltype(copy.data()), int*>);
 
-            ok::slice<const int> cint_1 =
-                slice_from_one<const int>(oneint[0]);
+            ok::slice<const int> cint_1 = slice_from_one<const int>(oneint[0]);
             cint_1 = slice_from_one(oneint[0]);
             ok::slice<const int> cint_2(cint_1);
         }
@@ -240,11 +238,11 @@ TEST_SUITE("slice")
         SUBCASE("foreach loop w/ enumerate over slice uses references")
         {
             uint8_t mem[128];
-            auto slice = raw_slice(mem[0], sizeof(mem));
-            REQUIRE(slice.is_alias_for(bytes_t(mem)));
-            memfill(slice(mem), 0);
+            auto mslice = raw_slice(mem[0], sizeof(mem));
+            REQUIRE(mslice.is_alias_for(bytes_t(mem)));
+            memfill<uint8_t>(mem, 0);
 
-            ok_foreach(ok_pair(byte, index), enumerate(slice))
+            ok_foreach(ok_pair(byte, index), enumerate(mslice))
             {
                 static_assert(std::is_same_v<decltype(byte), uint8_t&>);
                 static_assert(std::is_same_v<decltype(index), const size_t>);

@@ -39,8 +39,8 @@ template <typename T, typename E> struct res_internals_modifier_t;
 
 template <typename contained_t, typename enum_t>
 class res<contained_t, enum_t,
-            std::enable_if_t<
-                !detail::is_instance_v<std::remove_cv_t<contained_t>, slice>>>
+          std::enable_if_t<
+              !detail::is_instance_v<std::remove_cv_t<contained_t>, slice>>>
     : private detail::res_base_t<contained_t, std::underlying_type_t<enum_t>>,
       private detail::res_enable_copy_move_for_type_t<contained_t, enum_t>
 {
@@ -217,8 +217,8 @@ class res<contained_t, enum_t,
 
 template <typename contained_t, typename enum_t>
 class res<contained_t, enum_t,
-            std::enable_if_t<
-                detail::is_instance_v<std::remove_cv_t<contained_t>, slice>>>
+          std::enable_if_t<
+              detail::is_instance_v<std::remove_cv_t<contained_t>, slice>>>
 {
     size_t m_elements; // can also encode enum value
     void* m_data;
@@ -332,10 +332,10 @@ class res<contained_t, enum_t,
 template <typename payload_t, typename enum_t>
 struct fmt::formatter<ok::res<payload_t, enum_t>>
 {
-    using resemplate_t = ok::res<payload_t, enum_t>;
+    using res_template_t = ok::res<payload_t, enum_t>;
 
     static_assert(
-        resemplate_t::is_reference || fmt::is_formattable<payload_t>::value,
+        res_template_t::is_reference || fmt::is_formattable<payload_t>::value,
         "Attempt to format an ok::res whose contents are not formattable.");
     constexpr format_parse_context::iterator parse(format_parse_context& ctx)
     {
