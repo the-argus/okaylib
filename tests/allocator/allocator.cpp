@@ -16,13 +16,17 @@ struct test
     int a;
     float b;
 
-    struct default_construct
+  private:
+    struct default_construct_t
     {
-        using associated_type = test;
+        template <typename...> using associated_type = test;
+        constexpr auto operator()() const noexcept { return test{}; }
     };
 
+  public:
+    inline static constexpr default_construct_t default_construct;
+
     test() = default;
-    static constexpr test construct(const default_construct&) { return test(); }
     explicit test(int num) noexcept : a(num), b(num) {}
 };
 
@@ -39,15 +43,13 @@ void virtual_tests_1mb_a(allocator_t& ally)
     // alloc a bunch of stuff, every allocator should be capable of at least
     // this
     alloc::owned array_on_heap =
-        ally.make(array_t<int, 500>::undefined{}).release();
+        ally.make(array::undefined<int, 500>).release();
 
-    auto array_on_stack = array_t<int, 500>::construct({});
+    auto array_on_stack = array::undefined<int, 500>();
 
-    auto int_array =
-        ally.make(array_t<int, 50>::defaulted_or_zeroed{}).release();
+    auto int_array = ally.make(array::defaulted_or_zeroed<int, 50>).release();
 
-    ok::array_t deduction_test =
-        ok::make(array_t<int, 500>::defaulted_or_zeroed{});
+    ok::array_t deduction_test = array::defaulted_or_zeroed<int, 500>();
 
     if (ally.features() & alloc::feature_flags::can_only_alloc) {
     }
@@ -57,39 +59,44 @@ void virtual_tests_array_list(allocator_t& ally)
 {
     ok::array_t array = {1, 2, 3, 4};
 
-    ok::array_t zeroed =
-        array_t<int, 5>::construct(array_t<int, 5>::defaulted_or_zeroed{});
-    zeroed = ok::make(array_t<int, 5>::defaulted_or_zeroed{});
+    ok::arraylist_t arraylist =
+        ok::make(ok::arraylist::copy_items_from_range, ally, array).release();
+    ok::arraylist_t arraylist2 =
+        ok::arraylist::copy_items_from_range.make(ally, array).release();
 
-    ok::array_t undefined =
-        array_t<int, 5>::construct(array_t<int, 5>::undefined{});
-    undefined = ok::make(array_t<int, 5>::undefined{});
+    ok::array_t zeroed = ok::array::defaulted_or_zeroed<int, 5>();
+    zeroed = ok::make(ok::array::defaulted_or_zeroed<int, 5>);
 
-    arraylist_t alist = ok::make(arraylist_t<int>::empty{.allocator = ally});
+    ok::array_t undefined = ok::array::undefined<int, 5>();
+    undefined = ok::make(ok::array::undefined<int, 5>);
 
-    auto arraylist =
-        ok::make(ok::arraylist_t<int>::copy_items_from_range{ally, array})
-            .release();
+    auto alist1 = ok::arraylist::empty<int>(ally);
 
+    arraylist_t alist = ok::make(ok::arraylist::empty<int>, ally);
+
+    auto test = ok::arraylist::spots_preallocated<int>.make(ally, 5);
+    arraylist_t alist2 =
+        ok::make(ok::arraylist::spots_preallocated<int>, ally, 5).release();
+
+    static_assert(is_fallible_constructible_v<
+                  ok::arraylist_t<int, ok::allocator_t>,
+                  decltype(ok::arraylist::spots_preallocated<int>),
+                  decltype(ally), size_t>);
     {
         alloc::owned array2d_on_heap =
-            ally.make(arraylist_t<arraylist_t<int>>::spots_preallocated{
-                          .allocator = ally,
-                          .num_spots_preallocated = 50UL,
-                      })
+            ally.make(ok::arraylist::spots_preallocated<int>, ally, 50UL)
                 .release();
     }
 
-    arraylist_t empty_on_stack = ok::make(arraylist_t<int>::empty{ally});
+    arraylist_t empty_on_stack = arraylist::empty<int>(ally);
 
     if (!empty_on_stack.append(1).okay()) {
         __ok_assert(false, "couldnt append");
         return;
     }
 
-    auto arraylist2 =
-        ok::make(arraylist_t<int>::copy_items_from_range(ally, array))
-            .release();
+    auto arraylist3 =
+        ok::make(arraylist::copy_items_from_range, ally, array).release();
 
     ok_foreach(ok_pair(a, al), zip(array, arraylist)) { REQUIRE(a == al); }
 }
@@ -101,18 +108,19 @@ TEST_SUITE("abstract allocator")
         c_allocator_t allocator;
         // TODO: support allocating c style arrays with allocator_t::make()
         // auto& buf = allocator.make<test[100]>().release();
-        auto& buf =
-            allocator.make(array_t<test, 100>::undefined{}).release().release();
+        auto& buf = allocator.make(array::undefined<test, 100>)
+                        .release()
+                        .into_non_owning_ref();
 
         arena_t arena(reinterpret_as_bytes(slice_t(buf)));
 
-        alloc::owned mytest = arena.make(test::default_construct{}).release();
+        alloc::owned mytest = arena.make(test::default_construct).release();
         test& mytest2 =
-            arena.make(test::default_construct{}).release().release();
-        alloc::owned mytest3 = arena.make_trivial<test>(1).release();
-        test& mytest4 = arena.make_trivial<test>(1).release().release();
-        test& test2 = arena.malloc<test>(1).release();
-        test& test3 = arena.malloc<test>(test2).release();
+            arena.make(test::default_construct).release().into_non_owning_ref();
+        test& mytest3 = arena.make_non_owning<test>(1).release();
+        test& mytest4 = arena.make_non_owning<test>(1).release();
+        test& test2 = arena.make_non_owning<test>(1).release();
+        test& test3 = arena.make_non_owning<test>(test2).release();
 
         arena.destroy();
 

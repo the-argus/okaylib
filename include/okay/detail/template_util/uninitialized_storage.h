@@ -22,6 +22,8 @@ template <typename inner_input_contained_t,
           bool = std::is_trivially_destructible_v<inner_input_contained_t>>
 union uninitialized_storage_t
 {
+    using type = inner_input_contained_t;
+
     constexpr uninitialized_storage_t() OKAYLIB_NOEXCEPT : empty() {}
 
     template <typename... args_t>
