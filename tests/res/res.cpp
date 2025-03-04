@@ -11,7 +11,7 @@
 using namespace ok;
 
 static_assert(sizeof(slice_t<uint8_t>) ==
-              sizeof(res_t<slice_t<uint8_t>, StatusCodeA>));
+              sizeof(res<slice_t<uint8_t>, StatusCodeA>));
 
 TEST_SUITE("res")
 {
@@ -19,7 +19,7 @@ TEST_SUITE("res")
     {
         SUBCASE("Return status codes and success from functions")
         {
-            auto getresiftrue = [](bool cond) -> res_t<trivial_t, StatusCodeA> {
+            auto getresiftrue = [](bool cond) -> res<trivial_t, StatusCodeA> {
                 if (cond) {
                     return trivial_t{
                         .whatever = 10,
@@ -46,7 +46,7 @@ TEST_SUITE("res")
                     string = instr.c_str();
                 }
             };
-            using result = res_t<constructed_type, StatusCodeA>;
+            using result = res<constructed_type, StatusCodeA>;
             // random thought: i assume this is undefined behavior (dangling
             // pointer to string contents) but is it actually? maybe the
             // standard specifies a const char* optimization
@@ -67,8 +67,8 @@ TEST_SUITE("res")
 #ifdef OKAYLIB_USE_FMT
         SUBCASE("formattable")
         {
-            using result_t = res_t<int, StatusCodeB>;
-            using refresult_t = res_t<int&, StatusCodeB>;
+            using result_t = res<int, StatusCodeB>;
+            using refresult_t = res<int&, StatusCodeB>;
             result_t result(10);
             int target = 10;
             refresult_t refresult(target);
@@ -83,14 +83,14 @@ TEST_SUITE("res")
 
         SUBCASE("aborts on bad access")
         {
-            using res = res_t<int, StatusCodeB>;
+            using res = res<int, StatusCodeB>;
             res result(StatusCodeB::nothing);
             REQUIREABORTS({ auto nothing = result.release(); });
         }
 
         SUBCASE("Result released code after release is called")
         {
-            using res = res_t<trivial_t, StatusCodeB>;
+            using res = res<trivial_t, StatusCodeB>;
             res result(trivial_t{
                 .whatever = 19,
                 .nothing = nullptr,
@@ -110,7 +110,7 @@ TEST_SUITE("res")
 
         SUBCASE("std::vector result")
         {
-            using res = res_t<std::vector<size_t>, VectorCreationStatusCode>;
+            using res = res<std::vector<size_t>, VectorCreationStatusCode>;
 
             res vec_result((std::vector<size_t>()));
             REQUIRE(vec_result.okay());
@@ -145,8 +145,8 @@ TEST_SUITE("res")
                 error
             };
 
-            auto getRes = []() -> res_t<Test, TestCode> {
-                return res_t<Test, TestCode>{std::in_place};
+            auto getRes = []() -> res<Test, TestCode> {
+                return res<Test, TestCode>{std::in_place};
             };
 
             auto myres = getRes();
@@ -164,7 +164,7 @@ TEST_SUITE("res")
                 null_reference,
             };
 
-            using res = res_t<std::vector<int>&, ReferenceCreationStatusCode>;
+            using res = res<std::vector<int>&, ReferenceCreationStatusCode>;
 
             auto makeveciftrue = [](bool cond) -> res {
                 if (cond) {
@@ -190,7 +190,7 @@ TEST_SUITE("res")
 
         SUBCASE("res::to_opt() for reference result")
         {
-            using res = res_t<int&, StatusCodeA>;
+            using res = res<int&, StatusCodeA>;
 
             int i = 9;
             res test = i;
@@ -202,7 +202,7 @@ TEST_SUITE("res")
 
         SUBCASE("res::to_opt() for value result")
         {
-            using res = res_t<int&, StatusCodeA>;
+            using res = res<int&, StatusCodeA>;
 
             int i = 9;
             res test = i;
@@ -221,7 +221,7 @@ TEST_SUITE("res")
             };
 
             using res =
-                res_t<const std::vector<int>&, ReferenceCreationStatusCode>;
+                res<const std::vector<int>&, ReferenceCreationStatusCode>;
 
             auto makeveciftrue = [](bool cond) -> res {
                 if (cond) {
@@ -301,7 +301,7 @@ TEST_SUITE("res")
                 dummy_error,
             };
 
-            using res = res_t<increment_on_copy_or_move, dummy_status_code_e>;
+            using res = res<increment_on_copy_or_move, dummy_status_code_e>;
 
             // no copy, only move
             res res_1 = increment_on_copy_or_move(1, 2);
@@ -331,7 +331,7 @@ TEST_SUITE("res")
     TEST_CASE("slice result")
     {
         static std::array<int, 8> mem{};
-        using slice_int_result = res_t<slice_t<int>, StatusCodeA>;
+        using slice_int_result = res<slice_t<int>, StatusCodeA>;
         auto get_slice = []() -> slice_int_result { return mem; };
 
         SUBCASE("slice release_ref and conversion")
@@ -406,7 +406,7 @@ TEST_SUITE("res")
 
             auto fake_alloc =
                 [&memory](bool should_succeed,
-                          size_t bytes) -> res_t<uint8_t*, ExampleError> {
+                          size_t bytes) -> res<uint8_t*, ExampleError> {
                 if (should_succeed) {
                     return memory.data();
                 } else {
@@ -416,7 +416,7 @@ TEST_SUITE("res")
 
             auto make_zeroed_buffer =
                 [fake_alloc](bool should_succeed,
-                             size_t bytes) -> res_t<uint8_t*, ExampleError> {
+                             size_t bytes) -> res<uint8_t*, ExampleError> {
                 TRY_BLOCK(yielded_memory, fake_alloc(should_succeed, bytes), {
                     static_assert(
                         std::is_same_v<decltype(yielded_memory), uint8_t*>);
@@ -455,9 +455,9 @@ TEST_SUITE("res")
             };
 
             auto try_make_big_thing =
-                [](bool should_succeed) -> res_t<BigThing, ExampleError> {
+                [](bool should_succeed) -> res<BigThing, ExampleError> {
                 if (should_succeed)
-                    return res_t<BigThing, ExampleError>{std::in_place};
+                    return res<BigThing, ExampleError>{std::in_place};
                 else
                     return ExampleError::error;
             };

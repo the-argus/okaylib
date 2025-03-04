@@ -475,36 +475,36 @@ struct res_base_t<input_contained_t, enum_int_t, copy, move, true>
 } // namespace ok::detail
 
 namespace ok {
-template <typename contained_t, typename enum_t, typename = void> class res_t;
+template <typename contained_t, typename enum_t, typename = void> class res;
 }
 
 namespace ok::detail {
 
-template <typename T> inline constexpr bool is_result = is_instance<T, res_t>();
+template <typename T> inline constexpr bool is_result = is_instance<T, res>();
 
 template <typename target_t, typename res_contained_t, typename res_enum_t>
 inline constexpr bool converts_from_res =
     is_std_constructible_v<target_t,
-                           const res_t<res_contained_t, res_enum_t>&> ||
-    is_std_constructible_v<target_t, res_t<res_contained_t, res_enum_t>&> ||
+                           const res<res_contained_t, res_enum_t>&> ||
+    is_std_constructible_v<target_t, res<res_contained_t, res_enum_t>&> ||
     is_std_constructible_v<target_t,
-                           const res_t<res_contained_t, res_enum_t>&&> ||
-    is_std_constructible_v<target_t, res_t<res_contained_t, res_enum_t>&&> ||
-    std::is_convertible_v<const res_t<res_contained_t, res_enum_t>&,
+                           const res<res_contained_t, res_enum_t>&&> ||
+    is_std_constructible_v<target_t, res<res_contained_t, res_enum_t>&&> ||
+    std::is_convertible_v<const res<res_contained_t, res_enum_t>&,
                           target_t> ||
-    std::is_convertible_v<res_t<res_contained_t, res_enum_t>&, target_t> ||
-    std::is_convertible_v<const res_t<res_contained_t, res_enum_t>&&,
+    std::is_convertible_v<res<res_contained_t, res_enum_t>&, target_t> ||
+    std::is_convertible_v<const res<res_contained_t, res_enum_t>&&,
                           target_t> ||
-    std::is_convertible_v<res_t<res_contained_t, res_enum_t>&&, target_t>;
+    std::is_convertible_v<res<res_contained_t, res_enum_t>&&, target_t>;
 
 template <typename target_t, typename res_contained_t, typename res_enum_t>
 inline constexpr bool assigns_from_res =
     std::is_assignable_v<target_t&,
-                         const res_t<res_contained_t, res_enum_t>&> ||
-    std::is_assignable_v<target_t&, res_t<res_contained_t, res_enum_t>&> ||
+                         const res<res_contained_t, res_enum_t>&> ||
+    std::is_assignable_v<target_t&, res<res_contained_t, res_enum_t>&> ||
     std::is_assignable_v<target_t&,
-                         const res_t<res_contained_t, res_enum_t>&&> ||
-    std::is_assignable_v<target_t&, res_t<res_contained_t, res_enum_t>&&>;
+                         const res<res_contained_t, res_enum_t>&&> ||
+    std::is_assignable_v<target_t&, res<res_contained_t, res_enum_t>&&>;
 } // namespace ok::detail
 
 #endif

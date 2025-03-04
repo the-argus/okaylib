@@ -7,7 +7,7 @@
 #include <type_traits>
 
 namespace ok {
-template <typename contained_t, typename enum_t, typename> class res_t;
+template <typename contained_t, typename enum_t, typename> class res;
 
 template <typename T, typename... args_t>
 constexpr bool is_std_constructible_v =
@@ -90,7 +90,7 @@ template <typename maybe_res_t, typename expected_contained_t>
 struct is_type_res_and_contains<
     maybe_res_t, expected_contained_t,
     std::enable_if_t<
-        detail::is_instance_v<maybe_res_t, res_t> &&
+        detail::is_instance_v<maybe_res_t, res> &&
         std::is_same_v<typename maybe_res_t::type, expected_contained_t>>>
     : std::true_type
 {};

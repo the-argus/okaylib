@@ -9,14 +9,14 @@ namespace detail {
 
 template <typename T, typename E> struct res_accessor_t
 {
-    static constexpr void set_result_error_byte(res_t<T, E>& res,
+    static constexpr void set_result_error_byte(res<T, E>& res,
                                                 uint8_t byte) noexcept
     {
         res.get_error_payload() = byte;
     }
 
     static constexpr T&
-    get_result_payload_ref_unchecked(res_t<T, E>& res) noexcept
+    get_result_payload_ref_unchecked(res<T, E>& res) noexcept
     {
         return res.get_value_unchecked_payload();
     }
@@ -278,7 +278,7 @@ template <typename T = detail::deduced_t, typename... args_t>
                                   "must either be void (if it cannot error) or "
                                   "an ok::status_t.");
                     // fallible in-place constructor
-                    res_t<actual_deduced_t, typename return_type::enum_type>
+                    res<actual_deduced_t, typename return_type::enum_type>
                         out;
 
                     using accessor =

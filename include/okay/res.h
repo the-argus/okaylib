@@ -29,7 +29,7 @@ using res_enable_copy_move_for_type_t = detail::enable_copy_move<
     std::is_copy_constructible_v<T> && std::is_copy_assignable_v<T>,
     std::is_move_constructible_v<T>,
     std::is_move_constructible_v<T> && std::is_move_assignable_v<T>,
-    res_t<T, E>>; // unique tag
+    res<T, E>>; // unique tag
 
 template <typename T> struct make_inner_fn_t;
 
@@ -38,7 +38,7 @@ template <typename T> struct make_inner_fn_t;
 template <typename T, typename E> struct res_internals_modifier_t;
 
 template <typename contained_t, typename enum_t>
-class res_t<contained_t, enum_t,
+class res<contained_t, enum_t,
             std::enable_if_t<
                 !detail::is_instance_v<std::remove_cv_t<contained_t>, slice_t>>>
     : private detail::res_base_t<contained_t, std::underlying_type_t<enum_t>>,
@@ -49,7 +49,7 @@ class res_t<contained_t, enum_t,
     inline static constexpr bool is_reference =
         std::is_lvalue_reference_v<contained_t>;
 
-    constexpr res_t(detail::uninitialized_result_tag) OKAYLIB_NOEXCEPT {}
+    constexpr res(detail::uninitialized_result_tag) OKAYLIB_NOEXCEPT {}
 
   public:
     using type = contained_t;
@@ -57,7 +57,7 @@ class res_t<contained_t, enum_t,
 
     static_assert(
         std::is_enum_v<enum_t>,
-        "The second type parameter to res_t must be a statuscode enum.");
+        "The second type parameter to res must be a statuscode enum.");
     static_assert(std::is_same_v<std::decay_t<enum_t>, enum_t>,
                   "Do not cv or ref qualify statuscode type.");
     static_assert(!std::is_rvalue_reference_v<contained_t>,
@@ -133,17 +133,17 @@ class res_t<contained_t, enum_t,
         return this->get_value_unchecked_payload();
     }
 
-    res_t(const res_t& other) = delete;
-    res_t& operator=(const res_t& other) = default;
-    res_t& operator=(res_t&& other) = delete;
+    res(const res& other) = delete;
+    res& operator=(const res& other) = default;
+    res& operator=(res&& other) = delete;
 
     // move construction is possible but not move assignment
-    template <typename T = res_t,
-              std::enable_if_t<std::is_same_v<T, res_t> &&
+    template <typename T = res,
+              std::enable_if_t<std::is_same_v<T, res> &&
                                    (detail::is_moveable_v<contained_t> ||
                                     is_reference),
                                bool> = true>
-    constexpr res_t(T&& other) OKAYLIB_NOEXCEPT
+    constexpr res(T&& other) OKAYLIB_NOEXCEPT
     {
         if (other.okay()) {
             if constexpr (is_reference) {
@@ -158,7 +158,7 @@ class res_t<contained_t, enum_t,
     };
 
     template <typename T = contained_t>
-    constexpr res_t(
+    constexpr res(
         std::enable_if_t<!is_reference && std::is_default_constructible_v<T>,
                          std::in_place_t>) OKAYLIB_NOEXCEPT
     {
@@ -171,7 +171,7 @@ class res_t<contained_t, enum_t,
                   !is_reference && sizeof...(args_t) != 0 &&
                       is_infallible_constructible_v<contained_t, args_t...>,
                   bool> = true>
-    constexpr res_t(args_t&&... args) OKAYLIB_NOEXCEPT
+    constexpr res(args_t&&... args) OKAYLIB_NOEXCEPT
     {
         this->get_error_payload() = 0;
         if constexpr (is_std_constructible_v<contained_t, args_t...>) {
@@ -187,14 +187,14 @@ class res_t<contained_t, enum_t,
         typename maybe_t = contained_t,
         std::enable_if_t<is_reference && std::is_same_v<maybe_t, contained_t>,
                          bool> = true>
-    constexpr res_t(contained_t success) OKAYLIB_NOEXCEPT
+    constexpr res(contained_t success) OKAYLIB_NOEXCEPT
     {
         this->get_error_payload() = 0;
         this->construct_no_destroy_payload(success);
     }
 
     /// A statuscode can also be implicitly converted to a result
-    constexpr res_t(enum_t failure) OKAYLIB_NOEXCEPT
+    constexpr res(enum_t failure) OKAYLIB_NOEXCEPT
     {
         if (failure == enum_t::okay) [[unlikely]] {
             __ok_abort("Attempt to construct a result with an okay value");
@@ -203,7 +203,7 @@ class res_t<contained_t, enum_t,
         this->get_error_payload() = enum_int_t(failure);
     }
 
-    constexpr explicit res_t() OKAYLIB_NOEXCEPT
+    constexpr explicit res() OKAYLIB_NOEXCEPT
     {
         this->get_error_payload() = enum_int_t(enum_t::no_value);
     }
@@ -211,12 +211,12 @@ class res_t<contained_t, enum_t,
     friend struct ok::detail::res_accessor_t<contained_t, enum_t>;
 
 #ifdef OKAYLIB_USE_FMT
-    friend struct fmt::formatter<res_t>;
+    friend struct fmt::formatter<res>;
 #endif
 };
 
 template <typename contained_t, typename enum_t>
-class res_t<contained_t, enum_t,
+class res<contained_t, enum_t,
             std::enable_if_t<
                 detail::is_instance_v<std::remove_cv_t<contained_t>, slice_t>>>
 {
@@ -233,7 +233,7 @@ class res_t<contained_t, enum_t,
     static_assert(!is_std_constructible_v<contained_t, const enum_t&>);
     static_assert(
         std::is_enum_v<enum_t>,
-        "The second type parameter to res_t must be a statuscode enum.");
+        "The second type parameter to res must be a statuscode enum.");
     static_assert(std::is_same_v<std::decay_t<enum_t>, enum_t>,
                   "Do not cv or ref qualify statuscode type.");
     static_assert(
@@ -243,10 +243,10 @@ class res_t<contained_t, enum_t,
     static_assert(detail::is_status_enum_v<enum_t>,
                   OKAYLIB_IS_STATUS_ENUM_ERRMSG);
 
-    constexpr res_t(res_t&& other) = delete;
-    constexpr res_t(const res_t& other) = delete;
-    constexpr res_t& operator=(res_t&& other) = delete;
-    constexpr res_t& operator=(const res_t& other) = delete;
+    constexpr res(res&& other) = delete;
+    constexpr res(const res& other) = delete;
+    constexpr res& operator=(res&& other) = delete;
+    constexpr res& operator=(const res& other) = delete;
 
     // NOTE: not defining std::in_place constructor here because slice cannot
     // default construct
@@ -255,13 +255,13 @@ class res_t<contained_t, enum_t,
         std::enable_if_t<sizeof...(args_t) != 0 &&
                              is_std_constructible_v<contained_t, args_t...>,
                          bool> = true>
-    constexpr res_t(args_t&&... args) OKAYLIB_NOEXCEPT
+    constexpr res(args_t&&... args) OKAYLIB_NOEXCEPT
     {
         new (reinterpret_cast<unqualified_t*>(this))
             unqualified_t(std::forward<args_t>(args)...);
     }
 
-    constexpr res_t(enum_t failure) OKAYLIB_NOEXCEPT
+    constexpr res(enum_t failure) OKAYLIB_NOEXCEPT
     {
         if (failure == enum_t::okay) [[unlikely]] {
             __ok_abort("Attempt to construct a result with an okay value.");
@@ -271,7 +271,7 @@ class res_t<contained_t, enum_t,
         m_elements = enum_int_t(failure);
     }
 
-    constexpr explicit res_t() OKAYLIB_NOEXCEPT
+    constexpr explicit res() OKAYLIB_NOEXCEPT
         : m_data(nullptr),
           m_elements(enum_int_t(enum_t::no_value))
     {
@@ -330,13 +330,13 @@ class res_t<contained_t, enum_t,
 
 #ifdef OKAYLIB_USE_FMT
 template <typename payload_t, typename enum_t>
-struct fmt::formatter<ok::res_t<payload_t, enum_t>>
+struct fmt::formatter<ok::res<payload_t, enum_t>>
 {
-    using res_template_t = ok::res_t<payload_t, enum_t>;
+    using resemplate_t = ok::res<payload_t, enum_t>;
 
     static_assert(
-        res_template_t::is_reference || fmt::is_formattable<payload_t>::value,
-        "Attempt to format an ok::res_t whose contents are not formattable.");
+        resemplate_t::is_reference || fmt::is_formattable<payload_t>::value,
+        "Attempt to format an ok::res whose contents are not formattable.");
     constexpr format_parse_context::iterator parse(format_parse_context& ctx)
     {
         auto it = ctx.begin();
@@ -370,7 +370,7 @@ struct fmt::formatter<ok::res_t<payload_t, enum_t>>
                                       result.get_error_payload());
             } else {
                 using enum_int_t = typename res_template_t::enum_int_t;
-                return fmt::format_to(ctx.out(), "[res_t::statuscode::{}]",
+                return fmt::format_to(ctx.out(), "[res::statuscode::{}]",
                                       enum_int_t(result.get_error_payload()));
             }
         }

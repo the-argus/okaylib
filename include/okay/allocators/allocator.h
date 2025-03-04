@@ -110,7 +110,7 @@ enum class error : uint8_t
 
 inline constexpr size_t default_align = alignof(std::max_align_t);
 
-template <typename T> using result_t = ok::res_t<T, error>;
+template <typename T> using result_t = ok::res<T, error>;
 
 enum class flags : uint16_t
 {
@@ -625,7 +625,7 @@ ok::allocator_t::make(args_t&&... args) OKAYLIB_NOEXCEPT
                 "Cannot call potentially failing constructor from "
                 "allocator_t::make() if the error type returned from the "
                 "constructor does not define a conversion from alloc::error.");
-            return res_t<alloc::owned<actual_t>,
+            return res<alloc::owned<actual_t>,
                          typename initialization_return_type::enum_type>(
                 allocation_result.err());
         } else {
@@ -646,7 +646,7 @@ ok::allocator_t::make(args_t&&... args) OKAYLIB_NOEXCEPT
         auto result = make_into_uninitialized<actual_t>(
             *made, std::forward<args_t>(args)...);
         static_assert(detail::is_instance_v<decltype(result), status_t>);
-        return res_t<alloc::owned<actual_t>,
+        return res<alloc::owned<actual_t>,
                      typename decltype(result)::enum_type>(
             alloc::owned<actual_t>(*made, *this));
     } else {
