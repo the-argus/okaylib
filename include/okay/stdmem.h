@@ -18,22 +18,22 @@ enum class mem_error : uint8_t
 
 template <typename T> struct memcopy_options_t
 {
-    slice_t<T> to;
-    slice_t<T> from;
+    slice<T> to;
+    slice<T> from;
 };
 
 template <typename T>
-memcopy_options_t(const slice_t<T>&, const slice_t<T>&) -> memcopy_options_t<T>;
+memcopy_options_t(const slice<T>&, const slice<T>&) -> memcopy_options_t<T>;
 
 template <typename T> struct memcontains_options_t
 {
-    slice_t<T> outer;
-    slice_t<T> inner;
+    slice<T> outer;
+    slice<T> inner;
 };
 
 template <typename T>
-memcontains_options_t(const slice_t<T>&,
-                      const slice_t<T>&) -> memcontains_options_t<T>;
+memcontains_options_t(const slice<T>&,
+                      const slice<T>&) -> memcontains_options_t<T>;
 
 /// Copy the contents of "from" into "to", byte by byte, without invoking
 /// any copy constructors or destructors.
@@ -41,7 +41,7 @@ memcontains_options_t(const slice_t<T>&,
 /// Returns a slice of the new, copied-to memory.
 /// If the destination is smaller, or if they overlap, the function aborts.
 template <typename T>
-[[nodiscard]] constexpr slice_t<T>
+[[nodiscard]] constexpr slice<T>
 memcopy(const memcopy_options_t<T>& options) OKAYLIB_NOEXCEPT;
 
 /// Macro for memcopy to avoid writing the options typename
@@ -53,8 +53,8 @@ memcopy(const memcopy_options_t<T>& options) OKAYLIB_NOEXCEPT;
 /// case the function just returns true). If the two slices of memory are
 /// differently sized, the function immediately returns false.
 template <typename T>
-[[nodiscard]] constexpr bool memcompare(slice_t<T> a,
-                                        slice_t<T> b) OKAYLIB_NOEXCEPT;
+[[nodiscard]] constexpr bool memcompare(slice<T> a,
+                                        slice<T> b) OKAYLIB_NOEXCEPT;
 
 /// Check if slice "inner" points only to items also pointed at by slice
 /// "outer"
@@ -67,34 +67,34 @@ memcontains(const memcontains_options_t<T>&) OKAYLIB_NOEXCEPT;
 
 /// Check if two slices of memory have any memory in common.
 template <typename T>
-[[nodiscard]] constexpr bool memoverlaps(ok::slice_t<T> a,
-                                         ok::slice_t<T> b) OKAYLIB_NOEXCEPT;
+[[nodiscard]] constexpr bool memoverlaps(ok::slice<T> a,
+                                         ok::slice<T> b) OKAYLIB_NOEXCEPT;
 
 /// Fills a block of memory of type T by calling the destructor and then
 /// constructor of every item in the memory. The invoked constructor must be
 /// nothrow, and the type T must be nothrow destructable.
 template <typename slice_viewed_t, typename... constructor_args_t>
-constexpr void memfill(ok::slice_t<slice_viewed_t> slice,
+constexpr void memfill(ok::slice<slice_viewed_t> slice,
                        constructor_args_t&&... args) OKAYLIB_NOEXCEPT;
 
 /// Converts a slice of any type into a slice of bytes. Doing this is usually a
 /// bad idea.
 template <typename T>
 [[nodiscard]] constexpr bytes_t
-reinterpret_as_bytes(ok::slice_t<T> slice) OKAYLIB_NOEXCEPT;
+reinterpret_as_bytes(ok::slice<T> slice) OKAYLIB_NOEXCEPT;
 
 /// Given some slice of memory, convert it to a slice of a given type. Aborts if
 /// the slice's size is not divisible by sizeof(T), or memory is not properly
 /// aligned.
 template <typename T>
-[[nodiscard]] constexpr ok::slice_t<T>
+[[nodiscard]] constexpr ok::slice<T>
 reinterpret_bytes_as(bytes_t bytes) OKAYLIB_NOEXCEPT;
 
 } // namespace ok
 
 template <typename T>
 [[nodiscard]] constexpr auto
-ok::memcopy(const memcopy_options_t<T>& options) OKAYLIB_NOEXCEPT -> slice_t<T>
+ok::memcopy(const memcopy_options_t<T>& options) OKAYLIB_NOEXCEPT -> slice<T>
 {
     static_assert(std::is_trivially_copyable_v<T>,
                   "Cannot memcopy non-trivially copyable type.");
@@ -112,8 +112,8 @@ ok::memcopy(const memcopy_options_t<T>& options) OKAYLIB_NOEXCEPT -> slice_t<T>
 
 template <typename T>
 [[nodiscard]] constexpr bool
-ok::memcompare(ok::slice_t<T> memory_1,
-               ok::slice_t<T> memory_2) OKAYLIB_NOEXCEPT
+ok::memcompare(ok::slice<T> memory_1,
+               ok::slice<T> memory_2) OKAYLIB_NOEXCEPT
 {
     if (memory_1.size() != memory_2.size()) {
         return false;
@@ -145,14 +145,14 @@ ok::memcontains(const memcontains_options_t<T>& options) OKAYLIB_NOEXCEPT
 }
 
 template <typename T>
-[[nodiscard]] constexpr bool ok::memoverlaps(ok::slice_t<T> a,
-                                             ok::slice_t<T> b) OKAYLIB_NOEXCEPT
+[[nodiscard]] constexpr bool ok::memoverlaps(ok::slice<T> a,
+                                             ok::slice<T> b) OKAYLIB_NOEXCEPT
 {
     return a.data() < (b.data() + b.size()) && b.data() < (a.data() + a.size());
 }
 
 template <typename slice_viewed_t, typename... constructor_args_t>
-constexpr void ok::memfill(ok::slice_t<slice_viewed_t> slice,
+constexpr void ok::memfill(ok::slice<slice_viewed_t> slice,
                            constructor_args_t&&... args) OKAYLIB_NOEXCEPT
 {
     static_assert(std::is_nothrow_constructible_v<slice_viewed_t,
@@ -182,7 +182,7 @@ constexpr void ok::memfill(bytes_t bytes,
 
 template <typename T>
 [[nodiscard]] constexpr ok::bytes_t
-ok::reinterpret_as_bytes(ok::slice_t<T> slice) OKAYLIB_NOEXCEPT
+ok::reinterpret_as_bytes(ok::slice<T> slice) OKAYLIB_NOEXCEPT
 {
     // NOTE: leave_undefined performs unnecessary copy here
     return ok::undefined_memory_t<uint8_t>(
@@ -192,7 +192,7 @@ ok::reinterpret_as_bytes(ok::slice_t<T> slice) OKAYLIB_NOEXCEPT
 }
 
 template <typename T>
-[[nodiscard]] constexpr ok::slice_t<T>
+[[nodiscard]] constexpr ok::slice<T>
 ok::reinterpret_bytes_as(ok::bytes_t bytes) OKAYLIB_NOEXCEPT
 {
     return ok::undefined_memory_t<T>::from_bytes(bytes).leave_undefined();

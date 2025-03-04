@@ -112,7 +112,7 @@ TEST_SUITE("abstract allocator")
                         .release()
                         .into_non_owning_ref();
 
-        arena_t arena(reinterpret_as_bytes(slice_t(buf)));
+        arena_t arena(reinterpret_as_bytes(slice(buf)));
 
         alloc::owned mytest = arena.make(test::default_construct).release();
         test& mytest2 =

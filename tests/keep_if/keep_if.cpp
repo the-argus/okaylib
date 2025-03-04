@@ -36,7 +36,7 @@ TEST_SUITE("keep_if")
         SUBCASE("identity keep_if with macros")
         {
             std::array<int, 50> ints = {};
-            memfill(slice_t(ints), 0);
+            memfill(slice(ints), 0);
 
             size_t c = 0;
             ok_foreach(auto& item, ints)
@@ -115,7 +115,7 @@ TEST_SUITE("keep_if")
             auto get_first = transform([](auto pair) { return pair.first; });
 
             std::array<int, 50> ints;
-            memfill(slice_t(ints), 0);
+            memfill(slice(ints), 0);
 
             ok_foreach(ok_pair(i, index), enumerate(ints))
             {
@@ -134,7 +134,7 @@ TEST_SUITE("keep_if")
             auto keep_none = keep_if([](auto) { return false; });
 
             std::array<int, 50> array;
-            memfill(slice_t(array), 0);
+            memfill(slice(array), 0);
 
             ok_foreach(const int i, array | keep_none)
             {

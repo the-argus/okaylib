@@ -24,19 +24,19 @@ struct subslice_options_t
 
 // forward decls
 template <typename viewed_t> struct undefined_memory_t;
-template <typename viewed_t> class slice_t;
+template <typename viewed_t> class slice;
 
 // library implementation wants to be able to construct slices from data + size,
 // particularly in stdmem and allocators
 template <typename viewed_t>
-slice_t<viewed_t> raw_slice(viewed_t& data, size_t size) OKAYLIB_NOEXCEPT;
+slice<viewed_t> raw_slice(viewed_t& data, size_t size) OKAYLIB_NOEXCEPT;
 
 /// A non-owning reference to a section of a contiguously allocated array of
 /// type T. Intended to be passed around like a pointer.
-/// The data pointed at by a slice_t can be expected to be "initialized"-
+/// The data pointed at by a slice can be expected to be "initialized"-
 /// unless the viewed type is trivially constructible, in which case the type
 /// provides no guarantees and that is also true of a slice of the type.
-template <typename viewed_t> class slice_t
+template <typename viewed_t> class slice
 {
     static_assert(!std::is_reference_v<viewed_t>,
                   "Cannot create a slice of references.");
@@ -47,11 +47,11 @@ template <typename viewed_t> class slice_t
     size_t m_elements;
     viewed_t* m_data;
 
-    constexpr slice_t(viewed_t* data, size_t size) OKAYLIB_NOEXCEPT
+    constexpr slice(viewed_t* data, size_t size) OKAYLIB_NOEXCEPT
     {
         __ok_internal_assert(data);
         if (!data) [[unlikely]] {
-            __ok_abort("Something has gone horrible wrong with slice_t "
+            __ok_abort("Something has gone horrible wrong with slice "
                        "implementation");
         }
         m_data = data;
@@ -59,11 +59,11 @@ template <typename viewed_t> class slice_t
     }
 
   public:
-    slice_t(const slice_t&) = default;
-    slice_t& operator=(const slice_t&) = default;
-    slice_t(slice_t&&) = default;
-    slice_t& operator=(slice_t&&) = default;
-    ~slice_t() = default;
+    slice(const slice&) = default;
+    slice& operator=(const slice&) = default;
+    slice(slice&&) = default;
+    slice& operator=(slice&&) = default;
+    ~slice() = default;
 
     using value_type = viewed_t;
 
@@ -82,11 +82,11 @@ template <typename viewed_t> class slice_t
     template <typename U,
               std::enable_if_t<
                   detail::is_container_v<U> &&
-                      !detail::is_instance<U, ok::slice_t>() &&
+                      !detail::is_instance<U, ok::slice>() &&
                       std::is_same_v<decltype(*std::declval<const U&>().data()),
                                      viewed_t&>,
                   bool> = false>
-    constexpr slice_t(const U& other) OKAYLIB_NOEXCEPT
+    constexpr slice(const U& other) OKAYLIB_NOEXCEPT
         : m_data(other.data()),
           m_elements(other.size())
     {
@@ -97,7 +97,7 @@ template <typename viewed_t> class slice_t
               std::enable_if_t<
                   // has data() and size()
                   detail::is_container_v<U> &&
-                      !detail::is_instance<U, ok::slice_t>() &&
+                      !detail::is_instance<U, ok::slice>() &&
                       // either the value type of the container is the
                       // same as our value type, or it is nonconst and
                       // we are const
@@ -106,27 +106,27 @@ template <typename viewed_t> class slice_t
                        std::is_same_v<decltype(*std::declval<U&>().data()),
                                       std::remove_cv_t<viewed_t>&>),
                   bool> = false>
-    constexpr slice_t(U& other) OKAYLIB_NOEXCEPT : m_data(other.data()),
+    constexpr slice(U& other) OKAYLIB_NOEXCEPT : m_data(other.data()),
                                                    m_elements(other.size())
     {
     }
 
     // c array converting constructor
     template <size_t size>
-    constexpr slice_t(viewed_t (&array)[size]) OKAYLIB_NOEXCEPT
+    constexpr slice(viewed_t (&array)[size]) OKAYLIB_NOEXCEPT
         : m_data(array),
           m_elements(size)
     {
     }
 
     // can convert to const version of self
-    constexpr operator slice_t<const viewed_t>() const OKAYLIB_NOEXCEPT
+    constexpr operator slice<const viewed_t>() const OKAYLIB_NOEXCEPT
     {
         return raw_slice(*static_cast<const viewed_t*>(m_data), m_elements);
     }
 
     [[nodiscard]] constexpr bool
-    is_alias_for(const slice_t<const viewed_t>& other) OKAYLIB_NOEXCEPT
+    is_alias_for(const slice<const viewed_t>& other) OKAYLIB_NOEXCEPT
     {
         return m_elements == other.size() && m_data == other.data();
     };
@@ -142,7 +142,7 @@ template <typename viewed_t> class slice_t
         return m_data[idx];
     }
 
-    [[nodiscard]] constexpr slice_t subslice(subslice_options_t options)
+    [[nodiscard]] constexpr slice subslice(subslice_options_t options)
     {
         // NOTE: checking both start and start + length, in case overflow occurs
         // have to do this to be technically safe, but this will probably never
@@ -157,31 +157,31 @@ template <typename viewed_t> class slice_t
                        "of bounds.");
         }
 
-        return slice_t(m_data + options.start, options.length);
+        return slice(m_data + options.start, options.length);
     }
 
     /// Can't default construct a slice since its always a reference to another
     /// thing.
-    slice_t() = delete;
+    slice() = delete;
 
     template <typename T>
-    friend slice_t<T> ok::raw_slice(T& data, size_t size) OKAYLIB_NOEXCEPT;
+    friend slice<T> ok::raw_slice(T& data, size_t size) OKAYLIB_NOEXCEPT;
 
 #ifdef OKAYLIB_USE_FMT
-    friend struct fmt::formatter<slice_t>;
+    friend struct fmt::formatter<slice>;
 #endif
 };
 
 template <typename viewed_t, size_t size>
-slice_t(viewed_t (&)[size]) -> slice_t<viewed_t>;
+slice(viewed_t (&)[size]) -> slice<viewed_t>;
 
 template <typename T>
-slice_t(T) -> slice_t<std::enable_if_t<
+slice(T) -> slice<std::enable_if_t<
                detail::is_container_v<detail::remove_cvref_t<T>> &&
-                   !detail::is_instance<detail::remove_cvref_t<T>, slice_t>(),
+                   !detail::is_instance<detail::remove_cvref_t<T>, slice>(),
                typename detail::remove_cvref_t<T>::value_type>>;
 
-using bytes_t = slice_t<uint8_t>;
+using bytes_t = slice<uint8_t>;
 
 /// Pointer to an array of items of type viewed_t, which are not initialized.
 /// Not much can be done with this type besides decide how to initialize the
@@ -236,11 +236,11 @@ template <typename viewed_t> struct undefined_memory_t
     // If the type is trivially constructible, you can pretend it has been
     // initialized.
     template <typename T = viewed_t>
-    [[nodiscard]] constexpr slice_t<
+    [[nodiscard]] constexpr slice<
         std::enable_if_t<std::is_trivially_constructible_v<T>, T>>
     leave_undefined() const OKAYLIB_NOEXCEPT
     {
-        return *reinterpret_cast<const slice_t<viewed_t>*>(this);
+        return *reinterpret_cast<const slice<viewed_t>*>(this);
     }
 
     template <
@@ -249,7 +249,7 @@ template <typename viewed_t> struct undefined_memory_t
                          bool> = true>
     // Call the constructor of every item in the slice with the given arguments,
     // and return a slice to the now-initialized memory.
-    [[nodiscard]] constexpr slice_t<viewed_t>
+    [[nodiscard]] constexpr slice<viewed_t>
     construct_all(args_t&&... constructor_args) const OKAYLIB_NOEXCEPT
     {
         for (size_t i = 0; i < m_elements; ++i) {
@@ -257,7 +257,7 @@ template <typename viewed_t> struct undefined_memory_t
                 viewed_t(std::forward<args_t>(constructor_args)...);
         }
 
-        return *reinterpret_cast<const slice_t<viewed_t>*>(this);
+        return *reinterpret_cast<const slice<viewed_t>*>(this);
     }
 
     [[nodiscard]] constexpr viewed_t* data() const OKAYLIB_NOEXCEPT
@@ -282,7 +282,7 @@ subslice(container_t& container,
          const subslice_options_t& options) OKAYLIB_NOEXCEPT
     -> std::enable_if_t<
         detail::is_container_v<container_t>,
-        slice_t<std::remove_reference_t<decltype(*container.data())>>>
+        slice<std::remove_reference_t<decltype(*container.data())>>>
 {
     if (options.start >= container.size()) [[unlikely]] {
         __ok_abort("Attempt to get a subslice of a container but the starting "
@@ -299,14 +299,14 @@ subslice(container_t& container,
 /// Construct a slice from a starting item and a number of items. Generally a
 /// bad idea, but useful when interfacing with things like c-style strings.
 template <typename viewed_t>
-[[nodiscard]] slice_t<viewed_t> raw_slice(viewed_t& data,
+[[nodiscard]] slice<viewed_t> raw_slice(viewed_t& data,
                                           size_t size) OKAYLIB_NOEXCEPT
 {
-    return slice_t<viewed_t>(ok::addressof(data), size);
+    return slice<viewed_t>(ok::addressof(data), size);
 }
 
 template <typename T>
-[[nodiscard]] constexpr slice_t<T> slice_from_one(T& item) OKAYLIB_NOEXCEPT
+[[nodiscard]] constexpr slice<T> slice_from_one(T& item) OKAYLIB_NOEXCEPT
 {
     return raw_slice(item, 1);
 }
@@ -314,7 +314,7 @@ template <typename T>
 } // namespace ok
 
 #ifdef OKAYLIB_USE_FMT
-template <typename viewed_t> struct fmt::formatter<ok::slice_t<viewed_t>>
+template <typename viewed_t> struct fmt::formatter<ok::slice<viewed_t>>
 {
     constexpr auto
     parse(format_parse_context& ctx) -> format_parse_context::iterator
@@ -330,7 +330,7 @@ template <typename viewed_t> struct fmt::formatter<ok::slice_t<viewed_t>>
         return it;
     }
 
-    auto format(const ok::slice_t<viewed_t>& slice,
+    auto format(const ok::slice<viewed_t>& slice,
                 format_context& ctx) const -> format_context::iterator
     {
         // TODO: use CTTI here to get nice typename before pointer

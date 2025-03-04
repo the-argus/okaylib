@@ -433,7 +433,7 @@ class opt<payload_t, std::enable_if_t<std::is_lvalue_reference_v<payload_t>>>
 template <typename wrapped_slice_t>
 class opt<
     wrapped_slice_t,
-    std::enable_if_t<(detail::is_instance<wrapped_slice_t, ok::slice_t>())>>
+    std::enable_if_t<(detail::is_instance<wrapped_slice_t, ok::slice>())>>
 {
     inline static constexpr bool is_reference = false;
     inline static constexpr bool is_slice = true;

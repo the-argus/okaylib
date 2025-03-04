@@ -68,7 +68,7 @@ TEST_SUITE("zip")
     {
         example_range_bidirectional bidir;
         int arr[50] = {};
-        memfill(slice_t(arr), 0);
+        memfill(slice(arr), 0);
 
         static_assert(
             detail::is_bidirectional_range_v<example_range_bidirectional>);

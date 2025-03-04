@@ -104,7 +104,7 @@ class linked_blockpool_allocator_t : public ok::allocator_t
         {
             return ok::raw_slice(blocks[0], size);
         };
-        constexpr slice_t<const uint8_t> as_slice() const noexcept
+        constexpr slice<const uint8_t> as_slice() const noexcept
         {
             return ok::raw_slice(blocks[0], size);
         };
@@ -134,7 +134,7 @@ class linked_blockpool_allocator_t : public ok::allocator_t
     constexpr linked_blockpool_allocator_t(M&& members) noexcept : m(members) {}
 
     constexpr bool pool_contains(const pool_t& pool,
-                                 slice_t<const uint8_t> bytes) const
+                                 slice<const uint8_t> bytes) const
     {
         return ok_memcontains(.outer = pool.as_slice(), .inner = bytes);
     }

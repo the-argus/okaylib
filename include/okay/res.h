@@ -40,7 +40,7 @@ template <typename T, typename E> struct res_internals_modifier_t;
 template <typename contained_t, typename enum_t>
 class res<contained_t, enum_t,
             std::enable_if_t<
-                !detail::is_instance_v<std::remove_cv_t<contained_t>, slice_t>>>
+                !detail::is_instance_v<std::remove_cv_t<contained_t>, slice>>>
     : private detail::res_base_t<contained_t, std::underlying_type_t<enum_t>>,
       private detail::res_enable_copy_move_for_type_t<contained_t, enum_t>
 {
@@ -218,7 +218,7 @@ class res<contained_t, enum_t,
 template <typename contained_t, typename enum_t>
 class res<contained_t, enum_t,
             std::enable_if_t<
-                detail::is_instance_v<std::remove_cv_t<contained_t>, slice_t>>>
+                detail::is_instance_v<std::remove_cv_t<contained_t>, slice>>>
 {
     size_t m_elements; // can also encode enum value
     void* m_data;
@@ -318,10 +318,10 @@ class res<contained_t, enum_t,
             __ok_abort("Attempt to get an actual value from an error result.");
         }
 
-        // NOTE: release_ref for slice_t is special: because the error is stored
+        // NOTE: release_ref for slice is special: because the error is stored
         // in the type itself, we do not mark it no_value because that
         // would mean overwriting the data. so you can call release_ref on a
-        // res<slice_t<>> as many times as you want.
+        // res<slice<>> as many times as you want.
         return *reinterpret_cast<unqualified_t*>(this);
     }
 };

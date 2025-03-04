@@ -125,7 +125,7 @@ TEST_SUITE("enumerate")
             }
 
             size_t i = 0;
-            slice_t<uint8_t> test(mem);
+            slice<uint8_t> test(mem);
             ok_foreach(ok_pair(item, index), test | enumerate)
             {
                 REQUIRE(item == 0);

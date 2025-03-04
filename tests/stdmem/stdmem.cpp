@@ -43,8 +43,8 @@ TEST_SUITE("stdmem")
             REQUIRE(std::snprintf(chars.data(), chars.size(), "%s", string) ==
                     length);
 
-            ok::slice_t<const char> strslice = raw_slice(*string, length);
-            ok::slice_t<const char> array_strslice =
+            ok::slice<const char> strslice = raw_slice(*string, length);
+            ok::slice<const char> array_strslice =
                 raw_slice<const char>(*chars.data(), length);
             REQUIRE(memcompare(strslice, array_strslice));
         }
@@ -67,7 +67,7 @@ TEST_SUITE("stdmem")
             for (auto& b : bytes)
                 b = 1;
 
-            memfill(slice_t<u8>(bytes), u8(0));
+            memfill(slice<u8>(bytes), u8(0));
             for (u8 byte : bytes) {
                 REQUIRE(byte == 0);
             }
@@ -104,7 +104,7 @@ TEST_SUITE("stdmem")
                 float j;
             };
             std::array<Test, 200> tests_arr;
-            slice_t tests = tests_arr;
+            slice tests = tests_arr;
 
             bool c = ok_memcontains(.outer = tests,
                                     .inner = slice_from_one(tests[100]));
@@ -114,7 +114,7 @@ TEST_SUITE("stdmem")
             REQUIRE(ok_memcontains(
                 tests, subslice(tests, {.start = 199, .length = 1})));
             REQUIRE(ok_memcontains(tests, slice_from_one(tests[199])));
-            ok::slice_t<Test> tmem = tests;
+            ok::slice<Test> tmem = tests;
             REQUIRE(ok_memcontains(tmem, slice_from_one(tests[100])));
             REQUIRE(ok_memcontains(tmem, slice_from_one(tests[199])));
 

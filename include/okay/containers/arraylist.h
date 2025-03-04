@@ -25,7 +25,7 @@ class arraylist_t
     // - 8 bytes: backing_allocator pointer
     struct members_t
     {
-        opt<slice_t<T>> allocated_spots;
+        opt<slice<T>> allocated_spots;
         size_t spots_occupied;
         backing_allocator_t* backing_allocator;
     };
@@ -108,7 +108,7 @@ class arraylist_t
         // if else handles initial allocation and then future reallocation
         if (!m.allocated_spots) {
             first_allocation();
-        } else if (slice_t<T>& spots = m.allocated_spots.value();
+        } else if (slice<T>& spots = m.allocated_spots.value();
                    spots.size() <= m.spots_occupied) {
             reallocate(spots);
         }
@@ -187,7 +187,7 @@ class arraylist_t
         return alloc::error::okay;
     }
 
-    constexpr status<alloc::error> reallocate(slice_t<T>& spots)
+    constexpr status<alloc::error> reallocate(slice<T>& spots)
     {
         using namespace alloc;
         const auto realloc_flags = flags::leave_nonzeroed | flags::expand_back;

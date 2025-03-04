@@ -19,7 +19,7 @@ TEST_SUITE("join")
             int b[3] = {1, 2, 3};
             int c[3] = {1, 2, 3};
 
-            slice_t<int> arrays[] = {a, b, c};
+            slice<int> arrays[] = {a, b, c};
 
             static_assert(detail::is_random_access_range_v<decltype(a)>);
             static_assert(detail::is_random_access_range_v<decltype(arrays)>);
@@ -54,7 +54,7 @@ TEST_SUITE("join")
             int c[] = {1, 2, 3};
             std::array<int, 0> d = {};
 
-            slice_t<int> arrays[] = {a, b, c, d};
+            slice<int> arrays[] = {a, b, c, d};
 
             size_t counter = 0;
             ok_foreach(auto&& _, arrays | join) { ++counter; }
@@ -67,7 +67,7 @@ TEST_SUITE("join")
             std::array<int, 0> b = {};
             int c[] = {1, 2, 3};
             std::array<int, 0> d = {};
-            slice_t<int> arrays[] = {a, b, c, d};
+            slice<int> arrays[] = {a, b, c, d};
 
             ok_foreach(ok_pair(i, index), arrays | join | enumerate)
             {

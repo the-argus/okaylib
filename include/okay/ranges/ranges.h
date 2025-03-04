@@ -32,7 +32,7 @@
 
 namespace ok {
 
-template <typename viewed_t> class slice_t;
+template <typename viewed_t> class slice;
 
 template <typename range_t, typename enable = void> struct range_definition
 {
@@ -145,7 +145,7 @@ struct range_definition<
     get_ref(range_t& i, size_t c) OKAYLIB_NOEXCEPT
     {
         // slices have bounds checking already
-        if constexpr (!detail::is_instance_v<range_t, ok::slice_t>) {
+        if constexpr (!detail::is_instance_v<range_t, ok::slice>) {
             if (c >= i.size()) [[unlikely]] {
                 __ok_abort("Out of bounds access into arraylike container.");
             }
@@ -157,7 +157,7 @@ struct range_definition<
                                                size_t c) OKAYLIB_NOEXCEPT
     {
         // slices have bounds checking already
-        if constexpr (!detail::is_instance_v<range_t, ok::slice_t>) {
+        if constexpr (!detail::is_instance_v<range_t, ok::slice>) {
             if (c >= i.size()) [[unlikely]] {
                 __ok_abort("Out of bounds access into arraylike container.");
             }

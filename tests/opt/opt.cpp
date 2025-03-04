@@ -21,7 +21,7 @@ static_assert(!std::is_convertible_v<int*, const int&>);
 static_assert(!std::is_convertible_v<std::optional<int*>, const int&>);
 static_assert(!std::is_convertible_v<opt<int&>, const int&>);
 
-static_assert(sizeof(opt<slice_t<int>>) == sizeof(slice_t<int>),
+static_assert(sizeof(opt<slice<int>>) == sizeof(slice<int>),
               "Optional slice types are a different size than slices");
 
 static_assert(sizeof(opt<int&>) == sizeof(int*),
@@ -109,13 +109,13 @@ TEST_SUITE("opt")
         SUBCASE("non owning slice")
         {
             std::vector<uint8_t> bytes = {20, 32, 124, 99, 1};
-            opt<slice_t<uint8_t>> maybe_array;
+            opt<slice<uint8_t>> maybe_array;
             REQUIRE(!maybe_array.has_value());
 
             // opt<std::vector<uint8_t>> optional_vector_copy(bytes);
             // maybe_array = optional_vector_copy;
 
-            // TODO: make sure slice and opt<slice_t> cannot assume ownership
+            // TODO: make sure slice and opt<slice> cannot assume ownership
             // of objects that are not trivially moveable
         }
 
@@ -331,14 +331,14 @@ TEST_SUITE("opt")
         SUBCASE("safely return copies from slice optionals")
         {
             std::array<uint8_t, 512> mem;
-            const auto get_maybe_slice = [&mem]() -> opt<slice_t<uint8_t>> {
-                return slice_t<uint8_t>(mem);
+            const auto get_maybe_slice = [&mem]() -> opt<slice<uint8_t>> {
+                return slice<uint8_t>(mem);
             };
 
             static_assert(std::is_same_v<decltype(get_maybe_slice().value()),
-                                         slice_t<uint8_t>&>);
+                                         slice<uint8_t>&>);
 
-            slice_t<uint8_t> my_slice = get_maybe_slice().value();
+            slice<uint8_t> my_slice = get_maybe_slice().value();
             ok::memfill(my_slice, 0);
             for (auto byte : mem) {
                 REQUIRE(byte == 0);
@@ -352,7 +352,7 @@ TEST_SUITE("opt")
         //         byte = index;
         //     }
 
-        //     opt<slice_t<uint8_t>> maybe_bytes;
+        //     opt<slice<uint8_t>> maybe_bytes;
         //     maybe_bytes.emplace(bytes);
 
         //     for (auto [byte, index] : enumerate(maybe_bytes.value())) {
@@ -380,13 +380,13 @@ TEST_SUITE("opt")
         SUBCASE("copying slice")
         {
             std::array<uint8_t, 128> bytes;
-            opt<slice_t<uint8_t>> maybe_bytes(bytes);
+            opt<slice<uint8_t>> maybe_bytes(bytes);
 
-            opt<slice_t<uint8_t>> other_maybe_bytes(maybe_bytes);
+            opt<slice<uint8_t>> other_maybe_bytes(maybe_bytes);
             REQUIRE(
                 other_maybe_bytes.value().is_alias_for(maybe_bytes.value()));
 
-            slice_t<uint8_t> bytes_slice = other_maybe_bytes.value();
+            slice<uint8_t> bytes_slice = other_maybe_bytes.value();
         }
 
 #ifdef OKAYLIB_USE_FMT
@@ -405,7 +405,7 @@ TEST_SUITE("opt")
             fmt::println("optional reference string AFTER: {}", refstr);
 
             std::array<uint8_t, 128> bytes;
-            opt<slice_t<uint8_t>> maybe_bytes;
+            opt<slice<uint8_t>> maybe_bytes;
             maybe_bytes.emplace(bytes);
             fmt::println("optional slice: {}", maybe_bytes);
         }
@@ -527,7 +527,7 @@ TEST_SUITE("opt")
         SUBCASE("nested ok_foreach for optional slice")
         {
             std::array<uint8_t, 12> bytes;
-            opt<slice_t<uint8_t>> opt_bytes = bytes;
+            opt<slice<uint8_t>> opt_bytes = bytes;
             // fill with indices
             ok_foreach(auto& slice, opt_bytes)
             {

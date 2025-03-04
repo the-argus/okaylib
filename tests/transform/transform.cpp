@@ -35,7 +35,7 @@ TEST_SUITE("transform")
         SUBCASE("identity transform with macros")
         {
             std::array<int, 50> ints = {};
-            memfill(slice_t(ints), 0);
+            memfill(slice(ints), 0);
 
             size_t c = 0;
             ok_foreach(auto& item, ints)

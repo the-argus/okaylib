@@ -10,8 +10,8 @@
 
 using namespace ok;
 
-static_assert(sizeof(slice_t<uint8_t>) ==
-              sizeof(res<slice_t<uint8_t>, StatusCodeA>));
+static_assert(sizeof(slice<uint8_t>) ==
+              sizeof(res<slice<uint8_t>, StatusCodeA>));
 
 TEST_SUITE("res")
 {
@@ -331,7 +331,7 @@ TEST_SUITE("res")
     TEST_CASE("slice result")
     {
         static std::array<int, 8> mem{};
-        using slice_int_result = res<slice_t<int>, StatusCodeA>;
+        using slice_int_result = res<slice<int>, StatusCodeA>;
         auto get_slice = []() -> slice_int_result { return mem; };
 
         SUBCASE("slice release_ref and conversion")
@@ -340,9 +340,9 @@ TEST_SUITE("res")
             REQUIRE(slice_res.okay());
 
             static_assert(
-                std::is_same_v<decltype(slice_res.release()), slice_t<int>>);
+                std::is_same_v<decltype(slice_res.release()), slice<int>>);
             static_assert(std::is_same_v<decltype(slice_res.release_ref()),
-                                         slice_t<int>&>);
+                                         slice<int>&>);
 
             auto& slice = slice_res.release_ref();
 
