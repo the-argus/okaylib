@@ -445,11 +445,11 @@ class allocator_t
             "calling: `allocator.make_non_owning<MyType>(...)`.");
 
         static_assert(is_infallible_constructible_v<actual_t, args_t...>,
-                      "Cannot call make_leaky with the given arguments, "
+                      "Cannot call make_non_owning with the given arguments, "
                       "there is no matching infallible constructor.");
 
         __ok_assert(features() & alloc::feature_flags::can_clear,
-                    "Using make_leaky on an allocator which cannot clear, "
+                    "Using make_non_owning on an allocator which cannot clear, "
                     "this may lead to memory leaks.");
         auto allocation_result = allocate(alloc::request_t{
             .num_bytes = sizeof(actual_t),
@@ -626,7 +626,7 @@ ok::allocator_t::make(args_t&&... args) OKAYLIB_NOEXCEPT
                 "allocator_t::make() if the error type returned from the "
                 "constructor does not define a conversion from alloc::error.");
             return res<alloc::owned<actual_t>,
-                         typename initialization_return_type::enum_type>(
+                       typename initialization_return_type::enum_type>(
                 allocation_result.err());
         } else {
             return alloc::result_t<alloc::owned<actual_t>>(
@@ -647,7 +647,7 @@ ok::allocator_t::make(args_t&&... args) OKAYLIB_NOEXCEPT
             *made, std::forward<args_t>(args)...);
         static_assert(detail::is_instance_v<decltype(result), status>);
         return res<alloc::owned<actual_t>,
-                     typename decltype(result)::enum_type>(
+                   typename decltype(result)::enum_type>(
             alloc::owned<actual_t>(*made, *this));
     } else {
         make_into_uninitialized<actual_t>(*made, std::forward<args_t>(args)...);

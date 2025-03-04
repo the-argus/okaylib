@@ -122,7 +122,9 @@ const test_source_files = &[_][]const u8{
     "ordering/ordering.cpp",
     "join/join.cpp",
     "zip/zip.cpp",
-    "allocator/allocator.cpp",
+    "c_allocator/c_allocator.cpp",
+    "arena_allocator/arena_allocator.cpp",
+    // "linked_blockpool_allocator/linked_blockpool_allocator.cpp",
     "arc/arc.cpp",
 };
 
