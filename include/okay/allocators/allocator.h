@@ -11,7 +11,6 @@
 // pulls in res, then slice and opt, and because of that also ranges and
 // ordering
 #include "okay/construct.h"
-#include "okay/detail/template_util/first_type_in_pack.h"
 // for reinterpret_as_bytes
 #include "okay/stdmem.h"
 
@@ -350,7 +349,7 @@ template <typename T, typename allocator_impl_t = ok::allocator_t> struct owned
         m_allocator = other.m_allocator;
     }
 
-    [[nodiscard]] constexpr T& release()
+    [[nodiscard]] constexpr T& into_non_owning_ref()
     {
         return *static_cast<T*>(std::exchange(m_allocation, nullptr));
     }
@@ -423,54 +422,38 @@ class allocator_t
         return impl_reallocate_extended(options);
     }
 
-    template <typename... args_t, typename T>
+    template <typename T = detail::deduced_t, typename... args_t>
     [[nodiscard]] constexpr decltype(auto)
     make(args_t&&... args) OKAYLIB_NOEXCEPT;
 
-    /// Version of make which can only call regular constructors, not
-    /// T::construct() functions.
-    template <typename T, typename... args_t>
-    [[nodiscard]] constexpr alloc::result_t<alloc::owned<T>>
-    make_trivial(args_t&&... args) OKAYLIB_NOEXCEPT
-    {
-        static_assert(is_std_constructible_v<T, args_t...>,
-                      "Cannot call make_trivial with the given arguments, "
-                      "there is no matching constructor.");
-        auto allocation_result = allocate(alloc::request_t{
-            .num_bytes = sizeof(T),
-            .alignment = alignof(T),
-            .flags = alloc::flags::leave_nonzeroed,
-        });
-        if (!allocation_result.okay()) [[unlikely]] {
-            return allocation_result.err();
-        }
-        uint8_t* object_start =
-            allocation_result.release_ref().data_maybe_defined();
-
-        __ok_assert(uintptr_t(object_start) % alignof(T) == 0,
-                    "Misaligned memory produced by allocator");
-
-        T* made = reinterpret_cast<T*>(object_start);
-
-        new (made) T(std::forward<args_t>(args)...);
-        return alloc::owned(*made, *this);
-    }
-
-    /// "Leaky" version of make which can only call regular constructors
-    template <typename T, typename... args_t>
+    /// Version of make which simply returns an allocation error or a reference
+    /// to the newly allocated thing. Does not accept failing constructors.
+    /// Meant for simple code that uses arenas and doesn't need to manually free
+    /// every allocation.
+    template <typename T = detail::deduced_t, typename... args_t>
     [[nodiscard]] constexpr alloc::result_t<T&>
-    malloc(args_t&&... args) OKAYLIB_NOEXCEPT
+    make_non_owning(args_t&&... args) OKAYLIB_NOEXCEPT
     {
-        static_assert(is_std_constructible_v<T, args_t...>,
-                      "Cannot call make_trivial with the given arguments, "
-                      "there is no matching constructor.");
+        using actual_t = detail::deduced_make_type_t<T, args_t...>;
+
+        static_assert(
+            !std::is_void_v<actual_t> &&
+                !std::is_same_v<actual_t, detail::deduced_t>,
+            "Unable to deduce the type you're trying to make with this "
+            "allocator. The arguments to the constructor may be invalid, "
+            "or you may just need to specify the returned type when "
+            "calling: `allocator.make_non_owning<MyType>(...)`.");
+
+        static_assert(is_infallible_constructible_v<actual_t, args_t...>,
+                      "Cannot call make_leaky with the given arguments, "
+                      "there is no matching infallible constructor.");
+
         __ok_assert(features() & alloc::feature_flags::can_clear,
-                    "Using make_simple on an allocator which cannot clear, "
-                    "this may lead to memory leaks. Try "
-                    "make_trivial().release().release() instead.");
+                    "Using make_leaky on an allocator which cannot clear, "
+                    "this may lead to memory leaks.");
         auto allocation_result = allocate(alloc::request_t{
-            .num_bytes = sizeof(T),
-            .alignment = alignof(T),
+            .num_bytes = sizeof(actual_t),
+            .alignment = alignof(actual_t),
             .flags = alloc::flags::leave_nonzeroed,
         });
         if (!allocation_result.okay()) [[unlikely]] {
@@ -479,12 +462,12 @@ class allocator_t
         uint8_t* object_start =
             allocation_result.release_ref().data_maybe_defined();
 
-        __ok_assert(uintptr_t(object_start) % alignof(T) == 0,
+        __ok_assert(uintptr_t(object_start) % alignof(actual_t) == 0,
                     "Misaligned memory produced by allocator");
 
-        T* made = reinterpret_cast<T*>(object_start);
-
-        new (made) T(std::forward<args_t>(args)...);
+        actual_t* made = reinterpret_cast<actual_t*>(object_start);
+        ok::make_into_uninitialized<actual_t>(*made,
+                                              std::forward<args_t>(args)...);
         return *made;
     }
 
@@ -610,53 +593,66 @@ constexpr void free(allocator_impl_t& ally, T& object) OKAYLIB_NOEXCEPT
     ally.deallocate(ok::reinterpret_as_bytes(ok::slice_from_one(object)));
 }
 
-template <typename... args_t,
-          typename T =
-              typename detail::first_type_in_pack_t<args_t...>::associated_type>
+template <typename T, typename... args_t>
 [[nodiscard]] constexpr decltype(auto)
 ok::allocator_t::make(args_t&&... args) OKAYLIB_NOEXCEPT
 {
+    using actual_t = detail::deduced_make_type_t<T, args_t...>;
+
+    static_assert(!std::is_void_v<actual_t>,
+                  "Unable to deduce the type you're trying to make with this "
+                  "allocator. The arguments to the constructor may be invalid, "
+                  "or you may just need to specify the returned type when "
+                  "calling: `allocator.make<MyType>(...)`.");
+
     auto allocation_result = allocate(alloc::request_t{
-        .num_bytes = sizeof(T),
-        .alignment = alignof(T),
+        .num_bytes = sizeof(actual_t),
+        .alignment = alignof(actual_t),
         .flags = alloc::flags::leave_nonzeroed,
     });
 
-    using initialization_return_type = decltype(make_into_uninitialized<T>(
-        std::declval<T&>(), std::forward<args_t>(args)...));
+    using initialization_return_type =
+        decltype(make_into_uninitialized<actual_t>(
+            std::declval<actual_t&>(), std::forward<args_t>(args)...));
     constexpr bool returns_status = !std::is_void_v<initialization_return_type>;
 
     if (!allocation_result.okay()) [[unlikely]] {
         if constexpr (returns_status) {
             static_assert(
-                std::is_convertible_v<alloc::error, initialization_return_type>,
+                std::is_convertible_v<
+                    alloc::error,
+                    typename initialization_return_type::enum_type>,
                 "Cannot call potentially failing constructor from "
                 "allocator_t::make() if the error type returned from the "
                 "constructor does not define a conversion from alloc::error.");
-            return res_t<alloc::owned<T>, initialization_return_type>(
+            return res_t<alloc::owned<actual_t>,
+                         typename initialization_return_type::enum_type>(
                 allocation_result.err());
         } else {
-            return alloc::result_t<alloc::owned<T>>(allocation_result.err());
+            return alloc::result_t<alloc::owned<actual_t>>(
+                allocation_result.err());
         }
     }
 
     uint8_t* object_start =
         allocation_result.release_ref().data_maybe_defined();
 
-    __ok_assert(uintptr_t(object_start) % alignof(T) == 0,
+    __ok_assert(uintptr_t(object_start) % alignof(actual_t) == 0,
                 "Misaligned memory produced by allocator");
 
-    T* made = reinterpret_cast<T*>(object_start);
+    actual_t* made = reinterpret_cast<actual_t*>(object_start);
 
     if constexpr (returns_status) {
-        auto result =
-            make_into_uninitialized<T>(*made, std::forward<args_t>(args)...);
-        static_assert(detail::is_status_enum_v<decltype(result)>);
-        return res_t<alloc::owned<T>, decltype(result)>(
-            alloc::owned<T>(*made, *this));
+        auto result = make_into_uninitialized<actual_t>(
+            *made, std::forward<args_t>(args)...);
+        static_assert(detail::is_instance_v<decltype(result), status_t>);
+        return res_t<alloc::owned<actual_t>,
+                     typename decltype(result)::enum_type>(
+            alloc::owned<actual_t>(*made, *this));
     } else {
-        make_into_uninitialized<T>(*made, std::forward<args_t>(args)...);
-        return alloc::result_t<alloc::owned<T>>(alloc::owned<T>(*made, *this));
+        make_into_uninitialized<actual_t>(*made, std::forward<args_t>(args)...);
+        return alloc::result_t<alloc::owned<actual_t>>(
+            alloc::owned<actual_t>(*made, *this));
     }
 }
 } // namespace ok

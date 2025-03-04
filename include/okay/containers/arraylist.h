@@ -6,10 +6,13 @@
 #include "okay/status.h"
 
 namespace ok {
-namespace arraylist {
-template <typename T> struct empty;
 
-struct copy_items_from_range;
+namespace arraylist {
+namespace detail {
+template <typename T> struct empty_t;
+struct copy_items_from_range_t;
+template <typename T> struct spots_preallocated_t;
+} // namespace detail
 } // namespace arraylist
 
 template <typename T, typename backing_allocator_t = ok::allocator_t>
@@ -38,8 +41,9 @@ class arraylist_t
     arraylist_t() = default;
 
   public:
-    friend class arraylist::copy_items_from_range;
-    friend class arraylist::empty<T>;
+    friend class arraylist::detail::spots_preallocated_t<T>;
+    friend class arraylist::detail::copy_items_from_range_t;
+    friend class arraylist::detail::empty_t<T>;
     static_assert(!std::is_reference_v<T>,
                   "arraylist_t cannot store references.");
     static_assert(!std::is_void_v<T>, "cannot create an array list of void.");
@@ -96,10 +100,10 @@ class arraylist_t
     }
 
     /// Append a new item and return either a status_t representing whether the
-    /// allocation succeeded or T's error type.
-    template <typename constructor_t, typename... args_t>
-    constexpr auto append(const constructor_t& constructor,
-                          args_t&&... args) OKAYLIB_NOEXCEPT
+    /// allocation succeeded or T's error type. The new item is constructed
+    /// using the constructor selected by ok::make() with the given args.
+    template <typename... args_t>
+    constexpr auto append(args_t&&... args) OKAYLIB_NOEXCEPT
     {
         // if else handles initial allocation and then future reallocation
         if (!m.allocated_spots) {
@@ -120,7 +124,15 @@ class arraylist_t
             __ok_assert(
                 false, "Allocator did not give back expected amount of memory");
             if constexpr (returns_result) {
-                return status_t(make_result_type(alloc::error::oom));
+                static_assert(
+                    detail::is_instance_v<make_result_type, status_t>);
+                using enum_t = typename make_result_type::enum_type;
+                static_assert(
+                    std::is_convertible_v<alloc::error, enum_t>,
+                    "In order to use a potentially failing constructor with "
+                    "arraylist_t::append(), the constructor's enum type must "
+                    "define a conversion from alloc::error.");
+                return status_t(enum_t(alloc::error::oom));
             } else {
                 return status_t(alloc::error::oom);
             }
@@ -130,37 +142,16 @@ class arraylist_t
 
         auto& uninit = spots[m.spots_occupied];
 
-        if constexpr (std::is_invocable_v<constructor_t,
-                                          detail::uninitialized_storage_t<T>&,
-                                          args_t...>) {
-            using return_type = decltype(constructor(
-                std::declval<detail::uninitialized_storage_t<T>&>(),
-                std::forward<args_t>(args)...));
-            if constexpr (!std::is_void_v<return_type>) {
-                static_assert(detail::is_instance_v<return_type, res_t>);
-                using value_type = typename return_type::type;
-                static_assert(!std::is_reference_v<value_type>);
-            }
-        } else if constexpr (std::is_invocable_v<constructor_t, args_t...>) {
-            using return_type =
-                decltype(constructor(std::forward<args_t>(args)...));
-            static_assert(!std::is_reference_v<return_type>);
-            static_assert(!std::is_void_v<return_type>);
-        } else {
-            static_assert(
-                false,
-                "No matching call found to constructor given to append().");
-        }
-
         if constexpr (returns_result) {
             auto result = ok::make_into_uninitialized<T>(
                 uninit, std::forward<args_t>(args)...);
 
             // only add to occupied spots if the construction was successful
-            if (uint8_t(result) == 0) [[likely]] {
+            if (result.okay()) [[likely]] {
                 ++m.spots_occupied;
             }
-            return status_t(result);
+            using enum_t = typename make_result_type::enum_type;
+            return status_t(enum_t(result.err()));
         } else {
             ok::make_into_uninitialized<T>(uninit,
                                            std::forward<args_t>(args)...);
@@ -293,41 +284,14 @@ class arraylist_t
 // arraylist is done being defined
 // template <typename T, typename backing_allocator_t>
 // template <typename U>
-// constexpr auto arraylist_t<T, backing_allocator_t>::construct(
-//     detail::uninitialized_storage_t<U>& output,
-//     const spots_preallocated& options)
-//     OKAYLIB_NOEXCEPT -> std::enable_if_t<std::is_same_v<arraylist_t, U>,
-//                                          alloc::result_t<owning_ref<U>>>
-// {
-//     auto res = options.allocator.allocate(alloc::request_t{
-//         .num_bytes = sizeof(T) * options.num_spots_preallocated,
-//         .alignment = alignof(T),
-//         .flags = alloc::flags::leave_nonzeroed,
-//     });
-
-//     if (!res.okay()) [[unlikely]] {
-//         return res.err();
-//     }
-
-//     maybe_defined_memory_t& maybe_defined = res.release_ref();
-//     auto& start = *reinterpret_cast<T*>(maybe_defined.data_maybe_defined());
-//     const size_t num_bytes_allocated = maybe_defined.size();
-
-//     new (ok::addressof(output.value)) arraylist_t(M{
-//         .allocated_spots =
-//             ok::raw_slice(start, num_bytes_allocated / sizeof(T)),
-//         .spots_occupied = 0,
-//         .backing_allocator = ok::addressof(options.allocator),
-//     });
-//     return output.value;
-// }
 
 namespace arraylist {
 
-template <typename T> struct empty
+namespace detail {
+template <typename T> struct empty_t
 {
     template <typename allocator_impl_t>
-    constexpr arraylist_t<T, allocator_impl_t>
+    [[nodiscard]] constexpr arraylist_t<T, allocator_impl_t>
     operator()(allocator_impl_t& allocator) const noexcept
     {
         return typename arraylist_t<T, allocator_impl_t>::members_t{
@@ -338,15 +302,84 @@ template <typename T> struct empty
     }
 };
 
-struct copy_items_from_range
+template <typename T> struct spots_preallocated_t
 {
-    template <typename allocator_impl_t, typename input_range_t,
-              typename std::enable_if_t<
-                  detail::is_output_range_v<input_range_t>, bool> = false>
-    constexpr status_t<alloc::error> operator()(
-        ok::arraylist_t<value_type_for<const input_range_t&>, allocator_impl_t>&
-            output,
-        allocator_impl_t& allocator, const input_range_t& range) const noexcept
+    template <typename allocator_impl_t>
+    static ok::arraylist_t<T, allocator_impl_t>
+    associated_type_deducer(allocator_impl_t& allocator, size_t);
+
+    // provide type deduction if you want to use ok::make
+    template <typename... args_t>
+    using associated_type =
+        decltype(associated_type_deducer(std::declval<args_t>()...));
+
+    template <typename allocator_impl_t>
+    [[nodiscard]] constexpr auto
+    make(allocator_impl_t& allocator,
+         size_t num_spots_preallocated) const OKAYLIB_NOEXCEPT
+    {
+        return ok::make(*this, allocator, num_spots_preallocated);
+    }
+
+    template <typename allocator_impl_t>
+    [[nodiscard]] constexpr status_t<alloc::error>
+    operator()(arraylist_t<T, allocator_impl_t>& output,
+               allocator_impl_t& allocator,
+               size_t num_spots_preallocated) const OKAYLIB_NOEXCEPT
+    {
+        using output_t = arraylist_t<T, allocator_impl_t>;
+        auto res = allocator.allocate(alloc::request_t{
+            .num_bytes = sizeof(T) * num_spots_preallocated,
+            .alignment = alignof(T),
+            .flags = alloc::flags::leave_nonzeroed,
+        });
+
+        if (!res.okay()) [[unlikely]] {
+            return res.err();
+        }
+
+        maybe_defined_memory_t& maybe_defined = res.release_ref();
+        auto& start = *reinterpret_cast<T*>(maybe_defined.data_maybe_defined());
+        const size_t num_bytes_allocated = maybe_defined.size();
+
+        new (ok::addressof(output)) output_t(typename output_t::members_t{
+            .allocated_spots =
+                ok::raw_slice(start, num_bytes_allocated / sizeof(T)),
+            .spots_occupied = 0,
+            .backing_allocator = ok::addressof(allocator),
+        });
+        return alloc::error::okay;
+    }
+};
+
+struct copy_items_from_range_t
+{
+    // has to be public apparently, since its instantiated from another class
+    template <typename allocator_impl_t, typename input_range_t>
+    static ok::arraylist_t<value_type_for<const input_range_t&>,
+                           allocator_impl_t>
+    associated_type_deducer(allocator_impl_t& allocator,
+                            const input_range_t& range);
+
+    // provide type deduction if you want to use ok::make
+    template <typename... args_t>
+    using associated_type =
+        decltype(associated_type_deducer(std::declval<args_t>()...));
+
+    template <typename allocator_impl_t, typename input_range_t>
+    [[nodiscard]] constexpr auto
+    make(allocator_impl_t& allocator,
+         const input_range_t& range) const OKAYLIB_NOEXCEPT
+    {
+        return ok::make(*this, allocator, range);
+    }
+
+    template <typename allocator_impl_t, typename input_range_t>
+    [[nodiscard]] constexpr status_t<alloc::error>
+    operator()(ok::arraylist_t<value_type_for<const input_range_t&>,
+                               allocator_impl_t>& output,
+               allocator_impl_t& allocator,
+               const input_range_t& range) const OKAYLIB_NOEXCEPT
     {
         static_assert(ok::detail::range_definition_has_size_v<input_range_t>,
                       "Size of range unknown, refusing to copy out its items "
@@ -390,7 +423,7 @@ struct copy_items_from_range
             ++i;
         }
 
-        new (ok::addressof(output)) arraylist_t(typename output_t::members_t{
+        new (ok::addressof(output)) output_t(typename output_t::members_t{
             .allocated_spots = raw_slice(*reinterpret_cast<T*>(memory),
                                          bytes_allocated / sizeof(T)),
             .spots_occupied = num_items,
@@ -400,6 +433,16 @@ struct copy_items_from_range
         return alloc::error::okay;
     };
 };
+
+} // namespace detail
+
+template <typename T> inline constexpr detail::empty_t<T> empty;
+
+template <typename T>
+inline constexpr detail::spots_preallocated_t<T> spots_preallocated;
+
+inline constexpr detail::copy_items_from_range_t copy_items_from_range;
+
 }; // namespace arraylist
 
 // template <typename T, typename backing_allocator_t> struct empty
@@ -415,14 +458,6 @@ struct copy_items_from_range
 //     }
 
 //     constexpr associated_type operator()() noexcept { return {}; }
-// };
-
-// struct spots_preallocated
-// {
-//     using associated_type = arraylist_t;
-
-//     backing_allocator_t& allocator;
-//     size_t num_spots_preallocated;
 // };
 
 } // namespace ok

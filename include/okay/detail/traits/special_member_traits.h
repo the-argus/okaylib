@@ -46,9 +46,9 @@ constexpr bool is_std_invocable_v =
 template <typename T, typename return_type, typename... args_t>
 constexpr bool is_std_invocable_r_v =
 #ifdef OKAYLIB_DISALLOW_EXCEPTIONS
-    std::is_nothrow_invocable_r_v<T, return_type, args_t...>;
+    std::is_nothrow_invocable_r_v<return_type, T, args_t...>;
 #else
-    std::is_invocable_r_v<T, return_type, args_t...>;
+    std::is_invocable_r_v<return_type, T, args_t...>;
 #endif
 
 namespace detail {
@@ -151,7 +151,9 @@ using invoke_with_T_ref_return_type_or_template_failure_t =
 template <typename constructor_t, typename... args_t>
 struct infallible_construction_analyze
 {
-    template <typename T, typename = void, bool inplace = false> struct inner
+  private:
+    template <typename T, typename = void>
+    struct analyze_inplace : public std::false_type
     {
         using return_type = void;
         static constexpr bool is_return_type_valid = false;
@@ -159,12 +161,11 @@ struct infallible_construction_analyze
     };
 
     template <typename T>
-    struct inner<T,
-                 std::enable_if_t<!std::is_same_v<
-                     invoke_with_T_ref_return_type_or_template_failure_t<
-                         T, constructor_t, args_t...>,
-                     template_failure>>,
-                 true>
+    struct analyze_inplace<
+        T, std::enable_if_t<!std::is_same_v<
+               invoke_with_T_ref_return_type_or_template_failure_t<
+                   T, constructor_t, args_t...>,
+               template_failure>>> : public std::true_type
     {
         using return_type = invoke_with_T_ref_return_type_or_template_failure_t<
             T, constructor_t, args_t...>;
@@ -173,10 +174,18 @@ struct infallible_construction_analyze
         static constexpr bool is_inplace = true;
     };
 
+    template <typename T, typename = void>
+    struct analyze_returning_constructor : public std::false_type
+    {
+        using return_type = void;
+        static constexpr bool is_return_type_valid = false;
+        static constexpr bool is_inplace = false;
+    };
+
     template <typename T>
-    struct inner<
-        T, std::enable_if_t<is_std_invocable_r_v<T, constructor_t, args_t...>>,
-        false>
+    struct analyze_returning_constructor<
+        T, std::enable_if_t<is_std_invocable_r_v<constructor_t, T, args_t...>>>
+        : public std::true_type
     {
         using return_type = decltype(std::declval<const constructor_t&>()(
             std::declval<args_t>()...));
@@ -184,6 +193,22 @@ struct infallible_construction_analyze
             std::is_same_v<T, return_type>;
         static constexpr bool is_inplace = false;
     };
+
+  public:
+    template <typename T, typename = void> struct inner
+    {
+        using return_type = void;
+        static constexpr bool is_return_type_valid = false;
+        static constexpr bool is_inplace = false;
+    };
+
+    template <typename T>
+    struct inner<T, std::enable_if_t<analyze_returning_constructor<T>::value ||
+                                     analyze_inplace<T>::value>>
+        : public std::conditional_t<analyze_returning_constructor<T>::value,
+                                    analyze_returning_constructor<T>,
+                                    analyze_inplace<T>>
+    {};
 };
 
 /// NOTE: this may be void but actually be valid, check

@@ -88,7 +88,8 @@ namespace array {
 namespace detail {
 template <typename T, size_t num_items> struct defaulted_or_zeroed_t
 {
-    inline static constexpr auto impl = []() {
+    [[nodiscard]] constexpr auto operator()() const noexcept
+    {
         array_t<T, num_items> out;
         if constexpr (std::is_trivially_constructible_v<T>) {
             std::memset(out.__m_items, 0, num_items * sizeof(T));
@@ -98,7 +99,8 @@ template <typename T, size_t num_items> struct defaulted_or_zeroed_t
 };
 template <typename T, size_t num_items> struct undefined_t
 {
-    inline static constexpr auto impl = []() {
+    [[nodiscard]] constexpr auto operator()() const noexcept
+    {
         return array_t<T, num_items>();
     };
 };
@@ -106,10 +108,10 @@ template <typename T, size_t num_items> struct undefined_t
 
 template <typename T, size_t num_items>
 inline constexpr auto defaulted_or_zeroed =
-    detail::defaulted_or_zeroed_t<T, num_items>::impl;
+    detail::defaulted_or_zeroed_t<T, num_items>{};
 
 template <typename T, size_t num_items>
-inline constexpr auto undefined = detail::undefined_t<T, num_items>::impl;
+inline constexpr auto undefined = detail::undefined_t<T, num_items>{};
 
 } // namespace array
 
