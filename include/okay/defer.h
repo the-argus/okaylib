@@ -5,7 +5,7 @@
 #include <type_traits>
 
 namespace ok {
-template <typename callable_t> class maydefer_t
+template <typename callable_t> class maydefer
 {
     callable_t* statement;
     static_assert(std::is_invocable_r_v<void, callable_t>,
@@ -13,25 +13,25 @@ template <typename callable_t> class maydefer_t
                   "not return void.");
 
   public:
-    explicit maydefer_t(callable_t&& f) : statement(ok::addressof(f)) {}
+    explicit maydefer(callable_t&& f) : statement(ok::addressof(f)) {}
 
     // you cannot move or copy or really mess with a defer at all
-    maydefer_t& operator=(const maydefer_t&) = delete;
-    maydefer_t(const maydefer_t&) = delete;
+    maydefer& operator=(const maydefer&) = delete;
+    maydefer(const maydefer&) = delete;
 
-    maydefer_t& operator=(maydefer_t&&) = delete;
-    maydefer_t(maydefer_t&&) = delete;
+    maydefer& operator=(maydefer&&) = delete;
+    maydefer(maydefer&&) = delete;
 
     inline constexpr void cancel() { statement = nullptr; }
 
-    inline ~maydefer_t()
+    inline ~maydefer()
     {
         if (statement)
             (*statement)();
     }
 };
 
-template <typename callable_t> class defer_t
+template <typename callable_t> class defer
 {
     callable_t&& statement;
     static_assert(std::is_invocable_r_v<void, callable_t>,
@@ -39,16 +39,16 @@ template <typename callable_t> class defer_t
                   "not return void.");
 
   public:
-    explicit defer_t(callable_t&& f) : statement(std::forward<callable_t>(f)) {}
+    explicit defer(callable_t&& f) : statement(std::forward<callable_t>(f)) {}
 
     // you cannot move or copy or really mess with a defer at all
-    defer_t& operator=(const defer_t&) = delete;
-    defer_t(const defer_t&) = delete;
+    defer& operator=(const defer&) = delete;
+    defer(const defer&) = delete;
 
-    defer_t& operator=(defer_t&&) = delete;
-    defer_t(defer_t&&) = delete;
+    defer& operator=(defer&&) = delete;
+    defer(defer&&) = delete;
 
-    inline ~defer_t() { statement(); }
+    inline ~defer() { statement(); }
 };
 
 } // namespace ok

@@ -13,12 +13,12 @@ TEST_SUITE("defer")
     {
         SUBCASE("defer that does nothing")
         {
-            defer_t([] {});
+            defer([] {});
         }
 
         SUBCASE("maydefer that does nothing")
         {
-            maydefer_t([] {});
+            maydefer([] {});
         }
 
         SUBCASE("defer that adds to number")
@@ -26,9 +26,9 @@ TEST_SUITE("defer")
             int counter = 0;
 
             {
-                defer_t set_to_zero([&counter] { counter = 0; });
+                defer set_to_zero([&counter] { counter = 0; });
                 for (size_t i = 0; i < 10; ++i) {
-                    defer_t increment([&counter] { counter++; });
+                    defer increment([&counter] { counter++; });
                     REQUIRE(counter == i);
                 }
             }
@@ -41,10 +41,10 @@ TEST_SUITE("defer")
             int counter = 0;
 
             {
-                maydefer_t set_to_zero([&counter] { counter = 0; });
+                maydefer set_to_zero([&counter] { counter = 0; });
 
                 for (size_t i = 0; i < 10; ++i) {
-                    maydefer_t increment([&counter] { counter++; });
+                    maydefer increment([&counter] { counter++; });
                     REQUIRE(counter == i);
                 }
             }
@@ -80,13 +80,13 @@ TEST_SUITE("defer")
                 void* first_mem = fakemalloc(100);
                 if (!first_mem)
                     return {};
-                maydefer_t free_first_mem(
+                maydefer free_first_mem(
                     [first_mem, fakefree] { fakefree(first_mem); });
 
                 void* second_mem = fakemalloc(100);
                 if (!second_mem)
                     return {};
-                maydefer_t free_second_mem(
+                maydefer free_second_mem(
                     [second_mem, fakefree] { fakefree(second_mem); });
 
                 if (fail_halfway)
