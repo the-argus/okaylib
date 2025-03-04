@@ -17,12 +17,12 @@ enum class nondescriptive_error : uint8_t
     no_value = 1,
 };
 
-struct anystatus_t
+struct anystatus
 {
   private:
     uint8_t m_status;
 
-    constexpr anystatus_t(bool is_okay) OKAYLIB_NOEXCEPT
+    constexpr anystatus(bool is_okay) OKAYLIB_NOEXCEPT
         : m_status(is_okay ? 0 : 255)
     {
     }
@@ -56,7 +56,7 @@ struct anystatus_t
                       std::is_same_v<typename T::enum_type,
                                      decltype(std::declval<const T&>().err())>,
                   bool> = true>
-    constexpr anystatus_t(const T& result) OKAYLIB_NOEXCEPT
+    constexpr anystatus(const T& result) OKAYLIB_NOEXCEPT
     {
         m_status = uint8_t(result.err());
     }
@@ -65,29 +65,29 @@ struct anystatus_t
     /// just casts the enum value to a uint8_t.
     template <typename enum_t,
               std::enable_if_t<detail::is_status_enum_v<enum_t>, bool> = true>
-    constexpr anystatus_t(enum_t status) OKAYLIB_NOEXCEPT
+    constexpr anystatus(enum_t status) OKAYLIB_NOEXCEPT
     {
         m_status = uint8_t(status);
     }
 
     // no_value constructor
-    constexpr explicit anystatus_t() OKAYLIB_NOEXCEPT : m_status(1) {}
+    constexpr explicit anystatus() OKAYLIB_NOEXCEPT : m_status(1) {}
 
-    static const anystatus_t success;
-    static const anystatus_t failure;
+    static const anystatus success;
+    static const anystatus failure;
 
 #ifdef OKAYLIB_USE_FMT
-    friend struct fmt::formatter<anystatus_t>;
+    friend struct fmt::formatter<anystatus>;
 #endif
 };
 
-inline const anystatus_t anystatus_t::success{true};
-inline const anystatus_t anystatus_t::failure{false};
+inline const anystatus anystatus::success{true};
+inline const anystatus anystatus::failure{false};
 
 } // namespace ok
 
 #ifdef OKAYLIB_USE_FMT
-template <> struct fmt::formatter<ok::anystatus_t>
+template <> struct fmt::formatter<ok::anystatus>
 {
     constexpr format_parse_context::iterator parse(format_parse_context& ctx)
     {
@@ -99,13 +99,13 @@ template <> struct fmt::formatter<ok::anystatus_t>
         return it;
     }
 
-    format_context::iterator format(const ok::anystatus_t& result,
+    format_context::iterator format(const ok::anystatus& result,
                                     format_context& ctx) const
     {
         if (result.okay()) {
-            return fmt::format_to(ctx.out(), "[anystatus_t::okay]");
+            return fmt::format_to(ctx.out(), "[anystatus::okay]");
         } else {
-            return fmt::format_to(ctx.out(), "[anystatus_t::{}]",
+            return fmt::format_to(ctx.out(), "[anystatus::{}]",
                                   uint8_t(result.err()));
         }
     }

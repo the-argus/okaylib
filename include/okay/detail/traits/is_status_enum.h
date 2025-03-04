@@ -10,18 +10,18 @@
 
 namespace ok::detail {
 
-template <typename maybe_status_t, typename = void>
+template <typename maybe_status, typename = void>
 struct is_status_enum : std::false_type
 {};
 
-template <typename maybe_status_t>
+template <typename maybe_status>
 struct is_status_enum<
-    maybe_status_t,
+    maybe_status,
     std::enable_if_t<
-        std::is_enum_v<maybe_status_t> && sizeof(maybe_status_t) == 1 &&
-        std::underlying_type_t<maybe_status_t>(maybe_status_t::okay) == 0 &&
-        std::underlying_type_t<maybe_status_t>(
-            maybe_status_t::no_value) == 1>> : std::true_type
+        std::is_enum_v<maybe_status> && sizeof(maybe_status) == 1 &&
+        std::underlying_type_t<maybe_status>(maybe_status::okay) == 0 &&
+        std::underlying_type_t<maybe_status>(
+            maybe_status::no_value) == 1>> : std::true_type
 {};
 
 template <typename T>

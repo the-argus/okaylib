@@ -11,12 +11,12 @@
 
 namespace ok {
 /// Wrapper around a errcode to give it a similar interface to a result_t.
-template <typename enum_t> struct status_t
+template <typename enum_t> struct status
 {
   public:
     static_assert(
         detail::is_status_enum_v<enum_t>,
-        "Bad enum errorcode type provided to status_t. Make sure it is only a "
+        "Bad enum errorcode type provided to status. Make sure it is only a "
         "byte in size, and that the okay entry is = 0.");
 
   private:
@@ -33,23 +33,23 @@ template <typename enum_t> struct status_t
     {
         return m_status;
     }
-    constexpr status_t(enum_t failure) OKAYLIB_NOEXCEPT { m_status = failure; }
+    constexpr status(enum_t failure) OKAYLIB_NOEXCEPT { m_status = failure; }
 
-    constexpr explicit status_t() OKAYLIB_NOEXCEPT
+    constexpr explicit status() OKAYLIB_NOEXCEPT
     {
         m_status = enum_t::no_value;
     }
 
 #ifdef OKAYLIB_USE_FMT
-    friend struct fmt::formatter<status_t>;
+    friend struct fmt::formatter<status>;
 #endif
 };
 } // namespace ok
 
 #ifdef OKAYLIB_USE_FMT
-template <typename enum_t> struct fmt::formatter<ok::status_t<enum_t>>
+template <typename enum_t> struct fmt::formatter<ok::status<enum_t>>
 {
-    using status_template_t = ok::status_t<enum_t>;
+    using status_template_t = ok::status<enum_t>;
 
     constexpr format_parse_context::iterator parse(format_parse_context& ctx)
     {
@@ -66,13 +66,13 @@ template <typename enum_t> struct fmt::formatter<ok::status_t<enum_t>>
     {
         // TODO: use ctti to get nice typename for enum_t here
         if constexpr (fmt::is_formattable<enum_t>::value) {
-            return fmt::format_to(ctx.out(), "[status_t::{}]", status.err());
+            return fmt::format_to(ctx.out(), "[status::{}]", status.err());
         } else {
             if (status.okay()) {
-                return fmt::format_to(ctx.out(), "[status_t::okay]");
+                return fmt::format_to(ctx.out(), "[status::okay]");
             } else {
                 return fmt::format_to(
-                    ctx.out(), "[status_t::{}]",
+                    ctx.out(), "[status::{}]",
                     std::underlying_type_t<enum_t>(status.err()));
             }
         }

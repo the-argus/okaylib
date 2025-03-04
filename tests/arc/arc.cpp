@@ -22,7 +22,7 @@ TEST_SUITE("arc smart pointers")
 
         SUBCASE("directly calling make::with")
         {
-            status_t<alloc::error> out_status;
+            status<alloc::error> out_status;
             auto int_arc =
                 unique_rw_arc_t<int>::make::with(out_status, c_allocator);
             REQUIRE(out_status.okay());
@@ -30,7 +30,7 @@ TEST_SUITE("arc smart pointers")
 
         SUBCASE("move constructor")
         {
-            status_t<alloc::error> out_status;
+            status<alloc::error> out_status;
             auto int_arc =
                 unique_rw_arc_t<int>::make::with(out_status, c_allocator);
             REQUIRE(out_status.okay());

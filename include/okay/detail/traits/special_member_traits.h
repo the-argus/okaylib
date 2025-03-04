@@ -111,7 +111,7 @@ struct fallible_construction_analyze
         using return_type = decltype(std::declval<const constructor_t&>()(
             std::declval<T&>(), std::declval<args_t>()...));
         static constexpr bool is_return_type_valid =
-            is_instance_v<return_type, status_t>;
+            is_instance_v<return_type, status>;
     };
 };
 

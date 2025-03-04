@@ -21,7 +21,7 @@ enum class OtherError : uint8_t
     not_allowed,
 };
 
-static_assert(sizeof(status_t<GenericError>) == 1,
+static_assert(sizeof(status<GenericError>) == 1,
               "status is not a single byte in size");
 
 TEST_SUITE("status")
@@ -30,21 +30,21 @@ TEST_SUITE("status")
     {
         SUBCASE("construction")
         {
-            status_t<GenericError> stat(GenericError::okay);
-            status_t<GenericError> stat2 = GenericError::okay;
-            status_t<GenericError> stat3 = GenericError::evil;
+            status<GenericError> stat(GenericError::okay);
+            status<GenericError> stat2 = GenericError::okay;
+            status<GenericError> stat3 = GenericError::evil;
             REQUIRE(stat.okay());
             REQUIRE(stat2.okay());
             REQUIRE(!stat3.okay());
             std::array<decltype(stat), 3> statuses = {stat, stat2, stat3};
             for (auto s : statuses) {
-                anystatus_t any = s;
+                anystatus any = s;
                 REQUIRE(s.okay() == any.okay());
             }
         }
         SUBCASE("copy assignment")
         {
-            status_t<GenericError> stat(GenericError::okay);
+            status<GenericError> stat(GenericError::okay);
             auto stat2 = stat;
 
             static_assert(std::is_copy_assignable_v<decltype(stat)>,
@@ -58,7 +58,7 @@ TEST_SUITE("status")
         //  NOTE: this case is really just to make sure it compiles
         SUBCASE("turning different statuses into anystatus")
         {
-            auto memalloc = []() -> status_t<OtherError> {
+            auto memalloc = []() -> status<OtherError> {
                 void* bytes = malloc(100);
                 if (!bytes)
                     return OtherError::oom;
@@ -66,7 +66,7 @@ TEST_SUITE("status")
                 return OtherError::okay;
             };
 
-            auto floatmath = []() -> status_t<GenericError> {
+            auto floatmath = []() -> status<GenericError> {
                 const long i = 12378389479823989;
                 const long j = 85743323894782374;
 
@@ -82,7 +82,7 @@ TEST_SUITE("status")
                 return GenericError::evil;
             };
 
-            auto dostuff = [memalloc, floatmath]() -> anystatus_t {
+            auto dostuff = [memalloc, floatmath]() -> anystatus {
                 auto stat = memalloc();
                 if (!stat.okay())
                     return stat;
@@ -95,13 +95,13 @@ TEST_SUITE("status")
 
         SUBCASE("anystatus conversion at runtime")
         {
-            auto fakealloc = [](bool should_alloc) -> status_t<OtherError> {
+            auto fakealloc = [](bool should_alloc) -> status<OtherError> {
                 if (!should_alloc)
                     return OtherError::not_allowed;
                 return OtherError::okay;
             };
 
-            auto yesorno = [](bool cond) -> status_t<GenericError> {
+            auto yesorno = [](bool cond) -> status<GenericError> {
                 if (cond)
                     return GenericError::okay;
                 else
@@ -109,7 +109,7 @@ TEST_SUITE("status")
             };
 
             auto dostuff = [fakealloc, yesorno](bool one,
-                                                bool two) -> anystatus_t {
+                                                bool two) -> anystatus {
                 auto status1 = fakealloc(one);
                 if (!status1.okay())
                     return status1;

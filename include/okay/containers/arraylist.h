@@ -99,7 +99,7 @@ class arraylist_t
         return *this;
     }
 
-    /// Append a new item and return either a status_t representing whether the
+    /// Append a new item and return either a status representing whether the
     /// allocation succeeded or T's error type. The new item is constructed
     /// using the constructor selected by ok::make() with the given args.
     template <typename... args_t>
@@ -125,16 +125,16 @@ class arraylist_t
                 false, "Allocator did not give back expected amount of memory");
             if constexpr (returns_result) {
                 static_assert(
-                    detail::is_instance_v<make_result_type, status_t>);
+                    detail::is_instance_v<make_result_type, status>);
                 using enum_t = typename make_result_type::enum_type;
                 static_assert(
                     std::is_convertible_v<alloc::error, enum_t>,
                     "In order to use a potentially failing constructor with "
                     "arraylist_t::append(), the constructor's enum type must "
                     "define a conversion from alloc::error.");
-                return status_t(enum_t(alloc::error::oom));
+                return status(enum_t(alloc::error::oom));
             } else {
-                return status_t(alloc::error::oom);
+                return status(alloc::error::oom);
             }
         }
 
@@ -151,19 +151,19 @@ class arraylist_t
                 ++m.spots_occupied;
             }
             using enum_t = typename make_result_type::enum_type;
-            return status_t(enum_t(result.err()));
+            return status(enum_t(result.err()));
         } else {
             ok::make_into_uninitialized<T>(uninit,
                                            std::forward<args_t>(args)...);
             ++m.spots_occupied;
-            return status_t(alloc::error::okay);
+            return status(alloc::error::okay);
         }
     }
 
     inline ~arraylist_t() { destroy(); }
 
   private:
-    constexpr status_t<alloc::error> first_allocation()
+    constexpr status<alloc::error> first_allocation()
     {
         alloc::result_t<maybe_defined_memory_t> res =
             m.backing_allocator->allocate(alloc::request_t{
@@ -187,7 +187,7 @@ class arraylist_t
         return alloc::error::okay;
     }
 
-    constexpr status_t<alloc::error> reallocate(slice_t<T>& spots)
+    constexpr status<alloc::error> reallocate(slice_t<T>& spots)
     {
         using namespace alloc;
         const auto realloc_flags = flags::leave_nonzeroed | flags::expand_back;
@@ -322,7 +322,7 @@ template <typename T> struct spots_preallocated_t
     }
 
     template <typename allocator_impl_t>
-    [[nodiscard]] constexpr status_t<alloc::error>
+    [[nodiscard]] constexpr status<alloc::error>
     operator()(arraylist_t<T, allocator_impl_t>& output,
                allocator_impl_t& allocator,
                size_t num_spots_preallocated) const OKAYLIB_NOEXCEPT
@@ -375,7 +375,7 @@ struct copy_items_from_range_t
     }
 
     template <typename allocator_impl_t, typename input_range_t>
-    [[nodiscard]] constexpr status_t<alloc::error>
+    [[nodiscard]] constexpr status<alloc::error>
     operator()(ok::arraylist_t<value_type_for<const input_range_t&>,
                                allocator_impl_t>& output,
                allocator_impl_t& allocator,

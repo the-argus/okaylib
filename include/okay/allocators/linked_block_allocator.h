@@ -71,7 +71,7 @@ class linked_blockpool_allocator_t : public ok::allocator_t
     }
 
   private:
-    constexpr status_t<alloc::error> alloc_new_blockpool() OKAYLIB_NOEXCEPT;
+    constexpr status<alloc::error> alloc_new_blockpool() OKAYLIB_NOEXCEPT;
 
     constexpr void destroy() noexcept
     {
@@ -140,7 +140,7 @@ class linked_blockpool_allocator_t : public ok::allocator_t
     }
 };
 
-constexpr status_t<alloc::error>
+constexpr status<alloc::error>
 linked_blockpool_allocator_t::alloc_new_blockpool() OKAYLIB_NOEXCEPT
 {
     __ok_internal_assert(m.last_pool);

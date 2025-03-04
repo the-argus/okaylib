@@ -645,7 +645,7 @@ ok::allocator_t::make(args_t&&... args) OKAYLIB_NOEXCEPT
     if constexpr (returns_status) {
         auto result = make_into_uninitialized<actual_t>(
             *made, std::forward<args_t>(args)...);
-        static_assert(detail::is_instance_v<decltype(result), status_t>);
+        static_assert(detail::is_instance_v<decltype(result), status>);
         return res<alloc::owned<actual_t>,
                      typename decltype(result)::enum_type>(
             alloc::owned<actual_t>(*made, *this));

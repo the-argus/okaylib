@@ -65,7 +65,7 @@ template <typename T> struct make_into_uninitialized_fn_t
             new (ok::addressof(uninitialized)) T(std::forward<args_t>(args)...);
             return;
         } else if constexpr (is_fallible_constructible) {
-            status_t out = detail::
+            status out = detail::
                 call_first_argument_with_T_ref_and_the_rest_of_the_arguments(
                     uninitialized, std::forward<args_t>(args)...);
             return out;
@@ -196,7 +196,7 @@ using deduced_make_type_t = std::conditional_t<
 ///   function object) takes in a `T& uninitialized` as its first parameter and
 ///   does initialization in-place over that.
 ///   - In this case, ok::make() will also check if the constructor function
-///     returns a status_t. If so, it will create a result_t<T, error_enum>,
+///     returns a status. If so, it will create a result_t<T, error_enum>,
 ///     binding together the in-place constructed target of the constructor
 ///     function and the returned status into one object.
 ///   - Otherwise, ok::make() will just return the in-place constructed object.
@@ -273,10 +273,10 @@ template <typename T = detail::deduced_t, typename... args_t>
                                                innerargs)...);
                     return out.value;
                 } else {
-                    static_assert(detail::is_instance_v<return_type, status_t>,
+                    static_assert(detail::is_instance_v<return_type, status>,
                                   "Type returned from an in-place constructor "
                                   "must either be void (if it cannot error) or "
-                                  "an ok::status_t.");
+                                  "an ok::status.");
                     // fallible in-place constructor
                     res<actual_deduced_t, typename return_type::enum_type>
                         out;

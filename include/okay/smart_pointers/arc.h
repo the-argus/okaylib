@@ -772,7 +772,7 @@ struct unique_rw_arc_t<T, allocator_impl_t>::make
     make() = delete;
     // TODO: have this support factory functions for T
     static constexpr auto with =
-        [](status_t<alloc::error>& out_status, allocator_impl_t& allocator,
+        [](status<alloc::error>& out_status, allocator_impl_t& allocator,
            auto&&... constructor_args) -> unique_rw_arc_t {
         static_assert(is_std_constructible_v<T, decltype(constructor_args)...>,
                       "Cannot make a unique_rw_arc_t with the given arguments- "
@@ -815,7 +815,7 @@ into_arc(T&& item, allocator_impl_t& allocator) OKAYLIB_NOEXCEPT
     static_assert(detail::is_derived_from_v<allocator_impl_t, allocator_t>,
                   "Type given as allocator for into_arc is not derived "
                   "from allocator.");
-    status_t<alloc::error> out_status;
+    status<alloc::error> out_status;
     auto out = unique_rw_arc_t<T, allocator_impl_t>::make::with(
         out_status, allocator, std::forward<T>(item));
     if (!out_status.okay()) {

@@ -28,7 +28,7 @@ class std_memory_resource_allocator_t : public allocator_t
 
     inline void clear() noexcept final;
 
-    [[nodiscard]] inline status_t<error>
+    [[nodiscard]] inline status<error>
     register_destruction_callback(void*, destruction_callback_t) noexcept final;
 
     [[nodiscard]] inline feature_flags features() const noexcept final;
@@ -175,7 +175,7 @@ inline auto std_memory_resource_allocator_t::reallocate_bytes(
 }
 
 inline auto std_memory_resource_allocator_t::register_destruction_callback(
-    void*, destruction_callback_t) noexcept -> status_t<error>
+    void*, destruction_callback_t) noexcept -> status<error>
 {
     assert(false);
     return error::unsupported;
