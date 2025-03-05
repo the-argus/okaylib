@@ -2,7 +2,7 @@
 // test header must be first
 #include "allocator_tests.h"
 #include "okay/allocators/arena.h"
-#include "okay/allocators/linked_block_allocator.h"
+#include "okay/allocators/linked_blockpool_allocator.h"
 
 using namespace ok;
 

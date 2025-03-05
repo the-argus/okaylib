@@ -49,8 +49,10 @@ const okaylib_headers = &[_][]const u8{
 
     "allocators/allocator.h",
     "allocators/arena.h",
+    "allocators/block_allocator.h",
     "allocators/c_allocator.h",
     "allocators/destruction_callbacks.h",
+    "allocators/linked_blockpool_allocator.h",
     "allocators/std_memory_resource_allocator.h",
     "allocators/wrappers.h",
 
