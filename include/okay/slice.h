@@ -79,43 +79,41 @@ template <typename viewed_t> class slice
 
     // implicitly take a slice of something with data() and size() functions
     // which is not also a slice.
-    template <typename U,
-              std::enable_if_t<
-                  detail::is_container_v<U> &&
-                      !detail::is_instance<U, ok::slice>() &&
-                      std::is_same_v<decltype(*std::declval<const U&>().data()),
-                                     viewed_t&>,
-                  bool> = false>
-    constexpr slice(const U& other) OKAYLIB_NOEXCEPT
-        : m_data(other.data()),
-          m_elements(other.size())
+    template <
+        typename U,
+        std::enable_if_t<
+            detail::is_container_v<U> && !detail::is_instance<U, ok::slice>() &&
+                std::is_same_v<decltype(*std::declval<const U&>().data()),
+                               viewed_t&>,
+            bool> = false>
+    constexpr slice(const U& other) OKAYLIB_NOEXCEPT : m_data(other.data()),
+                                                       m_elements(other.size())
     {
     }
 
     // take slice of thing with data() and size(), nonconst variant
-    template <typename U,
-              std::enable_if_t<
-                  // has data() and size()
-                  detail::is_container_v<U> &&
-                      !detail::is_instance<U, ok::slice>() &&
-                      // either the value type of the container is the
-                      // same as our value type, or it is nonconst and
-                      // we are const
-                      (std::is_same_v<decltype(*std::declval<U&>().data()),
-                                      viewed_t&> ||
-                       std::is_same_v<decltype(*std::declval<U&>().data()),
-                                      std::remove_cv_t<viewed_t>&>),
-                  bool> = false>
+    template <
+        typename U,
+        std::enable_if_t<
+            // has data() and size()
+            detail::is_container_v<U> && !detail::is_instance<U, ok::slice>() &&
+                // either the value type of the container is the
+                // same as our value type, or it is nonconst and
+                // we are const
+                (std::is_same_v<decltype(*std::declval<U&>().data()),
+                                viewed_t&> ||
+                 std::is_same_v<decltype(*std::declval<U&>().data()),
+                                std::remove_cv_t<viewed_t>&>),
+            bool> = false>
     constexpr slice(U& other) OKAYLIB_NOEXCEPT : m_data(other.data()),
-                                                   m_elements(other.size())
+                                                 m_elements(other.size())
     {
     }
 
     // c array converting constructor
     template <size_t size>
-    constexpr slice(viewed_t (&array)[size]) OKAYLIB_NOEXCEPT
-        : m_data(array),
-          m_elements(size)
+    constexpr slice(viewed_t (&array)[size]) OKAYLIB_NOEXCEPT : m_data(array),
+                                                                m_elements(size)
     {
     }
 
@@ -177,9 +175,9 @@ slice(viewed_t (&)[size]) -> slice<viewed_t>;
 
 template <typename T>
 slice(T) -> slice<std::enable_if_t<
-               detail::is_container_v<detail::remove_cvref_t<T>> &&
-                   !detail::is_instance<detail::remove_cvref_t<T>, slice>(),
-               typename detail::remove_cvref_t<T>::value_type>>;
+             detail::is_container_v<detail::remove_cvref_t<T>> &&
+                 !detail::is_instance<detail::remove_cvref_t<T>, slice>(),
+             typename detail::remove_cvref_t<T>::value_type>>;
 
 using bytes_t = slice<uint8_t>;
 
@@ -300,7 +298,7 @@ subslice(container_t& container,
 /// bad idea, but useful when interfacing with things like c-style strings.
 template <typename viewed_t>
 [[nodiscard]] slice<viewed_t> raw_slice(viewed_t& data,
-                                          size_t size) OKAYLIB_NOEXCEPT
+                                        size_t size) OKAYLIB_NOEXCEPT
 {
     return slice<viewed_t>(ok::addressof(data), size);
 }

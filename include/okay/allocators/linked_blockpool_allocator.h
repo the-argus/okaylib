@@ -86,9 +86,8 @@ class linked_blockpool_allocator_t : public ok::allocator_t
         while (pool_iter) {
             auto* prev = pool_iter->prev;
 
-            m.backing->deallocate(
-                ok::raw_slice(*reinterpret_cast<uint8_t*>(pool_iter),
-                              sizeof(*pool_iter) + pool_iter->size));
+            m.backing->deallocate(ok::raw_slice(
+                *reinterpret_cast<uint8_t*>(pool_iter), pool_iter->byte_size));
 
             pool_iter = prev;
         }
@@ -100,16 +99,53 @@ class linked_blockpool_allocator_t : public ok::allocator_t
     struct pool_t
     {
         pool_t* prev;
-        size_t size;
-        uint8_t blocks[];
+        size_t num_blocks;
+        // total size of this pool, including its blocks and padding, in bytes
+        size_t byte_size;
+        size_t offset; // num bytes into `bytes` that blocks actually start
+        uint8_t bytes[];
 
-        constexpr bytes_t as_slice() noexcept
+        // takes an uninitialized pool sitting at the start of a buffer and
+        // initializes it, given the buffer and the alignment needed by the
+        // blocks (determines where blocks start). Returns false if it is unable
+        // to fit any blocks within the given buffer
+        [[nodiscard]] constexpr bool init_in_buffer(bytes_t containing,
+                                                    pool_t* prev,
+                                                    size_t block_min_alignment,
+                                                    size_t block_size) noexcept
         {
-            return ok::raw_slice(blocks[0], size);
+            __ok_internal_assert(static_cast<void*>(containing.data()) ==
+                                 static_cast<void*>(this));
+            __ok_internal_assert(containing.size() > sizeof(pool_t));
+
+            size_t remaining_space = containing.size();
+            void* start = containing.data();
+
+            if (!std::align(block_min_alignment, block_size, start,
+                            remaining_space)) {
+                return false;
+            }
+
+            this->byte_size = containing.size();
+            this->offset = static_cast<uint8_t*>(start) - bytes;
+            this->num_blocks = remaining_space / block_size;
+            this->prev = prev;
+
+            return true;
+        }
+
+        constexpr uint8_t* blocks_start() noexcept { return bytes + offset; }
+        constexpr const uint8_t* blocks_start() const noexcept
+        {
+            return bytes + offset;
+        }
+        constexpr bytes_t as_slice(size_t blocksize) noexcept
+        {
+            return ok::raw_slice(*blocks_start(), blocksize * num_blocks);
         };
-        constexpr slice<const uint8_t> as_slice() const noexcept
+        constexpr slice<const uint8_t> as_slice(size_t blocksize) const noexcept
         {
-            return ok::raw_slice(blocks[0], size);
+            return ok::raw_slice(*blocks_start(), blocksize * num_blocks);
         };
     };
 
@@ -139,7 +175,8 @@ class linked_blockpool_allocator_t : public ok::allocator_t
     constexpr bool pool_contains(const pool_t& pool,
                                  slice<const uint8_t> bytes) const
     {
-        return ok_memcontains(.outer = pool.as_slice(), .inner = bytes);
+        return ok_memcontains(.outer = pool.as_slice(m.blocksize),
+                              .inner = bytes);
     }
 };
 
@@ -147,8 +184,7 @@ constexpr status<alloc::error>
 linked_blockpool_allocator_t::alloc_new_blockpool() OKAYLIB_NOEXCEPT
 {
     __ok_internal_assert(m.last_pool);
-    const size_t next_size =
-        (m.last_pool->size * m.blocksize) * m.growth_factor;
+    const size_t next_size = (m.last_pool->byte_size) * m.growth_factor;
 
     auto allocation_result = m.backing->allocate({
         .num_bytes = next_size,
@@ -170,8 +206,14 @@ linked_blockpool_allocator_t::alloc_new_blockpool() OKAYLIB_NOEXCEPT
                 "misaligned memory.");
 
     pool_t* const new_pool = reinterpret_cast<pool_t*>(allocation.data());
-    new_pool->prev = m.last_pool;
-    new_pool->size = (allocation.size() - sizeof(pool_t)) / m.blocksize;
+    bool success = new_pool->init_in_buffer(allocation, m.last_pool,
+                                            m.minimum_alignment, m.blocksize);
+    if (!success) [[unlikely]] {
+        // bad pool size, cant fit any blocks in it?
+        __ok_internal_assert(false); // TODO: is this error necessary or can we
+                                     // guarantee it never happens
+        return alloc::error::oom;
+    }
     m.last_pool = new_pool;
 
     __ok_internal_assert(!m.free_head);
@@ -179,9 +221,9 @@ linked_blockpool_allocator_t::alloc_new_blockpool() OKAYLIB_NOEXCEPT
 
     // iterate in reverse so that the first item on the free list will be
     // the first thing in this new blockpool
-    for (int64_t i = new_pool->size - 1; i >= 0; --i) {
-        auto* block_start =
-            reinterpret_cast<free_block_t*>(&new_pool->blocks[i * m.blocksize]);
+    for (int64_t i = int64_t(new_pool->num_blocks) - 1; i >= 0; --i) {
+        auto* block_start = reinterpret_cast<free_block_t*>(
+            &new_pool->blocks_start()[i * m.blocksize]);
         __ok_internal_assert(uintptr_t(block_start) % m.minimum_alignment);
 
         // write free block linked list entry
@@ -328,7 +370,9 @@ struct start_with_one_pool_t
                     "Bad params to linked_blockpool_allocator::construct()");
 
         auto allocation_result = options.backing_allocator.allocate({
-            .num_bytes = actual_blocksize * options.num_blocks_in_first_pool,
+            .num_bytes = sizeof(linked_blockpool_allocator_t::pool_t) +
+                         actual_minimum_alignment +
+                         (actual_blocksize * options.num_blocks_in_first_pool),
             .alignment = actual_minimum_alignment,
             .flags = alloc::flags::leave_nonzeroed,
         });
@@ -336,7 +380,7 @@ struct start_with_one_pool_t
         if (!allocation_result.okay()) [[unlikely]]
             return allocation_result.err();
 
-        const bytes_t& allocation = allocation_result.release_ref();
+        bytes_t allocation = allocation_result.release();
 
         // initialize the linked list of free blocks
         linked_blockpool_allocator_t::free_block_t* free_list_iter = nullptr;
@@ -350,11 +394,24 @@ struct start_with_one_pool_t
         }
         __ok_internal_assert(free_list_iter);
 
+        auto* pool = reinterpret_cast<linked_blockpool_allocator_t::pool_t*>(
+            allocation.data());
+        const bool success = pool->init_in_buffer(
+            allocation, nullptr, actual_minimum_alignment, actual_blocksize);
+        if (!success) [[unlikely]] {
+            // bad buffer size, cant fit anything in it
+            __ok_internal_assert(
+                false); // TODO: can this be guaranteed avoided? required num
+                        // blocks is always > 0
+            return alloc::error::oom;
+        }
+
+        __ok_internal_assert(pool->num_blocks >=
+                             options.num_blocks_in_first_pool);
+
         new (ok::addressof(uninit))
             linked_blockpool_allocator_t(linked_blockpool_allocator_t::M{
-                .last_pool =
-                    reinterpret_cast<linked_blockpool_allocator_t::pool_t*>(
-                        allocation.data()),
+                .last_pool = pool,
                 .blocksize = actual_blocksize,
                 .minimum_alignment = actual_minimum_alignment,
                 .backing = ok::addressof(options.backing_allocator),
