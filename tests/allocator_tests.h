@@ -94,6 +94,16 @@ template <typename allocator_t> struct allocator_tests
         }
     }
 
+    inline static void
+    allocating_zero_bytes_returns_unsupported(allocator_t& ally)
+    {
+        REQUIRE(ally.allocate(ok::alloc::request_t{
+                                  .num_bytes = 0,
+                                  .alignment = 16,
+                              })
+                    .err() == ok::alloc::error::unsupported);
+    }
+
     inline static void allocate_and_clear_repeatedly(allocator_t& ally)
     {
         using namespace ok;
@@ -155,6 +165,7 @@ template <typename allocator_t> struct allocator_tests
             allocations_are_correctly_sized_aligned_and_zeroed,
             allocate_and_clear_repeatedly,
             inplace_feature_flag,
+            allocating_zero_bytes_returns_unsupported,
         };
 
         auto visited =

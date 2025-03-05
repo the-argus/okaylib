@@ -45,6 +45,11 @@ class c_allocator_t : public allocator_t
 [[nodiscard]] inline alloc::result_t<bytes_t>
 c_allocator_t::impl_allocate(const alloc::request_t& request) OKAYLIB_NOEXCEPT
 {
+    if (request.num_bytes == 0) [[unlikely]] {
+        __ok_usage_error(false,
+                         "Attempt to allocate 0 bytes from c_allocator.");
+        return alloc::error::unsupported;
+    }
     // NOTE: alignment over 16 is not possible on most platforms, I don't think?
     // TODO: figure out what platforms this is a problem for, maybe alloc more
     // and then align when alignment is big

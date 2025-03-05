@@ -121,6 +121,10 @@ constexpr void arena_t::destroy() OKAYLIB_NOEXCEPT
 [[nodiscard]] inline alloc::result_t<bytes_t>
 arena_t::impl_allocate(const alloc::request_t& request) OKAYLIB_NOEXCEPT
 {
+    if (request.num_bytes == 0) [[unlikely]] {
+        __ok_usage_error(false, "Attempt to allocate 0 bytes from arena.");
+        return alloc::error::unsupported;
+    }
     using namespace alloc;
     const bool should_zero = !(request.flags & flags::leave_nonzeroed);
     void* aligned_start_voidptr = m_available_memory.data();
