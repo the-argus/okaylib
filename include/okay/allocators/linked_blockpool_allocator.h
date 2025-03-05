@@ -15,7 +15,7 @@ class linked_blockpool_allocator_t : public ok::allocator_t
   public:
     static constexpr alloc::feature_flags type_features =
         alloc::feature_flags::can_predictably_realloc_in_place |
-        alloc::feature_flags::can_expand_back | alloc::feature_flags::can_clear;
+        alloc::feature_flags::can_expand_back;
 
     linked_blockpool_allocator_t&
     operator=(const linked_blockpool_allocator_t&) = delete;

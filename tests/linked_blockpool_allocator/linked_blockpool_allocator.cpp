@@ -12,6 +12,7 @@ TEST_SUITE("c_allocator")
     {
         ok::array_t<u8, 64 * 5100> bytes = {};
         arena_t arena(bytes);
+        defer arena_destroy([&] { arena.destroy(); });
         auto blockpool = linked_blockpool_allocator::start_with_one_pool
                              .make({
                                  .num_bytes_per_block = 64,
