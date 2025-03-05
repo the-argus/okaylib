@@ -95,6 +95,7 @@ const okaylib_headers = &[_][]const u8{
     "ranges/adaptors.h",
     "ranges/indices.h",
 
+    "ranges/views/all.h",
     "ranges/views/drop.h",
     "ranges/views/enumerate.h",
     "ranges/views/join.h",
@@ -130,6 +131,8 @@ const test_source_files = &[_][]const u8{
     "arena_allocator/arena_allocator.cpp",
     "linked_blockpool_allocator/linked_blockpool_allocator.cpp",
     "arc/arc.cpp",
+    "all/all.cpp",
+    "any/any.cpp",
 };
 
 const universal_tests_source_files = &[_][]const u8{};
