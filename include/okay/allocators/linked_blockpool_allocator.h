@@ -119,7 +119,7 @@ class linked_blockpool_allocator_t : public ok::allocator_t
             __ok_internal_assert(containing.size() > sizeof(pool_t));
 
             size_t remaining_space = containing.size();
-            void* start = containing.data();
+            void* start = bytes;
 
             if (!std::align(block_min_alignment, block_size, start,
                             remaining_space)) {
@@ -382,18 +382,6 @@ struct start_with_one_pool_t
 
         bytes_t allocation = allocation_result.release();
 
-        // initialize the linked list of free blocks
-        linked_blockpool_allocator_t::free_block_t* free_list_iter = nullptr;
-        for (int64_t i = (allocation.size() / actual_blocksize) - 1; i >= 0;
-             --i) {
-            auto* block =
-                reinterpret_cast<linked_blockpool_allocator_t::free_block_t*>(
-                    &allocation[i * actual_blocksize]);
-            *block = {.prev = free_list_iter};
-            free_list_iter = block;
-        }
-        __ok_internal_assert(free_list_iter);
-
         auto* pool = reinterpret_cast<linked_blockpool_allocator_t::pool_t*>(
             allocation.data());
         const bool success = pool->init_in_buffer(
@@ -405,6 +393,19 @@ struct start_with_one_pool_t
                         // blocks is always > 0
             return alloc::error::oom;
         }
+
+        __ok_internal_assert(pool->offset < actual_minimum_alignment);
+
+        // initialize the linked list of free blocks
+        linked_blockpool_allocator_t::free_block_t* free_list_iter = nullptr;
+        for (int64_t i = pool->num_blocks - 1; i >= 0; --i) {
+            auto* block =
+                reinterpret_cast<linked_blockpool_allocator_t::free_block_t*>(
+                    &pool->blocks_start()[i * actual_blocksize]);
+            *block = {.prev = free_list_iter};
+            free_list_iter = block;
+        }
+        __ok_internal_assert(free_list_iter);
 
         __ok_internal_assert(pool->num_blocks >=
                              options.num_blocks_in_first_pool);

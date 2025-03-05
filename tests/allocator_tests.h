@@ -39,7 +39,7 @@ template <typename allocator_t> struct allocator_tests
         }
 
         // manual free
-        if (ally.features() & alloc::feature_flags::can_clear) {
+        {
             array_t<u8, 1024>& array =
                 ally.make_non_owning(array::undefined<u8, 1024>).release();
 
