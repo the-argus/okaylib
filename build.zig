@@ -37,6 +37,7 @@ const testing_flags = &[_][]const u8{
 
 const okaylib_headers = &[_][]const u8{
     "anystatus.h",
+    "construct.h",
     "context.h",
     "defer.h",
     "opt.h",
@@ -45,7 +46,7 @@ const okaylib_headers = &[_][]const u8{
     "slice.h",
     "status.h",
     "stdmem.h",
-    "try_copy.h",
+    "version.h",
 
     "allocators/allocator.h",
     "allocators/arena.h",
@@ -56,10 +57,15 @@ const okaylib_headers = &[_][]const u8{
     "allocators/std_memory_resource_allocator.h",
     "allocators/wrappers.h",
 
+    "containers/array.h",
+    "containers/arraylist.h",
+
     "detail/template_util/c_array_length.h",
     "detail/template_util/c_array_value_type.h",
     "detail/template_util/empty.h",
     "detail/template_util/enable_copy_move.h",
+    "detail/template_util/first_type_in_pack.h",
+    "detail/template_util/is_all_same.h",
     "detail/template_util/remove_cvref.h",
     "detail/template_util/uninitialized_storage.h",
 
@@ -78,10 +84,11 @@ const okaylib_headers = &[_][]const u8{
     "detail/get_best.h",
     "detail/invoke.h",
     "detail/is_lvalue.h",
-    "detail/noexcept",
-    "detail/no_unique_add",
+    "detail/no_unique_addr.h",
+    "detail/noexcept.h",
     "detail/ok_assert.h",
     "detail/ok_enable_if.h",
+    "detail/ok_unreachable.h",
     "detail/opt.h",
     "detail/res.h",
     "detail/view_common.h",
@@ -96,6 +103,7 @@ const okaylib_headers = &[_][]const u8{
     "ranges/indices.h",
 
     "ranges/views/all.h",
+    "ranges/views/any.h",
     "ranges/views/drop.h",
     "ranges/views/enumerate.h",
     "ranges/views/join.h",
