@@ -166,7 +166,7 @@ linked_blockpool_allocator_t::alloc_new_blockpool() OKAYLIB_NOEXCEPT
     __ok_assert(allocation.size() >= next_size,
                 "Backing allocator for linked_block_allocator_t did not "
                 "return the expected amount of memory.");
-    __ok_assert((uintptr_t(allocation.data()) % m.minimum_alignment) != 0,
+    __ok_assert((uintptr_t(allocation.data()) % m.minimum_alignment) == 0,
                 "Backing allocator for linked_block_allocator_t gave "
                 "misaligned memory.");
 
