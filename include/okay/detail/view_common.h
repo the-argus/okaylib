@@ -212,24 +212,6 @@ struct propagate_boundscheck_t
             i.template get_view_reference<derived_range_t, parent_range_t>(),
             cursor_type_for<parent_range_t>(c));
     }
-
-    __ok_enable_if_static(parent_range_t,
-                          detail::range_can_is_after_bounds_v<T>, bool)
-        is_after_bounds(const derived_range_t& i, const cursor_t& c)
-    {
-        return detail::range_definition_inner<T>::is_after_bounds(
-            i.template get_view_reference<derived_range_t, parent_range_t>(),
-            cursor_type_for<parent_range_t>(c));
-    }
-
-    __ok_enable_if_static(parent_range_t,
-                          detail::range_can_is_before_bounds_v<T>, bool)
-        is_before_bounds(const derived_range_t& i, const cursor_t& c)
-    {
-        return detail::range_definition_inner<T>::is_before_bounds(
-            i.template get_view_reference<derived_range_t, parent_range_t>(),
-            cursor_type_for<parent_range_t>(c));
-    }
 };
 
 template <typename derived_range_t, typename parent_range_t>

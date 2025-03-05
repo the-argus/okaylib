@@ -337,12 +337,11 @@ TEST_SUITE("range traits")
             }
         }
 
-        SUBCASE("foreach loop c array no macro, prefer_after")
+        SUBCASE("foreach loop c array no macro")
         {
             int myints[500];
 
-            for (size_t i = ok::begin(myints);
-                 ok::is_inbounds(myints, i, ok::prefer_after_bounds_check_t{});
+            for (size_t i = ok::begin(myints); ok::is_inbounds(myints, i);
                  ok::increment(myints, i)) {
                 int& iter = myints[i];
 
@@ -354,13 +353,11 @@ TEST_SUITE("range traits")
             }
         }
 
-        SUBCASE("foreach loop is_before_bounds and is_after_bounds type, no "
-                "macro, prefer_after")
+        SUBCASE("foreach loop on bidirectional type, no macro")
         {
             example_range_bidirectional bytes;
 
-            for (auto i = ok::begin(bytes);
-                 ok::is_inbounds(bytes, i, ok::prefer_after_bounds_check_t{});
+            for (auto i = ok::begin(bytes); ok::is_inbounds(bytes, i);
                  ok::increment(bytes, i)) {
                 uint8_t& iter = bytes.get(i);
 

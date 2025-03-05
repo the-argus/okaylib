@@ -216,35 +216,6 @@ struct range_definition<detail::drop_view_t<input_range_t>>
             return parent_def::is_inbounds(parent_ref, c);
         }
     }
-
-    __ok_enable_if_static(range_t, detail::range_can_is_after_bounds_v<T>, bool)
-        is_after_bounds(const drop_t& i, const cursor_t& c) OKAYLIB_NOEXCEPT
-    {
-        // parent's after bounds check should still work: we can't change end
-        // bounds
-        return detail::range_definition_inner<T>::is_after_bounds(
-            i.template get_view_reference<drop_t, T>(), c);
-    }
-
-    __ok_enable_if_static(range_t, detail::range_can_is_before_bounds_v<T>,
-                          bool)
-        is_before_bounds(const drop_t& i, const cursor_t& c) OKAYLIB_NOEXCEPT
-    {
-        using parent_def = detail::range_definition_inner<T>;
-        const range_t& parent_ref = i.template get_view_reference<drop_t, T>();
-
-        if constexpr (detail::is_random_access_range_v<T>) {
-            static_assert(!detail::range_marked_finite_v<T>);
-            return c < ok::begin(i);
-        } else if constexpr (detail::is_bidirectional_range_v<T>) {
-            return c.num_consumed() >= i.amount();
-        } else {
-            // we are a type of range which cannot move its cursor backwards, so
-            // there's no way to mess this one up
-            static_assert(!detail::range_can_decrement_v<T>);
-            return false;
-        }
-    }
 };
 
 constexpr detail::range_adaptor_t<detail::drop_fn_t> drop;

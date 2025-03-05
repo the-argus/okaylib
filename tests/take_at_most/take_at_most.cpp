@@ -61,8 +61,7 @@ TEST_SUITE("take_at_most")
                 detail::is_bidirectional_range_v<decltype(half_view)>);
 
             size_t count = 0;
-            for (auto c = ok::begin(half_view); ok::is_inbounds(
-                     half_view, c, ok::prefer_after_bounds_check_t{});
+            for (auto c = ok::begin(half_view); ok::is_inbounds(half_view, c);
                  ok::increment(half_view, c)) {
                 ++count;
             }
@@ -105,42 +104,6 @@ TEST_SUITE("take_at_most")
             size_t count = 0;
             ok_foreach(auto&& blank, big_view) { ++count; }
             REQUIRE(count == 50);
-        }
-
-        SUBCASE("can't take more than container of unknown size w/ before "
-                "after boundscheck")
-        {
-            fifty_items_unknown_size_before_after_t items;
-            auto big_view = items | take_at_most(100);
-            size_t count = 0;
-            for (auto cursor = ok::begin(big_view);
-                 ok::is_inbounds(big_view, cursor);
-                 ok::increment(big_view, cursor)) {
-                ++count;
-            }
-            REQUIRE(count == 50);
-            count = 0;
-            for (auto cursor = ok::begin(big_view); ok::is_inbounds(
-                     big_view, cursor, ok::prefer_after_bounds_check_t{});
-                 ok::increment(big_view, cursor)) {
-                ++count;
-            }
-            REQUIRE(count == 50);
-        }
-
-        SUBCASE("get first half of container of unknown size w/ before after "
-                "boundscheck")
-        {
-            fifty_items_unknown_size_before_after_t items;
-            size_t count = 0;
-            ok_foreach(auto&& _, items) { ++count; }
-            REQUIRE(count == 50);
-
-            auto half_view = items | take_at_most(25);
-
-            count = 0;
-            ok_foreach(size_t i, half_view) { ++count; }
-            REQUIRE(count == 25);
         }
 
         SUBCASE("take subset of indices")

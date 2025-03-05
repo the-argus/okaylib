@@ -13,8 +13,7 @@
     auto&& __OK_L(__LINE__, range) = _range;                                  \
     for (bool _run = true; _run; _run = false)                                \
         for (auto cursor = ok::begin(__OK_L(__LINE__, range));                \
-             ok::is_inbounds(__OK_L(__LINE__, range), cursor,                 \
-                             ok::prefer_after_bounds_check_t{});              \
+             ok::is_inbounds(__OK_L(__LINE__, range), cursor);                \
              ok::increment(__OK_L(__LINE__, range), cursor))                  \
             if (1) {                                                          \
                 _run = true;                                                  \

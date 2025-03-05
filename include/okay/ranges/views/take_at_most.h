@@ -193,39 +193,6 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>,
         }
     }
 
-    __ok_enable_if_static(range_t, detail::range_can_is_after_bounds_v<T>, bool)
-        is_after_bounds(const take_at_most_t& i,
-                        const cursor_t& c) OKAYLIB_NOEXCEPT
-    {
-        using parent_def = detail::range_definition_inner<T>;
-        const range_t& parent_ref =
-            i.template get_view_reference<take_at_most_t, T>();
-
-        if constexpr (detail::is_random_access_range_v<T> &&
-                      !detail::range_marked_finite_v<T>) {
-            static_assert(std::is_same_v<cursor_t, cursor_type_for<T>>,
-                          "Cursor type has extra unneeded stuff in take() even "
-                          "though it doesnt need it.");
-            return c >= ok::begin(parent_ref) + i.amount();
-        } else if constexpr (!detail::range_marked_finite_v<T>) {
-            return c.num_consumed() >= i.amount();
-        } else {
-            return c.num_consumed() >= i.amount() ||
-                   parent_def::is_after_bounds(parent_ref, c.inner());
-        }
-    }
-
-    __ok_enable_if_static(range_t, detail::range_can_is_before_bounds_v<T>,
-                          bool)
-        is_before_bounds(const take_at_most_t& i,
-                         const cursor_t& c) OKAYLIB_NOEXCEPT
-    {
-        // take does not modify the beginning, so the parent's before bounds
-        // check should always work
-        return detail::range_definition_inner<T>::is_before_bounds(
-            i.template get_view_reference<take_at_most_t, T>(), c);
-    }
-
     __ok_enable_if_static(range_t, detail::range_definition_has_increment_v<T>,
                           void)
         increment(const take_at_most_t& i, cursor_t& c) OKAYLIB_NOEXCEPT

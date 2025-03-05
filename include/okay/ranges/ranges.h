@@ -259,30 +259,6 @@ struct range_definition_has_is_inbounds<
 {};
 
 template <typename T, typename = void>
-struct range_definition_has_is_after_bounds : public std::false_type
-{};
-template <typename T>
-struct range_definition_has_is_after_bounds<
-    T, std::enable_if_t<std::is_same_v<
-           bool, decltype(range_definition_inner<T>::is_after_bounds(
-                     std::declval<const remove_cvref_t<T>&>(),
-                     std::declval<const cursor_type_unchecked_for<T>&>()))>>>
-    : public std::true_type
-{};
-
-template <typename T, typename = void>
-struct range_definition_has_is_before_bounds : public std::false_type
-{};
-template <typename T>
-struct range_definition_has_is_before_bounds<
-    T, std::enable_if_t<std::is_same_v<
-           bool, decltype(range_definition_inner<T>::is_before_bounds(
-                     std::declval<const remove_cvref_t<T>&>(),
-                     std::declval<const cursor_type_unchecked_for<T>&>()))>>>
-    : public std::true_type
-{};
-
-template <typename T, typename = void>
 struct range_definition_has_increment : public std::false_type
 {};
 template <typename T>
@@ -406,13 +382,11 @@ struct range_is_arraylike<T,
         range_definition_has_size<T>::value,
         "Range marked arraylike, but its range definition does not define a "
         "`size()` function to determine its size in constant time.");
-    static_assert(!range_definition_has_is_inbounds<T>::value &&
-                      !range_definition_has_is_before_bounds<T>::value &&
-                      !range_definition_has_is_after_bounds<T>::value,
-                  "Range marked arraylike, but it defines boundschecking "
-                  "functions. An arraylike type must be able to be "
-                  "boundschecked with the provided arraylike function, which "
-                  "checks if the cursor is less than the array's size.");
+    static_assert(
+        !range_definition_has_is_inbounds<T>::value,
+        "Range marked arraylike, but it defines is_inbounds . An arraylike "
+        "type must be able to be boundschecked with the provided arraylike "
+        "function, which checks if the cursor is less than the array's size.");
     static_assert(
         !range_definition_has_increment<T>::value &&
             !range_definition_has_decrement<T>::value &&
@@ -436,18 +410,6 @@ constexpr bool range_definition_has_is_inbounds_v =
 template <typename T>
 constexpr bool range_can_is_inbounds_v =
     range_definition_has_is_inbounds_v<T> || range_is_arraylike_v<T>;
-template <typename T>
-constexpr bool range_definition_has_is_after_bounds_v =
-    range_definition_has_is_after_bounds<T>::value;
-template <typename T>
-constexpr bool range_definition_has_is_before_bounds_v =
-    range_definition_has_is_after_bounds<T>::value;
-template <typename T>
-constexpr bool range_can_is_after_bounds_v =
-    range_definition_has_is_after_bounds_v<T>;
-template <typename T>
-constexpr bool range_can_is_before_bounds_v =
-    range_definition_has_is_before_bounds_v<T>;
 template <typename T>
 constexpr bool range_definition_has_offset_v =
     range_definition_has_offset<T>::value;
@@ -659,14 +621,7 @@ template <typename T>
 constexpr bool has_baseline_functions_v =
     (range_marked_finite_v<T> || range_marked_infinite_v<T> ||
      range_can_size_v<T>) &&
-    // either provides an is_inbounds, XOR it provides after & before bounds
-    // checks
-    (range_can_is_inbounds_v<T> !=
-     (range_can_is_after_bounds_v<T> && range_can_is_before_bounds_v<T>)) &&
-    // also make sure you dont have is_inbounds and one of after/before also
-    // defined
-    (range_can_is_after_bounds_v<T> == range_can_is_before_bounds_v<T>) &&
-    range_can_begin_v<T>;
+    range_can_is_inbounds_v<T> && range_can_begin_v<T>;
 
 template <typename T, typename = void> struct cursor_or_void
 {
@@ -778,18 +733,8 @@ class range_def_for : public detail::range_definition_inner<T>
                              "range_t&) function which returns a cursor type.");
 
     static constexpr bool has_inbounds = detail::range_can_is_inbounds_v<noref>;
-    static constexpr bool has_after_bounds =
-        detail::range_can_is_after_bounds_v<noref>;
-    static constexpr bool has_before_bounds =
-        detail::range_can_is_before_bounds_v<noref>;
-    static_assert(has_inbounds || (has_after_bounds && has_before_bounds),
-                  "Range definition invalid- No bounds checking functions "
-                  "provided. Provide either `is_inbounds()` function or both "
-                  "`is_after_bounds` and `is_before_bounds`.");
-    static_assert(
-        has_inbounds != (has_after_bounds && has_before_bounds),
-        "Range definition invalid- do not provide both of `is_inbounds()` "
-        "*and* `is_after_bounds() and is_before_bounds()`.");
+    static_assert(has_inbounds,
+                  "Range definition invalid- `is_inbounds()` not provided.");
 
     static constexpr bool has_size = detail::range_can_size_v<noref>;
     static constexpr bool marked_infinite =
@@ -855,23 +800,6 @@ class range_def_for : public detail::range_definition_inner<T>
         "Range definition invalid- the return value from begin() (the "
         "cursor type) is not an object.");
 
-    static constexpr bool before_and_after_or_inbounds_are_mutually_exclusive =
-        detail::range_can_is_inbounds_v<noref> !=
-        (detail::range_can_is_before_bounds_v<noref> &&
-         detail::range_can_is_after_bounds_v<noref>);
-    static_assert(
-        before_and_after_or_inbounds_are_mutually_exclusive,
-        "Range definition invalid- define either `is_inbounds()` XOR (both "
-        "of `is_after_bounds()` and `is_before_bounds()`), but not both.");
-    static constexpr bool before_and_after_are_both_defined_or_not =
-        detail::range_can_is_after_bounds_v<noref> ==
-        detail::range_can_is_before_bounds_v<noref>;
-    static_assert(
-        before_and_after_are_both_defined_or_not,
-        "Range definition invalid- different status for `is_before_bounds` "
-        "and `is_after_bounds`. either define both of `is_before_bounds()` and "
-        "`is_after_bounds()`, or define neither.");
-
     static constexpr bool can_increment_cursor =
         detail::has_pre_increment_v<detail::cursor_type_unchecked_for<noref>> ||
         detail::range_definition_has_increment_v<noref>;
@@ -914,9 +842,7 @@ struct is_range<
         // doesnt have it, it will be void, which is not a valid value type
         is_valid_value_type_v<value_type> && range_can_begin_v<T> &&
         is_valid_cursor_v<cursor_type_unchecked_for<T>> &&
-        (range_can_is_inbounds_v<T> !=
-         (range_can_is_after_bounds_v<T> && range_can_is_before_bounds_v<T>)) &&
-        range_can_is_after_bounds_v<T> == range_can_is_before_bounds_v<T> &&
+        range_can_is_inbounds_v<T> &&
         (range_can_size_v<T> || range_marked_infinite_v<T> ||
          range_marked_finite_v<T>) &&
         ((int(range_can_size_v<T>) + int(range_marked_infinite_v<T>) +
@@ -941,14 +867,6 @@ template <typename T>
 using cursor_type_for =
     std::conditional_t<ok::detail::range_is_arraylike_v<T>, size_t,
                        typename detail::range_begin_rettype_or_void<T>::type>;
-
-struct prefer_after_bounds_check_t
-{};
-struct prefer_before_bounds_check_t
-{};
-
-inline constexpr prefer_before_bounds_check_t prefer_before_bounds_check{};
-inline constexpr prefer_after_bounds_check_t prefer_after_bounds_check{};
 
 namespace detail {
 
@@ -1246,38 +1164,12 @@ struct is_inbounds_fn_t
     {
         if constexpr (range_definition_has_is_inbounds_v<range_t>) {
             return range_def_for<range_t>::is_inbounds(range, cursor);
-        } else if constexpr (range_is_arraylike_v<range_t>) {
+        } else {
+            static_assert(range_is_arraylike_v<range_t>,
+                          "Range doesnt have an `is_inbounds()` function, and "
+                          "it's not arraylike (which would be the only valid "
+                          "reason not to have one).");
             return cursor < range_def_for<range_t>::size(range);
-        } else {
-            using def = range_def_for<range_t>;
-            return !def::is_before_bounds(range, cursor) &&
-                   !def::is_after_bounds(range, cursor);
-        }
-    }
-
-    template <typename range_t>
-    constexpr bool operator()
-        [[nodiscard]] (const range_t& range,
-                       const cursor_type_for<range_t>& cursor,
-                       prefer_after_bounds_check_t) const
-    {
-        if constexpr (range_definition_has_is_after_bounds_v<range_t>) {
-            return !range_def_for<range_t>::is_after_bounds(range, cursor);
-        } else {
-            return this->operator()(range, cursor);
-        }
-    }
-
-    template <typename range_t>
-    constexpr bool operator()
-        [[nodiscard]] (const range_t& range,
-                       const cursor_type_for<range_t>& cursor,
-                       prefer_before_bounds_check_t) const
-    {
-        if constexpr (range_definition_has_is_before_bounds_v<range_t>) {
-            return !range_def_for<range_t>::is_before_bounds(range, cursor);
-        } else {
-            return this->operator()(range, cursor);
         }
     }
 
