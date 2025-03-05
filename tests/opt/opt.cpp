@@ -15,6 +15,16 @@ struct big
 {
     int i[100];
 };
+
+struct destroyed
+{
+    static int destructions;
+    int me = 0;
+    ~destroyed() { destructions++; }
+};
+
+int destroyed::destructions = 0;
+
 static_assert(!std::is_convertible_v<std::optional<big>, const int&>);
 static_assert(!std::is_convertible_v<opt<big>, const int&>);
 static_assert(!std::is_convertible_v<int*, const int&>);
@@ -149,6 +159,35 @@ TEST_SUITE("opt")
         }
 #endif
 #endif
+
+        SUBCASE("destruction called when not nullopt")
+        {
+            {
+                opt<destroyed> d;
+                opt<destroyed> d1;
+                opt<destroyed> d2;
+                opt<destroyed> d3;
+            }
+            REQUIRE(destroyed::destructions == 0);
+
+            // make sure destruction counter is working
+            {
+                destroyed d;
+            }
+            REQUIRE(destroyed::destructions == 1);
+
+            {
+                opt<destroyed> d;
+                d.emplace();
+                opt<destroyed> d1;
+                d1.emplace();
+                opt<destroyed> d2;
+                d2.emplace();
+                opt<destroyed> d3;
+                d3.emplace();
+            }
+            REQUIRE(destroyed::destructions == 5);
+        }
     }
 
     TEST_CASE("Functionality")
@@ -210,11 +249,9 @@ TEST_SUITE("opt")
         SUBCASE("constness of optional reference follows const correctness")
         {
             // cannot go from const to nonconst
-            static_assert(
-                !std::is_convertible_v<opt<const int&>, opt<int&>>);
+            static_assert(!std::is_convertible_v<opt<const int&>, opt<int&>>);
             // can go from nonconst to const
-            static_assert(
-                std::is_convertible_v<opt<int&>, opt<const int&>>);
+            static_assert(std::is_convertible_v<opt<int&>, opt<const int&>>);
             int i = 10;
             opt<int&> mut_iref = i;
             opt<const int&> iref = i;
@@ -244,8 +281,8 @@ TEST_SUITE("opt")
             REQUIRE(tref.is_alias_for(td));
 
             // cannot go from base to derived
-            static_assert(!std::is_convertible_v<opt<test_base&>,
-                                                 opt<test_derived&>>);
+            static_assert(
+                !std::is_convertible_v<opt<test_base&>, opt<test_derived&>>);
         }
 
         SUBCASE("optional reference types")
@@ -289,8 +326,7 @@ TEST_SUITE("opt")
                 BigThing& operator=(const BigThing& other) = delete;
             };
 
-            auto try_make_big_thing =
-                [](bool should_succeed) -> opt<BigThing> {
+            auto try_make_big_thing = [](bool should_succeed) -> opt<BigThing> {
                 if (should_succeed)
                     return opt<BigThing>{std::in_place};
                 else
