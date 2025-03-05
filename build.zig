@@ -103,6 +103,8 @@ const okaylib_headers = &[_][]const u8{
     "ranges/views/take_at_most.h",
     "ranges/views/transform.h",
     "ranges/views/zip.h",
+
+    "smart_pointers/arc.h",
 };
 
 const test_source_files = &[_][]const u8{
