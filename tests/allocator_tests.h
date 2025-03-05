@@ -76,7 +76,7 @@ template <typename allocator_t> struct allocator_tests
             if (!result.okay())
                 continue;
 
-            bytes_t bytes = result.release().as_bytes();
+            bytes_t bytes = result.release();
 
             REQUIRE(bytes.size() >= num_bytes);
             REQUIRE(uintptr_t(bytes.data()) % 16 == 0);
@@ -113,8 +113,7 @@ template <typename allocator_t> struct allocator_tests
             bytes_t allocated =
                 ally.allocate(
                         alloc::request_t{.num_bytes = 1024, .alignment = 16})
-                    .release()
-                    .as_bytes();
+                    .release();
             ally.clear();
         }
     }
@@ -129,8 +128,7 @@ template <typename allocator_t> struct allocator_tests
 
         bytes_t allocation =
             ally.allocate(alloc::request_t{.num_bytes = 1, .alignment = 1})
-                .release()
-                .as_bytes();
+                .release();
 
         defer d([&] {
             ally.deallocate(allocation);

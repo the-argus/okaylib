@@ -18,85 +18,6 @@ namespace ok {
 
 class allocator_t;
 
-class maybe_defined_memory_t
-{
-  public:
-    maybe_defined_memory_t() = delete;
-    maybe_defined_memory_t(const maybe_defined_memory_t&) = default;
-    maybe_defined_memory_t& operator=(const maybe_defined_memory_t&) = default;
-    maybe_defined_memory_t(maybe_defined_memory_t&&) = default;
-    maybe_defined_memory_t& operator=(maybe_defined_memory_t&&) = default;
-
-    maybe_defined_memory_t(bytes_t bytes) OKAYLIB_NOEXCEPT : m_is_defined(true)
-    {
-        m_data.as_bytes = bytes;
-    }
-
-    maybe_defined_memory_t(undefined_memory_t<uint8_t> undefined)
-        OKAYLIB_NOEXCEPT : m_is_defined(false)
-    {
-        m_data.as_undefined = undefined;
-    }
-
-    [[nodiscard]] bool is_defined() const OKAYLIB_NOEXCEPT
-    {
-        return m_is_defined;
-    }
-
-    [[nodiscard]] bytes_t as_bytes() const OKAYLIB_NOEXCEPT
-    {
-        if (!is_defined()) [[unlikely]] {
-            __ok_abort(
-                "Attempt to get bytes_t from a maybe_defined_memory_t, but the "
-                "memory was undefined. Use as_undefined() instead.")
-        }
-
-        return m_data.as_bytes;
-    }
-
-    [[nodiscard]] undefined_memory_t<uint8_t>
-    as_undefined() const OKAYLIB_NOEXCEPT
-    {
-        if (is_defined()) [[unlikely]] {
-            __ok_abort("Attempt to get an undefined_memory_t from a "
-                       "maybe_defined_memory_t, but the memory was already "
-                       "defined. Use as_bytes() instead.")
-        }
-
-        return m_data.as_undefined;
-    }
-
-    /// get data directly without resolving whether or not this is defined
-    /// using this is a bad idea, just do as_undefined() or as_bytes()
-    [[nodiscard]] uint8_t* data_maybe_defined() const OKAYLIB_NOEXCEPT
-    {
-        if (m_is_defined) {
-            return m_data.as_bytes.data();
-        } else {
-            return m_data.as_undefined.data();
-        }
-    }
-
-    [[nodiscard]] size_t size() const OKAYLIB_NOEXCEPT
-    {
-        if (m_is_defined) {
-            return m_data.as_bytes.size();
-        } else {
-            return m_data.as_undefined.size();
-        }
-    }
-
-  private:
-    union maybe_undefined_slice_t
-    {
-        bytes_t as_bytes;
-        undefined_memory_t<uint8_t> as_undefined;
-        maybe_undefined_slice_t() OKAYLIB_NOEXCEPT {}
-    };
-    maybe_undefined_slice_t m_data;
-    bool m_is_defined;
-};
-
 namespace alloc {
 enum class error : uint8_t
 {
@@ -382,7 +303,7 @@ template <typename T, typename allocator_impl_t = ok::allocator_t> struct owned
 class allocator_t
 {
   public:
-    [[nodiscard]] constexpr alloc::result_t<maybe_defined_memory_t>
+    [[nodiscard]] constexpr alloc::result_t<bytes_t>
     allocate(const alloc::request_t& request) OKAYLIB_NOEXCEPT
     {
         return impl_allocate(request);
@@ -401,7 +322,7 @@ class allocator_t
         impl_deallocate(bytes);
     }
 
-    [[nodiscard]] constexpr alloc::result_t<maybe_defined_memory_t>
+    [[nodiscard]] constexpr alloc::result_t<bytes_t>
     reallocate(const alloc::reallocate_request_t& options) OKAYLIB_NOEXCEPT
     {
         if (!options.is_valid()) [[unlikely]] {
@@ -460,8 +381,7 @@ class allocator_t
         if (!allocation_result.okay()) [[unlikely]] {
             return return_type(allocation_result.err());
         }
-        uint8_t* object_start =
-            allocation_result.release_ref().data_maybe_defined();
+        uint8_t* object_start = allocation_result.release_ref().data();
 
         __ok_assert(uintptr_t(object_start) % alignof(actual_t) == 0,
                     "Misaligned memory produced by allocator");
@@ -473,7 +393,7 @@ class allocator_t
     }
 
   protected:
-    [[nodiscard]] virtual alloc::result_t<maybe_defined_memory_t>
+    [[nodiscard]] virtual alloc::result_t<bytes_t>
     impl_allocate(const alloc::request_t&) OKAYLIB_NOEXCEPT = 0;
 
     virtual void impl_clear() OKAYLIB_NOEXCEPT = 0;
@@ -483,9 +403,8 @@ class allocator_t
 
     virtual void impl_deallocate(bytes_t bytes) OKAYLIB_NOEXCEPT = 0;
 
-    [[nodiscard]] virtual alloc::result_t<maybe_defined_memory_t>
-    impl_reallocate(const alloc::reallocate_request_t& options)
-        OKAYLIB_NOEXCEPT = 0;
+    [[nodiscard]] virtual alloc::result_t<bytes_t> impl_reallocate(
+        const alloc::reallocate_request_t& options) OKAYLIB_NOEXCEPT = 0;
 
     [[nodiscard]] virtual alloc::result_t<alloc::reallocation_extended_t>
     impl_reallocate_extended(const alloc::reallocate_extended_request_t&
@@ -540,26 +459,18 @@ reallocate_in_place_orelse_keep_old_nocopy(
         options.calculate_new_preferred_size();
 
     // propagate leave_nonzeroed request to allocate call
-    result_t<maybe_defined_memory_t> res =
-        allocator.impl_allocate(alloc::request_t{
-            .num_bytes = new_size,
-            .flags = flags(leave_nonzeroed_bit),
-        });
+    result_t<bytes_t> res = allocator.impl_allocate(alloc::request_t{
+        .num_bytes = new_size,
+        .flags = flags(leave_nonzeroed_bit),
+    });
 
     if (!res.okay()) [[unlikely]]
         return res.err();
 
-    if (leave_nonzeroed_bit) {
-        return potentially_in_place_reallocation_t{
-            .memory = res.release_ref().as_undefined().leave_undefined(),
-            .was_in_place = false,
-        };
-    } else {
-        return potentially_in_place_reallocation_t{
-            .memory = res.release_ref().as_bytes(),
-            .was_in_place = false,
-        };
-    }
+    return potentially_in_place_reallocation_t{
+        .memory = res.release_ref(),
+        .was_in_place = false,
+    };
 }
 } // namespace alloc
 
@@ -635,8 +546,7 @@ ok::allocator_t::make(args_t&&... args) OKAYLIB_NOEXCEPT
         }
     }
 
-    uint8_t* object_start =
-        allocation_result.release_ref().data_maybe_defined();
+    uint8_t* object_start = allocation_result.release_ref().data();
 
     __ok_assert(uintptr_t(object_start) % alignof(actual_t) == 0,
                 "Misaligned memory produced by allocator");

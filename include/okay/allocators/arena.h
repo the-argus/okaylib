@@ -58,7 +58,7 @@ class arena_t : public allocator_t
 #endif
 
   protected:
-    [[nodiscard]] inline alloc::result_t<maybe_defined_memory_t>
+    [[nodiscard]] inline alloc::result_t<bytes_t>
     impl_allocate(const alloc::request_t&) OKAYLIB_NOEXCEPT final;
 
     inline void impl_clear() OKAYLIB_NOEXCEPT final;
@@ -71,7 +71,7 @@ class arena_t : public allocator_t
 
     inline void impl_deallocate(bytes_t) OKAYLIB_NOEXCEPT final {}
 
-    [[nodiscard]] inline alloc::result_t<maybe_defined_memory_t>
+    [[nodiscard]] inline alloc::result_t<bytes_t>
     impl_reallocate(const alloc::reallocate_request_t&) OKAYLIB_NOEXCEPT final
     {
         return alloc::error::unsupported;
@@ -118,7 +118,7 @@ constexpr void arena_t::destroy() OKAYLIB_NOEXCEPT
     }
 }
 
-[[nodiscard]] inline alloc::result_t<maybe_defined_memory_t>
+[[nodiscard]] inline alloc::result_t<bytes_t>
 arena_t::impl_allocate(const alloc::request_t& request) OKAYLIB_NOEXCEPT
 {
     using namespace alloc;
@@ -147,11 +147,8 @@ arena_t::impl_allocate(const alloc::request_t& request) OKAYLIB_NOEXCEPT
 
     if (should_zero) {
         std::memset(aligned_start, 0, allocated_size);
-        return maybe_defined_memory_t(
-            raw_slice(*aligned_start, allocated_size));
-    } else {
-        return undefined_memory_t<uint8_t>(*aligned_start, allocated_size);
     }
+    return raw_slice(*aligned_start, allocated_size);
 }
 
 inline void arena_t::impl_clear() OKAYLIB_NOEXCEPT

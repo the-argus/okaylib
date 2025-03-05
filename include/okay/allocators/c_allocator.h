@@ -17,7 +17,7 @@ class c_allocator_t : public allocator_t
     c_allocator_t() = default;
 
   protected:
-    [[nodiscard]] inline alloc::result_t<maybe_defined_memory_t>
+    [[nodiscard]] inline alloc::result_t<bytes_t>
     impl_allocate(const alloc::request_t&) OKAYLIB_NOEXCEPT final;
 
     inline void impl_clear() OKAYLIB_NOEXCEPT final;
@@ -27,7 +27,7 @@ class c_allocator_t : public allocator_t
 
     inline void impl_deallocate(bytes_t) OKAYLIB_NOEXCEPT final;
 
-    [[nodiscard]] inline alloc::result_t<maybe_defined_memory_t>
+    [[nodiscard]] inline alloc::result_t<bytes_t>
     impl_reallocate(const alloc::reallocate_request_t&) OKAYLIB_NOEXCEPT final;
 
     [[nodiscard]] inline alloc::result_t<alloc::reallocation_extended_t>
@@ -42,7 +42,7 @@ class c_allocator_t : public allocator_t
 
 // definitions -----------------------------------------------------------------
 
-[[nodiscard]] inline alloc::result_t<maybe_defined_memory_t>
+[[nodiscard]] inline alloc::result_t<bytes_t>
 c_allocator_t::impl_allocate(const alloc::request_t& request) OKAYLIB_NOEXCEPT
 {
     // NOTE: alignment over 16 is not possible on most platforms, I don't think?
@@ -78,9 +78,8 @@ inline void c_allocator_t::impl_deallocate(bytes_t bytes) OKAYLIB_NOEXCEPT
     ::free(bytes.data());
 }
 
-[[nodiscard]] inline alloc::result_t<maybe_defined_memory_t>
-c_allocator_t::impl_reallocate(const alloc::reallocate_request_t& options)
-    OKAYLIB_NOEXCEPT
+[[nodiscard]] inline alloc::result_t<bytes_t> c_allocator_t::impl_reallocate(
+    const alloc::reallocate_request_t& options) OKAYLIB_NOEXCEPT
 {
     using namespace alloc;
     __ok_usage_error(

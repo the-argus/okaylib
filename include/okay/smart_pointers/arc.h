@@ -778,20 +778,19 @@ struct unique_rw_arc_t<T, allocator_impl_t>::make
                       "Cannot make a unique_rw_arc_t with the given arguments- "
                       "there is no matching constructor for T.");
         using payload_t = detail::arc_payload_t<T, allocator_impl_t>;
-        alloc::result_t<maybe_defined_memory_t> res =
-            allocator.allocate(alloc::request_t{
-                .num_bytes = sizeof(payload_t),
-                .alignment = alignof(payload_t),
-                .flags = alloc::flags::leave_nonzeroed,
-            });
+        alloc::result_t<bytes_t> res = allocator.allocate(alloc::request_t{
+            .num_bytes = sizeof(payload_t),
+            .alignment = alignof(payload_t),
+            .flags = alloc::flags::leave_nonzeroed,
+        });
 
         if (!res.okay()) [[unlikely]] {
             out_status = res.err();
             return unique_rw_arc_t();
         }
 
-        payload_t& payload = *reinterpret_cast<payload_t*>(
-            res.release_ref().data_maybe_defined());
+        payload_t& payload =
+            *reinterpret_cast<payload_t*>(res.release_ref().data());
 
         // this unique ref holds the lock until it is destroyed. only when
         // unique ref is active is the strong refcount exactly equal to

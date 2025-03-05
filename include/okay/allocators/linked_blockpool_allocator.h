@@ -45,7 +45,7 @@ class linked_blockpool_allocator_t : public ok::allocator_t
     inline ~linked_blockpool_allocator_t() { destroy(); }
 
   protected:
-    [[nodiscard]] inline alloc::result_t<maybe_defined_memory_t>
+    [[nodiscard]] inline alloc::result_t<bytes_t>
     impl_allocate(const alloc::request_t&) OKAYLIB_NOEXCEPT final;
 
     inline void impl_clear() OKAYLIB_NOEXCEPT final
@@ -63,7 +63,7 @@ class linked_blockpool_allocator_t : public ok::allocator_t
 
     inline void impl_deallocate(bytes_t) OKAYLIB_NOEXCEPT final;
 
-    [[nodiscard]] inline alloc::result_t<maybe_defined_memory_t>
+    [[nodiscard]] inline alloc::result_t<bytes_t>
     impl_reallocate(const alloc::reallocate_request_t&) OKAYLIB_NOEXCEPT final;
 
     [[nodiscard]] inline alloc::result_t<alloc::reallocation_extended_t>
@@ -159,8 +159,7 @@ linked_blockpool_allocator_t::alloc_new_blockpool() OKAYLIB_NOEXCEPT
     if (!allocation_result.okay()) [[unlikely]]
         return allocation_result.err();
 
-    const bytes_t allocation =
-        allocation_result.release_ref().as_undefined().leave_undefined();
+    const bytes_t allocation = allocation_result.release_ref();
 
     // try to help folks implementing their own allocators
     __ok_assert(allocation.size() >= next_size,
@@ -193,7 +192,7 @@ linked_blockpool_allocator_t::alloc_new_blockpool() OKAYLIB_NOEXCEPT
     return alloc::error::okay;
 }
 
-[[nodiscard]] inline alloc::result_t<maybe_defined_memory_t>
+[[nodiscard]] inline alloc::result_t<bytes_t>
 linked_blockpool_allocator_t::impl_allocate(const alloc::request_t& request)
     OKAYLIB_NOEXCEPT
 {
@@ -218,11 +217,9 @@ linked_blockpool_allocator_t::impl_allocate(const alloc::request_t& request)
     if (!(request.flags & alloc::flags::leave_nonzeroed)) {
         // we always give back the full block, so zero the full block
         std::memset(free, 0, m.blocksize);
-        return maybe_defined_memory_t(
-            ok::raw_slice(*reinterpret_cast<uint8_t*>(free), m.blocksize));
     }
 
-    return undefined_memory_t(*reinterpret_cast<uint8_t*>(free), m.blocksize);
+    return ok::raw_slice(*reinterpret_cast<uint8_t*>(free), m.blocksize);
 }
 
 inline void
@@ -262,7 +259,7 @@ linked_blockpool_allocator_t::impl_deallocate(bytes_t bytes) OKAYLIB_NOEXCEPT
     m.free_head = new_free;
 }
 
-[[nodiscard]] inline alloc::result_t<maybe_defined_memory_t>
+[[nodiscard]] inline alloc::result_t<bytes_t>
 linked_blockpool_allocator_t::impl_reallocate(
     const alloc::reallocate_request_t& request) OKAYLIB_NOEXCEPT
 {
@@ -334,8 +331,7 @@ struct start_with_one_pool_t
         if (!allocation_result.okay()) [[unlikely]]
             return allocation_result.err();
 
-        bytes_t allocation =
-            allocation_result.release_ref().as_undefined().leave_undefined();
+        const bytes_t& allocation = allocation_result.release_ref();
 
         // initialize the linked list of free blocks
         linked_blockpool_allocator_t::free_block_t* free_list_iter = nullptr;
