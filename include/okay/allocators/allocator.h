@@ -431,10 +431,11 @@ class allocator_t
     /// Meant for simple code that uses arenas and doesn't need to manually free
     /// every allocation.
     template <typename T = detail::deduced_t, typename... args_t>
-    [[nodiscard]] constexpr alloc::result_t<T&>
+    [[nodiscard]] constexpr auto
     make_non_owning(args_t&&... args) OKAYLIB_NOEXCEPT
     {
         using actual_t = detail::deduced_make_type_t<T, args_t...>;
+        using return_type = alloc::result_t<actual_t&>;
 
         static_assert(
             !std::is_void_v<actual_t> &&
@@ -457,7 +458,7 @@ class allocator_t
             .flags = alloc::flags::leave_nonzeroed,
         });
         if (!allocation_result.okay()) [[unlikely]] {
-            return allocation_result.err();
+            return return_type(allocation_result.err());
         }
         uint8_t* object_start =
             allocation_result.release_ref().data_maybe_defined();
@@ -468,7 +469,7 @@ class allocator_t
         actual_t* made = reinterpret_cast<actual_t*>(object_start);
         ok::make_into_uninitialized<actual_t>(*made,
                                               std::forward<args_t>(args)...);
-        return *made;
+        return return_type(*made);
     }
 
   protected:

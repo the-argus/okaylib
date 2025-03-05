@@ -3,6 +3,7 @@
 
 #include "okay/allocators/allocator.h"
 #include "okay/containers/array.h"
+#include "okay/defer.h"
 #include "okay/short_arithmetic_types.h"
 #include <doctest.h>
 #include <random>
@@ -42,7 +43,7 @@ template <typename allocator_t> struct allocator_tests
             array_t<u8, 1024>& array =
                 ally.make_non_owning(array::undefined<u8, 1024>).release();
 
-            ally.free(array);
+            ok::free(ally, array);
         }
     }
 
@@ -96,7 +97,7 @@ template <typename allocator_t> struct allocator_tests
     inline static void allocate_and_clear_repeatedly(allocator_t& ally)
     {
         using namespace ok;
-        if (!(ally & alloc::feature_flags::can_clear))
+        if (!(ally.features() & alloc::feature_flags::can_clear))
             return;
 
         // if we cant allocate a megabyte at all, quit because this is a block
@@ -108,7 +109,7 @@ template <typename allocator_t> struct allocator_tests
         }
         ally.clear();
 
-        for (u64 i = 0; i < 100000000; ++i) {
+        for (u64 i = 0; i < 1000000; ++i) {
             bytes_t allocated =
                 ally.allocate(
                         alloc::request_t{.num_bytes = 1024, .alignment = 16})
@@ -131,6 +132,13 @@ template <typename allocator_t> struct allocator_tests
                 .release()
                 .as_bytes();
 
+        defer d([&] {
+            ally.deallocate(allocation);
+            if (ally.features() & alloc::feature_flags::can_clear) {
+                ally.clear();
+            }
+        });
+
         auto reallocation = ally.reallocate(alloc::reallocate_request_t{
             .memory = allocation,
             .new_size_bytes = 1,
@@ -139,11 +147,6 @@ template <typename allocator_t> struct allocator_tests
         });
 
         REQUIRE(reallocation.err() == alloc::error::unsupported);
-
-        ally.deallocate(allocation);
-        if (ally.features() & alloc::feature_flags::can_clear) {
-            ally.clear();
-        }
     }
 
     inline void run_all_fuzzed(allocator_t& ally)
@@ -161,8 +164,8 @@ template <typename allocator_t> struct allocator_tests
 
         constexpr auto seed = 1;
         std::default_random_engine engine(seed);
-        std::uniform_int_distribution<u64> distribution(0,
-                                                        test_functions.size());
+        std::uniform_int_distribution<u64> distribution(
+            0, test_functions.size() - 1);
 
         auto all_visited = [&visited] {
             for (u64 i = 0; i < visited.size(); ++i) {

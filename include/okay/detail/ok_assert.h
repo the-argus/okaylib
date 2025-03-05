@@ -17,6 +17,25 @@
         }                                                                     \
     }
 
+/// An assert which is just meant to fire in non-testing debug mode to make a
+/// returned error more obvious. This is purely to prevent okaylib users from
+/// having to search for the origins of error::usage or error::unsupported enum
+/// values
+#ifdef OKAYLIB_TESTING
+#define __ok_usage_error(expr, msg)
+#else
+#define __ok_usage_error(expr, msg)                                          \
+    {                                                                        \
+        if (!(expr)) {                                                       \
+            ::fprintf(                                                       \
+                stderr,                                                      \
+                "Usage error: assert \"%s\" triggered at %s:%d in %s: %s\n", \
+                #expr, __FILE__, __LINE__, __FUNCTION__, msg);               \
+            __ok_abort("usage error");                                       \
+        }                                                                    \
+    }
+#endif
+
 /// an assert which calls std::abort() in all modes including testing
 #define __ok_untestable_assert(expr, msg)                                  \
     {                                                                      \

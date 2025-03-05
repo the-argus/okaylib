@@ -83,11 +83,12 @@ c_allocator_t::impl_reallocate(const alloc::reallocate_request_t& options)
     OKAYLIB_NOEXCEPT
 {
     using namespace alloc;
-    __ok_assert(options.is_valid(),
-                "invalid reallocate request. validation check bypassed. did "
-                "you call impl_reallocate() directly?");
+    __ok_usage_error(
+        options.is_valid(),
+        "invalid reallocate request. validation check bypassed. did "
+        "you call impl_reallocate() directly?");
     if (options.flags & flags::in_place_orelse_fail) [[unlikely]] {
-        __ok_assert(
+        __ok_usage_error(
             false,
             "unsupported flag in_place_orelse_fail passed to c allocator");
         return error::unsupported;

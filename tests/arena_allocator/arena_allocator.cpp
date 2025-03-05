@@ -1,3 +1,4 @@
+#include "okay/defer.h"
 #include "test_header.h"
 // test header must be first
 #include "allocator_tests.h"
@@ -11,6 +12,7 @@ TEST_SUITE("c_allocator")
     {
         ok::array_t<u8, 10000> bytes = {};
         arena_t arena(bytes);
+        defer d([&] { arena.destroy(); });
         run_allocator_tests_static_and_dynamic_dispatch(arena);
     }
 }
