@@ -42,6 +42,12 @@ class linked_blockpool_allocator_t : public ok::allocator_t
         other.m.last_pool = nullptr;
     }
 
+    constexpr size_t block_size() const noexcept { return m.blocksize; }
+    constexpr size_t block_align() const noexcept
+    {
+        return m.minimum_alignment;
+    }
+
     inline ~linked_blockpool_allocator_t() { destroy(); }
 
   protected:
@@ -52,7 +58,7 @@ class linked_blockpool_allocator_t : public ok::allocator_t
     {
         __ok_assert(false,
                     "linked_blockpool_allocator_t cannot clear, this may cause "
-                    "memory leaks. check feature() before calling clear?");
+                    "memory leaks. check features() before calling clear?");
     }
 
     [[nodiscard]] inline alloc::feature_flags

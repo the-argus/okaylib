@@ -27,6 +27,7 @@ enum class error : uint8_t
     unsupported,
     usage,
     couldnt_expand_in_place,
+    platform_failure,
 };
 
 inline constexpr size_t default_align = alignof(std::max_align_t);

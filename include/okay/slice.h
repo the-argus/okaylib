@@ -140,7 +140,8 @@ template <typename viewed_t> class slice
         return m_data[idx];
     }
 
-    [[nodiscard]] constexpr slice subslice(subslice_options_t options)
+    [[nodiscard]] constexpr slice
+    subslice(subslice_options_t options) const OKAYLIB_NOEXCEPT
     {
         // NOTE: checking both start and start + length, in case overflow occurs
         // have to do this to be technically safe, but this will probably never

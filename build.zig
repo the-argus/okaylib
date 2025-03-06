@@ -54,6 +54,10 @@ const okaylib_headers = &[_][]const u8{
     "allocators/c_allocator.h",
     "allocators/destruction_callbacks.h",
     "allocators/linked_blockpool_allocator.h",
+    "allocators/linked_slab_allocator.h",
+    "allocators/page_allocator.h",
+    "allocators/reserving_page_allocator.h",
+    "allocators/slab_allocator.h",
     "allocators/std_memory_resource_allocator.h",
     "allocators/wrappers.h",
 
@@ -97,6 +101,9 @@ const okaylib_headers = &[_][]const u8{
     "macros/try.h",
 
     "math/ordering.h",
+    "math/rounding.h",
+
+    "platform/memory_map.h",
 
     "ranges/ranges.h",
     "ranges/adaptors.h",
