@@ -13,6 +13,14 @@ using namespace ok;
 static_assert(sizeof(slice<uint8_t>) ==
               sizeof(res<slice<uint8_t>, StatusCodeA>));
 
+struct destroyed
+{
+    static int destructions;
+    int me = 0;
+    ~destroyed() { destructions++; }
+};
+int destroyed::destructions = 0;
+
 TEST_SUITE("res")
 {
     TEST_CASE("Construction and type behavior")
@@ -326,6 +334,31 @@ TEST_SUITE("res")
             REQUIRE(copies == 1);
             REQUIRE(moves == 3);
         }
+
+        SUBCASE("res only destroys its contents if its not an error")
+        {
+            REQUIRE(destroyed::destructions == 0);
+            {
+                destroyed test;
+            }
+            REQUIRE(destroyed::destructions == 1);
+            destroyed::destructions = 0;
+            {
+                res<destroyed, StatusCodeA> r1;
+                REQUIRE(r1.err() == StatusCodeA::no_value);
+                res<destroyed, StatusCodeA> r2;
+                res<destroyed, StatusCodeA> r3;
+                res<destroyed, StatusCodeA> r4;
+            }
+            REQUIRE(destroyed::destructions == 0);
+            {
+                res<destroyed, StatusCodeA> r1(std::in_place);
+                res<destroyed, StatusCodeA> r2(std::in_place);
+                res<destroyed, StatusCodeA> r3(std::in_place);
+                res<destroyed, StatusCodeA> r4(std::in_place);
+            }
+            REQUIRE(destroyed::destructions == 4);
+        }
     }
 
     TEST_CASE("slice result")
@@ -341,8 +374,8 @@ TEST_SUITE("res")
 
             static_assert(
                 std::is_same_v<decltype(slice_res.release()), slice<int>>);
-            static_assert(std::is_same_v<decltype(slice_res.release_ref()),
-                                         slice<int>&>);
+            static_assert(
+                std::is_same_v<decltype(slice_res.release_ref()), slice<int>&>);
 
             auto& slice = slice_res.release_ref();
 
