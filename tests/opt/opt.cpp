@@ -1,4 +1,5 @@
 #include "okay/ranges/views/enumerate.h"
+#include "okay/ranges/views/std_for.h"
 #include "test_header.h"
 // test header must be first
 #include "okay/macros/foreach.h"
@@ -383,21 +384,50 @@ TEST_SUITE("opt")
             }
         }
 
-        // SUBCASE("emplace slice types")
-        // {
-        //     std::array<uint8_t, 128> bytes{0};
-        //     for (auto [byte, index] : enumerate_mut(bytes)) {
-        //         byte = index;
-        //     }
+        SUBCASE("emplace slice types")
+        {
+            std::array<uint8_t, 128> bytes{0};
+            for (auto [byte, index] : ok::enumerate(bytes) | std_for) {
+                byte = index;
+            }
 
-        //     opt<slice<uint8_t>> maybe_bytes;
-        //     maybe_bytes.emplace(bytes);
+            opt<slice<uint8_t>> maybe_bytes;
+            maybe_bytes.emplace(bytes);
 
-        //     for (auto [byte, index] : enumerate(maybe_bytes.ref_or_panic()))
-        //     {
-        //         REQUIRE(byte == bytes[index]);
-        //     }
-        // }
+            for (auto [byte, index] :
+                 enumerate(maybe_bytes.ref_or_panic()) | std_for) {
+                REQUIRE(byte == bytes[index]);
+            }
+        }
+
+        SUBCASE("copyout")
+        {
+            opt<int> i = 1;
+
+            int j = i.move_out().ref_or_panic();
+            REQUIRE(j == 1);
+            REQUIRE(!i);
+            i.reset();
+            REQUIRE(!i.move_out().has_value());
+            i.emplace(2);
+            REQUIRE(i.copy_out_or(3) == 2);
+            i.reset();
+            REQUIRE(i.copy_out_or(3) == 3);
+            REQUIRE(i.move_out_or(3) == 3);
+            REQUIRE(!i);
+            i.emplace(4);
+            REQUIRE(i.move_out_or(1) == 4);
+            i.reset();
+            REQUIRE(i.copy_out_or_run([] { return 1000; }) == 1000);
+            REQUIRE(!i);
+            REQUIRE(i.move_out_or_run([] { return 1000; }) == 1000);
+            REQUIRE(!i);
+            i.emplace(10);
+            REQUIRE(i.copy_out_or_run([] { return 1000; }) == 10);
+            REQUIRE(i);
+            REQUIRE(i.move_out_or_run([] { return 1000; }) == 10);
+            REQUIRE(!i);
+        }
 
         SUBCASE("moving or copying trivially copyable type")
         {

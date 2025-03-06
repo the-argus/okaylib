@@ -249,9 +249,9 @@ class opt_base_common_t
         static_cast<derived_t*>(this)->payload.reset();
     }
 
-    constexpr void _set_has_value(bool set) const OKAYLIB_NOEXCEPT
+    constexpr void _set_has_value(bool set) OKAYLIB_NOEXCEPT
     {
-        return static_cast<const derived_t*>(this)->payload.has_value = set;
+        static_cast<derived_t*>(this)->payload.has_value = set;
     }
 
     [[nodiscard]] constexpr bool _has_value() const OKAYLIB_NOEXCEPT
@@ -261,13 +261,11 @@ class opt_base_common_t
 
     constexpr input_contained_t& _get() OKAYLIB_NOEXCEPT
     {
-        assert(this->_has_value());
         return static_cast<derived_t*>(this)->payload.get();
     }
 
     constexpr const input_contained_t& _get() const OKAYLIB_NOEXCEPT
     {
-        assert(this->_has_value());
         return static_cast<const derived_t*>(this)->payload.get();
     }
 };

@@ -360,7 +360,7 @@ class opt : private detail::opt_base_t<payload_t>,
             is_std_invocable_v<callable_t> &&
                 std::is_same_v<std::remove_reference_t<decltype(callable())>,
                                payload_t>,
-            payload_t&&>
+            payload_t>
     {
         if (has_value()) {
             this->_set_has_value(false);
