@@ -599,6 +599,8 @@ template <> struct fmt::formatter<ok::alloc::error>
         case error_t::couldnt_expand_in_place:
             return fmt::format_to(ctx.out(),
                                   "alloc::error::couldnt_expand_in_place");
+        case error_t::platform_failure:
+            return fmt::format_to(ctx.out(), "alloc::error::platform_failure");
         }
     }
 };

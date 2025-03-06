@@ -47,8 +47,8 @@ class std_for_view : public detail::underlying_view_type<T>::type
         using iterator_category = std::input_iterator_tag;
         using difference_type = std::ptrdiff_t;
         using value_type = value_type_for<T>;
-        using reference =
-            decltype(ok::detail::get_best(m.value().parent, m.value().cursor));
+        using reference = decltype(ok::detail::get_best(
+            m.ref_or_panic().parent, m.ref_or_panic().cursor));
         using pointer = value_type*;
 
         static_assert(
@@ -67,14 +67,14 @@ class std_for_view : public detail::underlying_view_type<T>::type
 
         constexpr reference operator*() const OKAYLIB_NOEXCEPT
         {
-            auto& members = m.value();
+            auto& members = m.ref_or_panic();
             return ok::detail::get_best(members.parent, members.cursor);
         }
 
         // Prefix increment
         constexpr iterator& operator++() OKAYLIB_NOEXCEPT
         {
-            auto& members = m.value();
+            auto& members = m.ref_or_panic();
             ok::increment(members.parent, members.cursor);
             return *this;
         }
@@ -93,11 +93,12 @@ class std_for_view : public detail::underlying_view_type<T>::type
         {
             if (!(a.m.has_value() == b.m.has_value())) [[likely]] {
                 if (a.m.has_value())
-                    return !ok::is_inbounds(a.m.value().parent,
-                                            a.m.value().cursor);
-                return !ok::is_inbounds(b.m.value().parent, b.m.value().cursor);
+                    return !ok::is_inbounds(a.m.ref_or_panic().parent,
+                                            a.m.ref_or_panic().cursor);
+                return !ok::is_inbounds(b.m.ref_or_panic().parent,
+                                        b.m.ref_or_panic().cursor);
             }
-            return a.m.value().cursor == b.m.value().cursor;
+            return a.m.ref_or_panic().cursor == b.m.ref_or_panic().cursor;
         };
         constexpr friend bool operator!=(const iterator& a,
                                          const iterator& b) OKAYLIB_NOEXCEPT
@@ -106,11 +107,12 @@ class std_for_view : public detail::underlying_view_type<T>::type
                 // only one is nonnull. treat null as "end" cursor (signals need
                 // to check for out-of-bounds)
                 if (a.m.has_value())
-                    return ok::is_inbounds(a.m.value().parent,
-                                           a.m.value().cursor);
-                return ok::is_inbounds(b.m.value().parent, b.m.value().cursor);
+                    return ok::is_inbounds(a.m.ref_or_panic().parent,
+                                           a.m.ref_or_panic().cursor);
+                return ok::is_inbounds(b.m.ref_or_panic().parent,
+                                       b.m.ref_or_panic().cursor);
             }
-            return !(a.m.value().cursor == b.m.value().cursor);
+            return !(a.m.ref_or_panic().cursor == b.m.ref_or_panic().cursor);
         };
     };
 
@@ -128,8 +130,8 @@ class std_for_view : public detail::underlying_view_type<T>::type
         using iterator_category = std::input_iterator_tag;
         using difference_type = std::ptrdiff_t;
         using value_type = const value_type_for<T>;
-        using reference =
-            decltype(ok::detail::get_best(m.value().parent, m.value().cursor));
+        using reference = decltype(ok::detail::get_best(
+            m.ref_or_panic().parent, m.ref_or_panic().cursor));
         using pointer = const value_type*;
 
         constexpr const_iterator() = default;
@@ -142,13 +144,13 @@ class std_for_view : public detail::underlying_view_type<T>::type
 
         constexpr reference operator*() const OKAYLIB_NOEXCEPT
         {
-            const auto& members = m.value();
+            const auto& members = m.ref_or_panic();
             return ok::detail::get_best(members.parent, members.cursor);
         }
 
         // constexpr pointer operator->() OKAYLIB_NOEXCEPT
         // {
-        //     const auto& members = m.value();
+        //     const auto& members = m.ref_or_panic();
         //     return ok::addressof(
         //         ok::detail::get_best(members.parent, members.cursor));
         // }
@@ -156,7 +158,7 @@ class std_for_view : public detail::underlying_view_type<T>::type
         // Prefix increment
         constexpr const_iterator& operator++() OKAYLIB_NOEXCEPT
         {
-            auto& members = m.value();
+            auto& members = m.ref_or_panic();
             ok::increment(members.parent, members.cursor);
             return *this;
         }
@@ -176,11 +178,12 @@ class std_for_view : public detail::underlying_view_type<T>::type
         {
             if (!(a.m.has_value() == b.m.has_value())) [[likely]] {
                 if (a.m.has_value())
-                    return !ok::is_inbounds(a.m.value().parent,
-                                            a.m.value().cursor);
-                return !ok::is_inbounds(b.m.value().parent, b.m.value().cursor);
+                    return !ok::is_inbounds(a.m.ref_or_panic().parent,
+                                            a.m.ref_or_panic().cursor);
+                return !ok::is_inbounds(b.m.ref_or_panic().parent,
+                                        b.m.ref_or_panic().cursor);
             }
-            return a.m.value().cursor == b.m.value().cursor;
+            return a.m.ref_or_panic().cursor == b.m.ref_or_panic().cursor;
         };
         constexpr friend bool
         operator!=(const const_iterator& a,
@@ -188,11 +191,12 @@ class std_for_view : public detail::underlying_view_type<T>::type
         {
             if (!(a.m.has_value() == b.m.has_value())) [[likely]] {
                 if (a.m.has_value())
-                    return ok::is_inbounds(a.m.value().parent,
-                                           a.m.value().cursor);
-                return ok::is_inbounds(b.m.value().parent, b.m.value().cursor);
+                    return ok::is_inbounds(a.m.ref_or_panic().parent,
+                                           a.m.ref_or_panic().cursor);
+                return ok::is_inbounds(b.m.ref_or_panic().parent,
+                                       b.m.ref_or_panic().cursor);
             }
-            return !(a.m.value().cursor == b.m.value().cursor);
+            return !(a.m.ref_or_panic().cursor == b.m.ref_or_panic().cursor);
         };
     };
 

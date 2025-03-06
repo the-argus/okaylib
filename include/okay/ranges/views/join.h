@@ -56,20 +56,20 @@ template <typename input_range_t> struct joined_cursor_t
   public:
     constexpr const inner_cursor_t& inner() const OKAYLIB_NOEXCEPT
     {
-        return m.value().inner;
+        return m.ref_or_panic().inner;
     }
     constexpr inner_cursor_t& inner() OKAYLIB_NOEXCEPT
     {
-        return m.value().inner;
+        return m.ref_or_panic().inner;
     }
 
     constexpr const outer_cursor_t& outer() const OKAYLIB_NOEXCEPT
     {
-        return m.value().outer;
+        return m.ref_or_panic().outer;
     }
     constexpr outer_cursor_t& outer() OKAYLIB_NOEXCEPT
     {
-        return m.value().outer;
+        return m.ref_or_panic().outer;
     }
 
     constexpr joined_cursor_t(outer_cursor_t&& outer_cursor,
@@ -89,7 +89,7 @@ template <typename input_range_t> struct joined_cursor_t
     // can always get mutable internal view from range friend impl
     constexpr view_t& view() const OKAYLIB_NOEXCEPT
     {
-        return m.value().inner_view;
+        return m.ref_or_panic().inner_view;
     }
 
     struct members_t

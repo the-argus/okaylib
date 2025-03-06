@@ -58,7 +58,7 @@ TEST_SUITE("opt")
             opt<int> has = 10;
             REQUIRE(has.has_value());
             REQUIRE(has == 10);
-            REQUIRE(has.value() == 10);
+            REQUIRE(has.ref_or_panic() == 10);
             has = nullopt;
             REQUIRE(has != 10);
         }
@@ -103,7 +103,7 @@ TEST_SUITE("opt")
 
             if (auto result = bool_to_optional(true)) {
                 REQUIRE(result);
-                REQUIRE(result.value() == 3478);
+                REQUIRE(result.ref_or_panic() == 3478);
                 REQUIRE(result == 3478);
 
                 REQUIRE(result != opt<int>(3477));
@@ -139,11 +139,11 @@ TEST_SUITE("opt")
                 if (!maybe_moved)
                     return;
 
-                REQUIRE(!maybe_moved.value().empty());
+                REQUIRE(!maybe_moved.ref_or_panic().empty());
                 opt<std::vector<int>> our_nums = std::move(maybe_moved);
                 REQUIRE(!maybe_moved.has_value());
-                REQUIRE(!our_nums.value().empty());
-                our_nums.value().resize(0);
+                REQUIRE(!our_nums.ref_or_panic().empty());
+                our_nums.ref_or_panic().resize(0);
             };
 
             opt<std::vector<int>> maybe_copy;
@@ -153,7 +153,7 @@ TEST_SUITE("opt")
 
             opt<std::vector<int>> maybe_moved = std::move(nums);
             REQUIRE(maybe_moved);
-            REQUIRE(!maybe_moved.value().empty());
+            REQUIRE(!maybe_moved.ref_or_panic().empty());
             consume(std::move(maybe_moved));
             REQUIRE(!maybe_moved);
         }
@@ -200,8 +200,8 @@ TEST_SUITE("opt")
             REQUIRE(!vec.has_value());
             vec.emplace();
             REQUIRE(vec.has_value());
-            vec.value().push_back(42);
-            REQUIRE(vec.value()[0] == 42);
+            vec.ref_or_panic().push_back(42);
+            REQUIRE(vec.ref_or_panic()[0] == 42);
             vec.reset();
             REQUIRE(!vec.has_value());
 #endif
@@ -210,7 +210,7 @@ TEST_SUITE("opt")
         SUBCASE("Aborts on null")
         {
             opt<int> nope;
-            REQUIREABORTS(++nope.value());
+            REQUIREABORTS(++nope.ref_or_panic());
         }
 
         SUBCASE("moving non-trivially-copyable type")
@@ -223,7 +223,7 @@ TEST_SUITE("opt")
             // and this shouldnt work
             // opt<moveable_t> maybe_moveguy = moveguy;
 
-            REQUIRE(strcmp(maybe_moveguy.value().nothing, "nope") == 0);
+            REQUIRE(strcmp(maybe_moveguy.ref_or_panic().nothing, "nope") == 0);
         }
 
         SUBCASE("null optional references are not aliases for each other")
@@ -293,7 +293,7 @@ TEST_SUITE("opt")
             REQUIRE(!testref.has_value());
             REQUIRE(!testref2.has_value());
             testref = test;
-            REQUIRE(testref.value() == test);
+            REQUIRE(testref.ref_or_panic() == test);
             REQUIRE(testref.is_alias_for(test));
             static_assert(
                 std::is_same_v<opt<const int&>::pointer_t, const int>);
@@ -302,10 +302,10 @@ TEST_SUITE("opt")
 
             int test2 = 10;
             testref2 = test2;
-            REQUIRE(testref2.value() == test2);
+            REQUIRE(testref2.ref_or_panic() == test2);
             REQUIRE(testref2.is_alias_for(test2));
             REQUIRE(!testref.is_alias_for(test2));
-            REQUIRE(testref.value() == test2);
+            REQUIRE(testref.ref_or_panic() == test2);
             REQUIRE(!testref.is_alias_for(testref2));
 
             testref = testref2;
@@ -317,8 +317,8 @@ TEST_SUITE("opt")
             struct BigThing
             {
                 std::array<int, 300> numbers;
-                inline constexpr BigThing() noexcept : numbers({}) {}
-                inline constexpr BigThing(const BigThing& other) noexcept
+                constexpr BigThing() noexcept : numbers({}) {}
+                constexpr BigThing(const BigThing& other) noexcept
                     : numbers(other.numbers)
                 {
                     ++copy_count;
@@ -337,7 +337,7 @@ TEST_SUITE("opt")
             opt<BigThing> maybe_not_thing = try_make_big_thing(true);
             REQUIRE(copy_count == 0);
             // one copy required to get it out of the optional
-            BigThing thing = try_make_big_thing(true).value();
+            BigThing thing = try_make_big_thing(true).ref_or_panic();
             REQUIRE(copy_count == 1);
         }
 
@@ -356,9 +356,10 @@ TEST_SUITE("opt")
             const auto get_maybe_int = []() -> opt<int> { return 1; };
 
             static_assert(
-                std::is_same_v<decltype(get_maybe_int().value()), int&&>);
+                std::is_same_v<decltype(get_maybe_int().ref_or_panic()),
+                               int&&>);
 
-            int my_int = get_maybe_int().value();
+            int my_int = get_maybe_int().ref_or_panic();
             my_int++;
             if (my_int == 2)
                 printf("no asan!\n");
@@ -371,10 +372,11 @@ TEST_SUITE("opt")
                 return slice<uint8_t>(mem);
             };
 
-            static_assert(std::is_same_v<decltype(get_maybe_slice().value()),
-                                         slice<uint8_t>&>);
+            static_assert(
+                std::is_same_v<decltype(get_maybe_slice().ref_or_panic()),
+                               slice<uint8_t>&>);
 
-            slice<uint8_t> my_slice = get_maybe_slice().value();
+            slice<uint8_t> my_slice = get_maybe_slice().ref_or_panic();
             ok::memfill(my_slice, 0);
             for (auto byte : mem) {
                 REQUIRE(byte == 0);
@@ -391,7 +393,8 @@ TEST_SUITE("opt")
         //     opt<slice<uint8_t>> maybe_bytes;
         //     maybe_bytes.emplace(bytes);
 
-        //     for (auto [byte, index] : enumerate(maybe_bytes.value())) {
+        //     for (auto [byte, index] : enumerate(maybe_bytes.ref_or_panic()))
+        //     {
         //         REQUIRE(byte == bytes[index]);
         //     }
         // }
@@ -419,10 +422,10 @@ TEST_SUITE("opt")
             opt<slice<uint8_t>> maybe_bytes(bytes);
 
             opt<slice<uint8_t>> other_maybe_bytes(maybe_bytes);
-            REQUIRE(
-                other_maybe_bytes.value().is_alias_for(maybe_bytes.value()));
+            REQUIRE(other_maybe_bytes.ref_or_panic().is_alias_for(
+                maybe_bytes.ref_or_panic()));
 
-            slice<uint8_t> bytes_slice = other_maybe_bytes.value();
+            slice<uint8_t> bytes_slice = other_maybe_bytes.ref_or_panic();
         }
 
 #ifdef OKAYLIB_USE_FMT

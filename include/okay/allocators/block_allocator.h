@@ -7,10 +7,14 @@ namespace ok
 
 {
 
-    class block_allocator_t  : public ok::allocator_t
-    {};
+class block_allocator_t : public ok::allocator_t
+{
 
+constexpr explicit block_allocator_t(bytes_t initial_buffer);
+constexpr explicit block_allocator_t(bytes_t&& initial_buffer, ok);
 
-}
+};
+
+} // namespace ok
 
 #endif

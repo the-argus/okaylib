@@ -24,8 +24,8 @@ template <typename input_contained_t> struct opt_payload_base_t
 
     // constructor overload: in_place constructor, forwards to payload
     template <typename... args_t>
-    inline constexpr opt_payload_base_t(std::in_place_t tag,
-                                        args_t&&... args) OKAYLIB_NOEXCEPT
+    constexpr opt_payload_base_t(std::in_place_t tag,
+                                 args_t&&... args) OKAYLIB_NOEXCEPT
         : payload(tag, std::forward<args_t>(args)...),
           has_value(true)
     {
@@ -33,7 +33,7 @@ template <typename input_contained_t> struct opt_payload_base_t
 
     // constructor overload: pass in a bool to first argument to cause actual
     // runtime call to copy and move constructors, in case no trivial
-    inline constexpr opt_payload_base_t(bool, const opt_payload_base_t& other)
+    constexpr opt_payload_base_t(bool, const opt_payload_base_t& other)
         OKAYLIB_NOEXCEPT
     {
         if (other.has_value) {
@@ -41,8 +41,8 @@ template <typename input_contained_t> struct opt_payload_base_t
         }
     }
 
-    inline constexpr opt_payload_base_t(bool, opt_payload_base_t&& other)
-        OKAYLIB_NOEXCEPT
+    constexpr opt_payload_base_t(bool,
+                                 opt_payload_base_t&& other) OKAYLIB_NOEXCEPT
     {
         if (other.has_value) {
             this->construct(std::move(other.get()));
@@ -52,8 +52,7 @@ template <typename input_contained_t> struct opt_payload_base_t
         }
     }
 
-    inline constexpr void
-    copy_assign(const opt_payload_base_t& other) OKAYLIB_NOEXCEPT
+    constexpr void copy_assign(const opt_payload_base_t& other) OKAYLIB_NOEXCEPT
     {
         if (this->has_value && other.has_value) {
             this->get() = other.get();
@@ -66,8 +65,7 @@ template <typename input_contained_t> struct opt_payload_base_t
         }
     }
 
-    inline constexpr void
-    move_assign(opt_payload_base_t&& other) OKAYLIB_NOEXCEPT
+    constexpr void move_assign(opt_payload_base_t&& other) OKAYLIB_NOEXCEPT
     {
         if (this->has_value && other->has_value) {
             this->get() = std::move(other.get());
@@ -87,30 +85,30 @@ template <typename input_contained_t> struct opt_payload_base_t
     }
 
     template <typename... args_t>
-    inline constexpr void construct(args_t&&... args) OKAYLIB_NOEXCEPT
+    constexpr void construct(args_t&&... args) OKAYLIB_NOEXCEPT
     {
         new (ok::addressof(this->payload.value))
             contained_t(std::forward<args_t>(args)...);
         has_value = true;
     }
 
-    inline constexpr void destroy() OKAYLIB_NOEXCEPT
+    constexpr void destroy() OKAYLIB_NOEXCEPT
     {
         has_value = false;
         payload.value.~contained_t();
     }
 
-    inline constexpr input_contained_t& get() OKAYLIB_NOEXCEPT
+    constexpr input_contained_t& get() OKAYLIB_NOEXCEPT
     {
         return this->payload.value;
     }
 
-    inline constexpr const input_contained_t& get() const OKAYLIB_NOEXCEPT
+    constexpr const input_contained_t& get() const OKAYLIB_NOEXCEPT
     {
         return this->payload.value;
     }
 
-    inline constexpr void reset() OKAYLIB_NOEXCEPT
+    constexpr void reset() OKAYLIB_NOEXCEPT
     {
         if (has_value)
             destroy();
@@ -157,7 +155,7 @@ struct opt_payload_t<contained_t, true, false, true>
     opt_payload_t& operator=(opt_payload_t&&) = default;
     opt_payload_t(opt_payload_t&&) = default;
 
-    inline constexpr opt_payload_t&
+    constexpr opt_payload_t&
     operator=(const opt_payload_t& other) OKAYLIB_NOEXCEPT
     {
         this->copy_assign(other);
@@ -178,8 +176,7 @@ struct opt_payload_t<contained_t, true, true, false>
     opt_payload_t& operator=(const opt_payload_t&) = default;
     opt_payload_t(opt_payload_t&&) = default;
 
-    inline constexpr opt_payload_t&
-    operator=(opt_payload_t&& other) OKAYLIB_NOEXCEPT
+    constexpr opt_payload_t& operator=(opt_payload_t&& other) OKAYLIB_NOEXCEPT
     {
         this->move_assign(std::move(other));
         return *this;
@@ -198,14 +195,13 @@ struct opt_payload_t<contained_t, true, false, false>
     opt_payload_t(const opt_payload_t&) = default;
     opt_payload_t(opt_payload_t&&) = default;
 
-    inline constexpr opt_payload_t&
-    operator=(opt_payload_t&& other) OKAYLIB_NOEXCEPT
+    constexpr opt_payload_t& operator=(opt_payload_t&& other) OKAYLIB_NOEXCEPT
     {
         this->move_assign(std::move(other));
         return *this;
     }
 
-    inline constexpr opt_payload_t&
+    constexpr opt_payload_t&
     operator=(const opt_payload_t& other) OKAYLIB_NOEXCEPT
     {
         this->copy_assign(other);
@@ -237,34 +233,39 @@ class opt_base_common_t
     using contained_t = std::remove_const_t<input_contained_t>;
 
     template <typename... args_t>
-    inline constexpr void _construct(args_t&&... args) OKAYLIB_NOEXCEPT
+    constexpr void _construct(args_t&&... args) OKAYLIB_NOEXCEPT
     {
         static_cast<derived_t*>(this)->payload.construct(
             std::forward<args_t>(args)...);
     }
 
-    inline constexpr void _destroy() OKAYLIB_NOEXCEPT
+    constexpr void _destroy() OKAYLIB_NOEXCEPT
     {
         static_cast<derived_t*>(this)->payload.destroy();
     }
 
-    inline constexpr void _reset() OKAYLIB_NOEXCEPT
+    constexpr void _reset() OKAYLIB_NOEXCEPT
     {
         static_cast<derived_t*>(this)->payload.reset();
     }
 
-    [[nodiscard]] inline constexpr bool _has_value() const OKAYLIB_NOEXCEPT
+    constexpr void _set_has_value(bool set) const OKAYLIB_NOEXCEPT
+    {
+        return static_cast<const derived_t*>(this)->payload.has_value = set;
+    }
+
+    [[nodiscard]] constexpr bool _has_value() const OKAYLIB_NOEXCEPT
     {
         return static_cast<const derived_t*>(this)->payload.has_value;
     }
 
-    inline constexpr input_contained_t& _get() OKAYLIB_NOEXCEPT
+    constexpr input_contained_t& _get() OKAYLIB_NOEXCEPT
     {
         assert(this->_has_value());
         return static_cast<derived_t*>(this)->payload.get();
     }
 
-    inline constexpr const input_contained_t& _get() const OKAYLIB_NOEXCEPT
+    constexpr const input_contained_t& _get() const OKAYLIB_NOEXCEPT
     {
         assert(this->_has_value());
         return static_cast<const derived_t*>(this)->payload.get();
@@ -283,17 +284,17 @@ struct opt_base_t
         typename... args_t,
         std::enable_if_t<is_std_constructible_v<input_contained_t, args_t...>,
                          bool> = false>
-    inline constexpr explicit opt_base_t(std::in_place_t, args_t&&... args)
+    constexpr explicit opt_base_t(std::in_place_t, args_t&&... args)
         : payload(std::in_place, std::forward<args_t>(args)...)
     {
     }
 
-    inline constexpr opt_base_t(const opt_base_t& other)
+    constexpr opt_base_t(const opt_base_t& other)
         : payload(other.payload.has_value, other.payload)
     {
     }
 
-    inline constexpr opt_base_t(opt_base_t&& other)
+    constexpr opt_base_t(opt_base_t&& other)
         : payload(other.payload.has_value, std::move(other.payload))
     {
     }
@@ -314,18 +315,18 @@ struct opt_base_t<input_contained_t, false, true>
         typename... args_t,
         std::enable_if_t<is_std_constructible_v<input_contained_t, args_t...>,
                          bool> = false>
-    inline constexpr explicit opt_base_t(std::in_place_t, args_t&&... args)
+    constexpr explicit opt_base_t(std::in_place_t, args_t&&... args)
         : payload(std::in_place, std::forward<args_t>(args)...)
     {
     }
 
-    inline constexpr opt_base_t(const opt_base_t& other)
+    constexpr opt_base_t(const opt_base_t& other)
         : payload(other.payload.has_value, other.payload)
     {
     }
 
     // trivial move, can default this in this override
-    inline constexpr opt_base_t(opt_base_t&& other) = default;
+    constexpr opt_base_t(opt_base_t&& other) = default;
 
     opt_base_t& operator=(const opt_base_t&) = default;
     opt_base_t& operator=(opt_base_t&&) = default;
@@ -343,7 +344,7 @@ struct opt_base_t<input_contained_t, true, false>
         typename... args_t,
         std::enable_if_t<is_std_constructible_v<input_contained_t, args_t...>,
                          bool> = false>
-    inline constexpr explicit opt_base_t(std::in_place_t, args_t&&... args)
+    constexpr explicit opt_base_t(std::in_place_t, args_t&&... args)
         : payload(std::in_place, std::forward<args_t>(args)...)
     {
     }
@@ -351,7 +352,7 @@ struct opt_base_t<input_contained_t, true, false>
     // trivial copy, can default
     constexpr opt_base_t(const opt_base_t& other) = default;
 
-    inline constexpr opt_base_t(opt_base_t&& other)
+    constexpr opt_base_t(opt_base_t&& other)
         : payload(other.payload.has_value, std::move(other.payload))
     {
     }
@@ -372,7 +373,7 @@ struct opt_base_t<input_contained_t, true, true>
         typename... args_t,
         std::enable_if_t<is_std_constructible_v<input_contained_t, args_t...>,
                          bool> = false>
-    inline constexpr explicit opt_base_t(std::in_place_t, args_t&&... args)
+    constexpr explicit opt_base_t(std::in_place_t, args_t&&... args)
         : payload(std::in_place, std::forward<args_t>(args)...)
     {
     }

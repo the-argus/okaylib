@@ -147,7 +147,7 @@ TEST_SUITE("arc smart pointers")
 
             auto duplicate_2 = int_arc_2.duplicate();
             auto promoted =
-                int_arc.try_promote_and_consume_into_unique().value();
+                int_arc.try_promote_and_consume_into_unique().ref_or_panic();
             REQUIRE(
                 !duplicate_2.try_promote_and_consume_into_unique().has_value());
         }
@@ -175,7 +175,7 @@ TEST_SUITE("arc smart pointers")
 
                 weak_arc = int_arc.spawn_weak_arc();
 
-                auto strong = weak_arc.try_spawn_readonly().value();
+                auto strong = weak_arc.try_spawn_readonly().ref_or_panic();
             }
 
             // the thing the weak arc was pointing to has gone out of scope
@@ -207,7 +207,7 @@ TEST_SUITE("arc smart pointers")
                 ok::into_arc(1, c_allocator).release().demote_to_readonly();
             weak_arc_t<int> weak_ref = strong_ref.spawn_weak_arc();
 
-            REQUIRE(weak_ref.try_spawn_readonly().value().deref() == 1);
+            REQUIRE(weak_ref.try_spawn_readonly().ref_or_panic().deref() == 1);
         }
 
         SUBCASE("duplicate")
@@ -245,7 +245,8 @@ TEST_SUITE("arc smart pointers")
         SUBCASE("move construction and assignment, converting constructors")
         {
             variant_arc_t arc = into_arc(1, c_allocator).release();
-            arc = arc.try_convert_and_consume_into_readonly_arc().value();
+            arc =
+                arc.try_convert_and_consume_into_readonly_arc().ref_or_panic();
             variant_arc_t arc2 =
                 into_arc(2, c_allocator).release().demote_to_readonly();
             // spawn weak reference and then immediately destroy object.
@@ -255,7 +256,7 @@ TEST_SUITE("arc smart pointers")
             REQUIRE(!weak.try_deref());
 
             auto arc3 = std::move(arc2);
-            auto arc4 = arc.try_duplicate().value();
+            auto arc4 = arc.try_duplicate().ref_or_panic();
             arc4 = std::move(arc3);
         }
 
@@ -295,7 +296,7 @@ TEST_SUITE("arc smart pointers")
             variant_arc_t arc = into_arc(1, c_allocator).release();
             REQUIRE(arc.ownership_mode() == arc_ownership::unique_rw);
             arc = arc.try_consume_into_contained_unique_arc()
-                      .value()
+                      .ref_or_panic()
                       .demote_to_readonly();
             REQUIRE(arc.ownership_mode() == arc_ownership::shared_ro);
             variant_arc_t arc2 =
@@ -334,9 +335,9 @@ TEST_SUITE("arc smart pointers")
             REQUIRE(shared.try_duplicate());
             REQUIRE(weak.try_duplicate());
             auto weak2 = weak.try_duplicate()
-                             .value()
+                             .ref_or_panic()
                              .try_consume_into_contained_weak_arc()
-                             .value();
+                             .ref_or_panic();
             REQUIRE(!weak2.try_spawn_readonly());
             auto dup = shared.try_duplicate();
         }
@@ -380,13 +381,13 @@ TEST_SUITE("arc smart pointers")
             REQUIRE(!weak2.try_consume_into_contained_unique_arc());
 
             unique_rw_arc_t unique_actual =
-                unique.try_consume_into_contained_unique_arc().value();
+                unique.try_consume_into_contained_unique_arc().ref_or_panic();
             ro_arc_t shared_actual =
-                shared.try_consume_into_contained_readonly_arc().value();
+                shared.try_consume_into_contained_readonly_arc().ref_or_panic();
             weak_arc_t weak_actual =
-                weak.try_consume_into_contained_weak_arc().value();
+                weak.try_consume_into_contained_weak_arc().ref_or_panic();
             weak_arc_t weak2_actual =
-                weak2.try_consume_into_contained_weak_arc().value();
+                weak2.try_consume_into_contained_weak_arc().ref_or_panic();
         }
 
         SUBCASE("try convert and consume")
@@ -400,29 +401,29 @@ TEST_SUITE("arc smart pointers")
 
             {
                 REQUIRE(unique.ownership_mode() == arc_ownership::unique_rw);
-                unique =
-                    unique.try_convert_and_consume_into_readonly_arc().value();
+                unique = unique.try_convert_and_consume_into_readonly_arc()
+                             .ref_or_panic();
                 REQUIRE(unique.ownership_mode() == arc_ownership::shared_ro);
-                unique =
-                    unique.try_convert_and_consume_into_unique_arc().value();
+                unique = unique.try_convert_and_consume_into_unique_arc()
+                             .ref_or_panic();
                 REQUIRE(unique.ownership_mode() == arc_ownership::unique_rw);
                 // no error to convert a unique arc into a unique arc
-                unique =
-                    unique.try_convert_and_consume_into_unique_arc().value();
+                unique = unique.try_convert_and_consume_into_unique_arc()
+                             .ref_or_panic();
                 REQUIRE(unique.ownership_mode() == arc_ownership::unique_rw);
             }
 
             {
                 REQUIRE(shared.ownership_mode() == arc_ownership::shared_ro);
-                shared =
-                    shared.try_convert_and_consume_into_unique_arc().value();
+                shared = shared.try_convert_and_consume_into_unique_arc()
+                             .ref_or_panic();
                 REQUIRE(shared.ownership_mode() == arc_ownership::unique_rw);
-                shared =
-                    shared.try_convert_and_consume_into_readonly_arc().value();
+                shared = shared.try_convert_and_consume_into_readonly_arc()
+                             .ref_or_panic();
                 REQUIRE(shared.ownership_mode() == arc_ownership::shared_ro);
                 // no error trying to convert a readonly arc to readonly
-                shared =
-                    shared.try_convert_and_consume_into_readonly_arc().value();
+                shared = shared.try_convert_and_consume_into_readonly_arc()
+                             .ref_or_panic();
             }
 
             // cannot create a unique arc from weak because the original payload

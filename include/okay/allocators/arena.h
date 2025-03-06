@@ -9,7 +9,7 @@
 
 namespace ok {
 
-class arena_t : public allocator_t
+template <typename allocator_impl_t> class arena_t : public allocator_t
 {
   public:
     static constexpr alloc::feature_flags type_features =
@@ -19,16 +19,14 @@ class arena_t : public allocator_t
     // owning constructor (if you initialize the arena this way, then it will
     // try to realloc if overfull and destroy() will free the initial buffer
     constexpr explicit arena_t(bytes_t&& initial_buffer,
-                               allocator_t& backing_allocator) OKAYLIB_NOEXCEPT;
+                               allocator_impl_t& backing_allocator)
+        OKAYLIB_NOEXCEPT;
 
     constexpr arena_t(arena_t&& other) OKAYLIB_NOEXCEPT
         : m_memory(other.m_memory),
           m_available_memory(other.m_available_memory),
           m_backing(std::exchange(other.m_backing, nullopt))
     {
-#ifndef NDEBUG
-        other.is_destroyed = true;
-#endif
     }
 
     constexpr arena_t& operator=(arena_t&& other) OKAYLIB_NOEXCEPT
@@ -37,10 +35,6 @@ class arena_t : public allocator_t
         m_memory = other.m_memory;
         m_available_memory = other.m_available_memory;
         m_backing = std::exchange(other.m_backing, nullopt);
-#ifndef NDEBUG
-        is_destroyed = false;
-        other.is_destroyed = true;
-#endif
         return *this;
     }
 
@@ -49,13 +43,7 @@ class arena_t : public allocator_t
 
     constexpr void destroy() OKAYLIB_NOEXCEPT;
 
-#ifndef NDEBUG
-    inline ~arena_t() OKAYLIB_NOEXCEPT_FORCE
-    {
-        __ok_assert(is_destroyed,
-                    "arena allowed to go out of scope without being destroyed");
-    }
-#endif
+    inline ~arena_t() OKAYLIB_NOEXCEPT_FORCE { destroy(); }
 
   protected:
     [[nodiscard]] inline alloc::result_t<bytes_t>
@@ -85,41 +73,43 @@ class arena_t : public allocator_t
     }
 
   private:
-#ifndef NDEBUG
-    bool is_destroyed = false;
-#endif
     bytes_t m_memory;
     bytes_t m_available_memory;
-    opt<allocator_t&> m_backing;
+    opt<allocator_impl_t&> m_backing;
 };
 
-constexpr arena_t::arena_t(bytes_t static_buffer) OKAYLIB_NOEXCEPT
-    : m_memory(static_buffer),
-      m_available_memory(static_buffer)
+arena_t(bytes_t static_buffer) -> arena_t<ok::allocator_t>;
+
+template <typename allocator_impl_t>
+constexpr arena_t<allocator_impl_t>::arena_t(bytes_t static_buffer)
+    OKAYLIB_NOEXCEPT : m_memory(static_buffer),
+                       m_available_memory(static_buffer)
 {
 }
 
-constexpr arena_t::arena_t(bytes_t&& initial_buffer,
-                           allocator_t& backing_allocator) OKAYLIB_NOEXCEPT
+template <typename allocator_impl_t>
+constexpr arena_t<allocator_impl_t>::arena_t(
+    bytes_t&& initial_buffer,
+    allocator_impl_t& backing_allocator) OKAYLIB_NOEXCEPT
     : m_memory(initial_buffer),
       m_available_memory(initial_buffer),
       m_backing(backing_allocator)
 {
 }
 
-constexpr void arena_t::destroy() OKAYLIB_NOEXCEPT
+template <typename allocator_impl_t>
+constexpr void arena_t<allocator_impl_t>::destroy() OKAYLIB_NOEXCEPT
 {
-#ifndef NDEBUG
-    is_destroyed = true;
-#endif
     if (m_backing) {
-        auto& backing = m_backing.value();
+        auto& backing = m_backing.ref_or_panic();
         backing.deallocate(m_memory);
     }
 }
 
+template <typename allocator_impl_t>
 [[nodiscard]] inline alloc::result_t<bytes_t>
-arena_t::impl_allocate(const alloc::request_t& request) OKAYLIB_NOEXCEPT
+arena_t<allocator_impl_t>::impl_allocate(const alloc::request_t& request)
+    OKAYLIB_NOEXCEPT
 {
     if (request.num_bytes == 0) [[unlikely]] {
         __ok_usage_error(false, "Attempt to allocate 0 bytes from arena.");
@@ -155,7 +145,8 @@ arena_t::impl_allocate(const alloc::request_t& request) OKAYLIB_NOEXCEPT
     return raw_slice(*aligned_start, allocated_size);
 }
 
-inline void arena_t::impl_clear() OKAYLIB_NOEXCEPT
+template <typename allocator_impl_t>
+inline void arena_t<allocator_impl_t>::impl_clear() OKAYLIB_NOEXCEPT
 {
 #ifndef NDEBUG
     ok::memfill(m_memory, 0);

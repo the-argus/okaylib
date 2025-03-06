@@ -36,7 +36,7 @@ using enable_copy_move_opt_for_t = detail::enable_copy_move<
 
 template <typename payload_t, typename>
 class opt : private detail::opt_base_t<payload_t>,
-              private detail::enable_copy_move_opt_for_t<payload_t>
+            private detail::enable_copy_move_opt_for_t<payload_t>
 {
   public:
     // type constraints
@@ -108,7 +108,7 @@ class opt : private detail::opt_base_t<payload_t>,
     inline constexpr opt(const opt<incoming_t>& t) OKAYLIB_NOEXCEPT
     {
         if (t)
-            emplace(t.value());
+            emplace(t.ref_or_panic());
     }
 
     // same as above, but incoming type is not convertible, so construction
@@ -122,7 +122,7 @@ class opt : private detail::opt_base_t<payload_t>,
     inline explicit constexpr opt(const opt<incoming_t>& t) OKAYLIB_NOEXCEPT
     {
         if (t)
-            emplace(t.value());
+            emplace(t.ref_or_panic());
     }
 
     // convert an optional of a convertible type being moved into this optional
@@ -135,7 +135,7 @@ class opt : private detail::opt_base_t<payload_t>,
     inline constexpr opt(opt<incoming_t>&& t) OKAYLIB_NOEXCEPT
     {
         if (t) {
-            emplace(std::move(t.value()));
+            emplace(std::move(t.ref_or_panic()));
         }
     }
 
@@ -150,7 +150,7 @@ class opt : private detail::opt_base_t<payload_t>,
     inline explicit constexpr opt(opt<incoming_t>&& t) OKAYLIB_NOEXCEPT
     {
         if (t) {
-            emplace(std::move(t.value()));
+            emplace(std::move(t.ref_or_panic()));
         }
     }
 
@@ -201,9 +201,9 @@ class opt : private detail::opt_base_t<payload_t>,
     {
         if (incoming) {
             if (this->_has_value()) {
-                this->_get() = incoming.value();
+                this->_get() = incoming.ref_or_panic();
             } else {
-                this->_construct(incoming.value());
+                this->_construct(incoming.ref_or_panic());
             }
         } else {
             this->_reset();
@@ -223,9 +223,9 @@ class opt : private detail::opt_base_t<payload_t>,
     {
         if (incoming) {
             if (this->_has_value()) {
-                this->_get() = std::move(incoming.value());
+                this->_get() = std::move(incoming.ref_or_panic());
             } else {
-                this->_construct(std::move(incoming.value()));
+                this->_construct(std::move(incoming.ref_or_panic()));
             }
         } else {
             this->_reset();
@@ -265,7 +265,7 @@ class opt : private detail::opt_base_t<payload_t>,
 
     /// Extract the inner value of the optional, or abort the program. Check
     /// has_value() before calling this.
-    [[nodiscard]] inline payload_t& value() & OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr payload_t& ref_or_panic() & OKAYLIB_NOEXCEPT
     {
         if (!has_value()) [[unlikely]] {
             __ok_abort("Attempt to get value from a null optional.");
@@ -273,7 +273,7 @@ class opt : private detail::opt_base_t<payload_t>,
         return this->_get();
     }
 
-    [[nodiscard]] inline payload_t&& value() && OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr payload_t&& ref_or_panic() && OKAYLIB_NOEXCEPT
     {
         if (!has_value()) [[unlikely]] {
             __ok_abort("Attempt to get value from a null optional.");
@@ -281,12 +281,93 @@ class opt : private detail::opt_base_t<payload_t>,
         return std::move(this->_get());
     }
 
-    inline const payload_t& value() const& OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr const payload_t&
+    ref_or_panic() const& OKAYLIB_NOEXCEPT
     {
         if (!has_value()) [[unlikely]] {
             __ok_abort("Attempt to get value from a null optional.");
         }
         return this->_get();
+    }
+
+    template <typename T = payload_t>
+        [[nodiscard]] constexpr auto copy_out_or(payload_t alternative) const
+        & OKAYLIB_NOEXCEPT
+          -> std::enable_if_t<std::is_same_v<T, payload_t> &&
+                                  std::is_copy_constructible_v<T>,
+                              payload_t>
+    {
+        if (!has_value()) [[unlikely]] {
+            return alternative;
+        }
+        return payload_t(this->_get());
+    }
+
+    template <typename callable_t>
+        [[nodiscard]] constexpr auto
+        copy_out_or_run(callable_t&& callable) const
+        & OKAYLIB_NOEXCEPT
+          -> std::enable_if_t<
+              std::is_copy_constructible_v<payload_t> &&
+                  is_std_invocable_v<callable_t> &&
+                  std::is_convertible_v<decltype(callable()), payload_t>,
+              payload_t>
+    {
+        if (!has_value()) [[unlikely]] {
+            return callable();
+        }
+        return this->_get();
+    }
+
+    [[nodiscard]] constexpr opt move_out() OKAYLIB_NOEXCEPT
+    {
+        if (has_value()) {
+            opt out(std::move(this->_get()));
+            // never call destructor on moved object
+            this->_set_has_value(false);
+            return out;
+        } else {
+            return nullopt;
+        }
+    }
+
+    // Similar to the following code:
+    // opt<std::vector<int>> i = std::vector<int>{1, 2, 3, 4};
+    // std::vector<int> actual = std::move(i.value());
+    // i.reset();
+    // Except this function will elide the destruction that reset() performs,
+    // and does it in one line, with a default value if `i` does not have value
+    template <typename T = payload_t>
+        [[nodiscard]] constexpr auto move_out_or(payload_t&& alternative) &
+        OKAYLIB_NOEXCEPT -> std::enable_if_t<std::is_move_constructible_v<T> &&
+                                                 std::is_same_v<T, payload_t>,
+                                             T&&>
+    {
+        if (has_value()) {
+            this->_set_has_value(false);
+            return std::move(this->_get());
+        } else {
+            return std::move(alternative);
+        }
+    }
+
+    template <typename callable_t>
+        [[nodiscard]] constexpr auto move_out_or_run(callable_t&& callable) &
+        OKAYLIB_NOEXCEPT
+        // callable must take no arguments and return a payload_t, payload_t&,
+        // or payload_t&&
+        -> std::enable_if_t<
+            is_std_invocable_v<callable_t> &&
+                std::is_same_v<std::remove_reference_t<decltype(callable())>,
+                               payload_t>,
+            payload_t&&>
+    {
+        if (has_value()) {
+            this->_set_has_value(false);
+            return std::move(this->_get());
+        } else {
+            return std::move(callable());
+        }
     }
 
     /// Call destructor of internal type, or just reset it if it doesnt have one
@@ -399,7 +480,8 @@ class opt<payload_t, std::enable_if_t<std::is_lvalue_reference_v<payload_t>>>
 
     inline constexpr void reset() OKAYLIB_NOEXCEPT { pointer = nullptr; }
 
-    [[nodiscard]] inline constexpr payload_t value() const OKAYLIB_NOEXCEPT
+    [[nodiscard]] inline constexpr payload_t
+    ref_or_panic() const OKAYLIB_NOEXCEPT
     {
         if (!has_value()) [[unlikely]] {
             __ok_abort("Attempt to get value from a null optional.");
@@ -431,9 +513,8 @@ class opt<payload_t, std::enable_if_t<std::is_lvalue_reference_v<payload_t>>>
 
 // template specialization for slices
 template <typename wrapped_slice_t>
-class opt<
-    wrapped_slice_t,
-    std::enable_if_t<(detail::is_instance<wrapped_slice_t, ok::slice>())>>
+class opt<wrapped_slice_t,
+          std::enable_if_t<(detail::is_instance<wrapped_slice_t, ok::slice>())>>
 {
     inline static constexpr bool is_reference = false;
     inline static constexpr bool is_slice = true;
@@ -492,8 +573,7 @@ class opt<
         return has_value();
     }
 
-    inline constexpr opt&
-    operator=(const wrapped_slice_t& ref) OKAYLIB_NOEXCEPT
+    inline constexpr opt& operator=(const wrapped_slice_t& ref) OKAYLIB_NOEXCEPT
     {
         emplace(ref);
         return *this;
@@ -507,7 +587,8 @@ class opt<
 
     inline constexpr void reset() OKAYLIB_NOEXCEPT { data = nullptr; }
 
-    [[nodiscard]] inline constexpr wrapped_slice_t& value() OKAYLIB_NOEXCEPT
+    [[nodiscard]] inline constexpr wrapped_slice_t&
+    ref_or_panic() OKAYLIB_NOEXCEPT
     {
         if (!has_value()) [[unlikely]] {
             __ok_abort("Attempt to get value from a null optional.");
@@ -516,7 +597,7 @@ class opt<
     }
 
     [[nodiscard]] inline constexpr const wrapped_slice_t&
-    value() const OKAYLIB_NOEXCEPT
+    ref_or_panic() const OKAYLIB_NOEXCEPT
     {
         if (!has_value()) [[unlikely]] {
             __ok_abort("Attempt to get value from a null optional.");
@@ -562,7 +643,7 @@ class opt<
     inline constexpr opt(const opt<incoming_t>& t) OKAYLIB_NOEXCEPT
     {
         if (t)
-            emplace(t.value());
+            emplace(t.ref_or_panic());
     }
 
     // same as above, but incoming type is not convertible, so construction
@@ -577,7 +658,7 @@ class opt<
     inline explicit constexpr opt(const opt<incoming_t>& t) OKAYLIB_NOEXCEPT
     {
         if (t)
-            emplace(t.value());
+            emplace(t.ref_or_panic());
     }
 
 #ifdef OKAYLIB_USE_FMT
@@ -621,13 +702,13 @@ template <typename payload_t> struct ok::range_definition<opt<payload_t>>
 
     static constexpr auto& get_ref(opt_range_t& range, const cursor_t& cursor)
     {
-        return range.value();
+        return range.ref_or_panic();
     }
 
     static constexpr const auto& get_ref(const opt_range_t& range,
                                          const cursor_t& cursor)
     {
-        return range.value();
+        return range.ref_or_panic();
     }
 };
 
@@ -661,7 +742,8 @@ template <typename payload_t> struct fmt::formatter<ok::opt<payload_t>>
             if constexpr (ok::opt<payload_t>::is_reference) {
                 if constexpr (fmt::is_formattable<typename formatted_type_t::
                                                       pointer_t>::value) {
-                    return fmt::format_to(ctx.out(), "{}", optional.value());
+                    return fmt::format_to(ctx.out(), "{}",
+                                          optional.ref_or_panic());
                 } else {
                     // just format reference as pointer, if the contents itself
                     // can't be formatted

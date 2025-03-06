@@ -699,7 +699,7 @@ struct variant_arc_t
                 actual.m_payload = nullptr;
                 return nullopt;
             }
-            ro_arc_t& const_arc = const_promotion.value();
+            ro_arc_t& const_arc = const_promotion.ref_or_panic();
             auto unique_promotion =
                 const_arc.try_promote_and_consume_into_unique();
             if (!unique_promotion) {

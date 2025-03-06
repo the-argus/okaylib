@@ -57,12 +57,14 @@ class arraylist_t
 
     const T* data() const& OKAYLIB_NOEXCEPT
     {
-        return m.allocated_spots ? m.allocated_spots.value().data() : nullptr;
+        return m.allocated_spots ? m.allocated_spots.ref_or_panic().data()
+                                 : nullptr;
     }
 
     T* data() & OKAYLIB_NOEXCEPT
     {
-        return m.allocated_spots ? m.allocated_spots.value().data() : nullptr;
+        return m.allocated_spots ? m.allocated_spots.ref_or_panic().data()
+                                 : nullptr;
     }
 
     size_t size() const OKAYLIB_NOEXCEPT { return m.spots_occupied; }
@@ -72,14 +74,14 @@ class arraylist_t
         if (index >= m.spots_occupied) [[unlikely]] {
             __ok_abort("Out of bounds access to ok::arraylist_t");
         }
-        return m.allocated_spots.value().data()[index];
+        return m.allocated_spots.ref_or_panic().data()[index];
     }
     T& operator[](size_t index) & OKAYLIB_NOEXCEPT
     {
         if (index >= m.spots_occupied) [[unlikely]] {
             __ok_abort("Out of bounds access to ok::arraylist_t");
         }
-        return m.allocated_spots.value().data()[index];
+        return m.allocated_spots.ref_or_panic().data()[index];
     }
 
     // no default constructor or copy, but can move
@@ -108,12 +110,12 @@ class arraylist_t
         // if else handles initial allocation and then future reallocation
         if (!m.allocated_spots) {
             first_allocation();
-        } else if (slice<T>& spots = m.allocated_spots.value();
+        } else if (slice<T>& spots = m.allocated_spots.ref_or_panic();
                    spots.size() <= m.spots_occupied) {
             reallocate(spots);
         }
 
-        auto& spots = m.allocated_spots.value();
+        auto& spots = m.allocated_spots.ref_or_panic();
         using make_result_type = decltype(ok::make_into_uninitialized<T>(
             std::declval<T&>(), std::forward<args_t>(args)...));
         constexpr bool returns_result = !std::is_void_v<make_result_type>;
@@ -124,8 +126,7 @@ class arraylist_t
             __ok_assert(
                 false, "Allocator did not give back expected amount of memory");
             if constexpr (returns_result) {
-                static_assert(
-                    detail::is_instance_v<make_result_type, status>);
+                static_assert(detail::is_instance_v<make_result_type, status>);
                 using enum_t = typename make_result_type::enum_type;
                 static_assert(
                     std::is_convertible_v<alloc::error, enum_t>,
@@ -268,14 +269,14 @@ class arraylist_t
     {
         if (m.allocated_spots) {
             if (!std::is_trivially_destructible_v<T>) {
-                T* mem = m.allocated_spots.value().data();
+                T* mem = m.allocated_spots.ref_or_panic().data();
                 for (size_t i = 0; i < m.spots_occupied; ++i) {
                     mem[i].~T();
                 }
             }
 
             m.backing_allocator->deallocate(
-                reinterpret_as_bytes(m.allocated_spots.value()));
+                reinterpret_as_bytes(m.allocated_spots.ref_or_panic()));
         }
     }
 };

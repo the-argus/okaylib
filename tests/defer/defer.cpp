@@ -74,9 +74,8 @@ TEST_SUITE("defer")
             fakefree(mem);
             REQUIRE(malloced_stuff.size() == 0);
 
-            auto getmems =
-                [fakemalloc,
-                 fakefree](bool fail_halfway) -> opt<std::array<void*, 3>> {
+            auto getmems = [fakemalloc, fakefree](
+                               bool fail_halfway) -> opt<std::array<void*, 3>> {
                 void* first_mem = fakemalloc(100);
                 if (!first_mem)
                     return {};
@@ -106,7 +105,7 @@ TEST_SUITE("defer")
             auto maybe_mems = getmems(false);
             if (maybe_mems.has_value()) {
                 REQUIRE(malloced_stuff.size() == 3);
-                for (void* mem : maybe_mems.value()) {
+                for (void* mem : maybe_mems.ref_or_panic()) {
                     fakefree(mem);
                 }
             }
