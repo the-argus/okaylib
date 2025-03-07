@@ -18,10 +18,10 @@ struct alloc_initial_buf_t;
 
 template <typename free_block_t>
 constexpr free_block_t*
-free_everything_in_block_allocator_buffer(bytes_t memory, size_t blocksize)
+free_everything_in_block_allocator_buffer(bytes_t memory, size_t blocksize,
+                                          free_block_t* initial_iter = nullptr)
 {
-
-    free_block_t* free_list_iter = nullptr;
+    free_block_t* free_list_iter = initial_iter;
     for (int64_t i = (memory.size() / blocksize) - 1; i >= 0; --i) {
         auto* ptr =
             reinterpret_cast<free_block_t*>(memory.data() + (i * blocksize));
@@ -63,6 +63,8 @@ class block_allocator_t : public ok::allocator_t
         : m(std::forward<members_t>(m))
     {
     }
+
+    constexpr void grow() OKAYLIB_NOEXCEPT;
 
   public:
     static constexpr alloc::feature_flags type_features =
@@ -149,12 +151,49 @@ block_allocator_t(const block_allocator::fixed_buffer_options_t& static_buffer)
     -> block_allocator_t<ok::allocator_t>;
 
 template <typename allocator_impl_t>
+constexpr void block_allocator_t<allocator_impl_t>::grow() OKAYLIB_NOEXCEPT
+{
+    __ok_internal_assert(!m.free_head);
+    if (!m.backing)
+        return;
+
+    alloc::result_t<bytes_t> reallocation =
+        m.backing->reallocate(alloc::reallocate_request_t{
+            .memory = m.memory,
+            .new_size_bytes = m.memory.size() + m.blocksize,
+            .preferred_size_bytes = m.memory.size() * 2,
+            .flags = alloc::flags::in_place_orelse_fail &
+                     alloc::flags::leave_nonzeroed,
+        });
+
+    if (!reallocation.okay()) [[unlikely]] {
+        return;
+    }
+
+    bytes_t& newmem = reallocation.release_ref();
+    // there may be extra space at the end
+    const size_t padding = m.memory.size() % m.blocksize;
+    uint8_t* const first_new_byte = newmem.data() + m.memory.size() - padding;
+    const size_t additional_size = newmem.size() - m.memory.size() + padding;
+
+    m.free_head =
+        block_allocator::detail::free_everything_in_block_allocator_buffer(
+            ok::raw_slice(*first_new_byte, additional_size), m.blocksize,
+            m.free_head);
+
+    __ok_internal_assert(m.free_head);
+}
+
+template <typename allocator_impl_t>
 [[nodiscard]] inline alloc::result_t<bytes_t>
 block_allocator_t<allocator_impl_t>::impl_allocate(
     const alloc::request_t& request) OKAYLIB_NOEXCEPT
 {
     if (!m.free_head) [[unlikely]] {
-        return alloc::error::oom;
+        grow();
+        if (!m.free_head) [[unlikely]] {
+            return alloc::error::oom;
+        }
     }
 
     if (request.num_bytes > m.blocksize ||
