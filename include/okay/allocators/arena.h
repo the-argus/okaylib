@@ -41,8 +41,6 @@ template <typename allocator_impl_t> class arena_t : public allocator_t
     arena_t& operator=(const arena_t&) = delete;
     arena_t(const arena_t&) = delete;
 
-    constexpr void destroy() OKAYLIB_NOEXCEPT;
-
     inline ~arena_t() OKAYLIB_NOEXCEPT_FORCE { destroy(); }
 
   protected:
@@ -73,6 +71,8 @@ template <typename allocator_impl_t> class arena_t : public allocator_t
     }
 
   private:
+    constexpr void destroy() OKAYLIB_NOEXCEPT;
+
     bytes_t m_memory;
     bytes_t m_available_memory;
     opt<allocator_impl_t&> m_backing;
