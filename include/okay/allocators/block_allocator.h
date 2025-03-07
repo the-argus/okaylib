@@ -36,6 +36,7 @@ class block_allocator_t : public ok::allocator_t
         alloc::feature_flags::can_predictably_realloc_in_place |
         alloc::feature_flags::can_clear;
 
+    block_allocator_t() = delete;
     constexpr explicit block_allocator_t(bytes_t initial_buffer);
     constexpr explicit block_allocator_t(bytes_t&& initial_buffer,
                                          allocator_impl_t& allocator);
