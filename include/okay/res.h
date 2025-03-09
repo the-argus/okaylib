@@ -134,8 +134,10 @@ class res<contained_t, enum_t,
     }
 
     res(const res& other) = delete;
-    res& operator=(const res& other) = default;
-    res& operator=(res&& other) = delete;
+    res& operator=(const res& other) = delete;
+
+    // can move construct (to allow returning from functions without RVO)
+    res& operator=(res&& other) = default;
 
     // move construction is possible but not move assignment
     template <typename T = res,
@@ -243,7 +245,8 @@ class res<contained_t, enum_t,
     static_assert(detail::is_status_enum_v<enum_t>,
                   OKAYLIB_IS_STATUS_ENUM_ERRMSG);
 
-    constexpr res(res&& other) = delete;
+    // allow only move construction
+    constexpr res(res&& other) = default;
     constexpr res(const res& other) = delete;
     constexpr res& operator=(res&& other) = delete;
     constexpr res& operator=(const res& other) = delete;

@@ -50,17 +50,17 @@
 
 // internal assert has a different error message and does not go through
 // __ok_abort, meaning that it will still abort the program in testing mode
-#define __ok_internal_assert(expr)                                            \
-    {                                                                         \
-        if (!(expr)) {                                                        \
-            ::fprintf(stderr,                                                 \
-                      "okaylib v" __ok_version_str                            \
-                      " implementor assert " #expr                            \
-                      " triggered at %s:%d in function %s, file an issue at " \
-                      "https://github.com/the-argus/okaylib\n",               \
-                      __FILE__, __LINE__, __FUNCTION__);                      \
-            std::abort();                                                     \
-        }                                                                     \
+#define __ok_internal_assert(expr)                                           \
+    {                                                                        \
+        if (!(expr)) {                                                       \
+            ::fprintf(                                                       \
+                stderr,                                                      \
+                "okaylib v" __ok_version_str                                 \
+                " implementor assert %s triggered at %s:%d in function %s, " \
+                "file an issue at https://github.com/the-argus/okaylib\n",   \
+                #expr, __FILE__, __LINE__, __FUNCTION__);                    \
+            std::abort();                                                    \
+        }                                                                    \
     }
 
 #endif

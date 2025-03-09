@@ -8,7 +8,7 @@ namespace ok {
 
 namespace slab_allocator {
 
-struct slab_blocksize_description_t
+struct blocks_description_t
 {
     size_t blocksize;
     size_t alignment;
@@ -18,8 +18,7 @@ template <size_t nblocksizes> struct options_t
 {
     inline static constexpr size_t num_blocksizes = nblocksizes;
 
-    ok::array_t<slab_blocksize_description_t, num_blocksizes>
-        available_blocksizes;
+    ok::array_t<blocks_description_t, num_blocksizes> available_blocksizes;
     size_t num_initial_blocks_per_blocksize;
 };
 
@@ -141,9 +140,10 @@ slab_allocator_t<allocator_impl_t, num_blocksizes>::impl_reallocate(
     } else {
         // first pass: find allocator which contains original memory and returns
         // OOM when we try to realloc in place
-        allocator_impl_t* oomed_allocator = nullptr;
+        block_allocator_t<allocator_impl_t>* oomed_allocator = nullptr;
         for (size_t i = 0; i < num_blocksizes; ++i) {
-            allocator_impl_t* allocator = ok::addressof(m.allocators[i]);
+            block_allocator_t<allocator_impl_t>* allocator =
+                ok::addressof(m.allocators[i]);
 
             if (allocator->contains(request.memory)) {
                 alloc::result_t<bytes_t> result =
@@ -181,7 +181,7 @@ slab_allocator_t<allocator_impl_t, num_blocksizes>::impl_reallocate(
 
         bytes_t& newbytes = result.release_ref();
 
-        ok_memcopy(.to = newbytes, .from = request.memory);
+        auto&& _ = ok_memcopy(.to = newbytes, .from = request.memory);
 
         if (!(request.flags & alloc::flags::leave_nonzeroed)) {
             std::memset(newbytes.data() + request.memory.size(), 0,
@@ -200,9 +200,10 @@ slab_allocator_t<allocator_impl_t, num_blocksizes>::impl_reallocate(
 namespace slab_allocator {
 struct with_blocks_t
 {
-    template <typename allocator_impl_t, typename options_ref, typename...>
+    template <typename allocator_impl_t_c_ref, typename options_ref,
+              typename...>
     using associated_type =
-        slab_allocator_t<allocator_impl_t,
+        slab_allocator_t<detail::remove_cvref_t<allocator_impl_t_c_ref>,
                          detail::remove_cvref_t<options_ref>::num_blocksizes>;
 
     template <typename allocator_impl_t, size_t num_blocksizes>
@@ -221,16 +222,15 @@ struct with_blocks_t
                const options_t<num_blocksizes>& options) const OKAYLIB_NOEXCEPT
     {
         for (size_t i = 0; i < options.available_blocksizes.size(); ++i) {
-            slab_blocksize_description_t& desc =
-                options.available_blocksizes[i];
+            const blocks_description_t& desc = options.available_blocksizes[i];
 
             status<alloc::error> status = block_allocator::alloc_initial_buf(
                 uninit.m.allocators[i], allocator,
                 block_allocator::alloc_initial_buf_options_t{
                     .num_initial_spots =
                         options.num_initial_blocks_per_blocksize,
-                    .minimum_alignment = desc.alignment,
                     .num_bytes_per_block = desc.blocksize,
+                    .minimum_alignment = desc.alignment,
                 });
 
             // since a simple status is returned and we dont construct any
@@ -238,7 +238,8 @@ struct with_blocks_t
             // destruction on partially initialized blocks
             if (!status.okay()) [[unlikely]] {
                 for (int64_t j = i - 1; j >= 0; --j) {
-                    uninit[j].~block_allocator_t<allocator_impl_t>();
+                    uninit.m.allocators[j]
+                        .~block_allocator_t<allocator_impl_t>();
                 }
                 return status.err();
             }

@@ -316,6 +316,9 @@ template <typename T = detail::deduced_t, typename... args_t>
             }
         };
 
+    static_assert(is_std_invocable_v<decltype(factory_function_construct),
+                                     decltype(args)...>);
+
     if constexpr (is_std_invocable_v<decltype(factory_function_construct),
                                      decltype(args)...>) {
         return factory_function_construct(

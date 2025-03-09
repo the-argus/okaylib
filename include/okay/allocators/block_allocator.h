@@ -31,7 +31,7 @@ free_everything_in_block_allocator_buffer(bytes_t memory, size_t blocksize,
     for (int64_t i = (memory.size() / blocksize) - 1; i >= 0; --i) {
         auto* ptr =
             reinterpret_cast<free_block_t*>(memory.data() + (i * blocksize));
-        __ok_internal_assert(uintptr_t(ptr) % alignof(free_block_t) == 0);
+        __ok_internal_assert(!(uintptr_t(ptr) % alignof(free_block_t)));
         *ptr = free_block_t{.prev = std::exchange(free_list_iter, ptr)};
     }
     return free_list_iter;
@@ -43,6 +43,9 @@ template <typename allocator_impl_t>
 class block_allocator_t : public ok::allocator_t
 {
   private:
+    static_assert(detail::is_derived_from_v<allocator_impl_t, ok::allocator_t>,
+                  "Type given to block_allocator_t as a backing allocator is "
+                  "not a child of ok::allocator_t.");
     struct free_block_t
     {
         free_block_t* prev;
@@ -136,7 +139,7 @@ class block_allocator_t : public ok::allocator_t
 
     constexpr bool contains(const bytes_t& bytes) const noexcept
     {
-        return ok_memcontains(.inner = bytes, .outer = m.memory);
+        return ok_memcontains(.outer = m.memory, .inner = bytes);
     }
 
   protected:
@@ -179,7 +182,7 @@ constexpr void block_allocator_t<allocator_impl_t>::grow() OKAYLIB_NOEXCEPT
             .memory = m.memory,
             .new_size_bytes = m.memory.size() + m.blocksize,
             .preferred_size_bytes = m.memory.size() * 2,
-            .flags = alloc::flags::in_place_orelse_fail &
+            .flags = alloc::flags::in_place_orelse_fail |
                      alloc::flags::leave_nonzeroed,
         });
 
@@ -214,11 +217,12 @@ block_allocator_t<allocator_impl_t>::impl_allocate(
     }
 
     if (request.num_bytes > m.blocksize ||
-        request.alignment > m.minimum_alignment) [[unlikely]] {
+        request.alignment > m.minimum_alignment || request.num_bytes == 0)
+        [[unlikely]] {
         return alloc::error::unsupported;
     }
 
-    bytes_t output_memory = raw_slice(reinterpret_cast<uint8_t*>(std::exchange(
+    bytes_t output_memory = raw_slice(*reinterpret_cast<uint8_t*>(std::exchange(
                                           m.free_head, m.free_head->prev)),
                                       m.blocksize);
 
@@ -240,7 +244,7 @@ template <typename allocator_impl_t>
 inline void block_allocator_t<allocator_impl_t>::impl_deallocate(bytes_t bytes)
     OKAYLIB_NOEXCEPT
 {
-    __ok_assert(ok_memcontains(.inner = bytes, .outer = m.memory),
+    __ok_assert(ok_memcontains(.outer = m.memory, .inner = bytes),
                 "Attempt to free bytes from block allocator which do not all "
                 "belong to that allocator");
     __ok_assert((bytes.data() - m.memory.data()) % m.blocksize == 0,
@@ -256,7 +260,7 @@ template <typename allocator_impl_t>
 block_allocator_t<allocator_impl_t>::impl_reallocate(
     const alloc::reallocate_request_t& request) OKAYLIB_NOEXCEPT
 {
-    __ok_assert(ok_memcontains(.inner = request.memory, .outer = m.memory),
+    __ok_assert(ok_memcontains(.outer = m.memory, .inner = request.memory),
                 "Attempt to realloc bytes from block allocator which do not "
                 "all belong to that allocator");
     __ok_assert((request.memory.data() - m.memory.data()) % m.blocksize == 0,
@@ -283,8 +287,9 @@ namespace block_allocator {
 namespace detail {
 struct alloc_initial_buf_t
 {
-    template <typename size_type, typename allocator_impl_t>
-    using associated_type = block_allocator_t<allocator_impl_t>;
+    template <typename allocator_impl_t_cref, typename...>
+    using associated_type =
+        block_allocator_t<ok::detail::remove_cvref_t<allocator_impl_t_cref>>;
 
     template <typename allocator_impl_t>
     [[nodiscard]] constexpr auto
@@ -308,7 +313,7 @@ struct alloc_initial_buf_t
             actual_minimum_alignment,
             ok::max(options.num_bytes_per_block, sizeof(free_block_t)));
 
-        alloc::result_t<bytes_t> result = allocator->allocate(alloc::request_t{
+        alloc::result_t<bytes_t> result = allocator.allocate(alloc::request_t{
             .num_bytes = actual_blocksize * options.num_initial_spots,
             .alignment = actual_minimum_alignment,
             .flags = alloc::flags::leave_nonzeroed,

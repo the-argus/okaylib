@@ -47,7 +47,7 @@ template <typename T>
 memcopy(const memcopy_options_t<T>& options) OKAYLIB_NOEXCEPT;
 
 /// Macro for memcopy to avoid writing the options typename
-#define ok_memcopy(...) memcopy(memcopy_options_t{__VA_ARGS__})
+#define ok_memcopy(...) ok::memcopy(memcopy_options_t{__VA_ARGS__})
 
 /// Compare two slices of memory. The types must not define operator== overloads
 /// nor orderable or partial orderable traits (in that case, use the slices as
