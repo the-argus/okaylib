@@ -149,8 +149,7 @@ slab_allocator_t<allocator_impl_t, num_blocksizes>::impl_reallocate(
                 alloc::result_t<bytes_t> result =
                     allocator->reallocate(request);
                 if (result.okay()) {
-                    // successfully reallocated in-place, do an early out
-                    return result.release(); // TODO: res move construction?
+                    return result;
                 } else if (result.err() != alloc::error::oom) {
                     // found
                     return result.err();
@@ -176,7 +175,7 @@ slab_allocator_t<allocator_impl_t, num_blocksizes>::impl_reallocate(
         });
 
         if (!result.okay()) [[unlikely]] {
-            return result.err();
+            return result;
         }
 
         bytes_t& newbytes = result.release_ref();
