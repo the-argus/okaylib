@@ -351,7 +351,7 @@ linked_blockpool_allocator_t<allocator_impl_t>::impl_reallocate(
 }
 
 namespace linked_blockpool_allocator {
-struct options
+struct options_t
 {
     size_t num_bytes_per_block;
     size_t minimum_alignment = ok::alloc::default_align;
@@ -366,8 +366,9 @@ struct start_with_one_pool_t
         std::remove_reference_t<allocator_impl_t_ref>>;
 
     template <typename allocator_impl_t>
-    inline auto make(allocator_impl_t& allocator,
-                     const options& options) const OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr auto
+    make(allocator_impl_t& allocator,
+         const options_t& options) const OKAYLIB_NOEXCEPT
     {
         return ok::make(*this, allocator, options);
     }
@@ -376,7 +377,7 @@ struct start_with_one_pool_t
     constexpr status<alloc::error>
     operator()(linked_blockpool_allocator_t<allocator_impl_t>& uninit,
                allocator_impl_t& allocator,
-               const options& options) const OKAYLIB_NOEXCEPT
+               const options_t& options) const OKAYLIB_NOEXCEPT
     {
         using free_block_t = typename linked_blockpool_allocator_t<
             allocator_impl_t>::free_block_t;
@@ -431,8 +432,9 @@ struct start_with_one_pool_t
         __ok_internal_assert(pool->num_blocks >=
                              options.num_blocks_in_first_pool);
 
+        using return_type = linked_blockpool_allocator_t<allocator_impl_t>;
         using M = typename linked_blockpool_allocator_t<allocator_impl_t>::M;
-        new (ok::addressof(uninit)) linked_blockpool_allocator_t(M{
+        new (ok::addressof(uninit)) return_type(M{
             .last_pool = pool,
             .blocksize = actual_blocksize,
             .minimum_alignment = actual_minimum_alignment,

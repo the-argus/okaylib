@@ -94,8 +94,9 @@ reinterpret_bytes_as(bytes_t bytes) OKAYLIB_NOEXCEPT;
 
 } // namespace ok
 
+/// Returns the slice of memory copied into
 template <typename T>
-[[nodiscard]] constexpr auto
+constexpr auto
 ok::memcopy(const memcopy_options_t<T>& options) OKAYLIB_NOEXCEPT -> slice<T>
 {
     static_assert(std::is_trivially_copyable_v<T>,

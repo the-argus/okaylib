@@ -5,7 +5,7 @@
 
 using namespace ok;
 
-TEST_SUITE("c_allocator")
+TEST_SUITE("arena allocator")
 {
     TEST_CASE("allocator tests")
     {

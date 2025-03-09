@@ -13,6 +13,12 @@ struct fixed_buffer_options_t
     size_t num_bytes_per_block;
     size_t minimum_alignment;
 };
+struct alloc_initial_buf_options_t
+{
+    size_t num_initial_spots;
+    size_t num_bytes_per_block;
+    size_t minimum_alignment;
+};
 namespace detail {
 struct alloc_initial_buf_t;
 
@@ -121,6 +127,17 @@ class block_allocator_t : public ok::allocator_t
     block_allocator_t(const block_allocator_t&) = delete;
 
     inline ~block_allocator_t() OKAYLIB_NOEXCEPT_FORCE { destroy(); }
+
+    constexpr size_t block_size() const noexcept { return m.blocksize; }
+    constexpr size_t block_align() const noexcept
+    {
+        return m.minimum_alignment;
+    }
+
+    constexpr bool contains(const bytes_t& bytes) const noexcept
+    {
+        return ok_memcontains(.inner = bytes, .outer = m.memory);
+    }
 
   protected:
     [[nodiscard]] inline alloc::result_t<bytes_t>
@@ -266,28 +283,22 @@ namespace block_allocator {
 namespace detail {
 struct alloc_initial_buf_t
 {
-    struct options_t
-    {
-        size_t num_initial_spots;
-        size_t num_bytes_per_block;
-        size_t minimum_alignment;
-    };
-
     template <typename size_type, typename allocator_impl_t>
     using associated_type = block_allocator_t<allocator_impl_t>;
 
     template <typename allocator_impl_t>
-    inline auto make(allocator_impl_t& allocator,
-                     const options_t& options) const OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr auto
+    make(allocator_impl_t& allocator,
+         const alloc_initial_buf_options_t& options) const OKAYLIB_NOEXCEPT
     {
         return ok::make(*this, allocator, options);
     }
 
     template <typename allocator_impl_t>
-    constexpr status<alloc::error>
-    operator()(ok::block_allocator_t<allocator_impl_t>& uninit,
-               allocator_impl_t& allocator,
-               const options_t& options) const OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr status<alloc::error> operator()(
+        ok::block_allocator_t<allocator_impl_t>& uninit,
+        allocator_impl_t& allocator,
+        const alloc_initial_buf_options_t& options) const OKAYLIB_NOEXCEPT
     {
         using block_allocator_t = ok::block_allocator_t<allocator_impl_t>;
         using free_block_t = typename block_allocator_t::free_block_t;
