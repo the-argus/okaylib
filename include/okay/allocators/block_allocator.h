@@ -23,7 +23,7 @@ namespace detail {
 struct alloc_initial_buf_t;
 
 template <typename free_block_t>
-constexpr free_block_t*
+[[nodiscard]] constexpr free_block_t*
 free_everything_in_block_allocator_buffer(bytes_t memory, size_t blocksize,
                                           free_block_t* initial_iter = nullptr)
 {
@@ -236,8 +236,9 @@ block_allocator_t<allocator_impl_t>::impl_allocate(
 template <typename allocator_impl_t>
 inline void block_allocator_t<allocator_impl_t>::impl_clear() OKAYLIB_NOEXCEPT
 {
-    block_allocator::detail::free_everything_in_block_allocator_buffer<
-        free_block_t>(m.memory, m.blocksize);
+    m.free_head =
+        block_allocator::detail::free_everything_in_block_allocator_buffer<
+            free_block_t>(m.memory, m.blocksize);
 }
 
 template <typename allocator_impl_t>
