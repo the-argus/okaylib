@@ -23,6 +23,13 @@ enum class error : uint8_t
 {
     okay,
     no_value,
+    // NOTE: oom has semantic meaning which is "the given request does not work
+    // on me, but may work on another allocator with more memory." OOM will
+    // never be returned if the request will always be invalid for allocators of
+    // the same type. This is important when considering what happens when you
+    // request more than a block allocator's maximum allocation size: it returns
+    // OOM, not unsupported, because a block allocator with a bigger blocksize
+    // may be able to handle the request.
     oom,
     unsupported,
     usage,
