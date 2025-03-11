@@ -216,10 +216,13 @@ block_allocator_t<allocator_impl_t>::impl_allocate(
         }
     }
 
-    if (request.num_bytes > m.blocksize ||
-        request.alignment > m.minimum_alignment || request.num_bytes == 0)
-        [[unlikely]] {
+    if (request.num_bytes == 0) [[unlikely]] {
         return alloc::error::unsupported;
+    }
+
+    if (request.num_bytes > m.blocksize ||
+        request.alignment > m.minimum_alignment) [[unlikely]] {
+        return alloc::error::oom;
     }
 
     bytes_t output_memory = raw_slice(*reinterpret_cast<uint8_t*>(std::exchange(

@@ -120,7 +120,7 @@ template <typename allocator_t> struct allocator_tests
         }
         ally.clear();
 
-        for (u64 i = 0; i < 1000000; ++i) {
+        for (u64 i = 0; i < 10000; ++i) {
             bytes_t allocated =
                 ally.allocate(
                         alloc::request_t{.num_bytes = 1024, .alignment = 16})

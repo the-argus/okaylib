@@ -89,7 +89,7 @@ slab_allocator_t<allocator_impl_t, num_blocksizes>::impl_allocate(
         if (allocator.block_size() >= request.num_bytes &&
             allocator.block_align() >= request.alignment) {
             auto result = allocator.allocate(request);
-            if (!result.okay()) [[unlikely]] {
+            if (result.err() == alloc::error::oom) [[unlikely]] {
                 // try the next allocator
                 continue;
             }
