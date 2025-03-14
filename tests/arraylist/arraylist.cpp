@@ -71,6 +71,26 @@ TEST_SUITE("arraylist")
         }
     }
 
+    TEST_CASE("move semantics")
+    {
+        c_allocator_t backing;
+        array_t example{1, 2, 3, 4, 5};
+
+        SUBCASE("move causes right number of destructions with empty")
+        {
+            arraylist_t i = arraylist::empty<int>(backing);
+            arraylist_t j = std::move(i);
+        }
+
+        SUBCASE("move causes right number of destructions with full")
+        {
+            arraylist_t i =
+                arraylist::copy_items_from_range.make(backing, example)
+                    .release();
+            arraylist_t j = std::move(i);
+        }
+    }
+
     TEST_CASE("items() and size() and data()")
     {
         ok::c_allocator_t allocator;
@@ -104,6 +124,18 @@ TEST_SUITE("arraylist")
 
             REQUIRE(original_size == direct_size);
             REQUIRE(direct_size == items_size);
+        }
+
+        SUBCASE("can call size on empty arraylist but not data or items")
+        {
+            arraylist_t alist = arraylist::empty<int>(allocator);
+            const auto& const_alist = alist;
+
+            REQUIRE(alist.size() == 0);
+            REQUIREABORTS(alist.data());
+            REQUIREABORTS(const_alist.data());
+            REQUIREABORTS(alist.items());
+            REQUIREABORTS(const_alist.items());
         }
     }
 }

@@ -56,16 +56,20 @@ class arraylist_t
 
     // data and size are here so this can be iterated on directly without
     // calling .items()
+
+    /// Panics if the arraylist has not allocated anything yet
     const T* data() const& OKAYLIB_NOEXCEPT
     {
         return m.allocated_spots.ref_or_panic().data();
     }
 
+    /// Panics if the arraylist has not allocated anything yet
     T* data() & OKAYLIB_NOEXCEPT
     {
         return m.allocated_spots.ref_or_panic().data();
     }
 
+    /// Always valid to call .size() on any arraylist
     size_t size() const OKAYLIB_NOEXCEPT { return m.spots_occupied; }
 
     slice<T> items() & OKAYLIB_NOEXCEPT
