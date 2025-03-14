@@ -10,6 +10,30 @@
 
 using namespace ok;
 
+template <typename backing_allocator_t>
+auto make_slab(backing_allocator_t& allocator)
+{
+    return
+
+        slab_allocator::with_blocks
+            .make(allocator,
+                  slab_allocator::options_t<4>{
+                      .available_blocksizes =
+                          {
+                              slab_allocator::blocks_description_t{
+                                  .blocksize = 64, .alignment = 16},
+                              slab_allocator::blocks_description_t{
+                                  .blocksize = 256, .alignment = 16},
+                              slab_allocator::blocks_description_t{
+                                  .blocksize = 1024, .alignment = 16},
+                              slab_allocator::blocks_description_t{
+                                  .blocksize = 100000, .alignment = 16},
+                          },
+                      .num_initial_blocks_per_blocksize = 1,
+                  })
+            .release();
+}
+
 TEST_SUITE("arraylist")
 {
     TEST_CASE("initialization with different allocators")
@@ -18,24 +42,7 @@ TEST_SUITE("arraylist")
 
         reserving_page_allocator_t reserving({.pages_reserved = 100000000});
 
-        slab_allocator_t slab =
-            slab_allocator::with_blocks
-                .make(reserving,
-                      slab_allocator::options_t<4>{
-                          .available_blocksizes =
-                              {
-                                  slab_allocator::blocks_description_t{
-                                      .blocksize = 64, .alignment = 16},
-                                  slab_allocator::blocks_description_t{
-                                      .blocksize = 256, .alignment = 16},
-                                  slab_allocator::blocks_description_t{
-                                      .blocksize = 1024, .alignment = 16},
-                                  slab_allocator::blocks_description_t{
-                                      .blocksize = 100000, .alignment = 16},
-                              },
-                          .num_initial_blocks_per_blocksize = 1,
-                      })
-                .release();
+        auto slab = make_slab(reserving);
 
         SUBCASE("reserved buffer")
         {
@@ -157,6 +164,63 @@ TEST_SUITE("arraylist")
             REQUIREABORTS(const_alist.data());
             REQUIREABORTS(alist.items());
             REQUIREABORTS(const_alist.items());
+        }
+    }
+
+    TEST_CASE(
+        "basic nonfailing append usage to test reallocation, many allocators")
+    {
+        c_allocator_t backing;
+        SUBCASE("c allocator")
+        {
+            arraylist_t dup = arraylist::empty<int>(backing);
+            arraylist_t dup2 = arraylist::empty<int>(backing);
+
+            for (size_t i = 0; i < 4097; ++i) {
+                dup.append(i);
+            }
+
+            // throw in move assignment for good measure, maybe reallocation
+            // broke some other invariants
+            dup2 = std::move(dup);
+
+            for (size_t i = 0; i < 4097; ++i) {
+                REQUIRE(dup2[i] == i);
+            }
+        }
+
+        SUBCASE("slab allocator")
+        {
+            auto slab = make_slab(backing);
+            arraylist_t dup = arraylist::empty<int>(slab);
+            arraylist_t dup2 = arraylist::empty<int>(slab);
+
+            for (size_t i = 0; i < 4097; ++i) {
+                dup.append(i);
+            }
+
+            dup2 = std::move(dup);
+
+            for (size_t i = 0; i < 4097; ++i) {
+                REQUIRE(dup2[i] == i);
+            }
+        }
+
+        SUBCASE("reserved buffer")
+        {
+            reserving_page_allocator_t reserving({.pages_reserved = 8});
+            arraylist_t dup = arraylist::empty<int>(reserving);
+            arraylist_t dup2 = arraylist::empty<int>(reserving);
+
+            for (size_t i = 0; i < 4097; ++i) {
+                dup.append(i);
+            }
+
+            dup2 = std::move(dup);
+
+            for (size_t i = 0; i < 4097; ++i) {
+                REQUIRE(dup2[i] == i);
+            }
         }
     }
 }
