@@ -18,7 +18,7 @@ namespace ok {
 
 struct subslice_options_t
 {
-    size_t start;
+    size_t start = 0;
     size_t length;
 };
 
