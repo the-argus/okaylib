@@ -76,18 +76,39 @@ TEST_SUITE("arraylist")
         c_allocator_t backing;
         array_t example{1, 2, 3, 4, 5};
 
-        SUBCASE("move causes right number of destructions with empty")
+        SUBCASE(
+            "move construction causes right number of destructions with empty")
         {
             arraylist_t i = arraylist::empty<int>(backing);
             arraylist_t j = std::move(i);
         }
 
-        SUBCASE("move causes right number of destructions with full")
+        SUBCASE(
+            "move construction causes right number of destructions with full")
         {
             arraylist_t i =
                 arraylist::copy_items_from_range.make(backing, example)
                     .release();
             arraylist_t j = std::move(i);
+        }
+
+        SUBCASE(
+            "move assignment causes right number of destructions with empty")
+        {
+            arraylist_t i = arraylist::empty<int>(backing);
+            arraylist_t j = arraylist::empty<int>(backing);
+            j = std::move(i);
+        }
+
+        SUBCASE("move assignment causes right number of destructions with full")
+        {
+            arraylist_t i =
+                arraylist::copy_items_from_range.make(backing, example)
+                    .release();
+            arraylist_t j =
+                arraylist::copy_items_from_range.make(backing, example)
+                    .release();
+            j = std::move(i);
         }
     }
 
