@@ -69,11 +69,11 @@ class reserving_page_allocator_t : public allocator_t
         __ok_internal_assert(reservation_result.bytes >= total_bytes);
 
         if (!(request.flags & alloc::flags::leave_nonzeroed)) {
-            std::memset(reservation_result.data, 0, reservation_result.bytes);
+            std::memset(reservation_result.data, 0, total_bytes);
         }
 
         return ok::raw_slice(*static_cast<uint8_t*>(reservation_result.data),
-                             reservation_result.bytes);
+                             total_bytes);
     }
 
     inline void impl_clear() OKAYLIB_NOEXCEPT final

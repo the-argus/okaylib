@@ -28,11 +28,12 @@ free_everything_in_block_allocator_buffer(bytes_t memory, size_t blocksize,
                                           free_block_t* initial_iter = nullptr)
 {
     free_block_t* free_list_iter = initial_iter;
-    for (int64_t i = (memory.size() / blocksize) - 1; i >= 0; --i) {
+    for (size_t i = 0; i < memory.size() / blocksize; ++i) {
         auto* ptr =
             reinterpret_cast<free_block_t*>(memory.data() + (i * blocksize));
         __ok_internal_assert(!(uintptr_t(ptr) % alignof(free_block_t)));
-        *ptr = free_block_t{.prev = std::exchange(free_list_iter, ptr)};
+        *ptr = free_block_t{.prev = free_list_iter};
+        free_list_iter = ptr;
     }
     return free_list_iter;
 }

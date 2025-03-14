@@ -2,7 +2,6 @@
 #define __OKAYLIB_CONTAINERS_ARRAY_LIST_H__
 
 #include "okay/allocators/allocator.h"
-#include "okay/detail/template_util/uninitialized_storage.h"
 #include "okay/status.h"
 
 namespace ok {
@@ -55,19 +54,30 @@ class arraylist_t
 
     using value_type = T;
 
+    // data and size are here so this can be iterated on directly without
+    // calling .items()
     const T* data() const& OKAYLIB_NOEXCEPT
     {
-        return m.allocated_spots ? m.allocated_spots.ref_or_panic().data()
-                                 : nullptr;
+        return m.allocated_spots.ref_or_panic().data();
     }
 
     T* data() & OKAYLIB_NOEXCEPT
     {
-        return m.allocated_spots ? m.allocated_spots.ref_or_panic().data()
-                                 : nullptr;
+        return m.allocated_spots.ref_or_panic().data();
     }
 
     size_t size() const OKAYLIB_NOEXCEPT { return m.spots_occupied; }
+
+    slice<T> items() & OKAYLIB_NOEXCEPT
+    {
+        return m.allocated_spots.ref_or_panic().subslice(
+            {.length = m.spots_occupied});
+    }
+
+    slice<const T> items() const& OKAYLIB_NOEXCEPT
+    {
+        return const_cast<arraylist_t*>(this)->items(); // call other impl
+    }
 
     const T& operator[](size_t index) const& OKAYLIB_NOEXCEPT
     {
@@ -166,7 +176,7 @@ class arraylist_t
   private:
     constexpr status<alloc::error> first_allocation()
     {
-        alloc::result_t<maybe_defined_memory_t> res =
+        alloc::result_t<bytes_t> res =
             m.backing_allocator->allocate(alloc::request_t{
                 .num_bytes = sizeof(T) * 4,
                 .alignment = alignof(T),
@@ -178,7 +188,7 @@ class arraylist_t
         }
 
         auto& maybe_defined = res.release_ref();
-        uint8_t* memory = maybe_defined.data_maybe_defined();
+        uint8_t* memory = maybe_defined.data();
         const size_t bytes_allocated = maybe_defined.size();
 
         const size_t spots_allocated = bytes_allocated / sizeof(T);
@@ -245,7 +255,7 @@ class arraylist_t
             }
         }
 
-        result_t<maybe_defined_memory_t> res =
+        result_t<bytes_t> res =
             m.backing_allocator->reallocate(reallocate_request_t{
                 .memory = reinterpret_as_bytes(spots),
                 .new_size_bytes = (spots.size() + 1) * sizeof(T),
@@ -257,9 +267,9 @@ class arraylist_t
             return res.err();
         }
 
-        auto& maybe_defined = res.release_ref();
-        T* mem = reinterpret_cast<T*>(maybe_defined.data_maybe_defined());
-        const size_t bytes_allocated = maybe_defined.size();
+        auto& bytes = res.release_ref();
+        T* mem = reinterpret_cast<T*>(bytes.data());
+        const size_t bytes_allocated = bytes.size();
 
         spots = raw_slice(*mem, bytes_allocated / sizeof(T));
         return alloc::error::okay;
@@ -339,9 +349,9 @@ template <typename T> struct spots_preallocated_t
             return res.err();
         }
 
-        maybe_defined_memory_t& maybe_defined = res.release_ref();
-        auto& start = *reinterpret_cast<T*>(maybe_defined.data_maybe_defined());
-        const size_t num_bytes_allocated = maybe_defined.size();
+        bytes_t& bytes = res.release_ref();
+        auto& start = *reinterpret_cast<T*>(bytes.data());
+        const size_t num_bytes_allocated = bytes.size();
 
         new (ok::addressof(output)) output_t(typename output_t::members_t{
             .allocated_spots =
@@ -397,26 +407,23 @@ struct copy_items_from_range_t
 
         const size_t num_items = ok::size(range);
 
-        alloc::result_t<maybe_defined_memory_t> res =
-            allocator.allocate(alloc::request_t{
-                .num_bytes = num_items * sizeof(T),
-                .alignment = alignof(T),
-                .flags = alloc::flags::leave_nonzeroed,
-            });
+        alloc::result_t<bytes_t> res = allocator.allocate(alloc::request_t{
+            .num_bytes = num_items * sizeof(T),
+            .alignment = alignof(T),
+            .flags = alloc::flags::leave_nonzeroed,
+        });
 
         if (!res.okay()) [[unlikely]] {
             return res.err();
         }
 
-        auto& maybe_undefined = res.release_ref();
-        T* const memory =
-            reinterpret_cast<T*>(maybe_undefined.data_maybe_defined());
-        const size_t bytes_allocated = maybe_undefined.size();
+        auto& bytes = res.release_ref();
+        T* const memory = reinterpret_cast<T*>(bytes.data());
+        const size_t bytes_allocated = bytes.size();
 
         // TODO: if contiguous range and trivially copyable, do memcpy
         size_t i = 0;
-        for (auto cursor = ok::begin(range);
-             ok::is_inbounds(range, cursor, ok::prefer_after_bounds_check);
+        for (auto cursor = ok::begin(range); ok::is_inbounds(range, cursor);
              ok::increment(range, cursor)) {
             // perform a copy either through
             const auto& item = ok::iter_get_temporary_ref(range, cursor);
