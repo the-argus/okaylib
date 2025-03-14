@@ -119,7 +119,7 @@ class arraylist_t
     /// allocation succeeded or T's error type. The new item is constructed
     /// using the constructor selected by ok::make() with the given args.
     template <typename... args_t>
-    constexpr auto append(args_t&&... args) OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr auto append(args_t&&... args) OKAYLIB_NOEXCEPT
     {
         // if else handles initial allocation and then future reallocation
         if (!m.allocated_spots) {
@@ -215,10 +215,10 @@ class arraylist_t
                 reallocate_in_place_orelse_keep_old_nocopy(
                     *m.backing_allocator,
                     reallocate_extended_request_t{
+                        .memory = reinterpret_as_bytes(spots),
                         .required_bytes_back = sizeof(T),
                         // 2x grow rate
                         .preferred_bytes_back = sizeof(T) * spots.size(),
-                        .memory = reinterpret_as_bytes(spots),
                         .flags = realloc_flags | flags::in_place_orelse_fail,
                     });
 
@@ -242,8 +242,8 @@ class arraylist_t
                     raw_slice(*reinterpret_cast<T*>(reallocation.memory.data()),
                               reallocation.memory.size() / sizeof(T));
             } else {
-                // perform copy
-                const T* const src = spots.data();
+                // perform move
+                T* const src = spots.data();
                 T* const dest =
                     reinterpret_cast<T*>(reallocation.memory.data());
 
@@ -257,26 +257,27 @@ class arraylist_t
                 spots =
                     raw_slice(*dest, reallocation.memory.size() / sizeof(T));
             }
+            return alloc::error::okay;
+        } else {
+            result_t<bytes_t> res =
+                m.backing_allocator->reallocate(reallocate_request_t{
+                    .memory = reinterpret_as_bytes(spots),
+                    .new_size_bytes = (spots.size() + 1) * sizeof(T),
+                    .preferred_size_bytes = (spots.size() * 2) * sizeof(T),
+                    .flags = realloc_flags,
+                });
+
+            if (!res.okay()) [[unlikely]] {
+                return res.err();
+            }
+
+            auto& bytes = res.release_ref();
+            T* mem = reinterpret_cast<T*>(bytes.data());
+            const size_t bytes_allocated = bytes.size();
+
+            spots = raw_slice(*mem, bytes_allocated / sizeof(T));
+            return alloc::error::okay;
         }
-
-        result_t<bytes_t> res =
-            m.backing_allocator->reallocate(reallocate_request_t{
-                .memory = reinterpret_as_bytes(spots),
-                .new_size_bytes = (spots.size() + 1) * sizeof(T),
-                .preferred_size_bytes = (spots.size() * 2) * sizeof(T),
-                .flags = realloc_flags,
-            });
-
-        if (!res.okay()) [[unlikely]] {
-            return res.err();
-        }
-
-        auto& bytes = res.release_ref();
-        T* mem = reinterpret_cast<T*>(bytes.data());
-        const size_t bytes_allocated = bytes.size();
-
-        spots = raw_slice(*mem, bytes_allocated / sizeof(T));
-        return alloc::error::okay;
     }
 
     constexpr void destroy() OKAYLIB_NOEXCEPT

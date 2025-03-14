@@ -10,6 +10,47 @@
 
 using namespace ok;
 
+struct ooming_allocator_t : ok::allocator_t
+{
+    static constexpr alloc::feature_flags type_features =
+        alloc::feature_flags::can_expand_back |
+        alloc::feature_flags::can_reclaim | alloc::feature_flags::is_threadsafe;
+
+    [[nodiscard]] inline alloc::result_t<bytes_t>
+    impl_allocate(const alloc::request_t&) OKAYLIB_NOEXCEPT final
+    {
+        return alloc::error::oom;
+    }
+
+    inline void impl_clear() OKAYLIB_NOEXCEPT final {}
+
+    [[nodiscard]] inline alloc::feature_flags
+    impl_features() const OKAYLIB_NOEXCEPT final
+    {
+        return type_features;
+    }
+
+    inline void impl_deallocate(bytes_t) OKAYLIB_NOEXCEPT final
+    {
+        __ok_abort("how did you get here");
+    }
+
+    [[nodiscard]] inline alloc::result_t<bytes_t>
+    impl_reallocate(const alloc::reallocate_request_t&) OKAYLIB_NOEXCEPT final
+    {
+        __ok_abort("how did you get here");
+        return alloc::error::oom;
+    }
+
+    [[nodiscard]] inline alloc::result_t<alloc::reallocation_extended_t>
+    impl_reallocate_extended(const alloc::reallocate_extended_request_t&
+                                 options) OKAYLIB_NOEXCEPT final
+    {
+        __ok_abort("how did you get here");
+        return alloc::error::oom;
+    }
+};
+
 template <typename backing_allocator_t>
 auto make_slab(backing_allocator_t& allocator)
 {
@@ -177,7 +218,8 @@ TEST_SUITE("arraylist")
             arraylist_t dup2 = arraylist::empty<int>(backing);
 
             for (size_t i = 0; i < 4097; ++i) {
-                dup.append(i);
+                auto result = dup.append(i);
+                REQUIRE(result.okay());
             }
 
             // throw in move assignment for good measure, maybe reallocation
@@ -196,7 +238,8 @@ TEST_SUITE("arraylist")
             arraylist_t dup2 = arraylist::empty<int>(slab);
 
             for (size_t i = 0; i < 4097; ++i) {
-                dup.append(i);
+                auto result = dup.append(i);
+                REQUIRE(result.okay());
             }
 
             dup2 = std::move(dup);
@@ -213,7 +256,8 @@ TEST_SUITE("arraylist")
             arraylist_t dup2 = arraylist::empty<int>(reserving);
 
             for (size_t i = 0; i < 4097; ++i) {
-                dup.append(i);
+                auto result = dup.append(i);
+                REQUIRE(result.okay());
             }
 
             dup2 = std::move(dup);
@@ -221,6 +265,48 @@ TEST_SUITE("arraylist")
             for (size_t i = 0; i < 4097; ++i) {
                 REQUIRE(dup2[i] == i);
             }
+        }
+    }
+
+    TEST_CASE("append failing constructors")
+    {
+        SUBCASE("arraylist of arraylist, copy from range constructor")
+        {
+            c_allocator_t backing;
+
+            array_t sub_array{1, 2, 3, 4, 5, 6};
+
+            arraylist_t alist =
+                arraylist::empty<arraylist_t<int, c_allocator_t>>(backing);
+
+            auto result = alist.append(arraylist::copy_items_from_range,
+                                       backing, sub_array);
+            REQUIRE(result.okay());
+            REQUIRE(alist.size() == 1);
+
+            ok_foreach(ok_pair(lhs, rhs), zip(alist[0], sub_array))
+            {
+                REQUIRE(lhs == rhs);
+            }
+        }
+
+        SUBCASE(
+            "arraylist of arraylist, with failing allocator on inner arraylist")
+        {
+            c_allocator_t main_backing;
+
+            ooming_allocator_t failing;
+
+            array_t sub_array{1, 2, 3, 4, 5, 6};
+
+            arraylist_t alist =
+                arraylist::empty<arraylist_t<int, ooming_allocator_t>>(
+                    main_backing);
+
+            auto result = alist.append(arraylist::copy_items_from_range,
+                                       failing, sub_array);
+            REQUIRE(!result.okay());
+            REQUIRE(alist.size() == 0);
         }
     }
 }

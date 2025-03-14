@@ -434,7 +434,7 @@ struct potentially_in_place_reallocation_t
 template <typename allocator_impl_t>
 [[nodiscard]] constexpr result_t<potentially_in_place_reallocation_t>
 reallocate_in_place_orelse_keep_old_nocopy(
-    const allocator_impl_t& allocator,
+    allocator_impl_t& allocator,
     const alloc::reallocate_extended_request_t& options)
 {
     static_assert(detail::is_derived_from_v<allocator_impl_t, allocator_t>,
@@ -447,7 +447,7 @@ reallocate_in_place_orelse_keep_old_nocopy(
 
     // try to do it in place
     result_t<reallocation_extended_t> reallocation_res =
-        allocator.impl_reallocate_extended(options);
+        allocator.reallocate_extended(options);
     if (reallocation_res.okay()) {
         auto& reallocation = reallocation_res.release_ref();
         return potentially_in_place_reallocation_t{
@@ -467,7 +467,7 @@ reallocate_in_place_orelse_keep_old_nocopy(
         options.calculate_new_preferred_size();
 
     // propagate leave_nonzeroed request to allocate call
-    result_t<bytes_t> res = allocator.impl_allocate(alloc::request_t{
+    result_t<bytes_t> res = allocator.allocate(alloc::request_t{
         .num_bytes = new_size,
         .flags = flags(leave_nonzeroed_bit),
     });
