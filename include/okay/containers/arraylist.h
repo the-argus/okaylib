@@ -115,11 +115,9 @@ class arraylist_t
         return *this;
     }
 
-    /// Append a new item and return either a status representing whether the
-    /// allocation succeeded or T's error type. The new item is constructed
-    /// using the constructor selected by ok::make() with the given args.
     template <typename... args_t>
-    [[nodiscard]] constexpr auto append(args_t&&... args) OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr auto insert_at(size_t idx,
+                                           args_t&&... args) OKAYLIB_NOEXCEPT
     {
         // if else handles initial allocation and then future reallocation
         if (!m.allocated_spots) {
@@ -173,6 +171,75 @@ class arraylist_t
             ++m.spots_occupied;
             return status(alloc::error::okay);
         }
+    }
+
+    constexpr status<alloc::error>
+    increase_capacity_by(size_t new_spots) OKAYLIB_NOEXCEPT;
+
+    constexpr opt<T> remove(size_t idx) OKAYLIB_NOEXCEPT;
+
+    constexpr void remove_and_swap_last(size_t idx) OKAYLIB_NOEXCEPT;
+
+    constexpr status<alloc::error>
+    shrink_to_reclaim_unused_memory() OKAYLIB_NOEXCEPT;
+
+    constexpr size_t capacity() const noexcept;
+    [[nodiscard]] constexpr bool is_empty() const noexcept;
+
+    constexpr opt<T> pop_last() noexcept;
+
+    [[nodiscard]] constexpr T& first() noexcept;
+    [[nodiscard]] constexpr const T& first() const noexcept;
+    [[nodiscard]] constexpr T& last() noexcept;
+    [[nodiscard]] constexpr const T& last() const noexcept;
+
+    [[nodiscard]] constexpr opt<T&> try_access_first() noexcept;
+    [[nodiscard]] constexpr opt<const T&> try_access_first() const noexcept;
+    [[nodiscard]] constexpr opt<T&> try_access_last() noexcept;
+    [[nodiscard]] constexpr opt<const T&> try_access_last() const noexcept;
+
+    [[nodiscard]] constexpr const backing_allocator_t&
+    allocator() const noexcept
+    {
+        return *m.backing_allocator;
+    }
+    [[nodiscard]] constexpr backing_allocator_t& allocator() noexcept
+    {
+        return *m.backing_allocator;
+    }
+
+    constexpr void clear() noexcept;
+
+    constexpr status<alloc::error> resize() noexcept;
+
+    [[nodiscard]] constexpr opt<T&>
+    try_access_item_at(size_t idx) OKAYLIB_NOEXCEPT
+    {
+        if (idx >= size()) {
+            return nullopt;
+        } else {
+
+        }
+    }
+    [[nodiscard]] constexpr const opt<T&>
+    try_access_item_at(size_t idx) const OKAYLIB_NOEXCEPT;
+
+    [[nodiscard]] constexpr opt<slice<T>> leak() noexcept
+    {
+        shrink_to_reclaim_unused_memory();
+        opt<slice<T>> res = m.allocated_spots.move_out();
+
+        if (res) {
+            return res.ref_or_panic().subslice({.length = m.spots_occupied});
+        } else {
+            return nullopt;
+        }
+    }
+
+    template <typename... args_t>
+    constexpr status<alloc::error> append(args_t&&... args) OKAYLIB_NOEXCEPT
+    {
+        return insert_at(size() - 1, std::forward<args_t>(args)...);
     }
 
     inline ~arraylist_t() { destroy(); }
