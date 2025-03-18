@@ -2,6 +2,7 @@
 #define __OKAYLIB_CONTAINERS_array_t_H__
 
 #include "okay/anystatus.h"
+#include "okay/construct.h"
 #include "okay/detail/abort.h"
 #include "okay/detail/noexcept.h"
 
@@ -94,7 +95,7 @@ namespace array {
 namespace detail {
 template <typename T, size_t num_items> struct defaulted_or_zeroed_t
 {
-    [[nodiscard]] constexpr auto operator()() const noexcept
+    [[nodiscard]] constexpr auto make() const noexcept
     {
         array_t<T, num_items> out;
         if constexpr (std::is_trivially_constructible_v<T>) {
@@ -102,13 +103,23 @@ template <typename T, size_t num_items> struct defaulted_or_zeroed_t
         }
         return out;
     };
+
+    [[nodiscard]] constexpr auto operator()() const noexcept
+    {
+        return ok::make(*this);
+    }
 };
 template <typename T, size_t num_items> struct undefined_t
 {
-    [[nodiscard]] constexpr auto operator()() const noexcept
+    [[nodiscard]] constexpr auto make() const noexcept
     {
         return array_t<T, num_items>();
     };
+
+    [[nodiscard]] constexpr auto operator()() const noexcept
+    {
+        return ok::make(*this);
+    }
 };
 } // namespace detail
 

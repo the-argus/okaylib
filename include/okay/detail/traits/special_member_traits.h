@@ -2,6 +2,8 @@
 #define __OKAYLIB_DETAIL_TRAITS_SPECIAL_MEMBER_TRAITS_H__
 
 #include "okay/detail/template_util/first_type_in_pack.h"
+#include "okay/detail/template_util/remove_cvref.h"
+#include "okay/detail/traits/is_derived_from.h"
 #include "okay/detail/traits/is_instance.h"
 #include "okay/status.h"
 #include <type_traits>
@@ -95,230 +97,154 @@ struct is_type_res_and_contains<
     : std::true_type
 {};
 
-template <typename constructor_t, typename... args_t>
-struct fallible_construction_analyze
+struct bad_construction_analysis : public std::false_type
 {
-    template <typename T, typename = void> struct inner
-    {
-        using return_type = void;
-        static constexpr bool is_return_type_valid = false;
-    };
-
-    template <typename T>
-    struct inner<T, std::void_t<decltype(std::declval<const constructor_t&>()(
-                        std::declval<T&>(), std::declval<args_t>()...))>>
-    {
-        using return_type = decltype(std::declval<const constructor_t&>()(
-            std::declval<T&>(), std::declval<args_t>()...));
-        static constexpr bool is_return_type_valid =
-            is_instance_v<return_type, status>;
-    };
+    constexpr static bool has_inplace = false;
+    constexpr static bool has_rvo = false;
+    constexpr static bool can_fail = false;
+    using associated_type = void;
 };
 
-template <typename T, typename constructor_t, typename... args_t>
-using fallible_constructor_return_type_or_void_t =
-    typename fallible_construction_analyze<
-        constructor_t, args_t...>::template inner<T>::return_type;
-
-struct template_failure
-{};
-
-template <typename... args_t>
-struct invoke_with_T_ref_return_type_or_template_failure
+struct stdstyle_construction_analysis : public std::true_type
 {
-    template <typename T, typename constructor_t, typename = void> struct inner
+    constexpr static bool has_inplace = true;
+    constexpr static bool has_rvo = false;
+    constexpr static bool can_fail = false;
+    using associated_type = void;
+};
+
+template <typename... args_t> struct constructor_analysis
+{
+    template <typename constructor_t, typename = void>
+    struct make_fn_analysis : public std::false_type
     {
-        using type = template_failure;
+        using return_type = void;
+    };
+    template <typename constructor_t>
+    struct make_fn_analysis<
+        constructor_t,
+        std::void_t<decltype(std::declval<const constructor_t&>().make(
+            std::declval<args_t>()...))>> : public std::true_type
+    {
+        using return_type = decltype(std::declval<const constructor_t&>().make(
+            std::declval<args_t>()...));
+
+        static_assert(!detail::is_instance_v<return_type, res> &&
+                          !detail::is_instance_v<return_type, status>,
+                      "Do not return a status or res from a make() function- "
+                      "this function is only used for non-failing constructors "
+                      "and should return the constructed object directly.");
     };
 
+    template <typename T, typename constructor_t, typename = void>
+    struct make_into_uninit_fn_analysis : public std::false_type
+    {
+        using return_type = void;
+    };
     template <typename T, typename constructor_t>
-    struct inner<
+    struct make_into_uninit_fn_analysis<
         T, constructor_t,
-        std::enable_if_t<is_std_invocable_r_v<T, constructor_t, T&, args_t...>>>
-    {
-        using type = decltype(std::declval<const constructor_t&>()(
-            std::declval<T&>(), std::declval<args_t>()...));
-    };
-};
-
-template <typename T, typename constructor_t, typename... args_t>
-using invoke_with_T_ref_return_type_or_template_failure_t =
-    typename invoke_with_T_ref_return_type_or_template_failure<
-        args_t...>::template inner<T, constructor_t>::type;
-
-template <typename constructor_t, typename... args_t>
-struct infallible_construction_analyze
-{
-  private:
-    template <typename T, typename = void>
-    struct analyze_inplace : public std::false_type
-    {
-        using return_type = void;
-        static constexpr bool is_return_type_valid = false;
-        static constexpr bool is_inplace = false;
-    };
-
-    template <typename T>
-    struct analyze_inplace<
-        T, std::enable_if_t<!std::is_same_v<
-               invoke_with_T_ref_return_type_or_template_failure_t<
-                   T, constructor_t, args_t...>,
-               template_failure>>> : public std::true_type
-    {
-        using return_type = invoke_with_T_ref_return_type_or_template_failure_t<
-            T, constructor_t, args_t...>;
-        static constexpr bool is_return_type_valid =
-            std::is_void_v<return_type>;
-        static constexpr bool is_inplace = true;
-    };
-
-    template <typename T, typename = void>
-    struct analyze_returning_constructor : public std::false_type
-    {
-        using return_type = void;
-        static constexpr bool is_return_type_valid = false;
-        static constexpr bool is_inplace = false;
-    };
-
-    template <typename T>
-    struct analyze_returning_constructor<
-        T, std::enable_if_t<is_std_invocable_r_v<constructor_t, T, args_t...>>>
+        std::void_t<
+            decltype(std::declval<const constructor_t&>().make_into_uninit(
+                std::declval<T&>(), std::declval<args_t>()...))>>
         : public std::true_type
     {
-        using return_type = decltype(std::declval<const constructor_t&>()(
-            std::declval<args_t>()...));
-        static constexpr bool is_return_type_valid =
-            std::is_same_v<T, return_type>;
-        static constexpr bool is_inplace = false;
+        using return_type =
+            decltype(std::declval<const constructor_t&>().make_into_uninit(
+                std::declval<T&>(), std::declval<args_t>()...));
+        static_assert(std::is_void_v<return_type> ||
+                          detail::is_instance_v<return_type, status>,
+                      "Return type from make_into_uninit() should be void (if "
+                      "the function can't fail) or an ok::status.");
     };
 
-  public:
-    template <typename T, typename = void> struct inner
+    template <typename constructor_t, typename = void>
+    struct associated_type : public std::false_type
     {
-        using return_type = void;
-        static constexpr bool is_return_type_valid = false;
-        static constexpr bool is_inplace = false;
+        using type = void;
     };
 
-    template <typename T>
-    struct inner<T, std::enable_if_t<analyze_returning_constructor<T>::value ||
-                                     analyze_inplace<T>::value>>
-        : public std::conditional_t<analyze_returning_constructor<T>::value,
-                                    analyze_returning_constructor<T>,
-                                    analyze_inplace<T>>
+    template <typename constructor_t>
+    struct associated_type<
+        constructor_t, std::enable_if_t<make_fn_analysis<constructor_t>::value>>
+        : public std::true_type
+    {
+        using type = typename make_fn_analysis<constructor_t>::return_type;
+        static_assert(!detail::is_instance_v<type, status> &&
+                          !detail::is_instance_v<type, res>,
+                      "make() function should not return an error type- you "
+                      "probably want to implement make_into_uninit and then "
+                      "simly use ok::make to return a res<...> on the stack.");
+    };
+
+    template <typename constructor_t>
+    struct associated_type<
+        constructor_t,
+        std::void_t<
+            typename constructor_t::template associated_type<args_t...>>>
+        : public std::true_type
+    {
+        using type =
+            typename constructor_t::template associated_type<args_t...>;
+    };
+
+    template <typename constructor_t, typename = void>
+    struct inner : public bad_construction_analysis
     {};
+
+    template <typename constructor_t>
+    struct inner<constructor_t> : public std::true_type
+    {
+        using associated_type = typename associated_type<constructor_t>::type;
+
+        constexpr static bool has_rvo = make_fn_analysis<constructor_t>::value;
+        constexpr static bool has_inplace =
+            make_into_uninit_fn_analysis<associated_type, constructor_t>::value;
+
+        constexpr static bool can_fail =
+            has_inplace && !has_rvo &&
+            detail::is_instance_v<
+                typename make_into_uninit_fn_analysis<
+                    associated_type, constructor_t>::return_type,
+                status>;
+
+        static_assert(can_fail || !has_inplace ||
+                          std::is_void_v<typename make_into_uninit_fn_analysis<
+                              associated_type, constructor_t>::return_type>,
+                      "For a non-failing in-place constructor, the return type "
+                      "should be void.");
+    };
 };
 
-/// NOTE: this may be void but actually be valid, check
-/// is_valid_infallible_construction_v
-template <typename T, typename constructor_t, typename... args_t>
-using infallible_constructor_return_type_or_void_t =
-    typename infallible_construction_analyze<
-        constructor_t, args_t...>::template inner<T>::return_type;
-
-template <typename T, typename constructor_t, typename... args_t>
-inline constexpr bool is_valid_infallible_inplace_construction_v =
-    infallible_construction_analyze<constructor_t,
-                                    args_t...>::template inner<T>::is_inplace;
-
-template <typename T, typename = void> struct has_default_infallible_construct
-{
-    using return_type = void;
-    static constexpr bool is_return_type_valid = false;
-};
-
-template <typename T, typename... args_t>
-auto is_valid_fallible_construction_safe_args()
+template <typename... args_t> auto analyze_construction()
 {
     if constexpr (sizeof...(args_t) == 0) {
-        return std::false_type{};
+        return bad_construction_analysis{};
     } else {
-        if constexpr (detail::fallible_construction_analyze<
-                          args_t...>::template inner<T>::is_return_type_valid) {
-            return std::true_type{};
-        } else {
-            return std::false_type{};
-        }
+        constexpr auto split = [](auto&& constructor, auto&&... args) ->
+            typename constructor_analysis<decltype(args)...>::template inner<
+                detail::remove_cvref_t<decltype(constructor)>> { return {}; };
+        using out_t = decltype(split(std::declval<args_t>()...));
+        return out_t{};
     }
 }
 
-template <typename T, typename... args_t>
-auto is_valid_infallible_construction_safe_args()
-{
-    if constexpr (sizeof...(args_t) == 0) {
-        return std::false_type{};
-    } else {
-        if constexpr (detail::infallible_construction_analyze<
-                          args_t...>::template inner<T>::is_return_type_valid) {
-            return std::true_type{};
-        } else {
-            return std::false_type{};
-        }
-    }
-}
 } // namespace detail
-
-template <typename T, typename constructor_t, typename... args_t>
-inline constexpr bool is_valid_fallible_construction_v =
-    decltype(detail::is_valid_fallible_construction_safe_args<
-             T, constructor_t, args_t...>())::value;
-
-template <typename T, typename constructor_t, typename... args_t>
-inline constexpr bool is_valid_infallible_construction_v =
-    decltype(detail::is_valid_infallible_construction_safe_args<
-             T, constructor_t, args_t...>())::value;
-
-namespace detail {
-template <typename constructor_t, typename... args_t>
-struct is_inplace_factory_constructible
-{
-    template <typename T, typename = void> struct inner : std::false_type
-    {};
-
-    template <typename T>
-    struct inner<
-        T, std::enable_if_t<
-               is_valid_fallible_construction_v<T, constructor_t> ||
-               detail::infallible_construction_analyze<
-                   constructor_t, args_t...>::template inner<T>::is_inplace>>
-        : std::true_type
-    {};
-};
-
-template <typename... args_t> struct is_inplace_factory_constructible_safe_args
-{
-    template <typename T, typename = void> struct inner : std::false_type
-    {};
-
-    template <typename T>
-    struct inner<T, std::void_t<typename is_inplace_factory_constructible<
-                        args_t...>::template inner<T>::value>> : std::true_type
-    {};
-};
-
-} // namespace detail
-
-template <typename T, typename... args_t>
-inline constexpr bool is_inplace_constructible_v =
-    decltype(detail::is_valid_fallible_construction_safe_args<
-             T, args_t...>())::value ||
-    detail::is_inplace_factory_constructible_safe_args<
-        args_t...>::template inner<T>::value ||
-    is_std_constructible_v<T, args_t...>;
 
 template <typename T, typename... args_t>
 inline constexpr bool is_infallible_constructible_v =
-    // can be constructed using the first argument as a factory
-    decltype(detail::is_valid_infallible_construction_safe_args<
-             T, args_t...>())::value ||
-    // can be constructed normally
+    (decltype(detail::analyze_construction<args_t...>())::value &&
+     !decltype(detail::analyze_construction<args_t...>())::can_fail &&
+     std::is_same_v<T, typename decltype(detail::analyze_construction<
+                                         args_t...>())::associated_type>) ||
     is_std_constructible_v<T, args_t...>;
 
 template <typename T, typename... args_t>
 inline constexpr bool is_fallible_constructible_v =
-    // can be fallible constructed using the first argument as a factory
-    decltype(detail::is_valid_fallible_construction_safe_args<
-             T, args_t...>())::value;
+    (decltype(detail::analyze_construction<args_t...>())::value &&
+     decltype(detail::analyze_construction<args_t...>())::can_fail &&
+     std::is_same_v<T, typename decltype(detail::analyze_construction<
+                                         args_t...>())::associated_type>);
 
 template <typename T, typename... args_t>
 inline constexpr bool is_constructible_v =

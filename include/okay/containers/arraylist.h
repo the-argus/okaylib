@@ -331,17 +331,17 @@ template <typename T> struct spots_preallocated_t
 
     template <typename allocator_impl_t>
     [[nodiscard]] constexpr auto
-    make(allocator_impl_t& allocator,
-         size_t num_spots_preallocated) const OKAYLIB_NOEXCEPT
+    operator()(allocator_impl_t& allocator,
+               size_t num_spots_preallocated) const OKAYLIB_NOEXCEPT
     {
         return ok::make(*this, allocator, num_spots_preallocated);
     }
 
     template <typename allocator_impl_t>
     [[nodiscard]] constexpr status<alloc::error>
-    operator()(arraylist_t<T, allocator_impl_t>& output,
-               allocator_impl_t& allocator,
-               size_t num_spots_preallocated) const OKAYLIB_NOEXCEPT
+    make_into_uninit(arraylist_t<T, allocator_impl_t>& output,
+                     allocator_impl_t& allocator,
+                     size_t num_spots_preallocated) const OKAYLIB_NOEXCEPT
     {
         using output_t = arraylist_t<T, allocator_impl_t>;
         auto res = allocator.allocate(alloc::request_t{
@@ -384,18 +384,18 @@ struct copy_items_from_range_t
 
     template <typename allocator_impl_t, typename input_range_t>
     [[nodiscard]] constexpr auto
-    make(allocator_impl_t& allocator,
-         const input_range_t& range) const OKAYLIB_NOEXCEPT
+    operator()(allocator_impl_t& allocator,
+               const input_range_t& range) const OKAYLIB_NOEXCEPT
     {
         return ok::make(*this, allocator, range);
     }
 
     template <typename allocator_impl_t, typename input_range_t>
     [[nodiscard]] constexpr status<alloc::error>
-    operator()(ok::arraylist_t<value_type_for<const input_range_t&>,
-                               allocator_impl_t>& output,
-               allocator_impl_t& allocator,
-               const input_range_t& range) const OKAYLIB_NOEXCEPT
+    make_into_uninit(ok::arraylist_t<value_type_for<const input_range_t&>,
+                                     allocator_impl_t>& output,
+                     allocator_impl_t& allocator,
+                     const input_range_t& range) const OKAYLIB_NOEXCEPT
     {
         static_assert(ok::detail::range_definition_has_size_v<input_range_t>,
                       "Size of range unknown, refusing to copy out its items "
@@ -457,22 +457,6 @@ inline constexpr detail::spots_preallocated_t<T> spots_preallocated;
 inline constexpr detail::copy_items_from_range_t copy_items_from_range;
 
 }; // namespace arraylist
-
-// template <typename T, typename backing_allocator_t> struct empty
-// {
-//     static_assert(
-//         detail::is_derived_from_v<backing_allocator_t, ok::allocator_t>);
-//     using associated_type = arraylist_t<T, allocator_t>;
-//     backing_allocator_t& allocator;
-
-//     constexpr empty(backing_allocator_t& _allocator) noexcept
-//         : allocator(_allocator)
-//     {
-//     }
-
-//     constexpr associated_type operator()() noexcept { return {}; }
-// };
-
 } // namespace ok
 
 #endif

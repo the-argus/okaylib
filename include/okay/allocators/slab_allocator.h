@@ -207,30 +207,31 @@ struct with_blocks_t
 
     template <typename allocator_impl_t, size_t num_blocksizes>
     [[nodiscard]] constexpr auto
-    make(allocator_impl_t& allocator,
-         const options_t<num_blocksizes>& options) const OKAYLIB_NOEXCEPT
+    operator()(allocator_impl_t& allocator,
+               const options_t<num_blocksizes>& options) const OKAYLIB_NOEXCEPT
     {
         return ok::make(*this, allocator, options);
     }
 
     template <typename allocator_impl_t, size_t num_blocksizes>
-    [[nodiscard]] constexpr status<alloc::error>
-    operator()(associated_type<allocator_impl_t,
-                               const options_t<num_blocksizes>&>& uninit,
-               allocator_impl_t& allocator,
-               const options_t<num_blocksizes>& options) const OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr status<alloc::error> make_into_uninit(
+        associated_type<allocator_impl_t, const options_t<num_blocksizes>&>&
+            uninit,
+        allocator_impl_t& allocator,
+        const options_t<num_blocksizes>& options) const OKAYLIB_NOEXCEPT
     {
         for (size_t i = 0; i < options.available_blocksizes.size(); ++i) {
             const blocks_description_t& desc = options.available_blocksizes[i];
 
-            status<alloc::error> status = block_allocator::alloc_initial_buf(
-                uninit.m.allocators[i], allocator,
-                block_allocator::alloc_initial_buf_options_t{
-                    .num_initial_spots =
-                        options.num_initial_blocks_per_blocksize,
-                    .num_bytes_per_block = desc.blocksize,
-                    .minimum_alignment = desc.alignment,
-                });
+            status<alloc::error> status =
+                block_allocator::alloc_initial_buf.make_into_uninit(
+                    uninit.m.allocators[i], allocator,
+                    block_allocator::alloc_initial_buf_options_t{
+                        .num_initial_spots =
+                            options.num_initial_blocks_per_blocksize,
+                        .num_bytes_per_block = desc.blocksize,
+                        .minimum_alignment = desc.alignment,
+                    });
 
             // since a simple status is returned and we dont construct any
             // owning references of any kind, we have to manually call

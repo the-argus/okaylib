@@ -363,7 +363,21 @@ class allocator_t
     [[nodiscard]] constexpr auto
     make_non_owning(args_t&&... args) OKAYLIB_NOEXCEPT
     {
-        using actual_t = detail::deduced_make_type_t<T, args_t...>;
+        using analysis = decltype(detail::analyze_construction<args_t...>());
+        using deduced = typename analysis::associated_type;
+        constexpr bool is_constructed_type_deduced =
+            std::is_same_v<T, detail::deduced_t>;
+        static_assert(
+            // either analysis found an associated_type, or we were given one
+            // explicitly
+            !std::is_void_v<deduced> || !is_constructed_type_deduced,
+            "Type deduction failed for the given allocator.make() call. You "
+            "may "
+            "need to provide the type explicitly, e.g. "
+            "`allocator.make<int>(0)`");
+        using actual_t =
+            std::conditional_t<is_constructed_type_deduced, deduced, T>;
+
         using return_type = alloc::result_t<actual_t&>;
 
         static_assert(
@@ -517,9 +531,21 @@ template <typename T, typename... args_t>
 [[nodiscard]] constexpr decltype(auto)
 ok::allocator_t::make(args_t&&... args) OKAYLIB_NOEXCEPT
 {
-    using actual_t = detail::deduced_make_type_t<T, args_t...>;
+    using analysis = decltype(detail::analyze_construction<args_t...>());
+    using deduced = typename analysis::associated_type;
+    constexpr bool is_constructed_type_deduced =
+        std::is_same_v<T, detail::deduced_t>;
+    static_assert(
+        // either analysis found an associated_type, or we were given one
+        // explicitly
+        !std::is_void_v<deduced> || !is_constructed_type_deduced,
+        "Type deduction failed for the given allocator.make() call. You may "
+        "need to provide the type explicitly, e.g. `allocator.make<int>(0)`");
+    using actual_t =
+        std::conditional_t<is_constructed_type_deduced, deduced, T>;
 
-    static_assert(!std::is_void_v<actual_t>,
+    static_assert(!std::is_void_v<actual_t> &&
+                      !std::is_same_v<actual_t, detail::deduced_t>,
                   "Unable to deduce the type you're trying to make with this "
                   "allocator. The arguments to the constructor may be invalid, "
                   "or you may just need to specify the returned type when "

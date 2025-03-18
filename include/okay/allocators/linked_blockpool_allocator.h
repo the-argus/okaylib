@@ -367,17 +367,17 @@ struct start_with_one_pool_t
 
     template <typename allocator_impl_t>
     [[nodiscard]] constexpr auto
-    make(allocator_impl_t& allocator,
-         const options_t& options) const OKAYLIB_NOEXCEPT
+    operator()(allocator_impl_t& allocator,
+               const options_t& options) const OKAYLIB_NOEXCEPT
     {
         return ok::make(*this, allocator, options);
     }
 
     template <typename allocator_impl_t>
     constexpr status<alloc::error>
-    operator()(linked_blockpool_allocator_t<allocator_impl_t>& uninit,
-               allocator_impl_t& allocator,
-               const options_t& options) const OKAYLIB_NOEXCEPT
+    make_into_uninit(linked_blockpool_allocator_t<allocator_impl_t>& uninit,
+                     allocator_impl_t& allocator,
+                     const options_t& options) const OKAYLIB_NOEXCEPT
     {
         using free_block_t = typename linked_blockpool_allocator_t<
             allocator_impl_t>::free_block_t;

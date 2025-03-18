@@ -297,15 +297,15 @@ struct alloc_initial_buf_t
         block_allocator_t<ok::detail::remove_cvref_t<allocator_impl_t_cref>>;
 
     template <typename allocator_impl_t>
-    [[nodiscard]] constexpr auto
-    make(allocator_impl_t& allocator,
-         const alloc_initial_buf_options_t& options) const OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr auto operator()(
+        allocator_impl_t& allocator,
+        const alloc_initial_buf_options_t& options) const OKAYLIB_NOEXCEPT
     {
         return ok::make(*this, allocator, options);
     }
 
     template <typename allocator_impl_t>
-    [[nodiscard]] constexpr status<alloc::error> operator()(
+    [[nodiscard]] constexpr status<alloc::error> make_into_uninit(
         ok::block_allocator_t<allocator_impl_t>& uninit,
         allocator_impl_t& allocator,
         const alloc_initial_buf_options_t& options) const OKAYLIB_NOEXCEPT

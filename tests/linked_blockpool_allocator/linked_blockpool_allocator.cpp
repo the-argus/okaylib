@@ -12,13 +12,13 @@ TEST_SUITE("c_allocator")
     {
         ok::array_t<u8, 64 * 5100> bytes = {};
         arena_t arena(bytes);
-        auto blockpool = linked_blockpool_allocator::start_with_one_pool
-                             .make(arena,
-                                   linked_blockpool_allocator::options_t{
-                                       .num_bytes_per_block = 64,
-                                       .minimum_alignment = 64,
-                                       .num_blocks_in_first_pool = 5000,
-                                   })
+        auto blockpool = linked_blockpool_allocator::start_with_one_pool(
+                             arena,
+                             linked_blockpool_allocator::options_t{
+                                 .num_bytes_per_block = 64,
+                                 .minimum_alignment = 64,
+                                 .num_blocks_in_first_pool = 5000,
+                             })
                              .release();
         run_allocator_tests_static_and_dynamic_dispatch(blockpool);
     }

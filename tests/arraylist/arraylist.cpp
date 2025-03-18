@@ -56,22 +56,22 @@ auto make_slab(backing_allocator_t& allocator)
 {
     return
 
-        slab_allocator::with_blocks
-            .make(allocator,
-                  slab_allocator::options_t<4>{
-                      .available_blocksizes =
-                          {
-                              slab_allocator::blocks_description_t{
-                                  .blocksize = 64, .alignment = 16},
-                              slab_allocator::blocks_description_t{
-                                  .blocksize = 256, .alignment = 16},
-                              slab_allocator::blocks_description_t{
-                                  .blocksize = 1024, .alignment = 16},
-                              slab_allocator::blocks_description_t{
-                                  .blocksize = 100000, .alignment = 16},
-                          },
-                      .num_initial_blocks_per_blocksize = 1,
-                  })
+        slab_allocator::with_blocks(
+            allocator,
+            slab_allocator::options_t<4>{
+                .available_blocksizes =
+                    {
+                        slab_allocator::blocks_description_t{.blocksize = 64,
+                                                             .alignment = 16},
+                        slab_allocator::blocks_description_t{.blocksize = 256,
+                                                             .alignment = 16},
+                        slab_allocator::blocks_description_t{.blocksize = 1024,
+                                                             .alignment = 16},
+                        slab_allocator::blocks_description_t{
+                            .blocksize = 100000, .alignment = 16},
+                    },
+                .num_initial_blocks_per_blocksize = 1,
+            })
             .release();
 }
 
@@ -89,33 +89,33 @@ TEST_SUITE("arraylist")
         {
             arraylist_t i = arraylist::empty<int>(reserving);
             arraylist_t j =
-                arraylist::spots_preallocated<int>.make(reserving, 50).release();
+                arraylist::spots_preallocated<int>(reserving, 50).release();
             // tons of zeroed ints
             array_t arr = array::defaulted_or_zeroed<int, 500>();
             arraylist_t k =
-                arraylist::copy_items_from_range.make(reserving, arr).release();
+                arraylist::copy_items_from_range(reserving, arr).release();
         }
 
         SUBCASE("c allocator")
         {
             arraylist_t i = arraylist::empty<int>(malloc);
             arraylist_t j =
-                arraylist::spots_preallocated<int>.make(malloc, 50).release();
+                arraylist::spots_preallocated<int>(malloc, 50).release();
             // tons of zeroed ints
             array_t arr = array::defaulted_or_zeroed<int, 500>();
             arraylist_t k =
-                arraylist::copy_items_from_range.make(malloc, arr).release();
+                arraylist::copy_items_from_range(malloc, arr).release();
         }
 
         SUBCASE("slab allocator")
         {
             arraylist_t i = arraylist::empty<int>(slab);
             arraylist_t j =
-                arraylist::spots_preallocated<int>.make(slab, 50).release();
+                arraylist::spots_preallocated<int>(slab, 50).release();
             // tons of zeroed ints
             array_t arr = array::defaulted_or_zeroed<int, 500>();
             arraylist_t k =
-                arraylist::copy_items_from_range.make(slab, arr).release();
+                arraylist::copy_items_from_range(slab, arr).release();
         }
     }
 
@@ -135,8 +135,7 @@ TEST_SUITE("arraylist")
             "move construction causes right number of destructions with full")
         {
             arraylist_t i =
-                arraylist::copy_items_from_range.make(backing, example)
-                    .release();
+                arraylist::copy_items_from_range(backing, example).release();
             arraylist_t j = std::move(i);
         }
 
@@ -151,11 +150,9 @@ TEST_SUITE("arraylist")
         SUBCASE("move assignment causes right number of destructions with full")
         {
             arraylist_t i =
-                arraylist::copy_items_from_range.make(backing, example)
-                    .release();
+                arraylist::copy_items_from_range(backing, example).release();
             arraylist_t j =
-                arraylist::copy_items_from_range.make(backing, example)
-                    .release();
+                arraylist::copy_items_from_range(backing, example).release();
             j = std::move(i);
         }
     }
@@ -164,7 +161,7 @@ TEST_SUITE("arraylist")
     {
         ok::c_allocator_t allocator;
         ok::array_t arr{1, 2, 3, 4, 5};
-        auto listres = arraylist::copy_items_from_range.make(allocator, arr);
+        auto listres = arraylist::copy_items_from_range(allocator, arr);
         auto& list = listres.release_ref();
 
         SUBCASE("items matches direct iteration")
