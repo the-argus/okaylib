@@ -183,26 +183,73 @@ class arraylist_t
     constexpr status<alloc::error>
     shrink_to_reclaim_unused_memory() OKAYLIB_NOEXCEPT;
 
-    constexpr size_t capacity() const noexcept;
-    [[nodiscard]] constexpr bool is_empty() const noexcept;
+    constexpr size_t capacity() const noexcept
+    {
+        return m.allocated_spots ? m.allocated_spots.ref_or_panic().size() : 0;
+    }
+
+    [[nodiscard]] constexpr bool is_empty() const noexcept
+    {
+        return m.spots_occupied == 0;
+    }
 
     constexpr opt<T> pop_last() noexcept;
 
-    [[nodiscard]] constexpr T& first() noexcept;
-    [[nodiscard]] constexpr const T& first() const noexcept;
-    [[nodiscard]] constexpr T& last() noexcept;
-    [[nodiscard]] constexpr const T& last() const noexcept;
+    [[nodiscard]] constexpr T& first() noexcept
+    {
+        return m.allocated_spots.ref_or_panic()[0];
+    }
 
-    [[nodiscard]] constexpr opt<T&> try_access_first() noexcept;
-    [[nodiscard]] constexpr opt<const T&> try_access_first() const noexcept;
-    [[nodiscard]] constexpr opt<T&> try_access_last() noexcept;
-    [[nodiscard]] constexpr opt<const T&> try_access_last() const noexcept;
+    [[nodiscard]] constexpr const T& first() const noexcept
+    {
+        return m.allocated_spots.ref_or_panic()[0];
+    }
+
+    [[nodiscard]] constexpr T& last() noexcept
+    {
+        return m.allocated_spots.ref_or_panic()[m.spots_occupied];
+    }
+    [[nodiscard]] constexpr const T& last() const noexcept
+    {
+        return m.allocated_spots.ref_or_panic()[m.spots_occupied];
+    }
+
+    [[nodiscard]] constexpr opt<T&> try_access_first() noexcept
+    {
+        if (!m.allocated_spots)
+            return {};
+        auto& spots = m.allocated_spots.ref_or_panic();
+        if (spots.size() == 0)
+            return {};
+        return first();
+    }
+
+    [[nodiscard]] constexpr opt<const T&> try_access_first() const noexcept
+    {
+        return const_cast<arraylist_t*>(this)->try_access_first();
+    }
+
+    [[nodiscard]] constexpr opt<T&> try_access_last() noexcept
+    {
+        if (!m.allocated_spots)
+            return {};
+        auto& spots = m.allocated_spots.ref_or_panic();
+        if (spots.size() == 0)
+            return {};
+        return last();
+    }
+
+    [[nodiscard]] constexpr opt<const T&> try_access_last() const noexcept
+    {
+        return const_cast<arraylist_t*>(this)->try_access_first();
+    }
 
     [[nodiscard]] constexpr const backing_allocator_t&
     allocator() const noexcept
     {
         return *m.backing_allocator;
     }
+
     [[nodiscard]] constexpr backing_allocator_t& allocator() noexcept
     {
         return *m.backing_allocator;
@@ -218,9 +265,9 @@ class arraylist_t
         if (idx >= size()) {
             return nullopt;
         } else {
-
         }
     }
+
     [[nodiscard]] constexpr const opt<T&>
     try_access_item_at(size_t idx) const OKAYLIB_NOEXCEPT;
 
