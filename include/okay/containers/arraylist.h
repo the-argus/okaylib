@@ -116,6 +116,8 @@ class arraylist_t
         return *this;
     }
 
+    /// Returns error describing any potential failure due to allocation, but
+    /// just aborts if called with an out of bound index.
     template <typename... args_t>
     [[nodiscard]] constexpr auto insert_at(const size_t idx,
                                            args_t&&... args) OKAYLIB_NOEXCEPT

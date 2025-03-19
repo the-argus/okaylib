@@ -6,6 +6,8 @@
 #include "okay/containers/array.h"
 #include "okay/containers/arraylist.h"
 #include "okay/macros/foreach.h"
+#include "okay/ranges/indices.h"
+#include "okay/ranges/views/take_at_most.h"
 #include "okay/ranges/views/zip.h"
 
 using namespace ok;
@@ -302,6 +304,126 @@ TEST_SUITE("arraylist")
 
             auto result = alist.append(arraylist::copy_items_from_range,
                                        failing, sub_array);
+            REQUIRE(!result.okay());
+            REQUIRE(alist.size() == 0);
+        }
+    }
+
+    TEST_CASE("insert_at")
+    {
+        SUBCASE("insert_at succeeds and the size of the container is bigger")
+        {
+            c_allocator_t backing;
+            arraylist_t nums = arraylist::copy_items_from_range(
+                                   backing, indices | take_at_most(10))
+                                   .release();
+
+            REQUIRE(nums.size() == 10);
+
+            auto insert_begin_result = nums.insert_at(0, 0);
+            REQUIRE(insert_begin_result.okay());
+            REQUIRE(nums.size() == 11);
+
+            auto insert_middle_result = nums.insert_at(5, 0);
+            REQUIRE(insert_middle_result.okay());
+            REQUIRE(nums.size() == 12);
+
+            auto insert_end_result = nums.insert_at(nums.size(), 0);
+            REQUIRE(insert_end_result.okay());
+            REQUIRE(nums.size() == 13);
+        }
+
+        SUBCASE("insert_at aborts if inserting out of bounds")
+        {
+            c_allocator_t backing;
+            arraylist_t nums = arraylist::copy_items_from_range(
+                                   backing, indices | take_at_most(10))
+                                   .release();
+
+            REQUIREABORTS(auto&& _ = nums.insert_at(50, 1));
+            REQUIREABORTS(auto&& _ = nums.insert_at(11, 1));
+            auto res = nums.insert_at(10, 11);
+            REQUIRE(res.okay());
+        }
+
+        SUBCASE(
+            "after being moved by insert_at, values of arraylist are preserved")
+        {
+            c_allocator_t backing;
+            ok::array_t initial_state = {0, 2, 4, 6, 8};
+            arraylist_t nums =
+                arraylist::copy_items_from_range(backing, initial_state)
+                    .release();
+
+            auto require_nums_is_equal_to = [&nums](const auto& new_range) {
+                // require that every item in initial is equal to nums
+                ok_foreach(ok_pair(other, num), zip(new_range, nums))
+                {
+                    REQUIRE(other == num);
+                }
+            };
+
+            require_nums_is_equal_to(initial_state);
+
+            {
+                auto res = nums.insert_at(1, 1);
+                REQUIRE(res.okay());
+            }
+
+            require_nums_is_equal_to(ok::array_t{0, 1, 2, 4, 6, 8});
+
+            REQUIRE(nums.insert_at(3, 3).okay());
+
+            require_nums_is_equal_to(ok::array_t{0, 1, 2, 3, 4, 6, 8});
+
+            REQUIRE(nums.insert_at(5, 5).okay());
+
+            require_nums_is_equal_to(ok::array_t{0, 1, 2, 3, 4, 5, 6, 8});
+
+            REQUIRE(nums.insert_at(7, 7).okay());
+
+            require_nums_is_equal_to(ok::array_t{0, 1, 2, 3, 4, 5, 6, 8});
+
+            REQUIRE(nums.insert_at(0, 42).okay());
+
+            require_nums_is_equal_to(ok::array_t{42, 0, 1, 2, 3, 4, 5, 6, 8});
+        }
+
+        SUBCASE("insert_at with copy from range constructor")
+        {
+            c_allocator_t backing;
+
+            array_t sub_array{1, 2, 3, 4, 5, 6};
+
+            arraylist_t alist =
+                arraylist::empty<arraylist_t<int, c_allocator_t>>(backing);
+
+            auto result = alist.insert_at(0, arraylist::copy_items_from_range,
+                                          backing, sub_array);
+            REQUIRE(result.okay());
+            REQUIRE(alist.size() == 1);
+
+            ok_foreach(ok_pair(lhs, rhs), zip(alist[0], sub_array))
+            {
+                REQUIRE(lhs == rhs);
+            }
+        }
+
+        SUBCASE(
+            "arraylist of arraylist, with failing allocator on inner arraylist")
+        {
+            c_allocator_t main_backing;
+
+            ooming_allocator_t failing;
+
+            array_t sub_array{1, 2, 3, 4, 5, 6};
+
+            arraylist_t alist =
+                arraylist::empty<arraylist_t<int, ooming_allocator_t>>(
+                    main_backing);
+
+            auto result = alist.insert_at(0, arraylist::copy_items_from_range,
+                                          failing, sub_array);
             REQUIRE(!result.okay());
             REQUIRE(alist.size() == 0);
         }
