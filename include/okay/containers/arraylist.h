@@ -427,7 +427,7 @@ class arraylist_t
     inline ~arraylist_t() { destroy(); }
 
   private:
-    constexpr status<alloc::error>
+    [[nodiscard]] constexpr status<alloc::error>
     first_allocation(size_t initial_bytes = sizeof(T) * 4)
     {
         alloc::result_t<bytes_t> res =
@@ -454,7 +454,7 @@ class arraylist_t
 
     /// "spots" is the currently allocated spots, including uninitialized
     /// capacity. it is modified by this function
-    constexpr status<alloc::error>
+    [[nodiscard]] constexpr status<alloc::error>
     reallocate(slice<T>& spots, size_t required_bytes, size_t preferred_bytes)
     {
         using namespace alloc;
