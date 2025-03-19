@@ -141,13 +141,15 @@ c_allocator_t::realloc_inner(bytes_t memory, size_t new_size,
     OKAYLIB_NOEXCEPT -> alloc::result_t<alloc::reallocation_extended_t>
 {
     using namespace alloc;
-    __ok_assert(options.is_valid(),
-                "invalid reallocate extended request. validation check "
-                "bypassed. did you call impl_reallocate_extended() directly?");
-    constexpr auto unsupported =
-        flags::in_place_orelse_fail | flags::expand_front;
-    if (options.flags & unsupported) [[unlikely]] {
-        __ok_assert(false, "unsupported flag passed to c allocator");
+
+    if (options.flags & flags::in_place_orelse_fail) {
+        // not a supported operation by C allocator
+        return error::couldnt_expand_in_place;
+    }
+
+    if (options.flags & flags::expand_front) [[unlikely]] {
+        __ok_assert(false,
+                    "unsupported flag expand_front passed to c allocator");
         return error::unsupported;
     }
 

@@ -460,18 +460,15 @@ reallocate_in_place_orelse_keep_old_nocopy(
                 "but the given options do not specify in_place_orelse_fail");
 
     // try to do it in place if possible
-    if (allocator.features() &
-        alloc::feature_flags::can_predictably_realloc_in_place) {
-        result_t<reallocation_extended_t> reallocation_res =
-            allocator.reallocate_extended(options);
-        if (reallocation_res.okay()) {
-            auto& reallocation = reallocation_res.release_ref();
-            return potentially_in_place_reallocation_t{
-                .memory = reallocation.memory,
-                .bytes_offset_front = reallocation.bytes_offset_front,
-                .was_in_place = true,
-            };
-        }
+    result_t<reallocation_extended_t> reallocation_res =
+        allocator.reallocate_extended(options);
+    if (reallocation_res.okay()) {
+        auto& reallocation = reallocation_res.release_ref();
+        return potentially_in_place_reallocation_t{
+            .memory = reallocation.memory,
+            .bytes_offset_front = reallocation.bytes_offset_front,
+            .was_in_place = true,
+        };
     }
 
     using flags_underlying_t = std::underlying_type_t<flags>;
