@@ -129,7 +129,7 @@ class arraylist_t
 
         // if else handles initial allocation and then future reallocation
         if (!m.allocated_spots) {
-            auto status = first_allocation();
+            auto status = this->make_first_allocation();
             if (!status.okay()) {
                 return status;
             }
@@ -137,7 +137,7 @@ class arraylist_t
                    spots.size() <= m.spots_occupied) {
             // 2x growth rate
             auto status =
-                reallocate(spots, sizeof(T), spots.size() * sizeof(T));
+                this->reallocate(spots, sizeof(T), spots.size() * sizeof(T));
             if (!status.okay()) {
                 return status;
             }
@@ -150,11 +150,11 @@ class arraylist_t
                     "Backing allocator for arraylist did not give back "
                     "expected amount of memory");
 
-        if (idx < this->size() - 1) {
+        if (idx < this->size()) {
             // move all other items towards the back of the arraylist
             if constexpr (std::is_trivially_copyable_v<T>) {
                 std::memmove(spots.data() + idx + 1, spots.data() + idx,
-                             this->size() - idx);
+                             (this->size() - idx) * sizeof(T));
             } else {
                 for (size_t i = this->size(); i > idx; --i) {
                     auto& target = spots[i];
@@ -216,7 +216,7 @@ class arraylist_t
 
         if constexpr (std::is_trivially_copyable_v<T>) {
             std::memmove(spots.data() + idx, spots.data() + idx + 1,
-                         this->size() - idx);
+                         (this->size() - idx) * sizeof(T));
         } else {
             for (size_t i = this->size() - 1; i > idx; ++i) {
                 auto& target = spots.data()[i - 1];
@@ -349,7 +349,7 @@ class arraylist_t
                             status<alloc::error>>
     {
         if (!m.allocated_spots) {
-            auto status = first_allocation(new_size * sizeof(T));
+            auto status = make_first_allocation(new_size * sizeof(T));
             if (!status.okay()) {
                 return status;
             }
@@ -439,7 +439,7 @@ class arraylist_t
 
   private:
     [[nodiscard]] constexpr status<alloc::error>
-    first_allocation(size_t initial_bytes = sizeof(T) * 4)
+    make_first_allocation(size_t initial_bytes = sizeof(T) * 4)
     {
         alloc::result_t<bytes_t> res =
             m.backing_allocator->allocate(alloc::request_t{

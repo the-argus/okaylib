@@ -383,11 +383,12 @@ TEST_SUITE("arraylist")
 
             REQUIRE(nums.insert_at(7, 7).okay());
 
-            require_nums_is_equal_to(ok::array_t{0, 1, 2, 3, 4, 5, 6, 8});
+            require_nums_is_equal_to(ok::array_t{0, 1, 2, 3, 4, 5, 6, 7, 8});
 
             REQUIRE(nums.insert_at(0, 42).okay());
 
-            require_nums_is_equal_to(ok::array_t{42, 0, 1, 2, 3, 4, 5, 6, 8});
+            require_nums_is_equal_to(
+                ok::array_t{42, 0, 1, 2, 3, 4, 5, 6, 7, 8});
         }
 
         SUBCASE("insert_at with copy from range constructor")
