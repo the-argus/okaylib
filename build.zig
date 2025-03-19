@@ -153,7 +153,10 @@ const test_source_files = &[_][]const u8{
     "arraylist/arraylist.cpp",
 };
 
-const universal_tests_source_files = &[_][]const u8{};
+const universal_tests_source_files = &[_][]const u8{
+    // backtraces for tests
+    "tests/backward.cpp",
+};
 
 pub fn build(b: *std.Build) !void {
     // options
@@ -181,6 +184,21 @@ pub fn build(b: *std.Build) !void {
 
     const flags_owned = flags.toOwnedSlice() catch @panic("OOM");
 
+    const universal_tests_lib = b.addStaticLibrary(.{
+        .target = target,
+        .optimize = optimize,
+        .name = "universal_tests_source_files",
+    });
+
+    universal_tests_lib.addCSourceFiles(.{
+        .files = universal_tests_source_files,
+        .flags = flags_owned,
+    });
+    // backtraces
+    universal_tests_lib.linkLibCpp();
+    universal_tests_lib.linkSystemLibrary("unwind");
+    universal_tests_lib.linkSystemLibrary("bfd");
+
     for (test_source_files) |source_file| {
         var test_exe = b.addExecutable(.{
             .name = std.fs.path.stem(source_file),
@@ -191,11 +209,11 @@ pub fn build(b: *std.Build) !void {
             .file = b.path(b.pathJoin(&.{ "tests", source_file })),
             .flags = flags_owned,
         });
-        test_exe.addCSourceFiles(.{
-            .files = universal_tests_source_files,
-            .flags = flags_owned,
-        });
         test_exe.linkLibCpp();
+
+        // backtraces
+        test_exe.linkLibrary(universal_tests_lib);
+
         test_exe.step.dependOn(fmt.builder.getInstallStep());
         try tests.append(test_exe);
     }

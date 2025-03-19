@@ -30,6 +30,10 @@
               valgrind
               zig_0_13
               cmake
+
+              # backtraces
+              libbfd
+              libunwind
             ]);
         };
 
