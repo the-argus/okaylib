@@ -122,6 +122,11 @@ class arraylist_t
     [[nodiscard]] constexpr auto insert_at(const size_t idx,
                                            args_t&&... args) OKAYLIB_NOEXCEPT
     {
+        // bounds check out of the gate
+        if (idx > this->size()) [[unlikely]] {
+            __ok_abort("Out of bounds access to arraylist in insert_at.");
+        }
+
         // if else handles initial allocation and then future reallocation
         if (!m.allocated_spots) {
             auto status = first_allocation();
@@ -139,6 +144,8 @@ class arraylist_t
         }
 
         auto& spots = m.allocated_spots.ref_or_panic();
+        // make sure we have one free spot available for the thing being
+        // inserted
         __ok_assert(spots.size() > this->size(),
                     "Backing allocator for arraylist did not give back "
                     "expected amount of memory");
@@ -158,7 +165,7 @@ class arraylist_t
         }
 
         // populate item
-        auto& uninit = spots[idx];
+        auto& uninit = spots.data()[idx];
 
         using make_result_type = decltype(ok::make_into_uninitialized<T>(
             std::declval<T&>(), std::forward<args_t>(args)...));
@@ -196,8 +203,10 @@ class arraylist_t
     constexpr opt<T> remove(size_t idx) OKAYLIB_NOEXCEPT
     {
         auto& spots = m.allocated_spots.ref_or_panic();
+        if (idx >= this->size()) [[unlikely]]
+            return {};
         // moved out at index
-        opt<T> out(std::move(spots[idx]));
+        opt<T> out(std::move(spots.data()[idx]));
 
         defer decrement([this] { --m.spots_occupied; });
 
@@ -221,7 +230,9 @@ class arraylist_t
     constexpr opt<T> remove_and_swap_last(size_t idx) OKAYLIB_NOEXCEPT
     {
         auto& spots = m.allocated_spots.ref_or_panic();
-        auto& target = spots[idx];
+        if (idx >= this->size()) [[unlikely]]
+            return {};
+        auto& target = spots.data()[idx];
         // moved out at index
         opt<T> out(std::move(target));
 

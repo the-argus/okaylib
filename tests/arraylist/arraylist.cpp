@@ -340,8 +340,9 @@ TEST_SUITE("arraylist")
                                    backing, indices | take_at_most(10))
                                    .release();
 
+            REQUIREABORTS(auto&& _ = nums.insert_at(12, 1));
+            REQUIREABORTS(auto&& _ = nums.insert_at(13, 1));
             REQUIREABORTS(auto&& _ = nums.insert_at(50, 1));
-            REQUIREABORTS(auto&& _ = nums.insert_at(11, 1));
             auto res = nums.insert_at(10, 11);
             REQUIRE(res.okay());
         }
