@@ -412,7 +412,7 @@ class arraylist_t
     template <typename... args_t>
     constexpr status<alloc::error> append(args_t&&... args) OKAYLIB_NOEXCEPT
     {
-        return insert_at(size() - 1, std::forward<args_t>(args)...);
+        return insert_at(size(), std::forward<args_t>(args)...);
     }
 
     inline ~arraylist_t() { destroy(); }
