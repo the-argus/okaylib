@@ -76,6 +76,10 @@ template <typename viewed_t> class slice
     {
         return m_elements;
     }
+    [[nodiscard]] constexpr size_t size_bytes() const OKAYLIB_NOEXCEPT
+    {
+        return m_elements * sizeof(viewed_t);
+    }
 
     // implicitly take a slice of something with data() and size() functions
     // which is not also a slice.
