@@ -406,7 +406,9 @@ TEST_SUITE("res")
             try {
                 slice_int_result res = StatusCodeA::okay;
                 REQUIRE(false); // above should throw
-            } catch (...) {
+            } catch (reserve::_abort_exception& e) {
+                // minor detail to decrease spamming of logs here
+                e.cancel_stack_trace_print();
             }
         }
 
