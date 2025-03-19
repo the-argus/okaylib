@@ -202,7 +202,7 @@ pub fn build(b: *std.Build) !void {
 
     const run_tests_step = b.step("run_tests", "Compile and run all the tests");
     const install_tests_step = b.step("install_tests", "Install all the tests but don't run them");
-    for (tests.items) |test_exe| {
+    for (tests.items, 0..) |test_exe, idx| {
         const test_install = b.addInstallArtifact(test_exe, .{});
         install_tests_step.dependOn(&test_install.step);
 
@@ -211,6 +211,11 @@ pub fn build(b: *std.Build) !void {
             test_run.addArgs(args);
         }
         run_tests_step.dependOn(&test_run.step);
+
+        // induvidual run step for just this test
+        const local_test_step = b.step(std.fs.path.stem(test_source_files[idx]), "Install and run this specific test .cpp file");
+        local_test_step.dependOn(&test_run.step);
+        local_test_step.dependOn(&test_install.step);
     }
 
     zcc.createStep(b, "cdb", try tests.toOwnedSlice());
