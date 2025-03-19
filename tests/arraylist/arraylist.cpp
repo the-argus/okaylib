@@ -7,6 +7,7 @@
 #include "okay/containers/arraylist.h"
 #include "okay/macros/foreach.h"
 #include "okay/ranges/indices.h"
+#include "okay/ranges/views/drop.h"
 #include "okay/ranges/views/take_at_most.h"
 #include "okay/ranges/views/zip.h"
 
@@ -14,42 +15,60 @@ using namespace ok;
 
 struct ooming_allocator_t : ok::allocator_t
 {
+    bool should_oom = true;
+    ok::allocator_t* backing_actual = nullptr;
+
     static constexpr alloc::feature_flags type_features =
         alloc::feature_flags::can_expand_back |
         alloc::feature_flags::can_reclaim | alloc::feature_flags::is_threadsafe;
 
     [[nodiscard]] inline alloc::result_t<bytes_t>
-    impl_allocate(const alloc::request_t&) OKAYLIB_NOEXCEPT final
+    impl_allocate(const alloc::request_t& request) OKAYLIB_NOEXCEPT final
     {
-        return alloc::error::oom;
+        if (should_oom)
+            return alloc::error::oom;
+
+        return backing_actual->allocate(request);
     }
 
-    inline void impl_clear() OKAYLIB_NOEXCEPT final {}
+    inline void impl_clear() OKAYLIB_NOEXCEPT final
+    {
+        if (backing_actual)
+            backing_actual->clear();
+    }
 
     [[nodiscard]] inline alloc::feature_flags
     impl_features() const OKAYLIB_NOEXCEPT final
     {
-        return type_features;
+        if (!backing_actual)
+            return type_features;
+
+        return backing_actual->features();
     }
 
-    inline void impl_deallocate(bytes_t) OKAYLIB_NOEXCEPT final
+    inline void impl_deallocate(bytes_t bytes) OKAYLIB_NOEXCEPT final
     {
-        __ok_abort("how did you get here");
+        if (backing_actual)
+            backing_actual->deallocate(bytes);
     }
 
-    [[nodiscard]] inline alloc::result_t<bytes_t>
-    impl_reallocate(const alloc::reallocate_request_t&) OKAYLIB_NOEXCEPT final
+    [[nodiscard]] inline alloc::result_t<bytes_t> impl_reallocate(
+        const alloc::reallocate_request_t& request) OKAYLIB_NOEXCEPT final
     {
-        __ok_abort("how did you get here");
-        return alloc::error::oom;
+        if (should_oom || !backing_actual)
+            return alloc::error::oom;
+
+        return backing_actual->reallocate(request);
     }
 
     [[nodiscard]] inline alloc::result_t<alloc::reallocation_extended_t>
     impl_reallocate_extended(const alloc::reallocate_extended_request_t&
                                  options) OKAYLIB_NOEXCEPT final
     {
-        __ok_abort("how did you get here");
-        return alloc::error::oom;
+        if (should_oom || !backing_actual)
+            return alloc::error::oom;
+
+        return backing_actual->reallocate_extended(options);
     }
 };
 
@@ -428,6 +447,67 @@ TEST_SUITE("arraylist")
                                           failing, sub_array);
             REQUIRE(!result.okay());
             REQUIRE(alist.size() == 0);
+        }
+
+        SUBCASE("insert_at failing and having to restore the items")
+        {
+            c_allocator_t main_backing;
+
+            ooming_allocator_t failing;
+            failing.backing_actual = &main_backing;
+            failing.should_oom = false;
+
+            // empty with c allocator
+            arraylist_t alist =
+                arraylist::empty<arraylist_t<int, ooming_allocator_t>>(
+                    main_backing);
+
+            // insert some copies of sub_array
+            array_t sub_array{1, 2, 3, 4, 5, 6};
+            auto status = alist.insert_at(0, arraylist::copy_items_from_range,
+                                          failing, sub_array);
+            REQUIRE(status.okay());
+            REQUIRE(alist.size() == 1);
+
+            for (size_t i = 0; i < 30; ++i) {
+                status = alist.insert_at(0, arraylist::copy_items_from_range,
+                                         failing, sub_array);
+                REQUIRE(status.okay());
+            }
+
+            // make some items distinguishable so we can test if they moved
+            // around properly
+            alist[0] = arraylist::empty<int>(failing);
+            alist[0].append(0);
+            alist[0].append(1);
+
+            REQUIRE(alist.size() == 31);
+
+            ok_foreach(auto& innerlist, alist | drop(1))
+            {
+                REQUIRE(innerlist.size() == sub_array.size());
+            }
+
+            // now have a failing allocator call
+            failing.should_oom = true;
+            array_t different_sub_array{1, 2, 3};
+            status = alist.insert_at(0, arraylist::copy_items_from_range,
+                                     failing, sub_array);
+            REQUIRE(!status.okay());
+            REQUIRE(alist.size() == 31);
+
+            // make sure all elements past 0 are the same as sub_array
+            ok_foreach(auto& innerlist, alist | drop(1))
+            {
+                ok_foreach(ok_pair(old, current), zip(innerlist, sub_array))
+                {
+                    REQUIRE(old == current);
+                }
+            }
+
+            REQUIRE(alist[0].size() == 2);
+            REQUIRE(alist[0][0] == 0);
+            REQUIRE(alist[0][1] == 1);
         }
     }
 }

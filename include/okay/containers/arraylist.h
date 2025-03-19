@@ -182,6 +182,22 @@ class arraylist_t
             // only add to occupied spots if the construction was successful
             if (result.okay()) [[likely]] {
                 ++m.spots_occupied;
+            } else {
+                // move all other items BACK to where they were before (this is
+                // supposed to be the cold path and it only invokes nonfailing
+                // operations so it should be fine to do this)
+                if constexpr (std::is_trivially_copyable_v<T>) {
+                    std::memmove(spots.data() + idx, spots.data() + idx + 1,
+                                 (this->size() - idx) * sizeof(T));
+                } else {
+                    // this accesses spots[i + 1] but that is initialized
+                    // at this point
+                    for (size_t i = idx; i < this->size(); ++i) {
+                        auto& target = spots[i];
+                        auto& source = spots[i + 1];
+                        new (ok::addressof(target)) T(std::move(source));
+                    }
+                }
             }
             using enum_t = typename make_result_type::enum_type;
             return status(enum_t(result.err()));
