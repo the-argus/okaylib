@@ -124,11 +124,18 @@ class arraylist_t
     {
         // if else handles initial allocation and then future reallocation
         if (!m.allocated_spots) {
-            first_allocation();
+            auto status = first_allocation();
+            if (!status.okay()) {
+                return status;
+            }
         } else if (slice<T>& spots = m.allocated_spots.ref_or_panic();
                    spots.size() <= m.spots_occupied) {
             // 2x growth rate
-            reallocate(spots, sizeof(T), spots.size() * sizeof(T));
+            auto status =
+                reallocate(spots, sizeof(T), spots.size() * sizeof(T));
+            if (!status.okay()) {
+                return status;
+            }
         }
 
         auto& spots = m.allocated_spots.ref_or_panic();
