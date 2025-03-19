@@ -36,12 +36,19 @@
 #include "backward.hpp"
 
 namespace detail_testing {
-void print_stack_trace()
+void print_stack_trace(void* st)
 {
-    backward::StackTrace st;
-    st.load_here(32);
     backward::Printer p;
-    p.print(st);
+    p.print(*(backward::StackTrace*)st);
+}
+
+void delete_stack_trace(void* st) { delete (backward::StackTrace*)st; }
+
+void* get_stack_trace()
+{
+    auto* out = new backward::StackTrace();
+    out->load_here(32);
+    return (void*)out;
 }
 } // namespace detail_testing
 

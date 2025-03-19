@@ -15,8 +15,9 @@
         bool status = false;                             \
         try {                                            \
             operation;                                   \
-        } catch (const ::reserve::_abort_exception& e) { \
+        } catch (::reserve::_abort_exception& e) { \
             status = true;                               \
+            e.cancel_stack_trace_print();                \
         }                                                \
         REQUIRE(status);                                 \
     }
