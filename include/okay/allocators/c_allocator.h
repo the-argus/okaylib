@@ -100,7 +100,9 @@ inline void c_allocator_t::impl_deallocate(bytes_t bytes) OKAYLIB_NOEXCEPT
 
     const bool zeroed = !(options.flags & flags::leave_nonzeroed);
 
-    auto res = realloc_inner(options.memory, options.new_size_bytes, zeroed);
+    auto res = realloc_inner(
+        options.memory,
+        ok::max(options.preferred_size_bytes, options.new_size_bytes), zeroed);
     if (!res.okay()) [[unlikely]]
         return res.err();
 

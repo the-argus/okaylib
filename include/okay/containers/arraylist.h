@@ -139,7 +139,7 @@ class arraylist_t
         if (idx < this->size() - 1) {
             // move all other items towards the back of the arraylist
             if constexpr (std::is_trivially_copyable_v<T>) {
-                std::memmove(spots.data() + idx, spots.data() + idx + 1,
+                std::memmove(spots.data() + idx + 1, spots.data() + idx,
                              this->size() - idx);
             } else {
                 for (size_t i = this->size(); i > idx; --i) {
