@@ -43,8 +43,8 @@ int main(int argc, char* argv[])
 }
 ```
 
-Demonstration of allocators (non-polymorphic usage, static dispatch), the `res`
-(result) type, formatting of error values, and `arraylist_t`.
+Demonstration of allocators (non-polymorphic usage, static dispatch), and
+`arraylist_t`.
 
 ```cpp
 int main() {
