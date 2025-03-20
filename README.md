@@ -21,127 +21,84 @@ support for build systems that people actually use, like CMake) are a ways off.
 
 ## examples
 
-This code demonstrates some views of an array: transforming, enumerating,
-and reversing. C++17.
+A demonstration of `ok::enumerate`, `ok::for_each` and the `ok::slice`.
 
 ```cpp
-int main()
+int main(int argc, char* argv[])
 {
-    int forward[] = {5, 4, 3, 2, 1, 0};
+    using namespace ok;
+    slice<const char*> arguments = raw_slice(*argv, size_t(argc));
 
-    auto size_minus =
-        transform([&](int i) { return ok::size(forward) - 1 - i; });
-
-    fmt::println("Range using size_minus:");
-    // std_for view to make okaylib ranges compatible with range based for
-    for (auto [value, idx] : forward | size_minus | enumerate | std_for) {
-        const char* sep = idx == ok::size(forward) - 1 ? "\n" : " -> ";
-        fmt::print("{}: {}{}", value, idx, sep);
+    // print out arguments with their indices
+    {
+        arguments | enumerate | for_each([](auto& pair){
+            auto& [ arg, index ] = pair;
+            fmt::println("Argument {}: {}", index, arg);
+        });
     }
 
-    fmt::println("Range using reverse:");
-    for (auto [value, idx] : forward | reverse | enumerate | std_for) {
-        const char* sep = idx == ok::size(forward) - 1 ? "\n" : " -> ";
-        fmt::print("{}: {}{}", value, idx, sep);
+    // equivalent code, using some macros instead
+    {
+        ok_foreach(ok_pair(arg, index), enumerate(arguments))
+        {
+            fmt::println("Argument {}: {}", index, arg);
+        }
     }
 }
 ```
 
-Outputs:
-
-```txt
-Range using size_minus:
-0: 0 -> 1: 1 -> 2: 2 -> 3: 3 -> 4: 4 -> 5: 5
-Range using reverse:
-0: 0 -> 1: 1 -> 2: 2 -> 3: 3 -> 4: 4 -> 5: 5
-```
-
-This code makes use of a polymorphic allocator, conditional `defer` statements,
-the `res` (result) type, and formatting of error values.
+Demonstration of allocators (non-polymorphic usage, static dispatch), the `res`
+(result) type, formatting of error values, and `arraylist_t`.
 
 ```cpp
-auto make_three_buffers = [](ok::allocator& allo)
-    -> ok::allocator::res<std::array<ok::slice<u8>, 3>> {
+int main() {
     using namespace ok;
-    // require allocator feature
-    if (!(allo.features() & allocator::feature_flags::threadsafe)) {
-        return allocator::error::unsupported;
-    }
+    c_allocator_t working_allocator;
+    ooming_allocator_t failing_allocator; // for testing purposes
 
-    // do allocation using raw allocator, no owning ptrs. rare, but acceptable
-    // when combined with defers.
-    auto first_mem = allo.allocate_bytes(100);
-    if (!first_mem)
-        return first_mem.err();
+    // no need to do error handling with `arraylist::empty` constructor, which does no allocation
+    arraylist_t alist = arraylist::empty<arraylist_t<int, ooming_allocator_t>>(working_allocator);
 
-    maydefer free_first_mem([first_mem, &allo] {
-        allo.deallocate_bytes(first_mem.data(), first_mem.size());
-    });
-
-    auto second_mem = allo.allocate_bytes(100);
-    if (!second_mem)
-        return second_mem.err();
-
-    maydefer free_second_mem([second_mem, &allo] {
-        allo.deallocate_bytes(second_mem.data(), second_mem.size());
-    });
-
-    auto third_mem = allo.allocate_bytes(100);
-    if (!third_mem)
-        return third_mem.err();
-
-    // okay, all initialization is good, dont free anything
-    free_first_mem.cancel();
-    free_second_mem.cancel();
-
-    return std::array{first_mem.slice(), second_mem.slice(), third_mem.slice()};
-};
-
-int main()
-{
-    ok::c_allocator my_allocator; // malloc and free
-
-    auto buffer_result = make_three_buffers(my_allocator);
-    if (!buffer_result.okay()) {
-        fmt::println("Allocation failure: {}", buffer_result.err());
+    // to demonstrate that c_allocator_t works, just allocate some unused space
+    const auto status = alist.increase_capacity_by(10);
+    if (!status.okay()) {
+        // c_allocator_t (which calls malloc and free) must have failed.
+        fmt::println("Arraylist capacity increase error: {}", status);
         return -1;
     }
-    auto& buffers = buffer_result.release_ref();
 
-    for (auto& slice : buffers) {
-        // initialize to zero, just to demonstrate "stdmem" header
-        ok::memfill(slice, 0);
+    // arraylist has a constructor, `arraylist::copy_items_from_range`. Pass in
+    // that constructor followed by its arguments (the allocator that the sub-arraylist
+    // should use, and the items to copy into it).
+    const auto append_status =
+        alist.append(arraylist::copy_items_from_range, failing_allocator, array_t{1, 2, 3, 4, 5, 6});
 
-        fmt::format_to_n(slice.data(), slice.size(),
-                         "Hello, world! in slice {}", slice);
-
-        // cstdio still works fine of course!
-        printf("printed: %s\n", slice.data());
-    }
+    // The above operation should fail because we gave the sub arraylist the failing allocator.
+    fmt::println("Tried to create a new array inside of `alist`, got return code {}", append_status);
+    fmt::println("Size of `alist`: {}", alist.size());
 }
 ```
 
 Outputs:
 
 ```txt
-printed: Hello, world! in slice [0x23c152a0 -> 100]
-printed: Hello, world! in slice [0x23c15310 -> 100]
-printed: Hello, world! in slice [0x23c15380 -> 100]
+Tried to create a new array inside of `alist`, got return code [status::alloc::error::oom]
+Size of `alist`: 0
 ```
 
 ## todo
 
-- [x] implicit `context()` for allocators, random number generators, current error
-      message, etc.
-- [x] modify context with `context_switch` type, which always restores changes when
-      it is destroyed. it cannot be moved.
 - [x] polymorphic allocator interface
 - [x] arena allocator
-- [ ] block allocator
-- [ ] slab allocator
-- [ ] page allocator
-- [ ] remapping page allocator
-- [ ] wrapper / import of jemalloc for the allocator interface.
+- [x] block allocator
+- [x] slab allocator
+- [x] page allocator
+- [x] remapping page allocator
+- [x] `<memory_resource>` wrapper allocator
+- [x] linked blockpool allocator (like block allocator but noncontiguous buffer)
+- [ ] linked slab allocator (like slab allocator but implemented with linked
+      blockpools instead of block allocators)
+- [ ] wrapper / import of jemalloc
 - [x] "result" type: optional with enum error value. like `std::expected`, kind of
 - [x] "opt" type: optional but supports reference types with rebinding assignment
 - [x] opt and result are constexpr + trivial, if their payloads are
@@ -153,8 +110,9 @@ printed: Hello, world! in slice [0x23c15380 -> 100]
       compatible with algorithms that use legacy iterators or c++20 iterators. Designed
       for easy implementation, good codegen, and immediate rangelike support (type
       with iterator stuff should also be a range)
-- [ ] [WIP](https://github.com/the-argus/vmath) SIMD vector and matrix types,
-      explicit by default but with optional operator overloading. inspired by DirectXMath
+- [ ] [WIP](https://github.com/the-argus/vmath/tree/vector2-special-ops) SIMD vector
+      and matrix types, explicit by default but with optional operator overloading.
+      inspired by DirectXMath
 - [ ] A dynamic bit array and a static bit array with boolean-like iterators, to
       prove capability of new iterators
 - [x] `std::ranges` reimplementation, with some new views. enumerate, zip, take,
@@ -165,6 +123,10 @@ printed: Hello, world! in slice [0x23c15380 -> 100]
 - [ ] Add user-defined error values to the result. Also add some kind of anyhow
       error type result, and some initialization at program startup to pre-reserve
       space for errors.
+- [ ] implicit `context()` for allocators, random number generators, current error
+      message, etc.
+- [ ] modify context with `context_switch` type, which always restores changes when
+      it is destroyed. it cannot be moved.
 - [ ] "cresult" type, exactly like optional internally but with a different interface.
       On construction, it stores an info string in the thread context. Has a getter
       which returns a reference to the string in the context. Stands for "context
@@ -210,7 +172,7 @@ printed: Hello, world! in slice [0x23c15380 -> 100]
       copying off Go's homework. (potentially put threadpool and runtime into
       context for submitting coroutines upon construction?)
 - [ ] fmtlib included for IO, all types mentioned above include formatters
-- [ ] all okaylib types have nlohmann json serialization defined
+- [ ] all okaylib types have nlohmann json (or rapidjson?) serialization defined
 - [ ] Zig buildsystem module which makes it easy to import it into a zig project
       and propagate up information about compilation flags (get an error if you
       do something like enable bounds checking but a library youre calling into
