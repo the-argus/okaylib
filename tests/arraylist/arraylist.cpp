@@ -603,4 +603,65 @@ TEST_SUITE("arraylist")
             REQUIRE(alist.capacity() == size_t(std::round(4 * grow_factor)));
         }
     }
+
+    TEST_CASE("clear()")
+    {
+        SUBCASE("clearing decreases size to zero")
+        {
+            c_allocator_t backing;
+            arraylist_t alist = arraylist::empty<int>(backing);
+
+            // clearing on empty is fine
+            {
+                size_t cap_before = alist.capacity();
+                REQUIRE(alist.size() == 0);
+                alist.clear();
+                REQUIRE(alist.size() == 0);
+                REQUIRE(alist.capacity() == cap_before);
+            }
+
+            // push then clear
+            auto _ = alist.append(0);
+            _ = alist.append(1);
+            _ = alist.append(2);
+            _ = alist.append(3);
+            REQUIRE(alist.size() == 4);
+            size_t cap_before = alist.capacity();
+            alist.clear();
+            REQUIRE(alist.size() == 0);
+            REQUIRE(alist.capacity() == cap_before);
+        }
+
+        SUBCASE("clearing calls destructors")
+        {
+            static size_t destruction_count = 0;
+            struct test
+            {
+                bool owning = true;
+                test() = default;
+                test& operator=(test&& other)
+                {
+                    other.owning = false;
+                    return *this;
+                }
+                test(test&& other) { other.owning = false; }
+                ~test() { ++destruction_count; }
+            };
+
+            c_allocator_t backing;
+            arraylist_t alist = arraylist::empty<test>(backing);
+
+            auto _ = alist.append();
+            _ = alist.append();
+            _ = alist.append();
+            _ = alist.append();
+
+            REQUIRE(destruction_count == 0);
+
+            size_t num_items = alist.size();
+            alist.clear();
+
+            REQUIRE(destruction_count == num_items);
+        }
+    }
 }
