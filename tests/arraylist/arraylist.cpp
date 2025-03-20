@@ -72,6 +72,29 @@ struct ooming_allocator_t : ok::allocator_t
     }
 };
 
+struct trivial_with_failing_construction
+{
+    int* contents;
+
+    struct failing_construction
+    {
+        template <typename...>
+        using associated_type = trivial_with_failing_construction;
+
+        constexpr status<alloc::error>
+        make_into_uninit(trivial_with_failing_construction& uninit,
+                         ok::allocator_t& allocator, int initial_value) const
+        {
+            auto res = allocator.make_non_owning<int>(initial_value);
+            if (res.okay()) {
+                uninit.contents = &res.release();
+                return alloc::error::okay;
+            }
+            return res.err();
+        }
+    };
+};
+
 template <typename backing_allocator_t>
 auto make_slab(backing_allocator_t& allocator)
 {
@@ -508,6 +531,47 @@ TEST_SUITE("arraylist")
             REQUIRE(alist[0].size() == 2);
             REQUIRE(alist[0][0] == 0);
             REQUIRE(alist[0][1] == 1);
+        }
+
+        SUBCASE("insert_at failing and having to restore the items with a "
+                "trivially copyable type")
+        {
+            static_assert(std::is_trivially_copyable_v<
+                          trivial_with_failing_construction>);
+            c_allocator_t main_backing;
+            ooming_allocator_t failing;
+            failing.backing_actual = &main_backing;
+            failing.should_oom = false;
+
+            arraylist_t alist =
+                arraylist::empty<trivial_with_failing_construction>(
+                    main_backing);
+
+            constexpr auto constructor =
+                trivial_with_failing_construction::failing_construction{};
+            for (size_t i = 0; i < 5; ++i) {
+                auto result = alist.insert_at(0, constructor, failing, i);
+                REQUIRE(result.okay());
+            }
+
+            failing.should_oom = true;
+
+            auto result = alist.insert_at(0, constructor, failing, 0);
+            REQUIRE(!result.okay());
+
+            // everything still normal
+            REQUIRE(*alist[0].contents == 4);
+            REQUIRE(*alist[1].contents == 3);
+            REQUIRE(*alist[2].contents == 2);
+            REQUIRE(*alist[3].contents == 1);
+            REQUIRE(*alist[4].contents == 0);
+
+            // free all the ints that were validated
+            ok_foreach(auto intptr_wrapper, alist)
+            {
+                main_backing.deallocate(reinterpret_as_bytes(
+                    slice_from_one(*intptr_wrapper.contents)));
+            }
         }
     }
 }

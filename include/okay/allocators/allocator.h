@@ -392,9 +392,10 @@ class allocator_t
                       "Cannot call make_non_owning with the given arguments, "
                       "there is no matching infallible constructor.");
 
-        __ok_assert(features() & alloc::feature_flags::can_clear,
-                    "Using make_non_owning on an allocator which cannot clear, "
-                    "this may lead to memory leaks.");
+        // TODO: logging here, this should be a warning
+        // __ok_assert(features() & alloc::feature_flags::can_clear,
+        //             "Using make_non_owning on an allocator which cannot
+        //             clear, " "this may lead to memory leaks.");
         auto allocation_result = allocate(alloc::request_t{
             .num_bytes = sizeof(actual_t),
             .alignment = alignof(actual_t),

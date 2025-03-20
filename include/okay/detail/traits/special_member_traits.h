@@ -137,6 +137,27 @@ template <typename... args_t> struct constructor_analysis
     };
 
     template <typename T, typename constructor_t, typename = void>
+    struct has_nonconst_make_into_uninit : public std::false_type
+    {};
+    template <typename T, typename constructor_t>
+    struct has_nonconst_make_into_uninit<
+        T, constructor_t,
+        std::void_t<decltype(std::declval<constructor_t&>().make_into_uninit(
+            std::declval<T&>(), std::declval<args_t>()...))>>
+        : public std::true_type
+    {};
+
+    template <typename T, typename constructor_t, typename = void>
+    struct has_nonconst_make : public std::false_type
+    {};
+    template <typename T, typename constructor_t>
+    struct has_nonconst_make<
+        T, constructor_t,
+        std::void_t<decltype(std::declval<constructor_t&>().make(
+            std::declval<args_t>()...))>> : public std::true_type
+    {};
+
+    template <typename T, typename constructor_t, typename = void>
     struct make_into_uninit_fn_analysis : public std::false_type
     {
         using return_type = void;
@@ -200,6 +221,19 @@ template <typename... args_t> struct constructor_analysis
         constexpr static bool has_rvo = make_fn_analysis<constructor_t>::value;
         constexpr static bool has_inplace =
             make_into_uninit_fn_analysis<associated_type, constructor_t>::value;
+
+        // debug values just for static_asserts, in case you forget to mark a
+        // make / make_into_uninit function as const
+        constexpr static bool has_nonconst_make_debug =
+            has_nonconst_make<associated_type, constructor_t>::value;
+        constexpr static bool has_nonconst_make_into_uninit_debug =
+            has_nonconst_make_into_uninit<associated_type,
+                                          constructor_t>::value;
+
+        static_assert(has_rvo || !has_nonconst_make_debug,
+                      "Missing const specifier on make() method.");
+        static_assert(has_inplace || !has_nonconst_make_into_uninit_debug,
+                      "Missing const specifier on make_into_uninit() method.");
 
         constexpr static bool can_fail =
             has_inplace && !has_rvo &&
