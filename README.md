@@ -30,19 +30,15 @@ int main(int argc, char* argv[])
     slice<const char*> arguments = raw_slice(*argv, size_t(argc));
 
     // print out arguments with their indices
-    {
-        arguments | enumerate | for_each([](auto& pair){
-            auto& [ arg, index ] = pair;
-            fmt::println("Argument {}: {}", index, arg);
-        });
-    }
+    arguments | enumerate | for_each([](auto& pair){
+        auto& [ arg, index ] = pair;
+        fmt::println("Argument {}: {}", index, arg);
+    });
 
     // equivalent code, using some macros instead
+    ok_foreach(ok_pair(arg, index), enumerate(arguments))
     {
-        ok_foreach(ok_pair(arg, index), enumerate(arguments))
-        {
-            fmt::println("Argument {}: {}", index, arg);
-        }
+        fmt::println("Argument {}: {}", index, arg);
     }
 }
 ```
