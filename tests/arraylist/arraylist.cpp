@@ -501,8 +501,10 @@ TEST_SUITE("arraylist")
             // make some items distinguishable so we can test if they moved
             // around properly
             alist[0] = arraylist::empty<int>(failing);
+            REQUIRE(alist[0].is_empty());
             alist[0].append(0);
             alist[0].append(1);
+            REQUIRE(!alist[0].is_empty());
 
             REQUIRE(alist.size() == 31);
 
@@ -547,11 +549,14 @@ TEST_SUITE("arraylist")
                 arraylist::empty<trivial_with_failing_construction>(
                     main_backing);
 
+            REQUIRE(alist.is_empty());
+
             constexpr auto constructor =
                 trivial_with_failing_construction::failing_construction{};
             for (size_t i = 0; i < 5; ++i) {
                 auto result = alist.insert_at(0, constructor, failing, i);
                 REQUIRE(result.okay());
+                REQUIRE(!alist.is_empty());
             }
 
             failing.should_oom = true;
@@ -572,6 +577,30 @@ TEST_SUITE("arraylist")
                 main_backing.deallocate(reinterpret_as_bytes(
                     slice_from_one(*intptr_wrapper.contents)));
             }
+        }
+    }
+
+    TEST_CASE("capacity / reallocation operations")
+    {
+        SUBCASE("capacity() getter and evident 2x grow rate")
+        {
+            c_allocator_t backing;
+            arraylist_t alist = arraylist::empty<int>(backing);
+            REQUIRE(alist.is_empty());
+            REQUIRE(alist.capacity() == 0);
+
+            // some implementation details of the arraylist
+            constexpr float grow_factor = 2;
+            constexpr size_t initial_size = 4;
+
+            for (size_t i = 0; i < initial_size; ++i) {
+                REQUIRE(alist.size() == i);
+                alist.append(i);
+            }
+            REQUIRE(alist.capacity() == initial_size);
+            alist.append(int(initial_size));
+            REQUIRE(alist.size() == initial_size + 1);
+            REQUIRE(alist.capacity() == size_t(std::round(4 * grow_factor)));
         }
     }
 }
