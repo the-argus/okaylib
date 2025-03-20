@@ -21,7 +21,7 @@ support for build systems that people actually use, like CMake) are a ways off.
 
 ## examples
 
-A demonstration of `ok::enumerate`, `ok::for_each` and the `ok::slice`.
+A demonstration of `ok::enumerate`, `ok::for_each` and the `ok::slice`. All C++17.
 
 ```cpp
 int main(int argc, char* argv[])
