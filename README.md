@@ -36,8 +36,14 @@ int main(int argc, char* argv[])
     });
 
     // equivalent code, using some macros instead
-    ok_foreach(ok_pair(arg, index), enumerate(arguments))
+    ok_foreach(ok_pair(arg, index), arguments | enumerate)
     {
+        fmt::println("Argument {}: {}", index, arg);
+    }
+
+    // yet another option, the std_for view which provides compatbility with
+    // the language range based for loop
+    for(auto [ arg, index ] : arguments | enumerate | std_for) {
         fmt::println("Argument {}: {}", index, arg);
     }
 }
