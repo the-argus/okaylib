@@ -31,7 +31,7 @@ int main(int argc, char* argv[])
 
     // print out arguments with their indices
     arguments | enumerate | for_each([](auto& pair){
-        auto& [ arg, index ] = pair;
+        auto [ arg, index ] = pair;
         fmt::println("Argument {}: {}", index, arg);
     });
 
