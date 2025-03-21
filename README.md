@@ -92,6 +92,8 @@ Size of `alist`: 0
 
 - [x] polymorphic allocator interface
 - [x] arena allocator
+- [ ] linked arena allocator (arena but it uses a backward linked list of separate
+      blocks)
 - [x] block allocator
 - [x] slab allocator
 - [x] page allocator
