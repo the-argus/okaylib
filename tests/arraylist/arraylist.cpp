@@ -706,6 +706,45 @@ TEST_SUITE("arraylist")
             REQUIRE(ranges_equal(alist[0], array_t{2, 3}));
             REQUIRE(ranges_equal(alist[1], array_t{1, 2}));
         }
+
+        SUBCASE("pop_last with trivial objects")
+        {
+            c_allocator_t backing;
+            arraylist_t alist = arraylist::copy_items_from_range(
+                                    backing, array_t{0, 1, 2, 3, 4})
+                                    .release();
+
+            REQUIRE(ok::ranges_equal(alist, array_t{0, 1, 2, 3, 4}));
+            REQUIRE(alist.pop_last().ref_or_panic() == 4);
+            REQUIRE(ok::ranges_equal(alist, array_t{0, 1, 2, 3}));
+            REQUIRE(alist.pop_last().ref_or_panic() == 3);
+            REQUIRE(ok::ranges_equal(alist, array_t{0, 1, 2}));
+            REQUIRE(alist.pop_last().ref_or_panic() == 2);
+            REQUIRE(ok::ranges_equal(alist, array_t{0, 1}));
+        }
+
+        SUBCASE("pop_last with nontrivial objects")
+        {
+            c_allocator_t backing;
+            arraylist_t alist =
+                arraylist::empty<arraylist_t<int, c_allocator_t>>(backing);
+
+            // append three arraylists, each a copy of `initial`
+            for (size_t i = 0; i < 3; ++i) {
+                alist.append(arraylist::copy_items_from_range, backing,
+                             array_t{1, 2, 3});
+            }
+            REQUIRE(alist.size() == 3);
+
+            REQUIRE(ranges_equal(array_t{1, 2, 3},
+                                 alist.pop_last().ref_or_panic()));
+            REQUIRE(alist[1].pop_last().ref_or_panic() == 3);
+            REQUIRE(
+                ranges_equal(array_t{1, 2}, alist.pop_last().ref_or_panic()));
+            REQUIRE(alist[0].pop_last().ref_or_panic() == 3);
+            REQUIRE(alist[0].pop_last().ref_or_panic() == 2);
+            REQUIRE(ranges_equal(array_t{1}, alist.pop_last().ref_or_panic()));
+        }
     }
 
     TEST_CASE("remove_and_swap_last()") {}

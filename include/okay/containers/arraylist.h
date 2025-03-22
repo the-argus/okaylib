@@ -313,6 +313,8 @@ class arraylist_t
 
     constexpr opt<T> pop_last() OKAYLIB_NOEXCEPT
     {
+        if (is_empty())
+            return {};
         return remove(this->size() - 1);
     }
 
