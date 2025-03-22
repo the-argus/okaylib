@@ -231,12 +231,9 @@ TEST_SUITE("arraylist")
 
         SUBCASE("items matches direct iteration")
         {
-            ok_foreach(ok_decompose(original, direct, itemsiter),
-                       zip(arr, list, list.items()))
-            {
-                REQUIRE(original == direct);
-                REQUIRE(direct == itemsiter);
-            }
+            bool all_three_equal =
+                ranges_equal(arr, list) && ranges_equal(list, list.items());
+            REQUIRE(all_three_equal);
         }
 
         SUBCASE("items size and data matches direct size and data")
