@@ -670,7 +670,41 @@ TEST_SUITE("arraylist")
             arraylist_t alist =
                 arraylist::copy_items_from_range(backing, initial).release();
 
-            // alist.remove
+            REQUIRE(!ok::ranges_equal(alist, ok::indices));
+
+            REQUIRE(alist.remove(2) == 2);
+            REQUIRE(alist.remove(4) == 4);
+            REQUIRE(alist.remove(7) == 7);
+
+            REQUIRE(ok::ranges_equal(alist, ok::indices));
+        }
+
+        SUBCASE("remove with non-trivial objects")
+        {
+            c_allocator_t backing;
+
+            arraylist_t alist =
+                arraylist::empty<arraylist_t<int, c_allocator_t>>(backing);
+
+            constexpr array_t initial = {1, 2, 3};
+
+            // append three arraylists, each a copy of `initial`
+            for (size_t i = 0; i < 3; ++i) {
+                REQUIRE(alist
+                            .append(arraylist::copy_items_from_range, backing,
+                                    initial)
+                            .okay());
+            }
+
+            REQUIRE(alist[0].remove(0) == 1); // alist[0] = {2, 3}
+            REQUIRE(alist[1].remove(1) == 2); // alist[0] = {1, 3}
+            REQUIRE(alist[2].remove(2) == 3); // alist[0] = {1, 2}
+
+            arraylist_t out = alist.remove(1);
+            REQUIRE(alist.size() == 2);
+            REQUIRE(ranges_equal(out, array_t{1, 3}));
+            REQUIRE(ranges_equal(alist[0], array_t{2, 3}));
+            REQUIRE(ranges_equal(alist[1], array_t{1, 2}));
         }
     }
 

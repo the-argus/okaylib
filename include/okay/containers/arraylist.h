@@ -216,13 +216,14 @@ class arraylist_t
                           new_spots * sizeof(T), 0);
     }
 
-    constexpr opt<T> remove(size_t idx) OKAYLIB_NOEXCEPT
+    constexpr T remove(size_t idx) OKAYLIB_NOEXCEPT
     {
         auto& spots = m.allocated_spots.ref_or_panic();
-        if (idx >= this->size()) [[unlikely]]
-            return {};
         // moved out at index
-        opt<T> out(std::move(spots.data()[idx]));
+        T out(std::move(spots[idx]));
+
+        // we would have crashed at this point if out of bounds, so assume idx
+        // is in bounds
 
         defer decrement([this] { --m.spots_occupied; });
 
@@ -231,10 +232,11 @@ class arraylist_t
         }
 
         if constexpr (std::is_trivially_copyable_v<T>) {
-            std::memmove(spots.data() + idx, spots.data() + idx + 1,
-                         (this->size() - idx) * sizeof(T));
+            const size_t idxplusone = idx + 1;
+            std::memmove(spots.data() + idx, spots.data() + idxplusone,
+                         (this->size() - idxplusone) * sizeof(T));
         } else {
-            for (size_t i = this->size() - 1; i > idx; ++i) {
+            for (size_t i = this->size() - 1; i > idx; --i) {
                 auto& target = spots.data()[i - 1];
                 auto& source = spots.data()[i];
                 new (ok::addressof(target)) T(std::move(source));
