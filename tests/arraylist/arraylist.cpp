@@ -6,10 +6,11 @@
 #include "okay/containers/array.h"
 #include "okay/containers/arraylist.h"
 #include "okay/macros/foreach.h"
+#include "okay/ranges/algorithm.h"
+#include "okay/ranges/for_each.h"
 #include "okay/ranges/indices.h"
 #include "okay/ranges/views/drop.h"
 #include "okay/ranges/views/take_at_most.h"
-#include "okay/ranges/views/zip.h"
 
 using namespace ok;
 
@@ -70,6 +71,26 @@ struct ooming_allocator_t : ok::allocator_t
 
         return backing_actual->reallocate_extended(options);
     }
+};
+
+struct destruction_counting
+{
+    size_t* counter;
+    destruction_counting() = delete;
+    destruction_counting(size_t* c) : counter(c)
+    {
+        __ok_internal_assert(counter);
+    }
+    destruction_counting& operator=(destruction_counting&& other)
+    {
+        other.counter = nullptr;
+        return *this;
+    }
+    destruction_counting(destruction_counting&& other)
+    {
+        other.counter = nullptr;
+    }
+    ~destruction_counting() { ++(*counter); }
 };
 
 struct trivial_with_failing_construction
@@ -303,9 +324,9 @@ TEST_SUITE("arraylist")
 
             dup2 = std::move(dup);
 
-            for (size_t i = 0; i < 4097; ++i) {
-                REQUIRE(dup2[i] == i);
-            }
+            bool eql = ranges_equal(dup2 | take_at_most(4097),
+                                    indices | take_at_most(4097));
+            REQUIRE(eql);
         }
     }
 
@@ -324,30 +345,28 @@ TEST_SUITE("arraylist")
                                        backing, sub_array);
             REQUIRE(result.okay());
             REQUIRE(alist.size() == 1);
-
-            ok_foreach(ok_pair(lhs, rhs), zip(alist[0], sub_array))
-            {
-                REQUIRE(lhs == rhs);
-            }
+            bool eql = ranges_equal(alist[0], sub_array);
+            REQUIRE(eql);
         }
 
         SUBCASE(
             "arraylist of arraylist, with failing allocator on inner arraylist")
         {
-            c_allocator_t main_backing;
+            c_allocator_t working_allocator;
 
-            ooming_allocator_t failing;
-
-            array_t sub_array{1, 2, 3, 4, 5, 6};
+            ooming_allocator_t failing_allocator;
 
             arraylist_t alist =
                 arraylist::empty<arraylist_t<int, ooming_allocator_t>>(
-                    main_backing);
+                    working_allocator);
 
-            auto result = alist.append(arraylist::copy_items_from_range,
-                                       failing, sub_array);
-            REQUIRE(!result.okay());
-            REQUIRE(alist.size() == 0);
+            auto result =
+                alist.append(arraylist::copy_items_from_range,
+                             failing_allocator, array_t{1, 2, 3, 4, 5, 6});
+            fmt::println("Tried to create a new array inside of `alist`, got "
+                         "return code {}",
+                         result);
+            fmt::println("Size of `alist`: {}", alist.size());
         }
     }
 
@@ -399,11 +418,8 @@ TEST_SUITE("arraylist")
                     .release();
 
             auto require_nums_is_equal_to = [&nums](const auto& new_range) {
-                // require that every item in initial is equal to nums
-                ok_foreach(ok_pair(other, num), zip(new_range, nums))
-                {
-                    REQUIRE(other == num);
-                }
+                bool eql = ranges_equal(nums, new_range);
+                REQUIRE(eql);
             };
 
             require_nums_is_equal_to(initial_state);
@@ -446,11 +462,8 @@ TEST_SUITE("arraylist")
                                           backing, sub_array);
             REQUIRE(result.okay());
             REQUIRE(alist.size() == 1);
-
-            ok_foreach(ok_pair(lhs, rhs), zip(alist[0], sub_array))
-            {
-                REQUIRE(lhs == rhs);
-            }
+            bool eql = ranges_equal(alist[0], sub_array);
+            REQUIRE(eql);
         }
 
         SUBCASE(
@@ -522,13 +535,12 @@ TEST_SUITE("arraylist")
             REQUIRE(alist.size() == 31);
 
             // make sure all elements past 0 are the same as sub_array
-            ok_foreach(auto& innerlist, alist | drop(1))
-            {
-                ok_foreach(ok_pair(old, current), zip(innerlist, sub_array))
-                {
-                    REQUIRE(old == current);
-                }
-            }
+            ok::for_each(
+                alist | drop(1),
+                [&](arraylist_t<int, ooming_allocator_t>& sub_arraylist) {
+                    bool eql = ok::ranges_equal(sub_arraylist, sub_array);
+                    REQUIRE(eql);
+                });
 
             REQUIRE(alist[0].size() == 2);
             REQUIRE(alist[0][0] == 0);
@@ -634,34 +646,46 @@ TEST_SUITE("arraylist")
 
         SUBCASE("clearing calls destructors")
         {
-            static size_t destruction_count = 0;
-            struct test
-            {
-                bool owning = true;
-                test() = default;
-                test& operator=(test&& other)
-                {
-                    other.owning = false;
-                    return *this;
-                }
-                test(test&& other) { other.owning = false; }
-                ~test() { ++destruction_count; }
-            };
-
             c_allocator_t backing;
-            arraylist_t alist = arraylist::empty<test>(backing);
+            size_t counter = 0;
+            arraylist_t alist = arraylist::empty<destruction_counting>(backing);
 
-            auto _ = alist.append();
-            _ = alist.append();
-            _ = alist.append();
-            _ = alist.append();
+            auto _ = alist.append(&counter);
+            _ = alist.append(&counter);
+            _ = alist.append(&counter);
+            _ = alist.append(&counter);
 
-            REQUIRE(destruction_count == 0);
+            REQUIRE(counter == 0);
 
             size_t num_items = alist.size();
             alist.clear();
 
-            REQUIRE(destruction_count == num_items);
+            REQUIRE(counter == num_items);
         }
     }
+
+    TEST_CASE("remove() and pop_last()")
+    {
+        SUBCASE("remove with trivial objects")
+        {
+            c_allocator_t backing;
+            ok::array_t initial = {0, 1, 2, 2, 3, 4, 4, 5, 6, 7, 7, 8};
+            arraylist_t alist =
+                arraylist::copy_items_from_range(backing, initial).release();
+
+            // alist.remove
+        }
+    }
+
+    TEST_CASE("remove_and_swap_last()") {}
+
+    TEST_CASE("shrink_and_leak()") {}
+
+    TEST_CASE("resize()") {}
+
+    TEST_CASE("first() and last()") {}
+
+    TEST_CASE("shrink_to_reclaim_unused_memory()") {}
+
+    TEST_CASE("increase_capacity_by()") {}
 }

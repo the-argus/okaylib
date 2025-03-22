@@ -105,8 +105,10 @@ const okaylib_headers = &[_][]const u8{
 
     "platform/memory_map.h",
 
-    "ranges/ranges.h",
     "ranges/adaptors.h",
+    "ranges/algorithm.h",
+    "ranges/for_each.h",
+    "ranges/ranges.h",
     "ranges/indices.h",
 
     "ranges/views/all.h",
@@ -151,6 +153,7 @@ const test_source_files = &[_][]const u8{
     "all/all.cpp",
     "any/any.cpp",
     "arraylist/arraylist.cpp",
+    "algorithm/ranges_equal.cpp",
 };
 
 const universal_tests_source_files = &[_][]const u8{
