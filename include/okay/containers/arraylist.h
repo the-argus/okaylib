@@ -287,18 +287,18 @@ class arraylist_t
         alloc::result_t<bytes_t> reallocated =
             m.backing_allocator->reallocate(alloc::reallocate_request_t{
                 .memory = reinterpret_as_bytes(spots),
+                .new_size_bytes = size() * sizeof(T),
                 // flags besides in_place_orelse_fail not really necessary
                 .flags = alloc::flags::shrink_back |
                          alloc::flags::in_place_orelse_fail |
                          alloc::flags::leave_nonzeroed,
-                .new_size_bytes = size() * sizeof(T),
             });
 
         if (!reallocated.okay())
             return;
 
         bytes_t& new_bytes = reallocated.release_ref();
-        __ok_assert(new_bytes.data() == spots.data(),
+        __ok_assert((void*)new_bytes.data() == (void*)spots.data(),
                     "Backing allocator for arraylist did not reallocate "
                     "properly, different memory returned but shrink_back and "
                     "in_place_orelse_fail were passed.");
@@ -338,11 +338,11 @@ class arraylist_t
 
     [[nodiscard]] constexpr T& last() OKAYLIB_NOEXCEPT
     {
-        return m.allocated_spots.ref_or_panic()[m.spots_occupied];
+        return m.allocated_spots.ref_or_panic()[m.spots_occupied - 1];
     }
     [[nodiscard]] constexpr const T& last() const OKAYLIB_NOEXCEPT
     {
-        return m.allocated_spots.ref_or_panic()[m.spots_occupied];
+        return m.allocated_spots.ref_or_panic()[m.spots_occupied - 1];
     }
 
     [[nodiscard]] constexpr const backing_allocator_t&

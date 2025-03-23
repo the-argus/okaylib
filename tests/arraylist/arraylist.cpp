@@ -774,9 +774,8 @@ TEST_SUITE("arraylist")
         {
             array_t initial = {0, 6, 7, 3, 4, 5, 1, 2};
             c_allocator_t backing;
-            arraylist_t alist = arraylist::copy_items_from_range(
-                                    backing, initial)
-                                    .release();
+            arraylist_t alist =
+                arraylist::copy_items_from_range(backing, initial).release();
             REQUIRE(alist.capacity() == initial.size());
             REQUIRE(alist.capacity() == alist.size());
 
@@ -798,9 +797,64 @@ TEST_SUITE("arraylist")
 
     TEST_CASE("resize()") {}
 
-    TEST_CASE("first() and last()") {}
+    TEST_CASE("first() and last()")
+    {
+        c_allocator_t backing;
+        arraylist_t alist = arraylist::empty<int>(backing);
+        REQUIREABORTS(auto&& _ = alist.first());
+        REQUIREABORTS(auto&& _ = alist.last());
+        REQUIREABORTS(auto&& _ =
+                          static_cast<const decltype(alist)&>(alist).first());
+        REQUIREABORTS(auto&& _ =
+                          static_cast<const decltype(alist)&>(alist).last());
+        array_t{0, 1, 2, 3} |
+            for_each([&alist](int i) { auto&& _ = alist.append(i); });
+        REQUIRE(alist.first() == 0);
+        REQUIRE(alist.last() == 3);
 
-    TEST_CASE("shrink_to_reclaim_unused_memory()") {}
+        alist.first() = 1;
+        REQUIRE(ranges_equal(alist, array_t{1, 1, 2, 3}));
+        alist.last() = 2;
+        REQUIRE(ranges_equal(alist, array_t{1, 1, 2, 2}));
+        alist.first() = 0;
+        alist.last() = 3;
+        REQUIRE(ranges_equal(alist, indices));
+    }
 
-    TEST_CASE("increase_capacity_by()") {}
+    TEST_CASE("shrink_to_reclaim_unused_memory()")
+    {
+        // only allocator which can both reclaim and realloc in place
+        reserving_page_allocator_t backing({.pages_reserved = 100});
+        size_t page_size = mmap::get_page_size();
+        // two pages in size
+        arraylist_t alist =
+            arraylist::copy_items_from_range(
+                backing, indices | take_at_most(2 * page_size / sizeof(size_t)))
+                .release();
+
+        REQUIRE(alist.items().size_bytes() == 2 * page_size);
+        REQUIRE(alist.capacity() == alist.size());
+
+        for (size_t i = 0; i < (page_size / sizeof(size_t)); ++i) {
+            alist.pop_last();
+        }
+
+        REQUIRE(alist.items().size_bytes() == page_size);
+        REQUIRE(alist.capacity() == 2 * alist.size());
+
+        alist.shrink_to_reclaim_unused_memory();
+        REQUIRE(alist.capacity() == alist.size());
+        REQUIRE(ranges_equal(alist, indices));
+    }
+
+    TEST_CASE("increase_capacity_by()")
+    {
+        c_allocator_t backing;
+        arraylist_t alist = arraylist::copy_items_from_range(
+                                backing, indices | take_at_most(100))
+                                .release();
+        REQUIRE(alist.capacity() == 100);
+        alist.increase_capacity_by(100);
+        REQUIRE(alist.capacity() >= 200);
+    }
 }

@@ -19,7 +19,12 @@ class reserving_page_allocator_t : public allocator_t
   public:
     // NOTE: page allocator not threadsafe, uses errno and GetLastError on win
     static constexpr alloc::feature_flags type_features =
-        alloc::feature_flags::can_expand_back;
+        alloc::feature_flags::can_expand_back |
+        // NOTE: although this says it can reclaim, the current implementation
+        // doesn't actually return pages back to the OS because it doesn't do
+        // bookkeeping so it can't know how many pages are currently allocated
+        alloc::feature_flags::can_reclaim |
+        alloc::feature_flags::can_predictably_realloc_in_place;
 
     struct options_t
     {
@@ -114,20 +119,23 @@ class reserving_page_allocator_t : public allocator_t
                          "Always pass leave_nonzeroed to reservation allocator "
                          "because it does not zero memory when reallocating.");
 
-        if (request.flags & alloc::flags::shrink_back) [[unlikely]] {
-            return request.memory.subslice(
-                {.start = 0, .length = request.new_size_bytes});
-        }
-
-        const size_t actual_size_bytes =
-            ok::max(request.preferred_size_bytes, request.new_size_bytes);
-
         const size_t page_size = mmap::get_page_size();
 
         if (page_size == 0) [[unlikely]] {
             __ok_assert(false, "unable to get page size on this platform?");
             return alloc::error::platform_failure;
         }
+
+        if (request.flags & alloc::flags::shrink_back) [[unlikely]] {
+            // TODO: probably try to reclaim memory here, however it requires
+            // inserting bookkeeping data that says how many pages were
+            // initially allocated
+            return request.memory.subslice(
+                {.start = 0, .length = request.new_size_bytes});
+        }
+
+        const size_t actual_size_bytes =
+            ok::max(request.preferred_size_bytes, request.new_size_bytes);
 
         const size_t num_bytes =
             runtime_round_up_to_multiple_of(page_size, actual_size_bytes);
