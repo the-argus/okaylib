@@ -1,3 +1,5 @@
+#include "okay/containers/array.h"
+#include "okay/ranges/algorithm.h"
 #include "okay/ranges/views/enumerate.h"
 #include "okay/ranges/views/std_for.h"
 #include "test_header.h"
@@ -426,6 +428,77 @@ TEST_SUITE("opt")
             REQUIRE(i.copy_out_or_run([] { return 1000; }) == 10);
             REQUIRE(i);
             REQUIRE(i.move_out_or_run([] { return 1000; }) == 10);
+            REQUIRE(!i);
+        }
+
+        SUBCASE("copy_out and move_out with opt slice")
+        {
+            array_t<uint8_t, 3> bytes = {0, 1, 2};
+            opt<slice<const uint8_t>> i = bytes;
+
+            slice<const uint8_t> j = i.move_out().ref_or_panic();
+            REQUIRE(ranges_equal(bytes, j));
+            REQUIRE(!i);
+            i.reset();
+            // move out of empty thing returns another empty thing
+            REQUIRE(!i.move_out().has_value());
+            i.emplace(bytes);
+
+            array_t<uint8_t, 3> dummy = {2, 3, 1};
+            REQUIRE(i.copy_out_or(dummy).is_alias_for(bytes));
+            REQUIRE(i.ref_or_panic().is_alias_for(bytes));
+            i.reset();
+            REQUIRE(i.copy_out_or(dummy).is_alias_for(dummy));
+            REQUIRE(i.move_out_or(dummy).is_alias_for(dummy));
+            REQUIRE(!i);
+            i.emplace(bytes);
+            REQUIRE(i.move_out_or(dummy).is_alias_for(bytes));
+            REQUIRE(!i);
+            // copy out but it runs the given callable
+            {
+                bool ran = false;
+                auto t = i.copy_out_or_run([&] {
+                    ran = true;
+                    return bytes_t(dummy);
+                });
+                bool alias = t.is_alias_for(dummy);
+                REQUIRE(alias);
+                REQUIRE(ran);
+            }
+            i.emplace(bytes);
+            // copy out but it does not run the given callable
+            REQUIRE(i.copy_out_or_run([&] {
+                         REQUIRE(false);
+                         return bytes_t(dummy);
+                     }).is_alias_for(bytes));
+            REQUIRE(i);
+            i.reset();
+            // move out but it runs the given callable
+            {
+                bool ran = false;
+                REQUIRE(i.move_out_or_run([&] {
+                             ran = true;
+                             return bytes_t(dummy);
+                         }).is_alias_for(dummy));
+                REQUIRE(ran);
+            }
+            REQUIRE(!i);
+            i.emplace(bytes);
+            REQUIRE(i);
+            // move out but it does NOT run the given callable
+            REQUIRE(i.move_out_or_run([&] {
+                         REQUIRE(false);
+                         return bytes_t(dummy);
+                     }).is_alias_for(bytes));
+            REQUIRE(!i);
+
+            REQUIRE(i.copy_out_or_run([&] {
+                         return bytes_t(bytes);
+                     }).is_alias_for(bytes));
+            REQUIRE(!i);
+            REQUIRE(i.move_out_or_run([&] {
+                         return bytes_t(bytes);
+                     }).is_alias_for(bytes));
             REQUIRE(!i);
         }
 

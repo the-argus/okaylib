@@ -112,9 +112,13 @@ TEST_SUITE("slice")
             static_assert(std::is_same_v<decltype(carray.data()), const int*>);
 
             static_assert(
-                !is_std_constructible_v<slice<int>, decltype(carray)>);
+                !is_std_constructible_v<slice<int>, decltype(carray)&>);
+            // should not be constructible from value type but should be from
+            // reference
             static_assert(
-                is_std_constructible_v<slice<const int>, decltype(carray)>);
+                !is_std_constructible_v<slice<const int>, decltype(carray)>);
+            static_assert(
+                is_std_constructible_v<slice<const int>, decltype(carray)&>);
 
             slice<const int> cslice = carray;
         }
