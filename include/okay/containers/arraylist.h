@@ -451,10 +451,12 @@ class arraylist_t
         opt<slice<T>> res = m.allocated_spots.move_out();
 
         if (res) {
-            return res.ref_or_panic().subslice({.length = m.spots_occupied});
+            res = res.ref_or_panic().subslice({.length = m.spots_occupied});
+            m.spots_occupied = 0;
         } else {
-            return nullopt;
+            __ok_internal_assert(m.spots_occupied == 0);
         }
+        return res;
     }
 
     template <typename... args_t>

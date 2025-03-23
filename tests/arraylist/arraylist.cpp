@@ -793,7 +793,31 @@ TEST_SUITE("arraylist")
         }
     }
 
-    TEST_CASE("shrink_and_leak()") {}
+    TEST_CASE("shrink_and_leak()")
+    {
+        c_allocator_t backing;
+        arraylist_t alist = arraylist::copy_items_from_range(
+                                backing, indices | take_at_most(100))
+                                .release();
+
+        for (size_t i = 0; i < 50; ++i) {
+            alist.pop_last();
+        }
+
+        REQUIRE(alist.size() == 50);
+
+        slice<size_t> items = alist.shrink_and_leak().ref_or_panic();
+
+        REQUIRE(items.size() == 50);
+
+        REQUIRE(alist.size() == 0);
+        REQUIRE(alist.is_empty());
+
+        indices | take_at_most(100) |
+            for_each([&](size_t i) { alist.append(i); });
+
+        backing.deallocate(reinterpret_as_bytes(items));
+    }
 
     TEST_CASE("resize()") {}
 
