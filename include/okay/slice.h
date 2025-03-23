@@ -5,6 +5,7 @@
 #include "okay/detail/addressof.h"
 #include "okay/detail/noexcept.h"
 #include "okay/detail/ok_assert.h"
+#include "okay/detail/template_util/c_array_value_type.h"
 #include "okay/detail/template_util/remove_cvref.h"
 #include "okay/detail/traits/is_container.h"
 #include "okay/detail/traits/is_instance.h"
@@ -114,10 +115,35 @@ template <typename viewed_t> class slice
     {
     }
 
-    // c array converting constructor
+    // mark rvalue reference overloads for array-to-slice constructors as
+    // deleted, so we dont create a slice of something that's about to be
+    // destroyed
+    template <typename U,
+              std::enable_if_t<
+                  !detail::is_instance_v<detail::remove_cvref_t<U>, ok::slice>,
+                  bool> = true>
+    constexpr slice(const U&& other) = delete;
+    template <typename U,
+              std::enable_if_t<
+                  !detail::is_instance_v<detail::remove_cvref_t<U>, ok::slice>,
+                  bool> = true>
+    constexpr slice(U&& other) = delete;
+
+    // c array converting constructors
     template <size_t size>
     constexpr slice(viewed_t (&array)[size]) OKAYLIB_NOEXCEPT : m_data(array),
                                                                 m_elements(size)
+    {
+    }
+
+    template <
+        typename nonconst_viewed_t, size_t size,
+        std::enable_if_t<std::is_const_v<viewed_t> &&
+                             std::is_same_v<const nonconst_viewed_t, viewed_t>,
+                         bool> = true>
+    constexpr slice(nonconst_viewed_t (&array)[size]) OKAYLIB_NOEXCEPT
+        : m_data(array),
+          m_elements(size)
     {
     }
 
