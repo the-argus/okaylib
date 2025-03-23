@@ -314,6 +314,12 @@ class allocator_t
     [[nodiscard]] constexpr alloc::result_t<bytes_t>
     allocate(const alloc::request_t& request) OKAYLIB_NOEXCEPT
     {
+        // one way for request to be invalid
+        if (request.num_bytes == 0) [[unlikely]] {
+            __ok_usage_error(false,
+                             "Attempt to allocate 0 bytes from allocator.");
+            return alloc::error::unsupported;
+        }
         return impl_allocate(request);
     }
 

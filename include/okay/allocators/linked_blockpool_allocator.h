@@ -254,11 +254,6 @@ template <typename allocator_impl_t>
 linked_blockpool_allocator_t<allocator_impl_t>::impl_allocate(
     const alloc::request_t& request) OKAYLIB_NOEXCEPT
 {
-    if (request.num_bytes == 0) [[unlikely]] {
-        __ok_usage_error(false,
-                         "Attempt to allocate 0 bytes from c_allocator.");
-        return alloc::error::unsupported;
-    }
     if (request.num_bytes > m.blocksize ||
         request.alignment > m.minimum_alignment) [[unlikely]] {
         return alloc::error::unsupported;
