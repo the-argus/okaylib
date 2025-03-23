@@ -605,6 +605,67 @@ class opt<wrapped_slice_t,
         return unchecked_value();
     }
 
+    [[nodiscard]] constexpr auto
+    copy_out_or(const wrapped_slice_t& alternative) const& OKAYLIB_NOEXCEPT
+    {
+        if (!has_value()) [[unlikely]] {
+            return alternative;
+        }
+        return this->unchecked_value();
+    }
+
+    template <typename callable_t>
+        [[nodiscard]] constexpr auto
+        copy_out_or_run(callable_t&& callable) const
+        & OKAYLIB_NOEXCEPT
+          -> std::enable_if_t<
+              is_std_invocable_v<callable_t> &&
+                  std::is_convertible_v<decltype(callable()), wrapped_slice_t>,
+              wrapped_slice_t>
+    {
+        if (!has_value()) [[unlikely]] {
+            return callable();
+        }
+        return this->unchecked_value();
+    }
+
+    [[nodiscard]] constexpr opt move_out() OKAYLIB_NOEXCEPT
+    {
+        opt out = *this;
+        if (has_value()) {
+            reset();
+        }
+        return out;
+    }
+
+    [[nodiscard]] constexpr auto
+        move_out_or(const wrapped_slice_t& alternative) &
+        OKAYLIB_NOEXCEPT
+    {
+        opt out = *this;
+        if (has_value()) {
+            reset();
+        }
+        return out;
+    }
+
+    template <typename callable_t>
+        [[nodiscard]] constexpr auto move_out_or_run(callable_t&& callable) &
+        OKAYLIB_NOEXCEPT
+        -> std::enable_if_t<
+            is_std_invocable_v<callable_t> &&
+                std::is_convertible_v<decltype(callable()), wrapped_slice_t>,
+            wrapped_slice_t>
+    {
+        opt out = *this;
+        if (has_value()) {
+            reset();
+        } else {
+            out.unchecked_value() = callable();
+        }
+        return out;
+    }
+
     template <
         typename convert_from_t = wrapped_slice_t,
         requires_t<not_self<convert_from_t> && not_tag<convert_from_t> &&
