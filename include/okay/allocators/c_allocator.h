@@ -87,7 +87,7 @@ inline void c_allocator_t::impl_deallocate(bytes_t bytes) OKAYLIB_NOEXCEPT
         "invalid reallocate request. validation check bypassed. did "
         "you call impl_reallocate() directly?");
     if (options.flags & flags::in_place_orelse_fail) [[unlikely]] {
-        return error::couldnt_expand_in_place;
+        return error::unsupported;
     }
 
     const bool zeroed = !(options.flags & flags::leave_nonzeroed);
