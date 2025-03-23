@@ -747,7 +747,52 @@ TEST_SUITE("arraylist")
         }
     }
 
-    TEST_CASE("remove_and_swap_last()") {}
+    TEST_CASE("remove_and_swap_last()")
+    {
+        SUBCASE("correct ordering")
+        {
+            c_allocator_t backing;
+            arraylist_t alist = arraylist::copy_items_from_range(
+                                    backing, array_t{0, 6, 7, 3, 4, 5, 1, 2})
+                                    .release();
+
+            REQUIRE(!ranges_equal(alist, indices));
+            REQUIRE(alist.remove_and_swap_last(2).ref_or_panic() == 7);
+            REQUIRE(ranges_equal(alist, array_t{0, 6, 2, 3, 4, 5, 1}));
+            REQUIRE(alist.remove_and_swap_last(1).ref_or_panic() == 6);
+            REQUIRE(ranges_equal(alist, array_t{0, 1, 2, 3, 4, 5}));
+            REQUIRE(alist.remove_and_swap_last(0).ref_or_panic() == 0);
+            REQUIRE(alist.remove_and_swap_last(0).ref_or_panic() == 5);
+            REQUIRE(alist.remove_and_swap_last(0).ref_or_panic() == 4);
+            REQUIRE(alist.remove_and_swap_last(0).ref_or_panic() == 3);
+            REQUIRE(alist.remove_and_swap_last(0).ref_or_panic() == 2);
+            REQUIRE(alist.remove_and_swap_last(0).ref_or_panic() == 1);
+            REQUIRE(!alist.remove_and_swap_last(0).has_value());
+        }
+
+        SUBCASE("still works after reallocation")
+        {
+            array_t initial = {0, 6, 7, 3, 4, 5, 1, 2};
+            c_allocator_t backing;
+            arraylist_t alist = arraylist::copy_items_from_range(
+                                    backing, initial)
+                                    .release();
+            REQUIRE(alist.capacity() == initial.size());
+            REQUIRE(alist.capacity() == alist.size());
+
+            alist.remove_and_swap_last(2);
+            // no reallocation yet
+            REQUIRE(alist.capacity() == alist.size() + 1);
+            // ordering is preserved
+            REQUIRE(ranges_equal(alist, array_t{0, 6, 2, 3, 4, 5, 1}));
+
+            // okay now reallocate
+            alist.increase_capacity_by(100);
+            REQUIRE(ranges_equal(alist, array_t{0, 6, 2, 3, 4, 5, 1}));
+            alist.remove_and_swap_last(1);
+            REQUIRE(ranges_equal(alist, indices));
+        }
+    }
 
     TEST_CASE("shrink_and_leak()") {}
 

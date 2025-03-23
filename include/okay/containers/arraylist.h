@@ -5,6 +5,10 @@
 #include "okay/defer.h"
 #include "okay/status.h"
 
+#ifdef OKAYLIB_USE_FMT
+#include <fmt/core.h>
+#endif
+
 namespace ok {
 
 namespace arraylist {
@@ -44,6 +48,10 @@ class arraylist_t
     friend class arraylist::detail::spots_preallocated_t<T>;
     friend class arraylist::detail::copy_items_from_range_t;
     friend class arraylist::detail::empty_t<T>;
+#ifdef OKAYLIB_USE_FMT
+    friend struct fmt::formatter<arraylist_t>;
+#endif
+
     static_assert(!std::is_reference_v<T>,
                   "arraylist_t cannot store references.");
     static_assert(!std::is_void_v<T>, "cannot create an array list of void.");
@@ -257,11 +265,11 @@ class arraylist_t
         defer decrement([this] { --m.spots_occupied; });
 
         if (idx == this->size() - 1) {
-            return;
+            return out;
         }
 
         new (ok::addressof(target))
-            T(std::move(spots.data()[spots.size() - 1]));
+            T(std::move(spots.data()[m.spots_occupied - 1]));
 
         return out;
     }
@@ -749,5 +757,37 @@ inline constexpr detail::copy_items_from_range_t copy_items_from_range;
 
 }; // namespace arraylist
 } // namespace ok
+
+#ifdef OKAYLIB_USE_FMT
+template <typename T, typename backing_allocator_t>
+struct fmt::formatter<ok::arraylist_t<T, backing_allocator_t>>
+{
+    using formatted_type_t = ok::arraylist_t<T, backing_allocator_t>;
+    static_assert(
+        fmt::is_formattable<T>::value,
+        "Attempt to format an arraylist whose items are not formattable.");
+
+    constexpr format_parse_context::iterator parse(format_parse_context& ctx)
+    {
+        auto it = ctx.begin();
+        if (it != ctx.end() && *it != '}')
+            throw_format_error("invalid format");
+        return it;
+    }
+
+    format_context::iterator format(const formatted_type_t& arraylist,
+                                    format_context& ctx) const
+    {
+        // TODO: use CTTI to include nice type names in print here
+        fmt::format_to(ctx.out(), "[ ");
+
+        for (size_t i = 0; i < arraylist.size(); ++i) {
+            fmt::format_to(ctx.out(), "{} ", arraylist[i]);
+        }
+
+        return fmt::format_to(ctx.out(), "]");
+    }
+};
+#endif
 
 #endif
