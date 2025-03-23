@@ -307,11 +307,9 @@ class opt : private detail::opt_base_t<payload_t>,
         [[nodiscard]] constexpr auto
         copy_out_or_run(callable_t&& callable) const
         & OKAYLIB_NOEXCEPT
-          -> std::enable_if_t<
-              std::is_copy_constructible_v<payload_t> &&
-                  is_std_invocable_v<callable_t> &&
-                  std::is_convertible_v<decltype(callable()), payload_t>,
-              payload_t>
+          -> std::enable_if_t<std::is_copy_constructible_v<payload_t> &&
+                                  is_std_invocable_r_v<callable_t, payload_t>,
+                              payload_t>
     {
         if (!has_value()) [[unlikely]] {
             return callable();
@@ -356,11 +354,9 @@ class opt : private detail::opt_base_t<payload_t>,
         OKAYLIB_NOEXCEPT
         // callable must take no arguments and return a payload_t, payload_t&,
         // or payload_t&&
-        -> std::enable_if_t<
-            is_std_invocable_v<callable_t> &&
-                std::is_same_v<std::remove_reference_t<decltype(callable())>,
-                               payload_t>,
-            payload_t>
+        -> std::enable_if_t<is_std_invocable_v<callable_t> &&
+                                std::is_same_v<decltype(callable()), payload_t>,
+                            payload_t>
     {
         if (has_value()) {
             this->_set_has_value(false);
@@ -618,10 +614,8 @@ class opt<wrapped_slice_t,
         [[nodiscard]] constexpr auto
         copy_out_or_run(callable_t&& callable) const
         & OKAYLIB_NOEXCEPT
-          -> std::enable_if_t<
-              is_std_invocable_v<callable_t> &&
-                  std::is_convertible_v<decltype(callable()), wrapped_slice_t>,
-              wrapped_slice_t>
+          -> std::enable_if_t<is_std_invocable_r_v<callable_t, wrapped_slice_t>,
+                              wrapped_slice_t>
     {
         if (!has_value()) [[unlikely]] {
             return callable();
@@ -642,28 +636,28 @@ class opt<wrapped_slice_t,
         move_out_or(const wrapped_slice_t& alternative) &
         OKAYLIB_NOEXCEPT
     {
-        opt out = *this;
         if (has_value()) {
+            wrapped_slice_t out = this->unchecked_value();
             reset();
+            return out;
+        } else {
+            return alternative;
         }
-        return out;
     }
 
     template <typename callable_t>
         [[nodiscard]] constexpr auto move_out_or_run(callable_t&& callable) &
         OKAYLIB_NOEXCEPT
-        -> std::enable_if_t<
-            is_std_invocable_v<callable_t> &&
-                std::is_convertible_v<decltype(callable()), wrapped_slice_t>,
-            wrapped_slice_t>
+        -> std::enable_if_t<is_std_invocable_r_v<callable_t, wrapped_slice_t>,
+                            wrapped_slice_t>
     {
-        opt out = *this;
         if (has_value()) {
+            wrapped_slice_t out = this->unchecked_value();
             reset();
+            return out;
         } else {
-            out.unchecked_value() = callable();
+            return callable();
         }
-        return out;
     }
 
     template <
