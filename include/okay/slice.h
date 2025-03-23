@@ -82,6 +82,27 @@ template <typename viewed_t> class slice
         return m_elements * sizeof(viewed_t);
     }
 
+    [[nodiscard]] constexpr bool is_empty() const OKAYLIB_NOEXCEPT
+    {
+        return m_elements == 0;
+    }
+
+    [[nodiscard]] constexpr value_type& first() const OKAYLIB_NOEXCEPT
+    {
+        if (is_empty()) [[unlikely]] {
+            __ok_abort("Attempt to get first() item from empty slice.");
+        }
+        return m_data[0];
+    }
+
+    [[nodiscard]] constexpr value_type& last() OKAYLIB_NOEXCEPT
+    {
+        if (is_empty()) [[unlikely]] {
+            __ok_abort("Attempt to get last() item from empty slice.");
+        }
+        return m_data[m_elements - 1];
+    }
+
     // implicitly take a slice of something with data() and size() functions
     // which is not also a slice.
     template <

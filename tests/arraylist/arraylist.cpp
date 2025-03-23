@@ -260,10 +260,10 @@ TEST_SUITE("arraylist")
             const auto& const_alist = alist;
 
             REQUIRE(alist.size() == 0);
-            REQUIREABORTS(alist.data());
-            REQUIREABORTS(const_alist.data());
-            REQUIREABORTS(alist.items());
-            REQUIREABORTS(const_alist.items());
+            REQUIREABORTS(auto _ = alist.data());
+            REQUIREABORTS(auto _ = const_alist.data());
+            REQUIREABORTS(auto _ = alist.items());
+            REQUIREABORTS(auto _ = const_alist.items());
         }
     }
 
@@ -909,23 +909,25 @@ TEST_SUITE("arraylist")
     {
         c_allocator_t backing;
         arraylist_t alist = arraylist::empty<int>(backing);
-        REQUIREABORTS(auto&& _ = alist.first());
-        REQUIREABORTS(auto&& _ = alist.last());
-        REQUIREABORTS(auto&& _ =
-                          static_cast<const decltype(alist)&>(alist).first());
-        REQUIREABORTS(auto&& _ =
-                          static_cast<const decltype(alist)&>(alist).last());
+        REQUIREABORTS(auto&& _ = alist.items().first());
+        REQUIREABORTS(auto&& _ = alist.items().last());
+        REQUIREABORTS(
+            auto&& _ =
+                static_cast<const decltype(alist)&>(alist).items().first());
+        REQUIREABORTS(
+            auto&& _ =
+                static_cast<const decltype(alist)&>(alist).items().last());
         array_t{0, 1, 2, 3} |
             for_each([&alist](int i) { auto&& _ = alist.append(i); });
-        REQUIRE(alist.first() == 0);
-        REQUIRE(alist.last() == 3);
+        REQUIRE(alist.items().first() == 0);
+        REQUIRE(alist.items().last() == 3);
 
-        alist.first() = 1;
+        alist.items().first() = 1;
         REQUIRE(ranges_equal(alist, array_t{1, 1, 2, 3}));
-        alist.last() = 2;
+        alist.items().last() = 2;
         REQUIRE(ranges_equal(alist, array_t{1, 1, 2, 2}));
-        alist.first() = 0;
-        alist.last() = 3;
+        alist.items().first() = 0;
+        alist.items().last() = 3;
         REQUIRE(ranges_equal(alist, indices));
     }
 

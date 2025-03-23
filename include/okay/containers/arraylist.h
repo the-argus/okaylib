@@ -67,39 +67,42 @@ class arraylist_t
     // calling .items()
 
     /// Panics if the arraylist has not allocated anything yet
-    const T* data() const& OKAYLIB_NOEXCEPT
+    [[nodiscard]] const T* data() const& OKAYLIB_NOEXCEPT
     {
         return m.allocated_spots.ref_or_panic().data();
     }
 
     /// Panics if the arraylist has not allocated anything yet
-    T* data() & OKAYLIB_NOEXCEPT
+    [[nodiscard]] T* data() & OKAYLIB_NOEXCEPT
     {
         return m.allocated_spots.ref_or_panic().data();
     }
 
     /// Always valid to call .size() on any arraylist
-    size_t size() const OKAYLIB_NOEXCEPT { return m.spots_occupied; }
+    [[nodiscard]] size_t size() const OKAYLIB_NOEXCEPT
+    {
+        return m.spots_occupied;
+    }
 
-    slice<T> items() & OKAYLIB_NOEXCEPT
+    [[nodiscard]] slice<T> items() & OKAYLIB_NOEXCEPT
     {
         return m.allocated_spots.ref_or_panic().subslice(
             {.length = m.spots_occupied});
     }
 
-    slice<const T> items() const& OKAYLIB_NOEXCEPT
+    [[nodiscard]] slice<const T> items() const& OKAYLIB_NOEXCEPT
     {
         return const_cast<arraylist_t*>(this)->items(); // call other impl
     }
 
-    const T& operator[](size_t index) const& OKAYLIB_NOEXCEPT
+    [[nodiscard]] const T& operator[](size_t index) const& OKAYLIB_NOEXCEPT
     {
         if (index >= m.spots_occupied) [[unlikely]] {
             __ok_abort("Out of bounds access to ok::arraylist_t");
         }
         return m.allocated_spots.ref_or_panic().data()[index];
     }
-    T& operator[](size_t index) & OKAYLIB_NOEXCEPT
+    [[nodiscard]] T& operator[](size_t index) & OKAYLIB_NOEXCEPT
     {
         if (index >= m.spots_occupied) [[unlikely]] {
             __ok_abort("Out of bounds access to ok::arraylist_t");
@@ -111,12 +114,13 @@ class arraylist_t
     arraylist_t(const arraylist_t&) = delete;
     arraylist_t& operator=(const arraylist_t&) = delete;
 
-    constexpr arraylist_t(arraylist_t&& other) : m(std::move(other.m))
+    constexpr arraylist_t(arraylist_t&& other)
+        : m(std::move(other.m)) OKAYLIB_NOEXCEPT
     {
         other.m.allocated_spots = nullopt;
     }
 
-    constexpr arraylist_t& operator=(arraylist_t&& other)
+    constexpr arraylist_t& operator=(arraylist_t&& other) OKAYLIB_NOEXCEPT
     {
         this->destroy();
         this->m = std::move(other.m);
@@ -207,7 +211,6 @@ class arraylist_t
                     }
                 }
             }
-            using enum_t = typename make_result_type::enum_type;
             return status(enum_t(result.err()));
         } else {
             ok::make_into_uninitialized<T>(uninit,
@@ -309,7 +312,7 @@ class arraylist_t
         m.allocated_spots = reinterpret_bytes_as<T>(new_bytes);
     }
 
-    constexpr size_t capacity() const OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr size_t capacity() const OKAYLIB_NOEXCEPT
     {
         return m.allocated_spots ? m.allocated_spots.ref_or_panic().size() : 0;
     }
@@ -324,25 +327,6 @@ class arraylist_t
         if (is_empty())
             return {};
         return remove(this->size() - 1);
-    }
-
-    [[nodiscard]] constexpr T& first() OKAYLIB_NOEXCEPT
-    {
-        return m.allocated_spots.ref_or_panic()[0];
-    }
-
-    [[nodiscard]] constexpr const T& first() const OKAYLIB_NOEXCEPT
-    {
-        return m.allocated_spots.ref_or_panic()[0];
-    }
-
-    [[nodiscard]] constexpr T& last() OKAYLIB_NOEXCEPT
-    {
-        return m.allocated_spots.ref_or_panic()[m.spots_occupied - 1];
-    }
-    [[nodiscard]] constexpr const T& last() const OKAYLIB_NOEXCEPT
-    {
-        return m.allocated_spots.ref_or_panic()[m.spots_occupied - 1];
     }
 
     [[nodiscard]] constexpr const backing_allocator_t&
@@ -370,11 +354,11 @@ class arraylist_t
     /// Does not reclaim unused memory when shrinking
     /// If type stored is trivially constructible, then new memory is zeroed
     /// Only possible if T is default constructible.
-    template <typename U = T, typename... args_t>
+    /// Args `args` must select nonfailing constructor.
+    template <typename... args_t>
     [[nodiscard]] constexpr auto resize(size_t new_size,
                                         args_t&&... args) OKAYLIB_NOEXCEPT
-        -> std::enable_if_t<std::is_same_v<U, T> &&
-                                std::is_constructible_v<U, args_t...>,
+        -> std::enable_if_t<is_infallible_constructible_v<T, args_t...>,
                             status<alloc::error>>
     {
         if (!m.allocated_spots) {
@@ -390,7 +374,8 @@ class arraylist_t
                 memfill(reinterpret_as_bytes(spots), 0);
             } else {
                 for (size_t i = 0; i < new_size; ++i) {
-                    new (spots.data() + i) T(std::forward<args_t>(args)...);
+                    ok::make_into_uninitialized<T>(
+                        spots.data()[i], std::forward<args_t>(args)...);
                 }
             }
             m.spots_occupied = new_size;
@@ -437,7 +422,8 @@ class arraylist_t
                             (new_size - m.spots_occupied) * sizeof(T));
             } else {
                 for (size_t i = m.spots_occupied; i < new_size; ++i) {
-                    new (spots.data() + i) T(std::forward<args_t>(args)...);
+                    ok::make_into_uninitialized<T>(
+                        spots.data()[i], std::forward<args_t>(args)...);
                 }
             }
 
@@ -463,7 +449,11 @@ class arraylist_t
     }
 
     template <typename... args_t>
-    constexpr status<alloc::error> append(args_t&&... args) OKAYLIB_NOEXCEPT
+    constexpr auto append(args_t&&... args) OKAYLIB_NOEXCEPT
+        -> std::enable_if_t<
+            is_constructible_v<T, args_t...>,
+            // append may return the error type from an erroring constructor
+            decltype(insert_at(size(), std::forward<args_t>(args)...))>
     {
         return insert_at(size(), std::forward<args_t>(args)...);
     }
