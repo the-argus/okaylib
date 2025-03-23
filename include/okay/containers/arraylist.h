@@ -370,10 +370,11 @@ class arraylist_t
     /// Does not reclaim unused memory when shrinking
     /// If type stored is trivially constructible, then new memory is zeroed
     /// Only possible if T is default constructible.
-    template <typename U = T>
-    constexpr auto resize(size_t new_size) OKAYLIB_NOEXCEPT
+    template <typename U = T, typename... args_t>
+    [[nodiscard]] constexpr auto resize(size_t new_size,
+                                        args_t&&... args) OKAYLIB_NOEXCEPT
         -> std::enable_if_t<std::is_same_v<U, T> &&
-                                std::is_default_constructible_v<U>,
+                                std::is_constructible_v<U, args_t...>,
                             status<alloc::error>>
     {
         if (!m.allocated_spots) {
@@ -384,31 +385,31 @@ class arraylist_t
             auto& spots = m.allocated_spots.ref_or_panic();
             __ok_assert(spots.size() >= new_size,
                         "Allocator did not return enough memory to arraylist");
-            if constexpr (!std::is_trivially_default_constructible_v<T>) {
-                for (size_t i = 0; i < new_size; ++i) {
-                    new (spots.data() + i) T();
-                }
-            } else {
+            if constexpr (std::is_trivially_default_constructible_v<T> &&
+                          sizeof...(args_t) == 0) {
                 memfill(reinterpret_as_bytes(spots), 0);
+            } else {
+                for (size_t i = 0; i < new_size; ++i) {
+                    new (spots.data() + i) T(std::forward<args_t>(args)...);
+                }
             }
             m.spots_occupied = new_size;
             return alloc::error::okay;
         }
 
-        auto& spots = m.allocated_spots.ref_or_panic();
-
-        if (spots.size() == new_size) [[unlikely]] {
+        if (m.spots_occupied == new_size) [[unlikely]] {
             return alloc::error::okay;
         } else if (new_size == 0) [[unlikely]] {
             clear();
             return alloc::error::okay;
         }
 
-        const bool shrinking = spots.size() > new_size;
+        auto& spots = m.allocated_spots.ref_or_panic();
+        const bool shrinking = m.spots_occupied > new_size;
 
         if (shrinking) {
             if constexpr (!std::is_trivially_destructible_v<T>) {
-                for (size_t i = spots.size() - 1; i > new_size; ++i) {
+                for (size_t i = new_size; i < m.spots_occupied; ++i) {
                     spots[i].~T();
                 }
             }
@@ -427,15 +428,17 @@ class arraylist_t
             __ok_internal_assert(spots.size() >= new_size);
 
             // initialize new elements
-            if constexpr (!std::is_trivially_default_constructible_v<T>) {
-                for (size_t i = this->size(); i < new_size; ++i) {
-                    new (spots.data() + i) T();
-                }
-            } else {
+            if constexpr (std::is_trivially_default_constructible_v<T> &&
+                          sizeof...(args_t) == 0) {
                 // manually zero memory
-                // TODO: some ifdef here maybe to avoid zeroing
-                std::memset(spots.data() + this->size(), 0,
-                            (new_size - this->size()) * sizeof(T));
+                // TODO: some ifdef here maybe to avoid zeroing based on build
+                // option? or a template param?
+                std::memset(spots.data() + m.spots_occupied, 0,
+                            (new_size - m.spots_occupied) * sizeof(T));
+            } else {
+                for (size_t i = m.spots_occupied; i < new_size; ++i) {
+                    new (spots.data() + i) T(std::forward<args_t>(args)...);
+                }
             }
 
             m.spots_occupied = new_size;

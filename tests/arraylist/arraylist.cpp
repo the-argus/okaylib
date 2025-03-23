@@ -819,7 +819,91 @@ TEST_SUITE("arraylist")
         backing.deallocate(reinterpret_as_bytes(items));
     }
 
-    TEST_CASE("resize()") {}
+    TEST_CASE("resize()")
+    {
+        SUBCASE("resize zeroes trivially constructible stuff")
+        {
+            c_allocator_t backing;
+            arraylist_t alist = arraylist::empty<int>(backing);
+
+            auto&& _ = alist.resize(100);
+
+            ok_foreach(int i, alist) { REQUIRE(i == 0); }
+        }
+
+        SUBCASE("resize default constructs everything")
+        {
+            c_allocator_t backing;
+
+            struct test_constructor
+            {};
+            struct bad_constructor
+            {};
+
+            struct Thing
+            {
+                int i;
+                Thing() { i = 42; }
+                Thing(test_constructor) { i = 20; }
+                Thing(bad_constructor) { REQUIRE(false); }
+            };
+
+            arraylist_t alist = arraylist::empty<Thing>(backing);
+
+            auto _ = alist.resize(100);
+
+            ok_foreach(Thing & t, alist) { REQUIRE(t.i == 42); }
+            // resizing smaller never calls constructor
+            _ = alist.resize(50, bad_constructor{});
+            _ = alist.resize(0, bad_constructor{});
+
+            _ = alist.resize(50);
+            _ = alist.resize(100, test_constructor{});
+            ok_foreach(Thing i, alist | take_at_most(50))
+            {
+                REQUIRE(i.i == 42);
+            }
+            REQUIRE(alist.size() == 100);
+            REQUIRE(ok::size(alist) == 100);
+            REQUIRE(ok::size(alist | drop(50)) == 50);
+            ok_foreach(Thing i, alist | drop(50)) { REQUIRE(i.i == 20); }
+        }
+
+        SUBCASE("resize can call constructor")
+        {
+            c_allocator_t backing;
+            arraylist_t alist = arraylist::empty<int>(backing);
+            auto&& _ = alist.resize(100, 42);
+            ok_foreach(int& t, alist) { REQUIRE(t == 42); }
+
+            _ = alist.resize(150, 32);
+
+            ok_foreach(int i, alist | take_at_most(100)) { REQUIRE(i == 42); }
+            ok_foreach(int i, alist | drop(100)) { REQUIRE(i == 32); }
+        }
+
+        SUBCASE("resize calls destructors when shrinking")
+        {
+            size_t counter = 0;
+            c_allocator_t backing;
+            {
+                arraylist_t alist =
+                    arraylist::empty<destruction_counting>(backing);
+
+                auto&& _ = alist.resize(100, &counter);
+
+                REQUIRE(counter == 0);
+                alist.clear();
+                REQUIRE(counter == 100);
+
+                _ = alist.resize(100, &counter);
+                REQUIRE(counter == 100);
+                _ = alist.resize(50, &counter);
+                REQUIRE(counter == 150);
+            }
+            REQUIRE(counter == 200);
+        }
+    }
 
     TEST_CASE("first() and last()")
     {
