@@ -1,13 +1,17 @@
 #ifndef __OKAYLIB_CONTAINERS_array_t_H__
 #define __OKAYLIB_CONTAINERS_array_t_H__
 
-#include "okay/anystatus.h"
 #include "okay/construct.h"
 #include "okay/detail/abort.h"
 #include "okay/detail/noexcept.h"
+#include "okay/slice.h"
 
 #include <cstddef>
 #include <cstring>
+
+#ifdef OKAYLIB_USE_FMT
+#include <fmt/core.h>
+#endif
 
 namespace ok {
 
@@ -77,6 +81,15 @@ template <typename T, size_t num_items> class array_t
         return __m_items;
     }
 
+    [[nodiscard]] constexpr slice<const T> items() const& OKAYLIB_NOEXCEPT
+    {
+        return raw_slice(*data(), size());
+    }
+    [[nodiscard]] constexpr slice<T> items() & OKAYLIB_NOEXCEPT
+    {
+        return raw_slice(*data(), size());
+    }
+
     [[nodiscard]] constexpr size_t size() const noexcept { return num_items; }
 
     // this can't be private because we want aggregate initialization
@@ -133,5 +146,35 @@ inline constexpr auto undefined = detail::undefined_t<T, num_items>{};
 } // namespace array
 
 } // namespace ok
+
+#ifdef OKAYLIB_USE_FMT
+template <typename T, size_t num_items>
+struct fmt::formatter<ok::array_t<T, num_items>>
+{
+    using formatted_type_t = ok::array_t<T, num_items>;
+    static_assert(
+        fmt::is_formattable<T>::value,
+        "Attempt to format an arraylist whose items are not formattable.");
+
+    constexpr format_parse_context::iterator parse(format_parse_context& ctx)
+    {
+        auto it = ctx.begin();
+        if (it != ctx.end() && *it != '}')
+            throw_format_error("invalid format");
+        return it;
+    }
+
+    format_context::iterator format(const formatted_type_t& array,
+                                    format_context& ctx) const
+    {
+        // TODO: use CTTI to include nice type names in print here
+        fmt::format_to(ctx.out(), "[ ");
+        for (size_t i = 0; i < num_items; ++i) {
+            fmt::format_to(ctx.out(), "{} ", array.data()[i]);
+        }
+        return fmt::format_to(ctx.out(), "]");
+    }
+};
+#endif
 
 #endif

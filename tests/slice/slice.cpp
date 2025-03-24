@@ -1,8 +1,12 @@
+#include "okay/ranges/algorithm.h"
+#include "okay/ranges/views/drop.h"
 #include "okay/stdmem.h"
 #include "test_header.h"
 // test header must be first
+#include "okay/containers/array.h"
 #include "okay/detail/traits/is_container.h"
 #include "okay/macros/foreach.h"
+#include "okay/ranges/views/all.h"
 #include "okay/ranges/views/enumerate.h"
 #include "okay/slice.h"
 #include <array>
@@ -256,6 +260,166 @@ TEST_SUITE("slice")
             for (size_t i = 0; i < sizeof(mem); ++i) {
                 REQUIRE(mem[i] == i);
             }
+        }
+    }
+
+    TEST_CASE("bit_slice")
+    {
+        static_assert(!std::is_default_constructible_v<bit_slice_t>);
+        static_assert(!std::is_default_constructible_v<const_bit_slice_t>);
+        static_assert(std::is_convertible_v<bit_slice_t, const_bit_slice_t>);
+        static_assert(std::is_convertible_v<bit_slice_t&, const_bit_slice_t&>);
+
+        SUBCASE("size() of bit slice is correct")
+        {
+            uint8_t bytes[500];
+            memfill(slice(bytes), 0);
+
+            bit_slice_t bs = raw_bit_slice(slice(bytes), 500 * 8, 0);
+
+            REQUIRE(bs.size() == 500 * 8);
+            REQUIRE(sizeof(bytes) * 8 == bs.size());
+
+            // require all bits are off
+            const bool eql = bs | all([](bool b) { return !b; });
+            REQUIRE(eql);
+            REQUIRE(!bs.is_empty());
+        }
+
+        SUBCASE("size() of const bit slice is correct")
+        {
+            const uint8_t bytes[] = {0, 0, 0, 0};
+
+            const_bit_slice_t bs =
+                raw_bit_slice(slice(bytes), sizeof(bytes) * 8, 0);
+
+            REQUIRE(bs.size() == 4 * 8);
+            REQUIRE(sizeof(bytes) * 8 == bs.size());
+
+            // require all bits are off
+            const bool eql = bs | all([](bool b) { return !b; });
+            REQUIRE(eql);
+            REQUIRE(!bs.is_empty());
+        }
+
+        SUBCASE("subslice() with no offset")
+        {
+            uint8_t bytes[] = {0, 0, 0, 0, 0, 0, 0, 0};
+            REQUIREABORTS(bit_slice_t all_bits = raw_bit_slice(
+                              slice(bytes), sizeof(bytes) * 8, 1));
+            REQUIREABORTS(bit_slice_t all_bits =
+                              raw_bit_slice(slice(bytes).subslice({
+                                                .start = 1,
+                                                .length = sizeof(bytes) - 1,
+                                            }),
+                                            sizeof(bytes) * 8, 0));
+            const bit_slice_t all_bits =
+                raw_bit_slice(slice(bytes), sizeof(bytes) * 8, 0);
+
+            bit_slice_t first_half =
+                all_bits.subslice({.length = all_bits.size() / 2});
+
+            // set all the bits to on in the first half
+            for (auto c = ok::begin(first_half); ok::is_inbounds(first_half, c);
+                 ok::increment(first_half, c)) {
+                ok::iter_set(first_half, c, 1);
+            }
+
+            constexpr uint8_t all_ones = ~uint8_t(0);
+
+            array_t<uint8_t, sizeof(bytes)> expected = {
+                all_ones, all_ones, all_ones, all_ones, 0, 0, 0, 0};
+
+            REQUIRE(ranges_equal(bytes, expected));
+
+            const_bit_slice_t all_expected_bits =
+                raw_bit_slice(slice(expected), expected.size() * 8, 0);
+            const_bit_slice_t first_half_expected =
+                all_bits.subslice({.length = all_expected_bits.size() / 2});
+
+            REQUIRE(ranges_equal(first_half_expected, first_half));
+            REQUIRE(ranges_equal(all_expected_bits, all_bits));
+        }
+
+        SUBCASE("subslice() with some offset")
+        {
+            array_t a = array::defaulted_or_zeroed<uint8_t, 100>();
+
+            const bit_slice_t offsetted =
+                raw_bit_slice(slice(a), a.items().size_bits() - 5, 5);
+
+            for (size_t i = 0; i < offsetted.size(); ++i) {
+                offsetted.set_bit(i, true);
+            }
+
+            // all bits have been set to 1
+            REQUIRE(a.items().last() == 255);
+
+            bool all_set =
+                a | drop(1) | all([](uint8_t byte) { return byte == 255; });
+            REQUIRE(all_set);
+
+            // first five least significant bits are skipped
+            REQUIRE(a[0] == uint8_t(0b11100000));
+        }
+
+        SUBCASE("raw_bit_slice with zero size")
+        {
+            array_t bytes = array::defaulted_or_zeroed<uint8_t, 10>();
+
+            REQUIREABORTS(auto bs = raw_bit_slice(slice(bytes), 0, 8));
+            REQUIREABORTS(auto bs = raw_bit_slice(slice(bytes), 0, 20));
+            REQUIREABORTS(auto bs =
+                              raw_bit_slice(slice<const uint8_t>(bytes), 0, 8));
+            REQUIREABORTS(
+                auto bs = raw_bit_slice(slice<const uint8_t>(bytes), 0, 20));
+
+            auto bs = raw_bit_slice(slice(bytes), 0, 5);
+
+            REQUIRE(bs.is_empty());
+            REQUIRE(
+                raw_bit_slice(slice<const uint8_t>(bytes), 0, 5).is_empty());
+        }
+
+        SUBCASE("bit_slice_t::subslice with zero size")
+        {
+            array_t bytes = array::defaulted_or_zeroed<uint8_t, 10>();
+            auto bs = raw_bit_slice(slice(bytes), bytes.items().size_bits(), 0);
+
+            REQUIRE(bs.subslice({.start = 40, .length = 0}).is_empty());
+            REQUIRE(bs.subslice({.start = 0, .length = 0}).is_empty());
+            REQUIRE(bs.subslice({.start = 21, .length = 0}).is_empty());
+        }
+
+        SUBCASE("is_byte_aligned()")
+        {
+            array_t bytes = array::defaulted_or_zeroed<uint8_t, 10>();
+            auto bs = raw_bit_slice(slice(bytes), bytes.items().size_bits(), 0);
+
+            REQUIRE(bs.subslice({.start = 32, .length = 0}).is_byte_aligned());
+            REQUIRE(bs.subslice({.start = 0, .length = 0}).is_byte_aligned());
+            REQUIRE(!bs.subslice({.start = 21, .length = 0}).is_byte_aligned());
+
+            // try with addition of multiple offsets
+            bs = raw_bit_slice(slice(bytes), bytes.items().size_bits() - 3, 3);
+            REQUIRE(bs.subslice({.start = 5, .length = 0}).is_byte_aligned());
+            REQUIRE(!bs.is_byte_aligned());
+            REQUIRE(!bs.subslice({.start = 0, .length = 0}).is_byte_aligned());
+        }
+
+        SUBCASE("toggle_bit()")
+        {
+            array_t bytes = array::defaulted_or_zeroed<uint8_t, 10>();
+            auto bs = raw_bit_slice(slice(bytes), bytes.items().size_bits(), 0);
+
+            bs.toggle_bit(0);
+            REQUIRE(bytes[0] == 1);
+            bs.toggle_bit(1);
+            REQUIRE(bytes[0] == 3);
+            bs.toggle_bit(8);
+            REQUIRE(bytes[1] == 1);
+            bs.toggle_bit(8);
+            REQUIRE(bytes[1] == 0);
         }
     }
 }

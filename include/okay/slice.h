@@ -5,10 +5,10 @@
 #include "okay/detail/addressof.h"
 #include "okay/detail/noexcept.h"
 #include "okay/detail/ok_assert.h"
-#include "okay/detail/template_util/c_array_value_type.h"
 #include "okay/detail/template_util/remove_cvref.h"
 #include "okay/detail/traits/is_container.h"
 #include "okay/detail/traits/is_instance.h"
+#include "okay/math/rounding.h"
 #include <cassert>
 
 #ifdef OKAYLIB_USE_FMT
@@ -27,10 +27,19 @@ struct subslice_options_t
 template <typename viewed_t> struct undefined_memory_t;
 template <typename viewed_t> class slice;
 
+class bit_slice_t;
+class const_bit_slice_t;
+
 // library implementation wants to be able to construct slices from data + size,
 // particularly in stdmem and allocators
 template <typename viewed_t>
 slice<viewed_t> raw_slice(viewed_t& data, size_t size) OKAYLIB_NOEXCEPT;
+
+constexpr bit_slice_t raw_bit_slice(slice<uint8_t> bytes, size_t num_bits,
+                                    uint8_t offset) OKAYLIB_NOEXCEPT;
+constexpr const_bit_slice_t raw_bit_slice(slice<const uint8_t> bytes,
+                                          size_t num_bits,
+                                          uint8_t offset) OKAYLIB_NOEXCEPT;
 
 /// A non-owning reference to a section of a contiguously allocated array of
 /// type T. Intended to be passed around like a pointer.
@@ -80,6 +89,10 @@ template <typename viewed_t> class slice
     [[nodiscard]] constexpr size_t size_bytes() const OKAYLIB_NOEXCEPT
     {
         return m_elements * sizeof(viewed_t);
+    }
+    [[nodiscard]] constexpr size_t size_bits() const OKAYLIB_NOEXCEPT
+    {
+        return m_elements * sizeof(viewed_t) * 8;
     }
 
     [[nodiscard]] constexpr bool is_empty() const OKAYLIB_NOEXCEPT
@@ -233,6 +246,176 @@ slice(T) -> slice<std::enable_if_t<
 
 using bytes_t = slice<uint8_t>;
 
+class const_bit_slice_t
+{
+  protected:
+    constexpr const_bit_slice_t(uint8_t& first_byte, size_t num_bits,
+                                uint8_t offset)
+        : m(members_t{
+              .num_bits = num_bits,
+              .first_byte = &first_byte,
+              .offset = offset,
+          })
+    {
+    }
+
+    struct members_t
+    {
+        size_t num_bits;
+        uint8_t* first_byte;
+        // bytes from the start of first_byte that it starts
+        uint8_t offset;
+    } m;
+
+  public:
+#ifdef OKAYLIB_USE_FMT
+    friend struct fmt::formatter<const_bit_slice_t>;
+#endif
+
+    friend constexpr const_bit_slice_t
+    ok::raw_bit_slice(slice<const uint8_t> bytes, size_t num_bits,
+                      uint8_t offset) OKAYLIB_NOEXCEPT;
+
+    const_bit_slice_t() = delete;
+
+    [[nodiscard]] constexpr size_t size() const OKAYLIB_NOEXCEPT
+    {
+        return m.num_bits;
+    }
+
+    [[nodiscard]] constexpr bool is_empty() const OKAYLIB_NOEXCEPT
+    {
+        return this->size() == 0;
+    }
+
+    [[nodiscard]] constexpr bool is_byte_aligned() const OKAYLIB_NOEXCEPT
+    {
+        return m.offset == 0;
+    }
+
+    /// Returns the number of bytes pointed at by this contiguous slice of bits
+    [[nodiscard]] constexpr size_t num_bytes_occupied() const OKAYLIB_NOEXCEPT
+    {
+        return round_up_to_multiple_of<8>(m.num_bits + m.offset);
+    }
+
+    [[nodiscard]] constexpr bool
+    get_bit(const size_t idx) const OKAYLIB_NOEXCEPT
+    {
+        if (idx >= this->size()) [[unlikely]] {
+            __ok_abort("Out of bounds access to const_bit_slice_t::get_bit.");
+        }
+        const size_t bit_idx = idx + m.offset;
+        const size_t byte = bit_idx / 8;
+        const size_t bit = bit_idx % 8;
+        const uint8_t mask = uint8_t(1) << bit;
+        return m.first_byte[byte] & mask;
+    }
+
+    [[nodiscard]] constexpr const_bit_slice_t
+    subslice(const subslice_options_t& options) const OKAYLIB_NOEXCEPT
+    {
+        if (options.start + options.length >= this->size()) {
+            __ok_abort("Out of bounds access in const_bit_slice_t::subslice");
+        }
+
+        const size_t first_byte_index = m.offset + options.start;
+        const uint8_t new_offset = first_byte_index % 8UL;
+        return const_bit_slice_t(m.first_byte[first_byte_index], options.length,
+                                 new_offset);
+    }
+};
+
+class bit_slice_t : public const_bit_slice_t
+{
+  private:
+    constexpr bit_slice_t(uint8_t& first_byte, size_t num_bits, uint8_t offset)
+        : const_bit_slice_t(first_byte, num_bits, offset)
+    {
+    }
+
+  public:
+#ifdef OKAYLIB_USE_FMT
+    friend struct fmt::formatter<bit_slice_t>;
+#endif
+
+    friend constexpr bit_slice_t
+    ok::raw_bit_slice(slice<uint8_t> bytes, size_t num_bits,
+                      uint8_t offset) OKAYLIB_NOEXCEPT;
+
+    constexpr void set_bit(const size_t idx,
+                           const bool on) const OKAYLIB_NOEXCEPT
+    {
+        if (idx >= this->size()) [[unlikely]] {
+            __ok_abort("Out of bounds access to bit_slice_t::set_bit.");
+        }
+        const size_t bit_idx = idx + m.offset;
+        const size_t byte = bit_idx / 8;
+        const size_t bit = bit_idx % 8;
+
+        const uint8_t mask = uint8_t(1) << bit;
+
+        if (on) {
+            m.first_byte[byte] |= mask;
+        } else {
+            m.first_byte[byte] &= ~mask;
+        }
+    }
+
+    constexpr void toggle_bit(const size_t idx) OKAYLIB_NOEXCEPT
+    {
+        if (idx >= this->size()) [[unlikely]] {
+            __ok_abort("Out of bounds access to bit_slice_t::toggle_bit.");
+        }
+        const size_t bit_idx = idx + m.offset;
+        const size_t byte = bit_idx / 8;
+        const size_t bit = bit_idx % 8;
+        const uint8_t mask = uint8_t(1) << bit;
+        m.first_byte[byte] ^= mask;
+    }
+
+    [[nodiscard]] constexpr bit_slice_t
+    subslice(const subslice_options_t& options) const OKAYLIB_NOEXCEPT
+    {
+        if (options.start + options.length >= this->size()) {
+            __ok_abort("Out of bounds access in bit_slice_t::subslice");
+        }
+
+        const size_t first_byte_index = m.offset + options.start;
+        const uint8_t new_offset = first_byte_index % 8UL;
+        return bit_slice_t(m.first_byte[first_byte_index], options.length,
+                           new_offset);
+    }
+};
+
+constexpr bit_slice_t raw_bit_slice(bytes_t bytes, size_t num_bits,
+                                    uint8_t offset) OKAYLIB_NOEXCEPT
+{
+    if (round_up_to_multiple_of<8>((num_bits + offset)) / 8 > bytes.size()) {
+        __ok_abort("Invalid number of bits requested from slice of bytes in "
+                   "raw_bit_slice().");
+    }
+    if (offset >= 8) {
+        __ok_abort("Offset greater than 7 passed to raw_bit_slice.");
+    }
+    return bit_slice_t(*bytes.data(), num_bits, offset);
+}
+
+constexpr const_bit_slice_t raw_bit_slice(slice<const uint8_t> bytes,
+                                          size_t num_bits,
+                                          uint8_t offset) OKAYLIB_NOEXCEPT
+{
+    if (round_up_to_multiple_of<8>((num_bits + offset)) / 8 > bytes.size()) {
+        __ok_abort("Invalid number of bits requested from slice of bytes in "
+                   "raw_bit_slice().");
+    }
+    if (offset >= 8) {
+        __ok_abort("Offset greater than 7 passed to raw_bit_slice.");
+    }
+    return const_bit_slice_t(const_cast<uint8_t&>(*bytes.data()), num_bits,
+                             offset);
+}
+
 /// Pointer to an array of items of type viewed_t, which are not initialized.
 /// Not much can be done with this type besides decide how to initialize the
 /// memory.
@@ -361,6 +544,61 @@ template <typename T>
     return raw_slice(item, 1);
 }
 
+template <typename range_t, typename enable> struct range_definition;
+
+template <> struct range_definition<const_bit_slice_t, void>
+{
+    static constexpr size_t begin(const const_bit_slice_t&) OKAYLIB_NOEXCEPT
+    {
+        return 0;
+    }
+
+    static constexpr bool is_inbounds(const const_bit_slice_t& bs,
+                                      size_t cursor) OKAYLIB_NOEXCEPT
+    {
+        return cursor < bs.size();
+    }
+
+    static constexpr size_t size(const const_bit_slice_t& bs) OKAYLIB_NOEXCEPT
+    {
+        return bs.size();
+    }
+
+    static constexpr bool get(const const_bit_slice_t& range, size_t cursor)
+    {
+        return range.get_bit(cursor);
+    }
+};
+
+template <> struct range_definition<bit_slice_t, void>
+{
+    static constexpr size_t begin(const bit_slice_t&) OKAYLIB_NOEXCEPT
+    {
+        return 0;
+    }
+
+    static constexpr bool is_inbounds(const bit_slice_t& bs,
+                                      size_t cursor) OKAYLIB_NOEXCEPT
+    {
+        return cursor < bs.size();
+    }
+
+    static constexpr size_t size(const bit_slice_t& bs) OKAYLIB_NOEXCEPT
+    {
+        return bs.size();
+    }
+
+    static constexpr bool get(const bit_slice_t& range, size_t cursor)
+    {
+        return range.get_bit(cursor);
+    }
+
+    static constexpr void set(bit_slice_t& range, size_t cursor, bool value)
+    {
+        return range.set_bit(cursor, value);
+    }
+};
+
 } // namespace ok
 
 #ifdef OKAYLIB_USE_FMT
@@ -389,6 +627,33 @@ template <typename viewed_t> struct fmt::formatter<ok::slice<viewed_t>>
                               slice.m_elements);
     }
 };
+
+template <> struct fmt::formatter<ok::const_bit_slice_t>
+{
+    constexpr auto
+    parse(format_parse_context& ctx) -> format_parse_context::iterator
+    {
+        auto it = ctx.begin();
+        if (it != ctx.end() && *it != '}')
+            throw_format_error("invalid format");
+        return it;
+    }
+
+    auto format(const ok::const_bit_slice_t& bs,
+                format_context& ctx) const -> format_context::iterator
+    {
+        fmt::format_to(ctx.out(), "0b");
+        for (size_t i = 0; i < bs.size(); ++i) {
+            fmt::format_to(ctx.out(), bs.get_bit(i) ? "1" : "0");
+        }
+        return fmt::format_to(ctx.out(), "");
+    }
+};
+// bit slice inherits from const bit slice, and also from its fmt definition
+template <>
+struct fmt::formatter<ok::bit_slice_t>
+    : public fmt::formatter<ok::const_bit_slice_t>
+{};
 #endif
 
 #endif
