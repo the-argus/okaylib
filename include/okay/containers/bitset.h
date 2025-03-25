@@ -89,12 +89,12 @@ template <size_t num_bits> class bitset_t
         return *this;
     }
 
-    [[nodiscard]] constexpr bit_slice_t items() OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr bit_slice_t items() & OKAYLIB_NOEXCEPT
     {
         return raw_bit_slice(slice(bytes), num_bits, 0);
     }
 
-    [[nodiscard]] constexpr const_bit_slice_t items() const OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr const_bit_slice_t items() const& OKAYLIB_NOEXCEPT
     {
         return raw_bit_slice(slice<const uint8_t>(bytes), num_bits, 0);
     }
@@ -109,9 +109,9 @@ template <size_t num_bits> class bitset_t
         return num_bits;
     }
 
-    constexpr operator bit_slice_t() OKAYLIB_NOEXCEPT { return items(); }
+    constexpr operator bit_slice_t() & OKAYLIB_NOEXCEPT { return items(); }
 
-    constexpr operator const_bit_slice_t() const OKAYLIB_NOEXCEPT
+    constexpr operator const_bit_slice_t() const& OKAYLIB_NOEXCEPT
     {
         return items();
     }

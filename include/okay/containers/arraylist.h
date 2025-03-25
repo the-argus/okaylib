@@ -256,14 +256,12 @@ class arraylist_t
         return out;
     }
 
-    constexpr opt<T> remove_and_swap_last(size_t idx) OKAYLIB_NOEXCEPT
+    constexpr T remove_and_swap_last(size_t idx) OKAYLIB_NOEXCEPT
     {
         auto& spots = m.allocated_spots.ref_or_panic();
-        if (idx >= this->size()) [[unlikely]]
-            return {};
         auto& target = spots.data()[idx];
         // moved out at index
-        opt<T> out(std::move(target));
+        T out(std::move(target));
 
         defer decrement([this] { --m.spots_occupied; });
 

@@ -104,9 +104,10 @@ template <typename T = detail::deduced_t, typename... args_t>
             std::conditional_t<is_constructed_type_deduced,
                                typename analysis::associated_type, T>;
 
-        static_assert(!is_constructed_type_deduced || !std::is_void_v<actual_t>,
-                      "Unable to deduce the type for given construction, "
-                      "you may need to pass");
+        static_assert(
+            !is_constructed_type_deduced || !std::is_void_v<actual_t>,
+            "Unable to deduce the type for given construction, "
+            "you may need to pass the type like so: ok::make<MyType>(...)");
         static_assert(analysis{},
                       "No matching constructor for the given arguments.");
         static_assert(analysis{},

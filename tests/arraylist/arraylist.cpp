@@ -757,17 +757,17 @@ TEST_SUITE("arraylist")
                                     .release();
 
             REQUIRE(!ranges_equal(alist, indices));
-            REQUIRE(alist.remove_and_swap_last(2).ref_or_panic() == 7);
+            REQUIRE(alist.remove_and_swap_last(2) == 7);
             REQUIRE(ranges_equal(alist, array_t{0, 6, 2, 3, 4, 5, 1}));
-            REQUIRE(alist.remove_and_swap_last(1).ref_or_panic() == 6);
+            REQUIRE(alist.remove_and_swap_last(1) == 6);
             REQUIRE(ranges_equal(alist, array_t{0, 1, 2, 3, 4, 5}));
-            REQUIRE(alist.remove_and_swap_last(0).ref_or_panic() == 0);
-            REQUIRE(alist.remove_and_swap_last(0).ref_or_panic() == 5);
-            REQUIRE(alist.remove_and_swap_last(0).ref_or_panic() == 4);
-            REQUIRE(alist.remove_and_swap_last(0).ref_or_panic() == 3);
-            REQUIRE(alist.remove_and_swap_last(0).ref_or_panic() == 2);
-            REQUIRE(alist.remove_and_swap_last(0).ref_or_panic() == 1);
-            REQUIRE(!alist.remove_and_swap_last(0).has_value());
+            REQUIRE(alist.remove_and_swap_last(0) == 0);
+            REQUIRE(alist.remove_and_swap_last(0) == 5);
+            REQUIRE(alist.remove_and_swap_last(0) == 4);
+            REQUIRE(alist.remove_and_swap_last(0) == 3);
+            REQUIRE(alist.remove_and_swap_last(0) == 2);
+            REQUIRE(alist.remove_and_swap_last(0) == 1);
+            REQUIREABORTS(alist.remove_and_swap_last(0));
         }
 
         SUBCASE("still works after reallocation")
