@@ -259,6 +259,10 @@ class arraylist_t
     constexpr T remove_and_swap_last(size_t idx) OKAYLIB_NOEXCEPT
     {
         auto& spots = m.allocated_spots.ref_or_panic();
+        if (idx >= m.spots_occupied) [[unlikely]] {
+            __ok_abort(
+                "Out of bounds access in arraylist_t::remove_and_swap_last()");
+        }
         auto& target = spots.data()[idx];
         // moved out at index
         T out(std::move(target));
