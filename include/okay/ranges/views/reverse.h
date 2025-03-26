@@ -211,9 +211,11 @@ struct range_definition<detail::reversed_view_t<input_range_t>,
         return ok::iter_get_ref(parent_ref, size - (cursor + 1));
     }
 
-    __ok_enable_if_static(range_t, detail::range_has_get_v<T>, void)
-        set(const reversed_t& range, size_t cursor,
-            value_type_for<range_t>&& value) OKAYLIB_NOEXCEPT
+    template <typename... construction_args_t>
+    static constexpr std::enable_if_t<
+        detail::range_has_construction_set_v<range_t, construction_args_t...>>
+    set(const reversed_t& range, size_t cursor,
+        construction_args_t&&... args) OKAYLIB_NOEXCEPT
     {
         const auto& parent_ref =
             range.template get_view_reference<reversed_t, range_t>();
@@ -222,7 +224,7 @@ struct range_definition<detail::reversed_view_t<input_range_t>,
             cursor < size,
             "Bad cursor passed to reverse_view_t::set(), overflow will occur");
         ok::iter_set(parent_ref, size - (cursor + 1),
-                     std::forward<value_type_for<range_t>>(value));
+                     std::forward<construction_args_t>(args)...);
     }
 };
 

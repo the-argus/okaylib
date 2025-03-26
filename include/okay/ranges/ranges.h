@@ -1,6 +1,7 @@
 #ifndef __OKAYLIB_RANGES_RANGES_H__
 #define __OKAYLIB_RANGES_RANGES_H__
 
+#include "okay/construct.h"
 #include "okay/detail/noexcept.h"
 #include "okay/detail/template_util/c_array_length.h"
 #include "okay/detail/template_util/c_array_value_type.h"
@@ -11,7 +12,8 @@
 #include "okay/detail/traits/is_instance.h"
 #include "okay/detail/traits/mathop_traits.h"
 #include "okay/math/ordering.h"
-#include <type_traits>
+// provide opt range definition here to avoid circular includes
+#include "okay/opt.h"
 
 /*
  * This header defines customization points and traits for ranges- their
@@ -25,7 +27,7 @@
  * `const value_type& iter_get_temporary_ref(const range_t&, const
  * cursor_t&)`
  * `[const] value_type& iter_get_ref([const] range_t&, const cursor_t&)`
- * `void iter_set(range_t&, const cursor_t&)`
+ * `void iter_set(range_t&, const cursor_t&, ...)`
  * `begin()`
  * `is_inbounds()`
  */
@@ -563,22 +565,41 @@ template <typename range_t>
 using range_deduced_value_type_t =
     typename range_deduced_value_type<range_t>::type;
 
-template <typename range_t, typename = void>
-struct range_has_set : public std::false_type
+template <typename... construction_args_t> struct range_has_set
+{
+
+    template <typename range_t, typename = void>
+    struct inner : public std::false_type
+    {};
+
+    template <typename range_t>
+    struct inner<
+        range_t,
+        std::enable_if_t<std::is_same_v<
+            decltype(range_definition_inner<range_t>::set(
+                std::declval<range_t&>(),
+                std::declval<const cursor_type_unchecked_for<range_t>&>(),
+                std::declval<construction_args_t>()...)),
+            void>>> : std::true_type
+    {};
+};
+
+template <typename T, typename = void>
+struct range_has_move_construction_set : public std::false_type
 {};
 
-template <typename range_t>
-struct range_has_set<
-    range_t, std::enable_if_t<std::is_same_v<
-                 decltype(range_definition_inner<range_t>::set(
-                     std::declval<range_t&>(),
-                     std::declval<const cursor_type_unchecked_for<range_t>&>(),
-                     std::declval<range_deduced_value_type_t<range_t>&&>())),
-                 void>>> : std::true_type
+template <typename T>
+struct range_has_move_construction_set<
+    T, std::void_t<range_deduced_value_type_t<T>&&>> : public std::true_type
 {};
 
+template <typename range_t, typename... construction_args_t>
+constexpr bool range_has_construction_set_v =
+    range_has_set<construction_args_t...>::template inner<range_t>::value;
+
 template <typename range_t>
-constexpr bool range_has_set_v = range_has_set<range_t>::value;
+constexpr bool range_has_move_construction_set_v =
+    range_has_move_construction_set<range_t>::value;
 
 template <typename T>
 constexpr bool range_has_get_v =
@@ -659,7 +680,14 @@ constexpr bool range_can_decrement_v =
 template <typename T>
 constexpr bool is_output_range_v =
     has_baseline_functions_v<T> && range_can_increment_v<T> &&
-    (range_has_set_v<T> || range_has_get_ref_v<T>);
+    (range_has_move_construction_set_v<T> || range_has_get_ref_v<T>);
+
+template <typename T, typename... construction_args_t>
+constexpr bool is_output_range_with_specific_construction_args_v =
+    has_baseline_functions_v<T> && range_can_increment_v<T> &&
+    ((range_has_construction_set_v<T, construction_args_t...> ||
+      range_has_get_ref_v<T>) &&
+     is_infallible_constructible_v<T, construction_args_t...>);
 
 template <typename T>
 constexpr bool is_input_range_v =
@@ -868,6 +896,53 @@ using cursor_type_for =
     std::conditional_t<ok::detail::range_is_arraylike_v<T>, size_t,
                        typename detail::range_begin_rettype_or_void<T>::type>;
 
+// ok::opt range_definition. located here to avoid circular includes
+template <typename payload_t> struct ok::range_definition<ok::opt<payload_t>>
+{
+    struct cursor_t
+    {
+        friend class range_definition;
+
+      private:
+        bool is_out_of_bounds = false;
+    };
+
+    using opt_range_t = opt<payload_t>;
+
+    static constexpr cursor_t begin(const opt_range_t& range) OKAYLIB_NOEXCEPT
+    {
+        return cursor_t{};
+    }
+
+    static constexpr void increment(const opt_range_t& range,
+                                    cursor_t& cursor) OKAYLIB_NOEXCEPT
+    {
+        cursor.is_out_of_bounds = true;
+    }
+
+    static constexpr bool is_inbounds(const opt_range_t& range,
+                                      const cursor_t& cursor) OKAYLIB_NOEXCEPT
+    {
+        return range.has_value() && !cursor.is_out_of_bounds;
+    }
+
+    static constexpr size_t size(const opt_range_t& range) OKAYLIB_NOEXCEPT
+    {
+        return size_t(range.has_value());
+    }
+
+    static constexpr auto& get_ref(opt_range_t& range, const cursor_t& cursor)
+    {
+        return range.ref_or_panic();
+    }
+
+    static constexpr const auto& get_ref(const opt_range_t& range,
+                                         const cursor_t& cursor)
+    {
+        return range.ref_or_panic();
+    }
+};
+
 namespace detail {
 
 // forward declare these so we can make overloads that detect them and have
@@ -1026,22 +1101,28 @@ struct iter_get_ref_fn_t
 
 struct iter_set_fn_t
 {
-    template <typename range_t>
+    template <typename range_t, typename... construction_args_t>
     constexpr void
     operator()(range_t& range, const cursor_type_for<range_t>& cursor,
-               value_type_for<range_t>&& value) const OKAYLIB_NOEXCEPT
+               construction_args_t&&... args) const OKAYLIB_NOEXCEPT
     {
-        if constexpr (detail::range_has_get_ref_v<range_t> &&
-                      std::is_move_assignable_v<value_type_for<range_t>>) {
-            range_definition_inner<range_t>::get_ref(range, cursor) =
-                std::move(value);
+        if constexpr (detail::range_has_get_ref_v<range_t>) {
+            auto& ref = range_definition_inner<range_t>::get_ref(range, cursor);
+
+            // destroy whats there
+            ref.~value_type_for<range_t>();
+
+            new (ok::addressof(ref)) value_type_for<range_t>(
+                std::forward<construction_args_t>(args)...);
         } else {
             static_assert(
-                detail::range_has_set_v<range_t>,
-                "Cannot set for given range- it does not define iter_set, nor "
+                detail::range_has_construction_set_v<range_t,
+                                                     construction_args_t...>,
+                "Cannot set for given range- it does not define iter_set which "
+                "takes the given arguments, nor "
                 "does it define get_ref + a move constructor for value type.");
-            range_definition_inner<range_t>::set(range, cursor,
-                                                 std::move(value));
+            range_definition_inner<range_t>::set(
+                range, cursor, std::forward<construction_args_t>(args)...);
         }
     }
 

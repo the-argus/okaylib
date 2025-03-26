@@ -154,6 +154,7 @@ const test_source_files = &[_][]const u8{
     "any/any.cpp",
     "arraylist/arraylist.cpp",
     "algorithm/ranges_equal.cpp",
+    "algorithm/ranges_copy.cpp",
 };
 
 const universal_tests_source_files = &[_][]const u8{

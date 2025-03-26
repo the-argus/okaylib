@@ -3,6 +3,7 @@
 
 #include "okay/allocators/allocator.h"
 #include "okay/defer.h"
+#include "okay/ranges/ranges.h"
 #include "okay/status.h"
 
 #ifdef OKAYLIB_USE_FMT
@@ -128,6 +129,25 @@ class arraylist_t
         return *this;
     }
 
+    constexpr status<alloc::error> try_bump_capacity() OKAYLIB_NOEXCEPT
+    {
+        if (!m.allocated_spots) {
+            auto status = this->make_first_allocation();
+            if (!status.okay()) {
+                return status;
+            }
+        } else if (slice<T>& spots = m.allocated_spots.ref_or_panic();
+                   spots.size() <= m.spots_occupied) {
+            // 2x growth rate
+            auto status =
+                this->reallocate(spots, sizeof(T), spots.size() * sizeof(T));
+            if (!status.okay()) {
+                return status;
+            }
+        }
+        return alloc::error::okay;
+    }
+
     /// Returns error describing any potential failure due to allocation, but
     /// just aborts if called with an out of bound index.
     template <typename... args_t>
@@ -140,17 +160,9 @@ class arraylist_t
         }
 
         // if else handles initial allocation and then future reallocation
-        if (!m.allocated_spots) {
-            auto status = this->make_first_allocation();
-            if (!status.okay()) {
-                return status;
-            }
-        } else if (slice<T>& spots = m.allocated_spots.ref_or_panic();
-                   spots.size() <= m.spots_occupied) {
-            // 2x growth rate
-            auto status =
-                this->reallocate(spots, sizeof(T), spots.size() * sizeof(T));
-            if (!status.okay()) {
+        {
+            auto status = this->try_bump_capacity();
+            if (!status.okay()) [[unlikely]] {
                 return status;
             }
         }
@@ -752,7 +764,83 @@ inline constexpr detail::spots_preallocated_t<T> spots_preallocated;
 
 inline constexpr detail::copy_items_from_range_t copy_items_from_range;
 
+template <typename T> class appender_t
+{
+    T& m_output;
+    friend struct ok::range_definition<appender_t>;
+
+  public:
+    struct cursor_t
+    {
+        friend class appender_t;
+        friend struct ok::range_definition<appender_t>;
+
+      private:
+        cursor_t() = default;
+
+        // whether appending has happened. if it has, and you try to iter_set,
+        // it will overwrite the last appended thing. incrementing when this is
+        // already false does nothing.
+        bool has_appended = false;
+    };
+
+    template <
+        typename U = T,
+        std::enable_if_t<
+            std::is_same_v<U, T>&& ::ok::detail::is_instance_v<U, arraylist_t>,
+            bool> = true>
+    constexpr appender_t(U& output) noexcept : m_output(output)
+    {
+    }
+};
+
 }; // namespace arraylist
+
+template <typename T> struct range_definition<arraylist::appender_t<T>>
+{
+    using range_t = arraylist::appender_t<T>;
+    using cursor_t = typename range_t::cursor_t;
+    using value_type = typename T::value_type;
+
+    static constexpr bool infinite = false;
+
+    static constexpr cursor_t begin(range_t& range) noexcept
+    {
+        return cursor_t(range);
+    }
+
+    static constexpr bool is_inbounds(const range_t& appender,
+                                      const cursor_t&) noexcept
+    {
+        return true;
+    }
+
+    template <typename... construction_args_t>
+    static constexpr void set(range_t& appender, const cursor_t& cursor,
+                              construction_args_t&&... args) OKAYLIB_NOEXCEPT
+    {
+        if (cursor.has_appended) {
+            auto& ref = appender.m_output.items().last();
+            ref.~value_type_for<range_t>();
+            new (ok::addressof(ref)) value_type_for<range_t>(
+                std::forward<construction_args_t>(args)...);
+        } else {
+            cursor.has_appended = true;
+            if (!appender.m_output
+                     .append(std::forward<construction_args_t>(args)...)
+                     .okay()) {
+                __ok_abort("Construction of object in arraylist::appender_t "
+                           "failed due to an allocator error.");
+            }
+        }
+    }
+
+    static constexpr void increment(const range_t& appender,
+                                    cursor_t& cursor) OKAYLIB_NOEXCEPT
+    {
+        cursor.has_appended = false;
+    }
+};
 } // namespace ok
 
 #ifdef OKAYLIB_USE_FMT

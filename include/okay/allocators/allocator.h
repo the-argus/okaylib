@@ -8,9 +8,11 @@
 #include <type_traits>
 #include <utility> // for std::forward
 
-// pulls in res, then slice and opt, and because of that also ranges and
-// ordering
+// pulls in res, then slice and opt
 #include "okay/construct.h"
+#include "okay/detail/template_util/c_array_length.h"
+#include "okay/detail/template_util/c_array_value_type.h"
+#include "okay/math/ordering.h"
 // for reinterpret_as_bytes
 #include "okay/stdmem.h"
 

@@ -205,13 +205,19 @@ template <bool allow_small_destination = false> struct ranges_copy_fn_t
             auto source_cursor = ok::begin(options.source);
             while (true) {
 
-                // do bounds checking differently based on
-                // allow_small_destination and combinations of
-                // infinite/finite/sized
-                if constexpr (range_marked_finite_v<dest_range_t> &&
-                              range_marked_finite_v<source_range_t>) {
-                    // if theyre both finite, we have to do bounds checking for
-                    // both
+                // optimizations: we only need to check the bounds for
+                // non-infinite ranges
+                if constexpr (range_marked_infinite_v<source_range_t>) {
+                    if (!ok::is_inbounds(options.dest, dest_cursor)) {
+                        return;
+                    }
+                } else if constexpr (range_marked_infinite_v<dest_range_t>) {
+                    if (!ok::is_inbounds(options.source, source_cursor)) {
+                        return;
+                    }
+                } else {
+                    // if both ranges are either finite or sized, we have to
+                    // check both ranges
                     const bool dest_inbounds =
                         ok::is_inbounds(options.dest, dest_cursor);
                     const bool source_inbounds =
@@ -229,25 +235,6 @@ template <bool allow_small_destination = false> struct ranges_copy_fn_t
                             return;
                         }
                     }
-                } else if constexpr (range_marked_infinite_v<source_range_t> &&
-                                     range_marked_finite_v<dest_range_t>) {
-
-                } else if constexpr (range_marked_infinite_v<source_range_t> &&
-                                     range_definition_has_size_v<
-                                         dest_range_t>) {
-
-                } else if constexpr (range_marked_infinite_v<dest_range_t> &&
-                                     range_marked_finite_v<source_range_t>) {
-
-                } else if constexpr (range_marked_infinite_v<dest_range_t> &&
-                                     range_definition_has_size_v<
-                                         source_range_t>) {
-                } else if constexpr (range_marked_finite_v<source_range_t> &&
-                                     range_definition_has_size_v<
-                                         dest_range_t>) {
-                } else if constexpr (range_marked_finite_v<dest_range_t> &&
-                                     range_definition_has_size_v<
-                                         source_range_t>) {
                 }
 
                 ok::iter_set(
@@ -265,6 +252,7 @@ template <bool allow_small_destination = false> struct ranges_copy_fn_t
 
 inline constexpr detail::ranges_equal_fn_t ranges_equal;
 inline constexpr detail::ranges_copy_fn_t<false> ranges_copy;
+inline constexpr detail::ranges_copy_fn_t<true> ranges_copy_as_much_as_will_fit;
 
 } // namespace ok
 
