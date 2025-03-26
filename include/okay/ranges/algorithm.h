@@ -133,23 +133,23 @@ struct ranges_equal_fn_t
 };
 } // namespace detail
 
-template <typename dest_range_t, typename source_range_t>
-struct ranges_copy_options_t
+template <typename T> struct dest
 {
-    static_assert(detail::is_output_range_v<dest_range_t>,
-                  "Range given as `dest` is not an output range.");
-    static_assert(detail::is_input_range_v<source_range_t>,
-                  "Range given as `source` is not an input range.");
-    static_assert(std::is_convertible_v<value_type_for<source_range_t>,
-                                        value_type_for<dest_range_t>>,
-                  "The values inside the given ranges are not convertible, "
-                  "cannot copy from source to dest.");
-    static_assert(!detail::range_marked_infinite_v<dest_range_t> ||
-                      !detail::range_marked_infinite_v<source_range_t>,
-                  "Attempt to copy an infinite range into an infinite range, "
-                  "this will just loop forever.");
-    dest_range_t& dest;
-    const source_range_t& source;
+    constexpr dest(T& ref) noexcept : m_ref(ref) {}
+
+    constexpr T& value() const noexcept { return m_ref; }
+
+  private:
+    T& m_ref;
+};
+
+template <typename T> struct source
+{
+    constexpr source(const T& ref) noexcept : m_ref(ref) {}
+    constexpr const T& value() const noexcept { return m_ref; }
+
+  private:
+    const T& m_ref;
 };
 
 namespace detail {
@@ -158,70 +158,86 @@ template <bool allow_small_destination = false> struct ranges_copy_fn_t
 {
     template <typename dest_range_t, typename source_range_t>
     constexpr void
-    operator()(ranges_copy_options_t<dest_range_t, source_range_t>&& options)
-        const OKAYLIB_NOEXCEPT
+    operator()(dest<dest_range_t> dest_wrapper,
+               source<source_range_t> source_wrapper) const OKAYLIB_NOEXCEPT
     {
+        dest_range_t& dest = dest_wrapper.value();
+        const source_range_t& source = source_wrapper.value();
+
+        static_assert(detail::is_output_range_v<dest_range_t>,
+                      "Range given as `dest` is not an output range.");
+        static_assert(detail::is_input_range_v<source_range_t>,
+                      "Range given as `source` is not an input range.");
+        static_assert(std::is_convertible_v<value_type_for<source_range_t>,
+                                            value_type_for<dest_range_t>>,
+                      "The values inside the given ranges are not convertible, "
+                      "cannot copy from source to dest.");
+        static_assert(
+            !detail::range_marked_infinite_v<dest_range_t> ||
+                !detail::range_marked_infinite_v<source_range_t>,
+            "Attempt to copy an infinite range into an infinite range, "
+            "this will just loop forever.");
         constexpr bool both_ranges_have_known_size =
             range_definition_has_size_v<dest_range_t> &&
             range_definition_has_size_v<source_range_t>;
 
         if constexpr (both_ranges_have_known_size) {
 
-            if (ok::size(options.dest) < ok::size(options.source)) {
+            if (ok::size(dest) < ok::size(source)) {
                 if constexpr (!allow_small_destination) {
                     __ok_abort(
                         "Attempt to ranges_copy() from a source which is "
                         "larger than the destination.");
                 } else {
                     // we know destination is smaller, track that only
-                    auto dest_cursor = ok::begin(options.dest);
-                    auto source_cursor = ok::begin(options.source);
-                    while (ok::is_inbounds(options.dest, dest_cursor)) {
-                        ok::iter_set(options.dest, dest_cursor,
-                                     ok::iter_get_temporary_ref(options.source,
-                                                                source_cursor));
+                    auto dest_cursor = ok::begin(dest);
+                    auto source_cursor = ok::begin(source);
+                    while (ok::is_inbounds(dest, dest_cursor)) {
+                        ok::iter_set(
+                            dest, dest_cursor,
+                            ok::iter_get_temporary_ref(source, source_cursor));
 
-                        ok::increment(options.dest, dest_cursor);
-                        ok::increment(options.source, source_cursor);
+                        ok::increment(dest, dest_cursor);
+                        ok::increment(source, source_cursor);
                     }
                 }
             } else {
                 // identical code to above but we only check if the source is
                 // exhausted, since we know that dest is at least as big
-                auto dest_cursor = ok::begin(options.dest);
-                auto source_cursor = ok::begin(options.source);
-                while (ok::is_inbounds(options.source, source_cursor)) {
-                    ok::iter_set(options.dest, dest_cursor,
-                                 ok::iter_get_temporary_ref(options.source,
-                                                            source_cursor));
+                auto dest_cursor = ok::begin(dest);
+                auto source_cursor = ok::begin(source);
+                while (ok::is_inbounds(source, source_cursor)) {
+                    ok::iter_set(
+                        dest, dest_cursor,
+                        ok::iter_get_temporary_ref(source, source_cursor));
 
-                    ok::increment(options.dest, dest_cursor);
-                    ok::increment(options.source, source_cursor);
+                    ok::increment(dest, dest_cursor);
+                    ok::increment(source, source_cursor);
                 }
             }
 
         } else {
-            auto dest_cursor = ok::begin(options.dest);
-            auto source_cursor = ok::begin(options.source);
+            auto dest_cursor = ok::begin(dest);
+            auto source_cursor = ok::begin(source);
             while (true) {
 
                 // optimizations: we only need to check the bounds for
                 // non-infinite ranges
                 if constexpr (range_marked_infinite_v<source_range_t>) {
-                    if (!ok::is_inbounds(options.dest, dest_cursor)) {
+                    if (!ok::is_inbounds(dest, dest_cursor)) {
                         return;
                     }
                 } else if constexpr (range_marked_infinite_v<dest_range_t>) {
-                    if (!ok::is_inbounds(options.source, source_cursor)) {
+                    if (!ok::is_inbounds(source, source_cursor)) {
                         return;
                     }
                 } else {
                     // if both ranges are either finite or sized, we have to
                     // check both ranges
                     const bool dest_inbounds =
-                        ok::is_inbounds(options.dest, dest_cursor);
+                        ok::is_inbounds(dest, dest_cursor);
                     const bool source_inbounds =
-                        ok::is_inbounds(options.source, source_cursor);
+                        ok::is_inbounds(source, source_cursor);
 
                     if (!source_inbounds) {
                         return;
@@ -237,12 +253,11 @@ template <bool allow_small_destination = false> struct ranges_copy_fn_t
                     }
                 }
 
-                ok::iter_set(
-                    options.dest, dest_cursor,
-                    ok::iter_get_temporary_ref(options.source, source_cursor));
+                ok::iter_set(dest, dest_cursor,
+                             ok::iter_get_temporary_ref(source, source_cursor));
 
-                ok::increment(options.dest, dest_cursor);
-                ok::increment(options.source, source_cursor);
+                ok::increment(dest, dest_cursor);
+                ok::increment(source, source_cursor);
             }
         }
     }

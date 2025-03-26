@@ -567,7 +567,8 @@ using range_deduced_value_type_t =
 
 template <typename... construction_args_t> struct range_has_set
 {
-
+    static_assert(sizeof...(construction_args_t) != 0,
+                  "No construction args passed to range_has_set<...>");
     template <typename range_t, typename = void>
     struct inner : public std::false_type
     {};
@@ -590,7 +591,9 @@ struct range_has_move_construction_set : public std::false_type
 
 template <typename T>
 struct range_has_move_construction_set<
-    T, std::void_t<range_deduced_value_type_t<T>&&>> : public std::true_type
+    T, std::enable_if_t<range_has_set<
+           range_deduced_value_type_t<T>&&>::template inner<T>::value>>
+    : public std::true_type
 {};
 
 template <typename range_t, typename... construction_args_t>
@@ -681,13 +684,6 @@ template <typename T>
 constexpr bool is_output_range_v =
     has_baseline_functions_v<T> && range_can_increment_v<T> &&
     (range_has_move_construction_set_v<T> || range_has_get_ref_v<T>);
-
-template <typename T, typename... construction_args_t>
-constexpr bool is_output_range_with_specific_construction_args_v =
-    has_baseline_functions_v<T> && range_can_increment_v<T> &&
-    ((range_has_construction_set_v<T, construction_args_t...> ||
-      range_has_get_ref_v<T>) &&
-     is_infallible_constructible_v<T, construction_args_t...>);
 
 template <typename T>
 constexpr bool is_input_range_v =
@@ -842,12 +838,17 @@ class range_def_for : public detail::range_definition_inner<T>
     static_assert(
         input_or_output,
         "Range definition invalid- it does not define any operations that "
-        "can be done with the range like get(), set(), or get_ref()");
+        "can be done with the range like get(range, cursor), set(range, "
+        "cursor, value_type&&), or get_ref(range, cursor)");
 
     static constexpr bool ref_or_get_are_mutually_exclusive =
-        detail::range_has_get_v<noref> !=
-        (detail::range_has_get_ref_v<noref> ||
-         detail::range_has_get_ref_const_v<noref>);
+        (detail::range_has_get_v<noref> !=
+         (detail::range_has_get_ref_v<noref> ||
+          detail::range_has_get_ref_const_v<noref>)) ||
+        // its also valid for the range to only define set()
+        (!detail::range_has_get_v<noref> &&
+         !detail::range_has_get_ref_v<noref> &&
+         !detail::range_has_get_ref_const_v<noref>);
     static_assert(
         ref_or_get_are_mutually_exclusive,
         "Range definition invalid- both get() and a get_ref() functions are "
@@ -1109,11 +1110,30 @@ struct iter_set_fn_t
         if constexpr (detail::range_has_get_ref_v<range_t>) {
             auto& ref = range_definition_inner<range_t>::get_ref(range, cursor);
 
-            // destroy whats there
-            ref.~value_type_for<range_t>();
+            // if you supplied only one arg, and it is assignable, and the range
+            // uses get_ref, then set performs assignment. otherwise, it
+            // manually calls destruction and then constructs in place
+            if constexpr (sizeof...(construction_args_t) == 1) {
+                using first_type =
+                    detail::first_type_in_pack_t<construction_args_t...>;
+                if constexpr (std::is_assignable_v<decltype(ref), first_type>) {
+                    const auto applyer = [&ref](auto&& a) {
+                        ref = std::forward<first_type>(a);
+                    };
+                    applyer(std::forward<construction_args_t>(args)...);
+                } else {
+                    // duplicated code with outer else case here
+                    ref.~value_type_for<range_t>();
+                    new (ok::addressof(ref)) value_type_for<range_t>(
+                        std::forward<construction_args_t>(args)...);
+                }
+            } else {
+                // destroy whats there
+                ref.~value_type_for<range_t>();
 
-            new (ok::addressof(ref)) value_type_for<range_t>(
-                std::forward<construction_args_t>(args)...);
+                new (ok::addressof(ref)) value_type_for<range_t>(
+                    std::forward<construction_args_t>(args)...);
+            }
         } else {
             static_assert(
                 detail::range_has_construction_set_v<range_t,

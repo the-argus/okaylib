@@ -781,7 +781,7 @@ template <typename T> class appender_t
         // whether appending has happened. if it has, and you try to iter_set,
         // it will overwrite the last appended thing. incrementing when this is
         // already false does nothing.
-        bool has_appended = false;
+        mutable bool has_appended = false;
     };
 
     template <
@@ -789,7 +789,7 @@ template <typename T> class appender_t
         std::enable_if_t<
             std::is_same_v<U, T>&& ::ok::detail::is_instance_v<U, arraylist_t>,
             bool> = true>
-    constexpr appender_t(U& output) noexcept : m_output(output)
+    constexpr appender_t(T& output) noexcept : m_output(output)
     {
     }
 };
@@ -802,11 +802,11 @@ template <typename T> struct range_definition<arraylist::appender_t<T>>
     using cursor_t = typename range_t::cursor_t;
     using value_type = typename T::value_type;
 
-    static constexpr bool infinite = false;
+    static constexpr bool infinite = true;
 
-    static constexpr cursor_t begin(range_t& range) noexcept
+    static constexpr cursor_t begin(const range_t& range) noexcept
     {
-        return cursor_t(range);
+        return cursor_t();
     }
 
     static constexpr bool is_inbounds(const range_t& appender,

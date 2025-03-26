@@ -111,32 +111,63 @@ struct range_definition<detail::transformed_view_t<input_range_t, callable_t>>
     using transformed_t = detail::transformed_view_t<input_range_t, callable_t>;
     using cursor_t = cursor_type_for<range_t>;
 
+    static_assert(detail::is_input_range_v<range_t>,
+                  "Cannot transform something which is not an input range.");
+
+    template <typename T>
+    static constexpr decltype(auto)
+    get_and_transform(T& t, const cursor_t& cursor) OKAYLIB_NOEXCEPT
+    {
+        using inner_def = detail::range_definition_inner<range_t>;
+        if constexpr (detail::range_has_get_ref_v<range_t> ||
+                      detail::range_has_get_ref_const_v<range_t>) {
+            return t.transformer_callable()(inner_def::get_ref(
+                t.template get_view_reference<T, range_t>(), cursor));
+        } else {
+            static_assert(detail::range_has_get_v<range_t>);
+            return t.transformer_callable()(inner_def::get(
+                t.template get_view_reference<T, range_t>(), cursor));
+        }
+    }
+    using transforming_callable_rettype = decltype(get_and_transform(
+        std::declval<transformed_t&>(), std::declval<const cursor_t&>()));
+
     static constexpr bool is_arraylike = detail::range_is_arraylike_v<range_t>;
 
-    constexpr static decltype(auto) get(const transformed_t& i,
-                                        const cursor_t& c) OKAYLIB_NOEXCEPT
+    template <typename T = transforming_callable_rettype>
+    constexpr static auto get(const transformed_t& i,
+                              const cursor_t& c) OKAYLIB_NOEXCEPT
+        -> std::enable_if_t<std::is_same_v<T, transforming_callable_rettype> &&
+                                // should only use get() if the transformation
+                                // doesnt seem to create a ref
+                                !std::is_lvalue_reference_v<T>,
+                            T>
     {
-        static_assert(detail::is_input_range_v<range_t>);
-        using inner_def = detail::range_definition_inner<range_t>;
-        if constexpr (detail::range_has_get_v<range_t>) {
-            using rettype = decltype(inner_def::get(
-                i.template get_view_reference<transformed_t, range_t>(), c));
+        return get_and_transform(i, c);
+    }
 
-            return i.transformer_callable()(
-                std::forward<std::remove_reference_t<rettype>>(inner_def::get(
-                    i.template get_view_reference<transformed_t, range_t>(),
-                    c)));
-        } else {
-            static_assert(detail::range_has_get_ref_const_v<range_t>);
+    template <typename T = transforming_callable_rettype>
+    constexpr static auto get_ref(const transformed_t& i,
+                                  const cursor_t& c) OKAYLIB_NOEXCEPT
+        -> std::enable_if_t<std::is_same_v<T, transforming_callable_rettype> &&
+                                // should only use get() if the transformation
+                                // doesnt seem to create a ref
+                                std::is_lvalue_reference_v<T>,
+                            const std::remove_reference_t<T>&>
+    {
+        return get_and_transform(i, c);
+    }
 
-            using rettype = decltype(inner_def::get_ref(
-                i.template get_view_reference<transformed_t, range_t>(), c));
-
-            return i.transformer_callable()(
-                std::forward<rettype>(inner_def::get_ref(
-                    i.template get_view_reference<transformed_t, range_t>(),
-                    c)));
-        }
+    template <typename T = transforming_callable_rettype>
+    constexpr static auto get_ref(transformed_t& i,
+                                  const cursor_t& c) OKAYLIB_NOEXCEPT
+        -> std::enable_if_t<std::is_same_v<T, transforming_callable_rettype> &&
+                                // should only use get() if the transformation
+                                // doesnt seem to create a ref
+                                std::is_lvalue_reference_v<T>,
+                            T>
+    {
+        return get_and_transform(i, c);
     }
 };
 

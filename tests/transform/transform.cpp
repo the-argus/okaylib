@@ -25,6 +25,7 @@ TEST_SUITE("transform")
             }
 
             auto identity = ints | transform([](auto i) { return i; });
+
             for (auto c = ok::begin(identity); ok::is_inbounds(identity, c);
                  ok::increment(identity, c)) {
                 const int& item = ok::iter_get_temporary_ref(identity, c);
