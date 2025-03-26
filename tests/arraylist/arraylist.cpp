@@ -820,6 +820,8 @@ TEST_SUITE("arraylist")
             for_each([&](size_t i) { alist.append(i); });
 
         backing.deallocate(reinterpret_as_bytes(items));
+
+        REQUIRE(ranges_equal(alist, indices));
     }
 
     TEST_CASE("resize()")
