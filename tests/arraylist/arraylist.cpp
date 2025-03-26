@@ -10,6 +10,7 @@
 #include "okay/ranges/for_each.h"
 #include "okay/ranges/indices.h"
 #include "okay/ranges/views/drop.h"
+#include "okay/ranges/views/keep_if.h"
 #include "okay/ranges/views/take_at_most.h"
 
 using namespace ok;
@@ -957,6 +958,51 @@ TEST_SUITE("arraylist")
         alist.shrink_to_reclaim_unused_memory();
         REQUIRE(alist.capacity() == alist.size());
         REQUIRE(ranges_equal(alist, indices));
+    }
+
+    TEST_CASE("append_range()")
+    {
+        SUBCASE("sized range")
+        {
+            c_allocator_t backing;
+            auto alist = arraylist::empty<int>(backing);
+            array_t initial = {0, 1, 2, 3};
+
+            auto status = alist.append_range(array_t{0, 1, 2, 3});
+
+            REQUIRE(status.okay());
+            REQUIRE(ranges_equal(alist, initial));
+
+            status = alist.append_range(array_t{4, 5, 6, 7, 8});
+
+            REQUIRE(status.okay());
+            REQUIRE(ranges_equal(alist, array_t{0, 1, 2, 3, 4, 5, 6, 7, 8}));
+        }
+
+        SUBCASE("finite range")
+        {
+            c_allocator_t backing;
+            auto alist = arraylist::empty<int>(backing);
+
+            const auto identity = keep_if([](auto&&) { return true; });
+            const array_t initial = {0, 1, 2, 3};
+            const auto initial_finite = initial | identity;
+            static_assert(
+                detail::range_marked_finite_v<decltype(initial_finite)>);
+
+            auto status = alist.append_range(initial_finite);
+
+            REQUIRE(status.okay());
+            REQUIRE(ranges_equal(alist, initial));
+
+            const auto second_finite = array_t{4, 5, 6, 7, 8} | identity;
+            static_assert(
+                detail::range_marked_finite_v<decltype(second_finite)>);
+            status = alist.append_range(second_finite);
+
+            REQUIRE(status.okay());
+            REQUIRE(ranges_equal(alist, array_t{0, 1, 2, 3, 4, 5, 6, 7, 8}));
+        }
     }
 
     TEST_CASE("increase_capacity_by()")

@@ -1,8 +1,6 @@
 #include "test_header.h"
 // test header must be first
-#include "okay/allocators/c_allocator.h"
 #include "okay/containers/array.h"
-#include "okay/containers/arraylist.h"
 #include "okay/ranges/algorithm.h"
 #include "okay/ranges/indices.h"
 #include "okay/ranges/views/all.h"
@@ -62,16 +60,6 @@ TEST_SUITE("ok::ranges_copy and ok::ranges_copy_as_much_as_will_fit algorithms")
             // only affect every other item
             REQUIRE(ranges_equal(array, array_t{0, 0, 1, 0, 2, 0, 3, 0, 4, 0}));
         }
-    }
-
-    TEST_CASE("copy from finite or sized -> infinite")
-    {
-        c_allocator_t backing;
-        arraylist_t alist = arraylist::empty<int>(backing);
-
-        auto status = alist.append_range(array_t{0, 1, 2});
-        REQUIRE(status.okay());
-        REQUIRE(ranges_equal(alist, array_t{0, 1, 2}));
     }
 
     TEST_CASE("copy from finite to finite")
