@@ -786,8 +786,10 @@ TEST_SUITE("arraylist")
             REQUIRE(ranges_equal(alist, array_t{0, 6, 2, 3, 4, 5, 1}));
 
             // okay now reallocate
-            alist.increase_capacity_by(100);
-            REQUIRE(ranges_equal(alist, array_t{0, 6, 2, 3, 4, 5, 1}));
+            auto status = alist.increase_capacity_by(100);
+            const bool good = status.okay() &&
+                              ranges_equal(alist, array_t{0, 6, 2, 3, 4, 5, 1});
+            REQUIRE(good);
             alist.remove_and_swap_last(1);
             REQUIRE(ranges_equal(alist, indices));
         }
@@ -959,12 +961,25 @@ TEST_SUITE("arraylist")
 
     TEST_CASE("increase_capacity_by()")
     {
-        c_allocator_t backing;
-        arraylist_t alist = arraylist::copy_items_from_range(
-                                backing, indices | take_at_most(100))
-                                .release();
-        REQUIRE(alist.capacity() == 100);
-        alist.increase_capacity_by(100);
-        REQUIRE(alist.capacity() >= 200);
+        SUBCASE("reallocation")
+        {
+            c_allocator_t backing;
+            arraylist_t alist = arraylist::copy_items_from_range(
+                                    backing, indices | take_at_most(100))
+                                    .release();
+            REQUIRE(alist.capacity() == 100);
+            auto status = alist.increase_capacity_by(100);
+            const bool good = status.okay() && alist.capacity() >= 200;
+            REQUIRE(good);
+        }
+
+        SUBCASE("initial allocation")
+        {
+            c_allocator_t backing;
+            arraylist_t alist = arraylist::empty<size_t>(backing);
+            auto status = alist.increase_capacity_by(100);
+            const bool good = status.okay() && alist.capacity() >= 100;
+            REQUIRE(good);
+        }
     }
 }

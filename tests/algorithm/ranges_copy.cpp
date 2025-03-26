@@ -69,10 +69,8 @@ TEST_SUITE("ok::ranges_copy and ok::ranges_copy_as_much_as_will_fit algorithms")
         c_allocator_t backing;
         arraylist_t alist = arraylist::empty<int>(backing);
 
-        auto appender = arraylist::appender_t(alist);
-
-        ranges_copy(dest(appender), source(array_t{0, 1, 2}));
-
+        auto status = alist.append_range(array_t{0, 1, 2});
+        REQUIRE(status.okay());
         REQUIRE(ranges_equal(alist, array_t{0, 1, 2}));
     }
 

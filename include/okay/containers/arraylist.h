@@ -232,11 +232,15 @@ class arraylist_t
         }
     }
 
-    constexpr status<alloc::error>
+    [[nodiscard]] constexpr status<alloc::error>
     increase_capacity_by(size_t new_spots) OKAYLIB_NOEXCEPT
     {
-        return reallocate(m.allocated_spots.ref_or_panic(),
-                          new_spots * sizeof(T), 0);
+        if (!m.allocated_spots) {
+            return make_first_allocation(new_spots * sizeof(T));
+        } else {
+            return reallocate(m.allocated_spots.ref_or_panic(),
+                              new_spots * sizeof(T), 0);
+        }
     }
 
     constexpr T remove(size_t idx) OKAYLIB_NOEXCEPT
@@ -470,6 +474,45 @@ class arraylist_t
             decltype(insert_at(size(), std::forward<args_t>(args)...))>
     {
         return insert_at(size(), std::forward<args_t>(args)...);
+    }
+
+    /// Returns an error only if allocation to expand space for the new items
+    /// errored.
+    template <typename other_range_t>
+    [[nodiscard]] constexpr status<alloc::error>
+    append_range(const other_range_t& range) OKAYLIB_NOEXCEPT
+    {
+        static_assert(
+            is_infallible_constructible_v<T, value_type_for<other_range_t>>,
+            "Cannot append the given range: the contents of the arraylist "
+            "cannot (definitely) be constructed from the contents of the given "
+            "range.");
+        static_assert(!detail::range_marked_infinite_v<other_range_t>,
+                      "Cannot append an infinite range.");
+
+        __ok_internal_assert(this->capacity() >= this->size());
+        if constexpr (detail::range_definition_has_size_v<other_range_t>) {
+            const size_t size = ok::size(range);
+            const size_t extra_space = this->capacity() - this->size();
+            if (size > extra_space) {
+                auto status = this->increase_capacity_by(size - extra_space);
+                if (!status.okay()) [[unlikely]] {
+                    return status;
+                }
+            }
+        }
+
+        for (auto cursor = ok::begin(range); ok::is_inbounds(range, cursor);
+             ok::increment(range, cursor)) {
+            auto status =
+                this->append(ok::iter_get_temporary_ref(range, cursor));
+            if constexpr (!detail::range_definition_has_size_v<other_range_t>) {
+                if (!status.okay()) [[unlikely]] {
+                    return status;
+                }
+            }
+        }
+        return alloc::error::okay;
     }
 
     inline ~arraylist_t() { destroy(); }
@@ -763,84 +806,7 @@ template <typename T>
 inline constexpr detail::spots_preallocated_t<T> spots_preallocated;
 
 inline constexpr detail::copy_items_from_range_t copy_items_from_range;
-
-template <typename T> class appender_t
-{
-    T& m_output;
-    friend struct ok::range_definition<appender_t>;
-
-  public:
-    struct cursor_t
-    {
-        friend class appender_t;
-        friend struct ok::range_definition<appender_t>;
-
-      private:
-        cursor_t() = default;
-
-        // whether appending has happened. if it has, and you try to iter_set,
-        // it will overwrite the last appended thing. incrementing when this is
-        // already false does nothing.
-        mutable bool has_appended = false;
-    };
-
-    template <
-        typename U = T,
-        std::enable_if_t<
-            std::is_same_v<U, T>&& ::ok::detail::is_instance_v<U, arraylist_t>,
-            bool> = true>
-    constexpr appender_t(T& output) noexcept : m_output(output)
-    {
-    }
-};
-
 }; // namespace arraylist
-
-template <typename T> struct range_definition<arraylist::appender_t<T>>
-{
-    using range_t = arraylist::appender_t<T>;
-    using cursor_t = typename range_t::cursor_t;
-    using value_type = typename T::value_type;
-
-    static constexpr bool infinite = true;
-
-    static constexpr cursor_t begin(const range_t& range) noexcept
-    {
-        return cursor_t();
-    }
-
-    static constexpr bool is_inbounds(const range_t& appender,
-                                      const cursor_t&) noexcept
-    {
-        return true;
-    }
-
-    template <typename... construction_args_t>
-    static constexpr void set(range_t& appender, const cursor_t& cursor,
-                              construction_args_t&&... args) OKAYLIB_NOEXCEPT
-    {
-        if (cursor.has_appended) {
-            auto& ref = appender.m_output.items().last();
-            ref.~value_type_for<range_t>();
-            new (ok::addressof(ref)) value_type_for<range_t>(
-                std::forward<construction_args_t>(args)...);
-        } else {
-            cursor.has_appended = true;
-            if (!appender.m_output
-                     .append(std::forward<construction_args_t>(args)...)
-                     .okay()) {
-                __ok_abort("Construction of object in arraylist::appender_t "
-                           "failed due to an allocator error.");
-            }
-        }
-    }
-
-    static constexpr void increment(const range_t& appender,
-                                    cursor_t& cursor) OKAYLIB_NOEXCEPT
-    {
-        cursor.has_appended = false;
-    }
-};
 } // namespace ok
 
 #ifdef OKAYLIB_USE_FMT
