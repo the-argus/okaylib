@@ -2,6 +2,7 @@
 #define __OKAYLIB_CONTAINERS_DYNAMIC_BITSET_H__
 
 #include "okay/allocators/allocator.h"
+#include "okay/ranges/ranges.h"
 
 namespace ok {
 namespace dynamic_bitset::detail {

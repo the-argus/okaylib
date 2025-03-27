@@ -3,6 +3,7 @@
 
 #include "okay/construct.h"
 #include "okay/math/rounding.h"
+#include "okay/ranges/ranges.h"
 #include "okay/slice.h"
 #include <cstdint>
 
