@@ -261,10 +261,18 @@ TEST_SUITE("arraylist")
             const auto& const_alist = alist;
 
             REQUIRE(alist.size() == 0);
-            REQUIREABORTS(auto _ = alist.data());
-            REQUIREABORTS(auto _ = const_alist.data());
-            REQUIREABORTS(auto _ = alist.items());
-            REQUIREABORTS(auto _ = const_alist.items());
+            {
+                auto _ = alist.data();
+            }
+            {
+                auto _ = const_alist.data();
+            }
+            {
+                auto _ = alist.items();
+            }
+            {
+                auto _ = const_alist.items();
+            }
         }
     }
 

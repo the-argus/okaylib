@@ -35,6 +35,11 @@ class const_bit_slice_t;
 template <typename viewed_t>
 slice<viewed_t> raw_slice(viewed_t& data, size_t size) OKAYLIB_NOEXCEPT;
 
+/// Only use this if you absolutely know what you're doing. data() will return
+/// nullptr on the slice returned from this.
+template <typename viewed_t>
+slice<viewed_t> raw_slice_create_null_empty_unsafe() OKAYLIB_NOEXCEPT;
+
 constexpr bit_slice_t raw_bit_slice(slice<uint8_t> bytes, size_t num_bits,
                                     uint8_t offset) OKAYLIB_NOEXCEPT;
 constexpr const_bit_slice_t raw_bit_slice(slice<const uint8_t> bytes,
@@ -59,9 +64,10 @@ template <typename viewed_t> class slice
 
     constexpr slice(viewed_t* data, size_t size) OKAYLIB_NOEXCEPT
     {
-        __ok_internal_assert(data);
-        if (!data) [[unlikely]] {
-            __ok_abort("Something has gone horrible wrong with slice "
+        // allow nullptr data only if size is zero
+        __ok_internal_assert(size == 0 || data);
+        if (!data && size != 0) [[unlikely]] {
+            __ok_abort("Something has gone horribly wrong with slice "
                        "implementation");
         }
         m_data = data;
@@ -74,6 +80,8 @@ template <typename viewed_t> class slice
     slice(slice&&) = default;
     slice& operator=(slice&&) = default;
     ~slice() = default;
+
+    template <typename T> friend class slice;
 
     using value_type = viewed_t;
 
@@ -184,7 +192,7 @@ template <typename viewed_t> class slice
     // can convert to const version of self
     constexpr operator slice<const viewed_t>() const OKAYLIB_NOEXCEPT
     {
-        return raw_slice(*static_cast<const viewed_t*>(m_data), m_elements);
+        return slice<const viewed_t>(m_data, m_elements);
     }
 
     [[nodiscard]] constexpr bool
@@ -229,6 +237,8 @@ template <typename viewed_t> class slice
 
     template <typename T>
     friend slice<T> ok::raw_slice(T& data, size_t size) OKAYLIB_NOEXCEPT;
+    template <typename T>
+    friend slice<T> ok::raw_slice_create_null_empty_unsafe() OKAYLIB_NOEXCEPT;
 
 #ifdef OKAYLIB_USE_FMT
     friend struct fmt::formatter<slice>;
@@ -536,6 +546,13 @@ template <typename viewed_t>
                                         size_t size) OKAYLIB_NOEXCEPT
 {
     return slice<viewed_t>(ok::addressof(data), size);
+}
+
+template <typename viewed_t>
+[[nodiscard]] slice<viewed_t>
+raw_slice_create_null_empty_unsafe() OKAYLIB_NOEXCEPT
+{
+    return slice<viewed_t>(nullptr, 0);
 }
 
 template <typename T>

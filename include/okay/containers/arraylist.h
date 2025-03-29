@@ -30,7 +30,7 @@ class arraylist_t
     // - 8 bytes: backing_allocator pointer
     struct members_t
     {
-        opt<slice<T>> allocated_spots;
+        slice<T> allocated_spots;
         size_t spots_occupied;
         backing_allocator_t* backing_allocator;
     };
@@ -67,48 +67,50 @@ class arraylist_t
     // data and size are here so this can be iterated on directly without
     // calling .items()
 
-    /// Panics if the arraylist has not allocated anything yet
-    [[nodiscard]] const T* data() const& OKAYLIB_NOEXCEPT
+    /// If size is zero, whether this points to valid memory or not is undefined
+    [[nodiscard]] constexpr const T* data() const& OKAYLIB_NOEXCEPT
     {
-        return m.allocated_spots.ref_or_panic().data();
+        return m.allocated_spots.data();
     }
 
-    /// Panics if the arraylist has not allocated anything yet
-    [[nodiscard]] T* data() & OKAYLIB_NOEXCEPT
+    /// If size is zero, whether this points to valid memory or not is undefined
+    [[nodiscard]] constexpr T* data() & OKAYLIB_NOEXCEPT
     {
-        return m.allocated_spots.ref_or_panic().data();
+        return m.allocated_spots.data();
     }
 
-    /// Always valid to call .size() on any arraylist
-    [[nodiscard]] size_t size() const OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr size_t size() const OKAYLIB_NOEXCEPT
     {
         return m.spots_occupied;
     }
 
-    [[nodiscard]] slice<T> items() & OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr slice<T> items() & OKAYLIB_NOEXCEPT
     {
-        return m.allocated_spots.ref_or_panic().subslice(
-            {.length = m.spots_occupied});
+        if (m.allocated_spots.size() == 0) {
+            return m.allocated_spots;
+        }
+        return m.allocated_spots.subslice({.length = m.spots_occupied});
     }
 
-    [[nodiscard]] slice<const T> items() const& OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr slice<const T> items() const& OKAYLIB_NOEXCEPT
     {
         return const_cast<arraylist_t*>(this)->items(); // call other impl
     }
 
-    [[nodiscard]] const T& operator[](size_t index) const& OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr const T&
+    operator[](size_t index) const& OKAYLIB_NOEXCEPT
     {
         if (index >= m.spots_occupied) [[unlikely]] {
             __ok_abort("Out of bounds access to ok::arraylist_t");
         }
-        return m.allocated_spots.ref_or_panic().data()[index];
+        return m.allocated_spots.data()[index];
     }
-    [[nodiscard]] T& operator[](size_t index) & OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr T& operator[](size_t index) & OKAYLIB_NOEXCEPT
     {
         if (index >= m.spots_occupied) [[unlikely]] {
             __ok_abort("Out of bounds access to ok::arraylist_t");
         }
-        return m.allocated_spots.ref_or_panic().data()[index];
+        return m.allocated_spots.data()[index];
     }
 
     // no default constructor or copy, but can move
@@ -118,14 +120,14 @@ class arraylist_t
     constexpr arraylist_t(arraylist_t&& other)
         : m(std::move(other.m)) OKAYLIB_NOEXCEPT
     {
-        other.m.allocated_spots = nullopt;
+        other.m.allocated_spots = raw_slice_create_null_empty_unsafe<T>();
     }
 
     constexpr arraylist_t& operator=(arraylist_t&& other) OKAYLIB_NOEXCEPT
     {
         this->destroy();
         this->m = std::move(other.m);
-        other.m.allocated_spots = nullopt;
+        other.m.allocated_spots = raw_slice_create_null_empty_unsafe<T>();
         return *this;
     }
 
@@ -133,17 +135,17 @@ class arraylist_t
     [[nodiscard]] constexpr status<alloc::error>
     ensure_additional_capacity() OKAYLIB_NOEXCEPT
     {
-        if (!m.allocated_spots) {
+        if (m.allocated_spots.size() == 0) {
             auto status = this->make_first_allocation();
-            if (!status.okay()) {
+            if (!status.okay()) [[unlikely]] {
                 return status;
             }
-        } else if (slice<T>& spots = m.allocated_spots.ref_or_panic();
-                   spots.size() <= m.spots_occupied) {
+        } else if (m.allocated_spots.size() <= m.spots_occupied) {
             // 2x growth rate
             auto status =
-                this->reallocate(spots, sizeof(T), spots.size() * sizeof(T));
-            if (!status.okay()) {
+                this->reallocate(m.allocated_spots, sizeof(T),
+                                 m.allocated_spots.size() * sizeof(T));
+            if (!status.okay()) [[unlikely]] {
                 return status;
             }
         }
@@ -169,7 +171,7 @@ class arraylist_t
             }
         }
 
-        auto& spots = m.allocated_spots.ref_or_panic();
+        auto& spots = m.allocated_spots;
         // make sure we have one free spot available for the thing being
         // inserted
         __ok_assert(spots.size() > this->size(),
@@ -242,17 +244,16 @@ class arraylist_t
             __ok_assert(false, "Attempt to increase capacity by 0.");
             return alloc::error::unsupported;
         }
-        if (!m.allocated_spots) {
+        if (m.allocated_spots.size() == 0) {
             return make_first_allocation(new_spots * sizeof(T));
         } else {
-            return reallocate(m.allocated_spots.ref_or_panic(),
-                              new_spots * sizeof(T), 0);
+            return reallocate(m.allocated_spots, new_spots * sizeof(T), 0);
         }
     }
 
     constexpr T remove(size_t idx) OKAYLIB_NOEXCEPT
     {
-        auto& spots = m.allocated_spots.ref_or_panic();
+        auto& spots = m.allocated_spots;
         // moved out at index
         T out(std::move(spots[idx]));
 
@@ -281,7 +282,7 @@ class arraylist_t
 
     constexpr T remove_and_swap_last(size_t idx) OKAYLIB_NOEXCEPT
     {
-        auto& spots = m.allocated_spots.ref_or_panic();
+        auto& spots = m.allocated_spots;
         if (idx >= m.spots_occupied) [[unlikely]] {
             __ok_abort(
                 "Out of bounds access in arraylist_t::remove_and_swap_last()");
@@ -310,7 +311,7 @@ class arraylist_t
             return;
         }
 
-        auto& spots = m.allocated_spots.ref_or_panic();
+        auto& spots = m.allocated_spots;
 
         alloc::result_t<bytes_t> reallocated =
             m.backing_allocator->reallocate(alloc::reallocate_request_t{
@@ -339,7 +340,7 @@ class arraylist_t
 
     [[nodiscard]] constexpr size_t capacity() const OKAYLIB_NOEXCEPT
     {
-        return m.allocated_spots ? m.allocated_spots.ref_or_panic().size() : 0;
+        return m.allocated_spots.size();
     }
 
     [[nodiscard]] constexpr bool is_empty() const OKAYLIB_NOEXCEPT
@@ -368,8 +369,8 @@ class arraylist_t
     constexpr void clear() OKAYLIB_NOEXCEPT
     {
         if constexpr (!std::is_trivially_destructible_v<T>) {
-            for (size_t i = 0; i < this->size(); ++i) {
-                m.allocated_spots.ref_or_panic()[i].~T();
+            for (size_t i = 0; i < m.spots_occupied; ++i) {
+                m.allocated_spots.data()[i].~T();
             }
         }
 
@@ -386,12 +387,12 @@ class arraylist_t
         -> std::enable_if_t<is_infallible_constructible_v<T, args_t...>,
                             status<alloc::error>>
     {
-        if (!m.allocated_spots) {
+        if (m.allocated_spots.size() == 0) {
             auto status = make_first_allocation(new_size * sizeof(T));
             if (!status.okay()) {
                 return status;
             }
-            auto& spots = m.allocated_spots.ref_or_panic();
+            auto& spots = m.allocated_spots;
             __ok_assert(spots.size() >= new_size,
                         "Allocator did not return enough memory to arraylist");
             if constexpr (std::is_trivially_default_constructible_v<T> &&
@@ -414,7 +415,7 @@ class arraylist_t
             return alloc::error::okay;
         }
 
-        auto& spots = m.allocated_spots.ref_or_panic();
+        auto& spots = m.allocated_spots;
         const bool shrinking = m.spots_occupied > new_size;
 
         if (shrinking) {
@@ -462,15 +463,19 @@ class arraylist_t
     [[nodiscard]] constexpr opt<slice<T>> shrink_and_leak() OKAYLIB_NOEXCEPT
     {
         shrink_to_reclaim_unused_memory();
-        opt<slice<T>> res = m.allocated_spots.move_out();
 
-        if (res) {
-            res = res.ref_or_panic().subslice({.length = m.spots_occupied});
-            m.spots_occupied = 0;
-        } else {
+        if (m.allocated_spots.size() == 0) [[unlikely]] {
             __ok_internal_assert(m.spots_occupied == 0);
+            return nullopt;
         }
-        return res;
+
+        auto out = m.allocated_spots.subslice({.length = m.spots_occupied});
+
+        // we no longer own the memory
+        m.allocated_spots = raw_slice_create_null_empty_unsafe<T>();
+        m.spots_occupied = 0;
+
+        return out;
     }
 
     template <typename... args_t>
@@ -640,17 +645,19 @@ class arraylist_t
 
     constexpr void destroy() OKAYLIB_NOEXCEPT
     {
-        if (m.allocated_spots) {
-            if (!std::is_trivially_destructible_v<T>) {
-                T* mem = m.allocated_spots.ref_or_panic().data();
-                for (size_t i = 0; i < m.spots_occupied; ++i) {
-                    mem[i].~T();
-                }
-            }
-
-            m.backing_allocator->deallocate(
-                reinterpret_as_bytes(m.allocated_spots.ref_or_panic()));
+        if (m.allocated_spots.is_empty()) {
+            return;
         }
+
+        if (!std::is_trivially_destructible_v<T>) {
+            T* mem = m.allocated_spots.data();
+            for (size_t i = 0; i < m.spots_occupied; ++i) {
+                mem[i].~T();
+            }
+        }
+
+        m.backing_allocator->deallocate(
+            reinterpret_as_bytes(m.allocated_spots));
     }
 };
 
@@ -669,7 +676,7 @@ template <typename T> struct empty_t
     operator()(allocator_impl_t& allocator) const noexcept
     {
         return typename arraylist_t<T, allocator_impl_t>::members_t{
-            .allocated_spots = ok::nullopt,
+            .allocated_spots = raw_slice_create_null_empty_unsafe<T>(),
             .spots_occupied = 0,
             .backing_allocator = ok::addressof(allocator),
         };
