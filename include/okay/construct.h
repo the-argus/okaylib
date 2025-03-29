@@ -125,7 +125,8 @@ template <typename T = detail::deduced_t, typename... args_t>
                 static_assert(!analysis::can_fail,
                               "bad template analysis? found that something has "
                               ".make() but also it can fail");
-                return constructor.make();
+                return constructor.make(
+                    std::forward<decltype(innerargs)>(innerargs)...);
             } else {
                 if constexpr (analysis::can_fail) {
                     using enum_type =
