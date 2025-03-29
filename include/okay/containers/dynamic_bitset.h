@@ -38,6 +38,7 @@ template <typename backing_allocator_t = ok::allocator_t> class dynamic_bitset_t
     explicit dynamic_bitset_t(backing_allocator_t& allocator) OKAYLIB_NOEXCEPT
         : m(members_t{.allocator = ok::addressof(allocator)})
     {
+        __ok_internal_assert(m.data == nullptr);
     }
 
     constexpr dynamic_bitset_t(dynamic_bitset_t&& other) noexcept : m(other.m)
@@ -86,16 +87,152 @@ template <typename backing_allocator_t = ok::allocator_t> class dynamic_bitset_t
 
     [[nodiscard]] constexpr size_t size() const noexcept { return m.num_bits; }
 
+    [[nodiscard]] constexpr status<alloc::error>
+    ensure_additional_capacity() OKAYLIB_NOEXCEPT
+    {
+        if (!m.data) {
+            auto status = this->first_allocation();
+            if (!status.okay()) [[unlikely]] {
+                return status;
+            }
+        } else if (m.num_bytes_allocated <= m.num_bits * 8) {
+            auto status = reallocate(1, m.num_bytes_allocated * 2);
+            if (!status.okay()) [[unlikely]] {
+                return status;
+            }
+        }
+        return alloc::error::okay;
+    }
+
     // TODO: these functions
     [[nodiscard]] constexpr status<alloc::error>
-    insert_at(size_t idx, bool value) OKAYLIB_NOEXCEPT;
+    insert_at(size_t idx, bool value) OKAYLIB_NOEXCEPT
+    {
+        __ok_internal_assert(this->capacity() >= this->size());
+        if (auto status = this->ensure_additional_capacity(); !status.okay())
+            [[unlikely]] {
+            return status;
+        }
+        __ok_internal_assert(this->capacity() > this->size());
+        constexpr uint8_t carry_in_mask = 0b001;
+        constexpr uint8_t carry_check_mask = 0b10000000;
+
+        constexpr auto shift_byte_zero_return_carry =
+            [](uint8_t* byte, size_t bit_index, bool bit_is_on) -> bool {
+            __ok_internal_assert(bit_index < 8);
+
+            // mask of the bits that should be shifted
+            const uint8_t shift_mask = (~uint8_t(0)) << bit_index;
+            const bool carry = (*byte & carry_check_mask) != 0;
+            const uint8_t shifted = (*byte & shift_mask) << 1;
+
+            // zero stuff that was shifted, so only unmoved stuff is left in the
+            // bit
+            *byte &= ~shift_mask;
+            // insert the shifted stuff
+            *byte |= shifted;
+            // insert the byte we're setting. if (!bit_is_on), this does nothing
+            *byte |= (bit_is_on ? uint8_t(1) : uint8_t(0)) << bit_index;
+
+            return carry;
+        };
+
+        const size_t first_byte_index = idx / 8;
+        const size_t sub_byte_bit_index = idx % 8;
+
+        bool carry = shift_byte_zero_return_carry(m.data + first_byte_index,
+                                                  sub_byte_bit_index, value);
+
+        // loop from zero to the number of bytes in use, shifting everything up
+        // TODO: check if this gets optimized, maybe a good idea for
+        // dynamic bitset to use u64 internally
+
+        static_assert(round_up_to_multiple_of<8>(0) / 8 == 1);
+
+        const size_t num_bytes =
+            (round_up_to_multiple_of<8>(m.num_bits - idx) / 8) - 1;
+
+        for (size_t i = first_byte_index + 1; i < num_bytes; ++i) {
+            const bool new_carry = m.data[i] & carry_check_mask;
+            m.data[i] << 1;
+            m.data[i] ^= carry_in_mask * carry;
+            carry = new_carry;
+        }
+
+        return alloc::error::okay;
+    }
+
     [[nodiscard]] constexpr status<alloc::error>
-    append(bool value) OKAYLIB_NOEXCEPT;
-    constexpr bool remove(size_t idx) OKAYLIB_NOEXCEPT;
+    append(bool value) OKAYLIB_NOEXCEPT
+    {
+        return this->insert_at(this->size(), value);
+    }
+
+    constexpr bool remove(size_t idx) OKAYLIB_NOEXCEPT
+    {
+        if (idx >= this->size()) [[unlikely]] {
+            __ok_abort("Out of bounds access to dynamic_bitset_t in remove()");
+        }
+
+        constexpr uint8_t carry_check_mask = 0b001;
+        constexpr uint8_t carry_in_mask = 0b10000000;
+
+        const size_t byte_index = idx / 8;
+        const size_t sub_byte_bit_index = idx % 8;
+
+        constexpr auto shift_last_byte_and_return_whether_bit_was_on =
+            [](uint8_t* byte, size_t bit_index, bool removal_carry_in) -> bool {
+            __ok_internal_assert(bit_index < 8);
+
+            const uint8_t shift_mask = (~uint8_t(0)) << (bit_index + 1);
+            const uint8_t bit_mask = uint8_t(1) << bit_index;
+            const uint8_t out = *byte & bit_mask;
+            const uint8_t shifted = (*byte & shift_mask) >> 1;
+
+            *byte &= ~((~uint8_t(0)) << bit_index);
+            *byte |= shifted;
+            *byte |= carry_in_mask * removal_carry_in;
+            return out;
+        };
+
+        // always carrying in a zero, it will be unused after this anyways
+        // bc we decrease m.num_bits
+        bool carry = false;
+        const size_t num_bytes_in_use =
+            round_up_to_multiple_of<8>(m.num_bits) / 8;
+        // NOTE: skipping last byte in this for loop
+        for (size_t i = num_bytes_in_use; i > byte_index; --i) {
+            const bool new_carry = (m.data[i] & carry_check_mask) != 0;
+            m.data[i] >> 1;
+            // add most significant bit if it carried from above
+            m.data[i] |= (carry * carry_in_mask);
+            carry = new_carry;
+        }
+        m.num_bits -= 1;
+        return shift_last_byte_and_return_whether_bit_was_on(
+            m.data + byte_index, sub_byte_bit_index, carry);
+    }
+
     constexpr status<alloc::error>
-    increase_capacity_by(size_t new_spots) OKAYLIB_NOEXCEPT;
-    constexpr opt<bool> remove_and_swap_last(size_t idx) OKAYLIB_NOEXCEPT;
-    constexpr void shrink_to_reclaim_unused_memory() OKAYLIB_NOEXCEPT;
+    increase_capacity_by(size_t new_spots) OKAYLIB_NOEXCEPT
+    {
+        if (new_spots == 0) [[unlikely]] {
+            // TODO: can we just guarantee that all allocators do this?
+            __ok_assert(false, "Attempt to increase capacity by 0.");
+            return alloc::error::unsupported;
+        }
+        if (m.data == nullptr) {
+            return this->first_allocation(new_spots);
+        } else {
+            return this->reallocate(round_up_to_multiple_of<8>(new_spots) / 8,
+                                    0);
+        }
+    }
+
+    // constexpr opt<bool> remove_and_swap_last(size_t idx) OKAYLIB_NOEXCEPT;
+
+    // constexpr void shrink_to_reclaim_unused_memory() OKAYLIB_NOEXCEPT;
+
     [[nodiscard]] constexpr status<alloc::error>
     resize(size_t new_size) OKAYLIB_NOEXCEPT;
 
@@ -130,6 +267,64 @@ template <typename backing_allocator_t = ok::allocator_t> class dynamic_bitset_t
     constexpr void clear() OKAYLIB_NOEXCEPT { m.num_bits = 0; }
 
     ~dynamic_bitset_t() { destroy(); }
+
+  private:
+    /// This function initializes m.data pointer and m.num_bytes_allocated
+    [[nodiscard]] constexpr status<alloc::error>
+    first_allocation(size_t total_allocated_bits = 40) OKAYLIB_NOEXCEPT
+    {
+        __ok_assert(m.allocator,
+                    "Attempt to operate on an invalid dynamic_bitset_t");
+        __ok_internal_assert(total_allocated_bits != 0);
+
+        const size_t bytes_needed =
+            round_up_to_multiple_of<8>(total_allocated_bits) / 8UL;
+
+        alloc::result_t<bytes_t> result =
+            m.allocator->allocate(alloc::request_t{
+                .num_bytes = bytes_needed,
+                .alignment = 1,
+            });
+
+        if (!result.okay()) [[unlikely]] {
+            return result.err();
+        }
+
+        auto& bytes = result.release_ref();
+
+        m.data = bytes.data();
+        m.num_bytes_allocated = bytes.size();
+
+        return alloc::error::okay;
+    }
+
+    [[nodiscard]] constexpr status<alloc::error>
+    reallocate(size_t bytes_required, size_t bytes_preferred) OKAYLIB_NOEXCEPT
+    {
+        using namespace alloc;
+
+        result_t<bytes_t> res = m.allocator->reallocate(reallocate_request_t{
+            .memory = raw_slice(*m.data, m.num_bytes_allocated),
+            .new_size_bytes = m.num_bytes_allocated + bytes_required,
+            .preferred_size_bytes =
+                bytes_preferred == 0 ? 0
+                                     : m.num_bytes_allocated + bytes_preferred,
+            .flags = flags::expand_back,
+        });
+
+        if (!res.okay()) [[unlikely]] {
+            return res.err();
+        }
+
+        auto& bytes = res.release_ref();
+        uint8_t* mem = bytes.data();
+        const size_t bytes_allocated = bytes.size();
+
+        m.num_bytes_allocated = bytes.size();
+        m.data = bytes.data();
+
+        return alloc::error::okay;
+    }
 };
 
 namespace dynamic_bitset {
@@ -162,42 +357,24 @@ struct preallocated_and_zeroed_t
     {
         using type = dynamic_bitset_t<backing_allocator_t>;
 
-        if (options.num_initial_bits + options.additional_capacity_in_bits ==
-            0) {
+        const size_t total_bits =
+            options.num_initial_bits + options.additional_capacity_in_bits;
+
+        if (total_bits == 0) {
             new (ok::addressof(uninit)) type(allocator);
             return alloc::error::okay;
         }
 
-        const size_t bytes_needed =
-            round_up_to_multiple_of<8>(options.num_initial_bits +
-                                       options.additional_capacity_in_bits) /
-            8;
+        uninit.m.allocator = ok::addressof(allocator);
 
-        alloc::result_t<bytes_t> result = allocator.allocate(alloc::request_t{
-            .num_bytes = bytes_needed,
-            .alignment = 1,
-            .flags = alloc::flags::leave_nonzeroed,
-        });
-
-        if (!result.okay()) [[unlikely]] {
-            return result.err();
+        auto status = uninit.first_allocation(total_bits);
+        if (!status.okay()) [[unlikely]] {
+            return status;
         }
 
-        auto& bytes = result.release_ref();
+        // last piece that needs to be initialized
+        uninit.m.num_bits = options.num_initial_bits;
 
-        // zero data in use
-        if (options.num_initial_bits != 0) {
-            std::memset(bytes.data(), 0,
-                        round_up_to_multiple_of<8>(options.num_initial_bits) /
-                            8);
-        }
-
-        uninit.m = typename type::members_t{
-            .num_bits = options.num_initial_bits,
-            .data = bytes.data(),
-            .num_bytes_allocated = bytes.size(),
-            .allocator = ok::addressof(allocator),
-        };
         return alloc::error::okay;
     }
 };
