@@ -197,17 +197,16 @@ template <typename... args_t> struct constructor_analysis
     };
 
     template <typename constructor_t, typename = void>
-    struct associated_type : public std::false_type
-    {
-        using type =
-            typename associated_type_by_explicit_decl<constructor_t>::type;
-    };
+    struct associated_type
+        : public associated_type_by_explicit_decl<constructor_t>
+    {};
 
     template <typename constructor_t>
     struct associated_type<
         constructor_t,
-        std::enable_if_t<make_fn_analysis<constructor_t>::value &&
-                         !associated_type_by_explicit_decl<constructor_t>{}>>
+        std::enable_if_t<
+            make_fn_analysis<constructor_t>::value &&
+            !associated_type_by_explicit_decl<constructor_t>::value>>
         : public std::true_type
     {
         using type = typename make_fn_analysis<constructor_t>::return_type;
