@@ -9,13 +9,12 @@
 
 namespace ok {
 
-template <size_t num_bits> class bitset_t;
-
-namespace detail {
-template <size_t num_bits>
-constexpr bitset_t<num_bits> default_construct_bitset();
-
-} // namespace detail
+namespace bitset::detail {
+template <size_t num_bits> struct all_bits_on_t;
+template <size_t num_bits> struct zeroed_t;
+template <size_t num_bits> struct undefined_t;
+struct bit_string_t;
+} // namespace bitset::detail
 
 template <size_t num_bits> class bitset_t
 {
@@ -28,7 +27,10 @@ template <size_t num_bits> class bitset_t
     bitset_t() = default;
 
   public:
-    friend constexpr bitset_t detail::default_construct_bitset();
+    friend struct bitset::detail::all_bits_on_t<num_bits>;
+    friend struct bitset::detail::zeroed_t<num_bits>;
+    friend struct bitset::detail::undefined_t<num_bits>;
+    friend struct bitset::detail::bit_string_t;
 
     constexpr bitset_t operator&(const bitset_t& other) const OKAYLIB_NOEXCEPT
     {
@@ -108,6 +110,13 @@ template <size_t num_bits> class bitset_t
         return items();
     }
 
+    constexpr operator bit_slice_t() && = delete;
+    constexpr operator bit_slice_t() const&& = delete;
+    constexpr operator const_bit_slice_t() && = delete;
+    constexpr operator const_bit_slice_t() const&& = delete;
+    constexpr bit_slice_t items() && = delete;
+    constexpr const_bit_slice_t items() const&& = delete;
+
     constexpr void set_all_bits(bool value) OKAYLIB_NOEXCEPT
     {
         std::memset(bytes, value ? char(-1) : char(0), num_bytes);
@@ -144,14 +153,6 @@ template <size_t num_bits> class bitset_t
         return !(lhs == rhs);
     }
 };
-
-namespace detail {
-template <size_t num_bits>
-constexpr bitset_t<num_bits> default_construct_bitset()
-{
-    return bitset_t<num_bits>();
-}
-} // namespace detail
 
 template <size_t max_elems> struct range_definition<bitset_t<max_elems>>
 {
@@ -201,7 +202,7 @@ struct bit_string_t
     [[nodiscard]] constexpr bitset_t<N - 1>
     make(const char (&literal)[N]) const OKAYLIB_NOEXCEPT
     {
-        auto out = ok::detail::default_construct_bitset<N - 1>();
+        bitset_t<N - 1> out;
 
         for (size_t i = 0; i < N - 1; ++i) {
             out.set_bit(i, literal[i] == '1');
@@ -221,7 +222,7 @@ template <size_t num_bits> struct zeroed_t
 
     [[nodiscard]] constexpr bitset_t<num_bits> make() const OKAYLIB_NOEXCEPT
     {
-        auto out = ok::detail::default_construct_bitset<num_bits>();
+        bitset_t<num_bits> out;
         out.set_all_bits(false);
         return out;
     }
@@ -237,7 +238,8 @@ template <size_t num_bits> struct undefined_t
 
     [[nodiscard]] constexpr bitset_t<num_bits> make() const OKAYLIB_NOEXCEPT
     {
-        return ok::detail::default_construct_bitset<num_bits>();
+        return bitset_t<num_bits>();
+        ;
     }
 };
 template <size_t num_bits> struct all_bits_on_t
@@ -251,7 +253,7 @@ template <size_t num_bits> struct all_bits_on_t
 
     [[nodiscard]] constexpr bitset_t<num_bits> make() const OKAYLIB_NOEXCEPT
     {
-        auto out = ok::detail::default_construct_bitset<num_bits>();
+        bitset_t<num_bits> out;
         out.set_all_bits(true);
         return out;
     }

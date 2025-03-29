@@ -1,4 +1,6 @@
 #include "okay/ranges/algorithm.h"
+#include "okay/ranges/for_each.h"
+#include "okay/ranges/views/all.h"
 #include "test_header.h"
 // test header must be first
 #include "okay/allocators/c_allocator.h"
@@ -15,6 +17,19 @@ template <size_t bits> void print_bitset(const bitset_t<bits>& bs)
     }
     fmt::print("\n");
 }
+
+// cant take a slice of rvalue
+static_assert(
+    !std::is_convertible_v<dynamic_bitset_t<c_allocator_t>&&, bit_slice_t>);
+static_assert(!std::is_convertible_v<dynamic_bitset_t<c_allocator_t>&&,
+                                     const_bit_slice_t>);
+// cant convert const to nonconst
+static_assert(!std::is_convertible_v<const dynamic_bitset_t<c_allocator_t>&,
+                                     bit_slice_t>);
+static_assert(!std::is_convertible_v<bitset_t<1>&&, bit_slice_t>);
+static_assert(!std::is_convertible_v<bitset_t<1>&&, const_bit_slice_t>);
+// cant convert const to nonconst
+static_assert(!std::is_convertible_v<const bitset_t<1>&, bit_slice_t>);
 
 TEST_SUITE("bitset containers")
 {
@@ -121,6 +136,107 @@ TEST_SUITE("bitset containers")
 
             a ^= bitset::bit_string("1100");
             REQUIRE(a == bitset::bit_string("1001"));
+        }
+
+        SUBCASE("bitset set_all_bits")
+        {
+            bitset_t a = bitset::bit_string("01010000111");
+            a.set_all_bits(false);
+            REQUIRE(a == bitset::bit_string("00000000000"));
+            a.set_all_bits(true);
+            REQUIRE(a == bitset::bit_string("11111111111"));
+        }
+    }
+
+    TEST_CASE("dynamic bitset")
+    {
+        SUBCASE("construction from allocator")
+        {
+            dynamic_bitset_t test(c_allocator);
+            REQUIRE(test.size() == 0);
+        }
+
+        SUBCASE("move constructor upcast to ok::allocator_t")
+        {
+            dynamic_bitset_t<c_allocator_t> first(c_allocator);
+            static_assert(
+                std::is_same_v<c_allocator_t, decltype(first)::allocator_type>);
+            dynamic_bitset_t second(std::move(first));
+            REQUIRE(second.size() == 0);
+            static_assert(std::is_same_v<decltype(second)::allocator_type,
+                                         decltype(first)::allocator_type>);
+            // upcast, only possible implicitly in move assignment
+            dynamic_bitset_t<ok::allocator_t> third(c_allocator);
+            third = std::move(second);
+        }
+
+        SUBCASE("upcasting move constructor")
+        {
+            dynamic_bitset_t first(c_allocator);
+            static_assert(
+                std::is_same_v<c_allocator_t, decltype(first)::allocator_type>);
+
+            dynamic_bitset_t<ok::allocator_t> second(
+                dynamic_bitset::upcast_tag{}, std::move(first));
+
+            REQUIRE(second.size() == 0);
+        }
+
+        SUBCASE("items returns the correct thing by constness")
+        {
+            dynamic_bitset_t dbs(c_allocator);
+
+            bit_slice_t bits = dbs.items();
+            const_bit_slice_t bits_const = dbs.items();
+            const_bit_slice_t bits_const_2 =
+                static_cast<const dynamic_bitset_t<c_allocator_t>&>(dbs)
+                    .items();
+        }
+
+        SUBCASE("can implicitly convert dynamic bitset into bit_slice_t")
+        {
+            constexpr auto gets_slice = [](const_bit_slice_t bs) {
+                bs | ok::for_each(
+                         [](bool item) { fmt::print("{}", item ? "0" : "1"); });
+                fmt::print("\n");
+            };
+
+            dynamic_bitset_t dbs(c_allocator);
+
+            gets_slice(dbs);
+        }
+
+        SUBCASE("copy booleans from range constructor")
+        {
+            array_t bools = {true, false, true, true};
+            dynamic_bitset_t copied =
+                dynamic_bitset::copy_booleans_from_range(c_allocator, bools)
+                    .release();
+
+            dynamic_bitset_t copied2 =
+                dynamic_bitset::copy_booleans_from_range(
+                    c_allocator, bitset::bit_string("010011011"))
+                    .release();
+
+            REQUIRE(ranges_equal(copied2, bitset::bit_string("010011011")));
+            REQUIRE(ranges_equal(bools, copied));
+            REQUIRE(ranges_equal(bitset::bit_string("1011"), copied));
+        }
+
+        SUBCASE("preallocated and zeroed constructor")
+        {
+            dynamic_bitset_t dbs = dynamic_bitset::preallocated_and_zeroed(
+                                       c_allocator,
+                                       {
+                                           .num_initial_bits = 100,
+                                           .additional_capacity_in_bits = 500,
+                                       })
+                                       .release();
+            REQUIRE(dbs.size() == 100);
+            REQUIRE(dbs.capacity() >= 600);
+
+            bool all_zeroed = dbs | all([](bool a) { return a == false; });
+            REQUIRE(all_zeroed);
         }
     }
 }
