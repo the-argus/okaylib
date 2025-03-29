@@ -180,14 +180,34 @@ template <typename... args_t> struct constructor_analysis
     };
 
     template <typename constructor_t, typename = void>
-    struct associated_type : public std::false_type
+    struct associated_type_by_explicit_decl : public std::false_type
     {
         using type = void;
     };
 
     template <typename constructor_t>
+    struct associated_type_by_explicit_decl<
+        constructor_t,
+        std::void_t<
+            typename constructor_t::template associated_type<args_t...>>>
+        : public std::true_type
+    {
+        using type =
+            typename constructor_t::template associated_type<args_t...>;
+    };
+
+    template <typename constructor_t, typename = void>
+    struct associated_type : public std::false_type
+    {
+        using type =
+            typename associated_type_by_explicit_decl<constructor_t>::type;
+    };
+
+    template <typename constructor_t>
     struct associated_type<
-        constructor_t, std::enable_if_t<make_fn_analysis<constructor_t>::value>>
+        constructor_t,
+        std::enable_if_t<make_fn_analysis<constructor_t>::value &&
+                         !associated_type_by_explicit_decl<constructor_t>{}>>
         : public std::true_type
     {
         using type = typename make_fn_analysis<constructor_t>::return_type;
@@ -196,17 +216,6 @@ template <typename... args_t> struct constructor_analysis
                       "make() function should not return an error type- you "
                       "probably want to implement make_into_uninit and then "
                       "simly use ok::make to return a res<...> on the stack.");
-    };
-
-    template <typename constructor_t>
-    struct associated_type<
-        constructor_t,
-        std::void_t<
-            typename constructor_t::template associated_type<args_t...>>>
-        : public std::true_type
-    {
-        using type =
-            typename constructor_t::template associated_type<args_t...>;
     };
 
     template <typename constructor_t, typename = void>
