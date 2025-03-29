@@ -129,7 +129,9 @@ class arraylist_t
         return *this;
     }
 
-    constexpr status<alloc::error> try_bump_capacity() OKAYLIB_NOEXCEPT
+    /// If there is not space for another item, reallocate.
+    [[nodiscard]] constexpr status<alloc::error>
+    ensure_additional_capacity() OKAYLIB_NOEXCEPT
     {
         if (!m.allocated_spots) {
             auto status = this->make_first_allocation();
@@ -161,7 +163,7 @@ class arraylist_t
 
         // if else handles initial allocation and then future reallocation
         {
-            auto status = this->try_bump_capacity();
+            auto status = this->ensure_additional_capacity();
             if (!status.okay()) [[unlikely]] {
                 return status;
             }
@@ -235,6 +237,11 @@ class arraylist_t
     [[nodiscard]] constexpr status<alloc::error>
     increase_capacity_by(size_t new_spots) OKAYLIB_NOEXCEPT
     {
+        if (new_spots == 0) [[unlikely]] {
+            // TODO: can we just guarantee that all allocators do this?
+            __ok_assert(false, "Attempt to increase capacity by 0.");
+            return alloc::error::unsupported;
+        }
         if (!m.allocated_spots) {
             return make_first_allocation(new_spots * sizeof(T));
         } else {
