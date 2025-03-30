@@ -26,15 +26,14 @@ template <typename backing_allocator_t = ok::allocator_t> class dynamic_bitset_t
     struct members_t
     {
         size_t num_bits;
-        uint8_t* data;
-        size_t num_bytes_allocated;
+        bytes_t allocation;
         backing_allocator_t* allocator;
     } m;
 
     constexpr void destroy() OKAYLIB_NOEXCEPT
     {
-        if (m.data) {
-            m.allocator->deallocate(raw_slice(*m.data, m.num_bytes_allocated));
+        if (m.allocation.size() != 0) {
+            m.allocator->deallocate(m.allocation);
         }
     }
 
@@ -49,16 +48,19 @@ template <typename backing_allocator_t = ok::allocator_t> class dynamic_bitset_t
     using allocator_type = backing_allocator_t;
 
     explicit dynamic_bitset_t(backing_allocator_t& allocator) OKAYLIB_NOEXCEPT
-        : m(members_t{.allocator = ok::addressof(allocator)})
+        : m(members_t{
+              .allocation = raw_slice_create_null_empty_unsafe<uint8_t>(),
+              .allocator = ok::addressof(allocator),
+          })
     {
-        __ok_internal_assert(m.data == nullptr);
     }
 
     constexpr dynamic_bitset_t(dynamic_bitset_t&& other) noexcept : m(other.m)
     {
-        other.m.data = nullptr;
+        other.m.allocation = raw_slice_create_null_empty_unsafe<uint8_t>();
 #ifndef NDEBUG
-        other.m = {};
+        other.m.allocator = nullptr;
+        other.m.num_bits = 0;
 #endif
     }
 
@@ -72,13 +74,15 @@ template <typename backing_allocator_t = ok::allocator_t> class dynamic_bitset_t
                                dynamic_bitset_t<other_allocator_t>&& other)
         : m(members_t{
               .num_bits = other.m.num_bits,
-              .data = std::exchange(other.m.data, nullptr),
-              .num_bytes_allocated = other.m.num_bytes_allocated,
+              .allocation =
+                  std::exchange(other.m.allocation,
+                                raw_slice_create_null_empty_unsafe<uint8_t>()),
               .allocator = static_cast<backing_allocator_t*>(other.m.allocator),
           })
     {
 #ifndef NDEBUG
-        other.m = {};
+        other.m.num_bits = 0;
+        other.m.allocator = nullptr;
 #endif
     }
 
@@ -91,36 +95,38 @@ template <typename backing_allocator_t = ok::allocator_t> class dynamic_bitset_t
         destroy();
         m = members_t{
             .num_bits = other.m.num_bits,
-            .data = std::exchange(other.m.data, nullptr),
-            .num_bytes_allocated = other.m.num_bytes_allocated,
+            .allocation =
+                std::exchange(other.m.allocation,
+                              raw_slice_create_null_empty_unsafe<uint8_t>()),
             .allocator = static_cast<backing_allocator_t*>(other.m.allocator),
         };
 #ifndef NDEBUG
-        other.m = {};
+        other.m.num_bits = 0;
+        other.m.allocator = nullptr;
 #endif
         return *this;
     }
 
     [[nodiscard]] constexpr bit_slice_t items() & OKAYLIB_NOEXCEPT
     {
-        if (m.data == nullptr) {
-            return raw_bit_slice(
-                raw_slice(
-                    const_cast<uint8_t&>(dynamic_bitset::detail::dummy_mem), 0),
-                0, 0);
-        }
-        return raw_bit_slice(raw_slice(*m.data, m.num_bytes_allocated),
-                             m.num_bits, 0);
+        return raw_bit_slice(m.allocation, m.num_bits, 0);
     }
     [[nodiscard]] constexpr const_bit_slice_t items() const& OKAYLIB_NOEXCEPT
     {
-        if (m.data == nullptr) {
-            return raw_bit_slice(
-                raw_slice(dynamic_bitset::detail::dummy_mem, 0), 0, 0);
-        }
-        return raw_bit_slice(raw_slice(*m.data, m.num_bytes_allocated),
-                             m.num_bits, 0);
+        return raw_bit_slice(m.allocation, m.num_bits, 0);
     }
+
+    [[nodiscard]] constexpr uint8_t* data() & OKAYLIB_NOEXCEPT
+    {
+        return m.allocation.data();
+    }
+    uint8_t* data() && = delete;
+
+    [[nodiscard]] constexpr const uint8_t* data() const& OKAYLIB_NOEXCEPT
+    {
+        return m.allocation.data();
+    }
+    const uint8_t* data() const&& = delete;
 
     constexpr operator bit_slice_t() & OKAYLIB_NOEXCEPT { return items(); }
     constexpr operator const_bit_slice_t() const& OKAYLIB_NOEXCEPT
@@ -128,7 +134,7 @@ template <typename backing_allocator_t = ok::allocator_t> class dynamic_bitset_t
         return items();
     }
 
-    // do not convert rvalue into slice ever
+    // do not convert rvalue into slice EVER
     constexpr operator bit_slice_t() && = delete;
     constexpr operator bit_slice_t() const&& = delete;
     constexpr operator const_bit_slice_t() && = delete;
@@ -140,8 +146,16 @@ template <typename backing_allocator_t = ok::allocator_t> class dynamic_bitset_t
 
     constexpr void set_all_bits(bool value) OKAYLIB_NOEXCEPT
     {
-        std::memset(m.data, value ? char(-1) : char(0),
-                    round_up_to_multiple_of<8>(m.num_bits));
+        if (m.allocation.size() == 0) [[unlikely]] {
+            return;
+        }
+        std::memset(m.allocation.data(), value ? char(-1) : char(0),
+                    this->size_bytes());
+    }
+
+    constexpr size_t size_bytes() const OKAYLIB_NOEXCEPT
+    {
+        return round_up_to_multiple_of<8>(m.num_bits) / 8;
     }
 
     constexpr void set_bit(size_t idx, bool value) OKAYLIB_NOEXCEPT
@@ -165,26 +179,29 @@ template <typename backing_allocator_t = ok::allocator_t> class dynamic_bitset_t
     {
         // make sure both bitsets have data, if theyre both empty then this
         // returns true
-        if (other.m.data == nullptr || m.data == nullptr) [[unlikely]] {
-            return other.m.data == m.data;
+        if (other.m.allocation.size() == 0 || m.allocation.size() == 0)
+            [[unlikely]] {
+            return other.m.allocation.size() == m.allocation.size();
         }
 
-        return ok::memcompare(
-            raw_slice(*m.data, round_up_to_multiple_of<8>(m.num_bits)),
-            raw_slice(*other.m.data,
-                      round_up_to_multiple_of<8>(other.m.num_bits)));
+        return ok::memcompare(m.allocation.subslice({
+                                  .length = this->size_bytes(),
+                              }),
+                              other.m.allocation.subslice({
+                                  .length = other.size_bytes(),
+                              }));
     }
 
     [[nodiscard]] constexpr status<alloc::error>
     ensure_additional_capacity() OKAYLIB_NOEXCEPT
     {
-        if (!m.data) {
+        if (m.allocation.size() == 0) {
             auto status = this->first_allocation();
             if (!status.okay()) [[unlikely]] {
                 return status;
             }
-        } else if (m.num_bytes_allocated <= m.num_bits * 8) {
-            auto status = reallocate(1, m.num_bytes_allocated * 2);
+        } else if (m.allocation.size() <= m.num_bits * 8) {
+            auto status = reallocate(1, m.allocation.size() * 2);
             if (!status.okay()) [[unlikely]] {
                 return status;
             }
@@ -228,8 +245,8 @@ template <typename backing_allocator_t = ok::allocator_t> class dynamic_bitset_t
         const size_t first_byte_index = idx / 8;
         const size_t sub_byte_bit_index = idx % 8;
 
-        bool carry = shift_byte_zero_return_carry(m.data + first_byte_index,
-                                                  sub_byte_bit_index, value);
+        bool carry = shift_byte_zero_return_carry(
+            m.allocation.data() + first_byte_index, sub_byte_bit_index, value);
 
         // loop from zero to the number of bytes in use, shifting everything up
         // TODO: check if this gets optimized, maybe a good idea for
@@ -241,9 +258,9 @@ template <typename backing_allocator_t = ok::allocator_t> class dynamic_bitset_t
             (round_up_to_multiple_of<8>(m.num_bits - idx) / 8) - 1;
 
         for (size_t i = first_byte_index + 1; i < num_bytes; ++i) {
-            const bool new_carry = m.data[i] & carry_check_mask;
-            m.data[i] << 1;
-            m.data[i] ^= carry_in_mask * carry;
+            const bool new_carry = m.allocation.data()[i] & carry_check_mask;
+            m.allocation.data()[i] << 1;
+            m.allocation.data()[i] ^= carry_in_mask * carry;
             carry = new_carry;
         }
 
@@ -290,15 +307,16 @@ template <typename backing_allocator_t = ok::allocator_t> class dynamic_bitset_t
             round_up_to_multiple_of<8>(m.num_bits) / 8;
         // NOTE: skipping last byte in this for loop
         for (size_t i = num_bytes_in_use; i > byte_index; --i) {
-            const bool new_carry = (m.data[i] & carry_check_mask) != 0;
-            m.data[i] >> 1;
+            const bool new_carry =
+                (m.allocation.data()[i] & carry_check_mask) != 0;
+            m.allocation.data()[i] >> 1;
             // add most significant bit if it carried from above
-            m.data[i] |= (carry * carry_in_mask);
+            m.allocation.data()[i] |= (carry * carry_in_mask);
             carry = new_carry;
         }
         m.num_bits -= 1;
         return shift_last_byte_and_return_whether_bit_was_on(
-            m.data + byte_index, sub_byte_bit_index, carry);
+            m.allocation.data() + byte_index, sub_byte_bit_index, carry);
     }
 
     constexpr status<alloc::error>
@@ -309,7 +327,7 @@ template <typename backing_allocator_t = ok::allocator_t> class dynamic_bitset_t
             __ok_assert(false, "Attempt to increase capacity by 0.");
             return alloc::error::unsupported;
         }
-        if (m.data == nullptr) {
+        if (m.allocation.size() == 0) {
             return this->first_allocation(new_spots);
         } else {
             return this->reallocate(round_up_to_multiple_of<8>(new_spots) / 8,
@@ -326,7 +344,7 @@ template <typename backing_allocator_t = ok::allocator_t> class dynamic_bitset_t
 
     [[nodiscard]] constexpr size_t capacity() const OKAYLIB_NOEXCEPT
     {
-        return m.num_bytes_allocated * 8;
+        return m.allocation.size() * 8;
     }
 
     [[nodiscard]] constexpr bool is_empty() const OKAYLIB_NOEXCEPT
@@ -357,7 +375,7 @@ template <typename backing_allocator_t = ok::allocator_t> class dynamic_bitset_t
     ~dynamic_bitset_t() { destroy(); }
 
   private:
-    /// This function initializes m.data pointer and m.num_bytes_allocated
+    /// This function initializes m.allocation
     [[nodiscard]] constexpr status<alloc::error>
     first_allocation(size_t total_allocated_bits = 40) OKAYLIB_NOEXCEPT
     {
@@ -378,10 +396,7 @@ template <typename backing_allocator_t = ok::allocator_t> class dynamic_bitset_t
             return result.err();
         }
 
-        auto& bytes = result.release_ref();
-
-        m.data = bytes.data();
-        m.num_bytes_allocated = bytes.size();
+        m.allocation = result.release_ref();
 
         return alloc::error::okay;
     }
@@ -392,11 +407,11 @@ template <typename backing_allocator_t = ok::allocator_t> class dynamic_bitset_t
         using namespace alloc;
 
         result_t<bytes_t> res = m.allocator->reallocate(reallocate_request_t{
-            .memory = raw_slice(*m.data, m.num_bytes_allocated),
-            .new_size_bytes = m.num_bytes_allocated + bytes_required,
-            .preferred_size_bytes =
-                bytes_preferred == 0 ? 0
-                                     : m.num_bytes_allocated + bytes_preferred,
+            .memory = m.allocation,
+            .new_size_bytes = m.allocation.size() + bytes_required,
+            .preferred_size_bytes = bytes_preferred == 0
+                                        ? 0
+                                        : m.allocation.size() + bytes_preferred,
             .flags = flags::expand_back,
         });
 
@@ -404,12 +419,7 @@ template <typename backing_allocator_t = ok::allocator_t> class dynamic_bitset_t
             return res.err();
         }
 
-        auto& bytes = res.release_ref();
-        uint8_t* mem = bytes.data();
-        const size_t bytes_allocated = bytes.size();
-
-        m.num_bytes_allocated = bytes.size();
-        m.data = bytes.data();
+        m.allocation = res.release_ref();
 
         return alloc::error::okay;
     }
@@ -544,7 +554,7 @@ struct copy_booleans_from_range_t
             return result.err();
         }
 
-        __ok_internal_assert(uninit.m.num_bytes_allocated * 8 >= size);
+        __ok_internal_assert(uninit.m.allocation.size() * 8 >= size);
 
         uninit.m.num_bits = size;
 

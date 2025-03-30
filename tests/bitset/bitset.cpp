@@ -235,8 +235,45 @@ TEST_SUITE("bitset containers")
             REQUIRE(dbs.size() == 100);
             REQUIRE(dbs.capacity() >= 600);
 
-            bool all_zeroed = dbs | all([](bool a) { return a == false; });
-            REQUIRE(all_zeroed);
+            const auto all_zeroed = all([](bool a) { return a == false; });
+            const auto all_ones = all([](bool a) { return a == true; });
+            bool good = all_zeroed(dbs);
+            REQUIRE(good);
+
+            dbs.set_all_bits(true);
+            good = all_ones(dbs);
+            REQUIRE(good);
+        }
+
+        SUBCASE("toggle and memcompare_with()")
+        {
+            dynamic_bitset_t dbs = dynamic_bitset::preallocated_and_zeroed(
+                                       c_allocator,
+                                       {
+                                           .num_initial_bits = 100,
+                                           .additional_capacity_in_bits = 500,
+                                       })
+                                       .release();
+            dynamic_bitset_t dbs2 = dynamic_bitset::preallocated_and_zeroed(
+                                        c_allocator,
+                                        {
+                                            .num_initial_bits = 100,
+                                            .additional_capacity_in_bits = 500,
+                                        })
+                                        .release();
+
+            REQUIRE(dbs.memcompare_with(dbs2));
+
+            dbs.toggle_bit(1);
+
+            REQUIRE(dbs.get_bit(1));
+
+            REQUIRE(!dbs.memcompare_with(dbs2));
+
+            dbs2.toggle_bit(1);
+            REQUIRE(dbs2.get_bit(1));
+
+            REQUIRE(dbs.memcompare_with(dbs2));
         }
     }
 }

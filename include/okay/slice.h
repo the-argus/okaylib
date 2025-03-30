@@ -259,14 +259,17 @@ using bytes_t = slice<uint8_t>;
 class const_bit_slice_t
 {
   protected:
-    constexpr const_bit_slice_t(uint8_t& first_byte, size_t num_bits,
+    constexpr const_bit_slice_t(uint8_t* first_byte, size_t num_bits,
                                 uint8_t offset)
         : m(members_t{
               .num_bits = num_bits,
-              .first_byte = &first_byte,
+              .first_byte = first_byte,
               .offset = offset,
           })
     {
+        if (first_byte == nullptr && num_bits != 0) [[unlikely]] {
+            __ok_abort("Attempt to use null data but size is not zero.");
+        }
     }
 
     struct members_t
@@ -331,15 +334,15 @@ class const_bit_slice_t
 
         const size_t first_byte_index = m.offset + options.start;
         const uint8_t new_offset = first_byte_index % 8UL;
-        return const_bit_slice_t(m.first_byte[first_byte_index], options.length,
-                                 new_offset);
+        return const_bit_slice_t(m.first_byte + first_byte_index,
+                                 options.length, new_offset);
     }
 };
 
 class bit_slice_t : public const_bit_slice_t
 {
   private:
-    constexpr bit_slice_t(uint8_t& first_byte, size_t num_bits, uint8_t offset)
+    constexpr bit_slice_t(uint8_t* first_byte, size_t num_bits, uint8_t offset)
         : const_bit_slice_t(first_byte, num_bits, offset)
     {
     }
@@ -393,7 +396,7 @@ class bit_slice_t : public const_bit_slice_t
 
         const size_t first_byte_index = m.offset + options.start;
         const uint8_t new_offset = first_byte_index % 8UL;
-        return bit_slice_t(m.first_byte[first_byte_index], options.length,
+        return bit_slice_t(m.first_byte + first_byte_index, options.length,
                            new_offset);
     }
 };
@@ -408,7 +411,7 @@ constexpr bit_slice_t raw_bit_slice(bytes_t bytes, size_t num_bits,
     if (offset >= 8) {
         __ok_abort("Offset greater than 7 passed to raw_bit_slice.");
     }
-    return bit_slice_t(*bytes.data(), num_bits, offset);
+    return bit_slice_t(bytes.data(), num_bits, offset);
 }
 
 constexpr const_bit_slice_t raw_bit_slice(slice<const uint8_t> bytes,
@@ -422,7 +425,7 @@ constexpr const_bit_slice_t raw_bit_slice(slice<const uint8_t> bytes,
     if (offset >= 8) {
         __ok_abort("Offset greater than 7 passed to raw_bit_slice.");
     }
-    return const_bit_slice_t(const_cast<uint8_t&>(*bytes.data()), num_bits,
+    return const_bit_slice_t(const_cast<uint8_t*>(bytes.data()), num_bits,
                              offset);
 }
 
