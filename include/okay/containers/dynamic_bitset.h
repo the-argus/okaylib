@@ -252,14 +252,13 @@ template <typename backing_allocator_t = ok::allocator_t> class dynamic_bitset_t
         // TODO: check if this gets optimized, maybe a good idea for
         // dynamic bitset to use u64 internally
 
-        static_assert(round_up_to_multiple_of<8>(0) / 8 == 1);
-
         const size_t num_bytes =
-            (round_up_to_multiple_of<8>(m.num_bits - idx) / 8) - 1;
+            round_up_to_multiple_of<8>(m.num_bits - idx) / 8;
 
-        for (size_t i = first_byte_index + 1; i < num_bytes; ++i) {
+        for (size_t iter = first_byte_index + 2; iter < num_bytes; ++iter) {
+            const size_t i = iter - 1;
             const bool new_carry = m.allocation.data()[i] & carry_check_mask;
-            m.allocation.data()[i] << 1;
+            m.allocation.data()[i] <<= 1;
             m.allocation.data()[i] ^= carry_in_mask * carry;
             carry = new_carry;
         }

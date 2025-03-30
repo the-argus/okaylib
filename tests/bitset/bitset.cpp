@@ -275,5 +275,21 @@ TEST_SUITE("bitset containers")
 
             REQUIRE(dbs.memcompare_with(dbs2));
         }
+
+        SUBCASE("insert_at on empty dbs")
+        {
+            dynamic_bitset_t dbs(c_allocator);
+            REQUIREABORTS(auto&& out_of_range = dbs.insert_at(1, true));
+        }
+
+        SUBCASE("insert_at on preinitialized, first_allocation dynamic bitset")
+        {
+            dynamic_bitset_t dbs =
+                dynamic_bitset::copy_booleans_from_range(
+                    c_allocator, bitset::bit_string("01010011"))
+                    .release();
+
+
+        }
     }
 }
