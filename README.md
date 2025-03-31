@@ -206,3 +206,15 @@ Size of `alist`: 0
 - [ ] Add some concept of being infinite _and_ arraylike. Currently infinite ranges
       like `ok::indices` are not arraylike, which makes `enumerate(array)` more
       space efficient than `zip(array, indices)`.
+- [ ] Add something like `alloc::flags::allow_overlapping` for when the user
+      wants to grow the buffer as much as possible in one atomic operation, allowing
+      for the allocator to figure out if maybe expanding back is a good way to
+      achieve that. The user can find out if the returned memory is overlapping
+      by calling `ok::memoverlaps`
+
+## relevant papers
+
+- **Improving STL Allocators**: [https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2006/n2045.html](https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2006/n2045.html)
+- **Upgrading the Interface of Allocators using API Versioning** [https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2006/n1953.html](https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2006/n1953.html)
+  - Referenced by **Improving STL Allocators**
+- **Size feedback in operator new** [https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2019/p0901r5.html](https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2019/p0901r5.html)
