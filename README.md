@@ -220,8 +220,8 @@ Size of `alist`: 0
 - Barry's C++ Blog:
   - [`T*` makes for a poor `optional<T&>`](https://brevzin.github.io/c++/2021/12/13/optional-ref-ptr)
   - [What's the right hash table API?](https://brevzin.github.io/c++/2023/05/23/map-api/#fn:except)
-  - (the most influential on the ranges design alongside \*\*Pipe support for
-    user-defined range adaptors) above: [What's so hard about `views::enumerate`?](https://brevzin.github.io/c++/2022/12/05/enumerate/)
+  - (the most influential on the ranges design alongside **Pipe support for
+    user-defined range adaptors**) above: [What's so hard about `views::enumerate`?](https://brevzin.github.io/c++/2022/12/05/enumerate/)
 - [Improving STL Allocators](https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2006/n2045.html)
 - [Upgrading the Interface of Allocators using API Versioning](https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2006/n1953.html)
   - Referenced by **Improving STL Allocators**
