@@ -212,9 +212,17 @@ Size of `alist`: 0
       achieve that. The user can find out if the returned memory is overlapping
       by calling `ok::memoverlaps`
 
-## relevant papers
+## relevant papers and blogs
 
-- **Improving STL Allocators**: [https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2006/n2045.html](https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2006/n2045.html)
-- **Upgrading the Interface of Allocators using API Versioning** [https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2006/n1953.html](https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2006/n1953.html)
+- [The One Ranges Proposal](https://www.open-std.org/JTC1/SC22/WG21/docs/papers/2018/p0896r2.pdf)
+- [Pipe support for user-defined range adaptors](http://www5.open-std.org/JTC1/SC22/WG21/docs/papers/2021/p2387r1.html)
+- [Introduction of std::colony to the standard library](https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2017/p0447r4.html)
+- Barry's C++ Blog:
+  - [`T*` makes for a poor `optional<T&>`](https://brevzin.github.io/c++/2021/12/13/optional-ref-ptr)
+  - [What's the right hash table API?](https://brevzin.github.io/c++/2023/05/23/map-api/#fn:except)
+  - (the most influential on the ranges design alongside \*\*Pipe support for
+    user-defined range adaptors) above: [What's so hard about `views::enumerate`?](https://brevzin.github.io/c++/2022/12/05/enumerate/)
+- [Improving STL Allocators](https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2006/n2045.html)
+- [Upgrading the Interface of Allocators using API Versioning](https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2006/n1953.html)
   - Referenced by **Improving STL Allocators**
-- **Size feedback in operator new** [https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2019/p0901r5.html](https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2019/p0901r5.html)
+- [Size feedback in operator new](https://www.open-std.org/jtc1/sc22/wg21/docs/papers/2019/p0901r5.html)
