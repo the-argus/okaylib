@@ -63,6 +63,10 @@ const okaylib_headers = &[_][]const u8{
 
     "containers/array.h",
     "containers/arraylist.h",
+    "containers/bit_arraylist.h",
+    "containers/bit_array.h",
+    "containers/fixed_arraylist.h",
+    "containers/segmented_list.h",
 
     "detail/template_util/c_array_length.h",
     "detail/template_util/c_array_value_type.h",
@@ -155,7 +159,7 @@ const test_source_files = &[_][]const u8{
     "arraylist/arraylist.cpp",
     "algorithm/ranges_equal.cpp",
     "algorithm/ranges_copy.cpp",
-    "bitset/bitset.cpp",
+    "bit_array/bit_array.cpp",
 };
 
 const universal_tests_source_files = &[_][]const u8{

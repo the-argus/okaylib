@@ -177,7 +177,7 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
     constexpr bool memcompare_with(
         const bit_arraylist_t<other_allocator_t>& other) const OKAYLIB_NOEXCEPT
     {
-        // make sure both bitsets have data, if theyre both empty then this
+        // make sure both bit_arrays have data, if theyre both empty then this
         // returns true
         if (other.m.allocation.size() == 0 || m.allocation.size() == 0)
             [[unlikely]] {
@@ -250,7 +250,7 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
 
         // loop from zero to the number of bytes in use, shifting everything up
         // TODO: check if this gets optimized, maybe a good idea for
-        // dynamic bitset to use u64 internally
+        // dynamic bit_array to use u64 internally
 
         const size_t num_bytes =
             round_up_to_multiple_of<8>(m.num_bits - idx) / 8;

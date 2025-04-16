@@ -9,39 +9,39 @@
 
 namespace ok {
 
-namespace bitset::detail {
+namespace bit_array::detail {
 template <size_t num_bits> struct all_bits_on_t;
 template <size_t num_bits> struct zeroed_t;
 template <size_t num_bits> struct undefined_t;
 struct bit_string_t;
-} // namespace bitset::detail
+} // namespace bit_array::detail
 
-template <size_t num_bits> class bitset_t
+template <size_t num_bits> class bit_array_t
 {
-    static_assert(num_bits != 0, "Cannot create a bitset of zero bits");
+    static_assert(num_bits != 0, "Cannot create a bit_array of zero bits");
     static constexpr size_t num_bytes =
         round_up_to_multiple_of<8>(num_bits) / 8;
     static_assert(num_bytes != 0);
     uint8_t bytes[num_bytes];
 
-    bitset_t() = default;
+    bit_array_t() = default;
 
   public:
-    friend struct bitset::detail::all_bits_on_t<num_bits>;
-    friend struct bitset::detail::zeroed_t<num_bits>;
-    friend struct bitset::detail::undefined_t<num_bits>;
-    friend struct bitset::detail::bit_string_t;
+    friend struct bit_array::detail::all_bits_on_t<num_bits>;
+    friend struct bit_array::detail::zeroed_t<num_bits>;
+    friend struct bit_array::detail::undefined_t<num_bits>;
+    friend struct bit_array::detail::bit_string_t;
 
-    constexpr bitset_t operator&(const bitset_t& other) const OKAYLIB_NOEXCEPT
+    constexpr bit_array_t operator&(const bit_array_t& other) const OKAYLIB_NOEXCEPT
     {
-        bitset_t out;
+        bit_array_t out;
         for (size_t i = 0; i < num_bytes; ++i) {
             out.bytes[i] = other.bytes[i] & bytes[i];
         }
         return out;
     }
 
-    constexpr bitset_t& operator&=(const bitset_t& other) OKAYLIB_NOEXCEPT
+    constexpr bit_array_t& operator&=(const bit_array_t& other) OKAYLIB_NOEXCEPT
     {
         for (size_t i = 0; i < num_bytes; ++i) {
             bytes[i] &= other.bytes[i];
@@ -49,16 +49,16 @@ template <size_t num_bits> class bitset_t
         return *this;
     }
 
-    constexpr bitset_t operator|(const bitset_t& other) const OKAYLIB_NOEXCEPT
+    constexpr bit_array_t operator|(const bit_array_t& other) const OKAYLIB_NOEXCEPT
     {
-        bitset_t out;
+        bit_array_t out;
         for (size_t i = 0; i < num_bytes; ++i) {
             out.bytes[i] = other.bytes[i] | bytes[i];
         }
         return out;
     }
 
-    constexpr bitset_t& operator|=(const bitset_t& other) OKAYLIB_NOEXCEPT
+    constexpr bit_array_t& operator|=(const bit_array_t& other) OKAYLIB_NOEXCEPT
     {
         for (size_t i = 0; i < num_bytes; ++i) {
             bytes[i] |= other.bytes[i];
@@ -66,16 +66,16 @@ template <size_t num_bits> class bitset_t
         return *this;
     }
 
-    constexpr bitset_t operator^(const bitset_t& other) const OKAYLIB_NOEXCEPT
+    constexpr bit_array_t operator^(const bit_array_t& other) const OKAYLIB_NOEXCEPT
     {
-        bitset_t out;
+        bit_array_t out;
         for (size_t i = 0; i < num_bytes; ++i) {
             out.bytes[i] = other.bytes[i] ^ bytes[i];
         }
         return out;
     }
 
-    constexpr bitset_t& operator^=(const bitset_t& other) OKAYLIB_NOEXCEPT
+    constexpr bit_array_t& operator^=(const bit_array_t& other) OKAYLIB_NOEXCEPT
     {
         for (size_t i = 0; i < num_bytes; ++i) {
             bytes[i] ^= other.bytes[i];
@@ -137,7 +137,7 @@ template <size_t num_bits> class bitset_t
         return items().get_bit(idx);
     }
 
-    friend constexpr bool operator==(const bitset_t& lhs, const bitset_t& rhs)
+    friend constexpr bool operator==(const bit_array_t& lhs, const bit_array_t& rhs)
     {
         // TODO: use bytewise == comparison here instead of doing math on every
         // bit for no reeason
@@ -148,47 +148,47 @@ template <size_t num_bits> class bitset_t
         }
         return true;
     }
-    friend constexpr bool operator!=(const bitset_t& lhs, const bitset_t& rhs)
+    friend constexpr bool operator!=(const bit_array_t& lhs, const bit_array_t& rhs)
     {
         return !(lhs == rhs);
     }
 };
 
-template <size_t max_elems> struct range_definition<bitset_t<max_elems>>
+template <size_t max_elems> struct range_definition<bit_array_t<max_elems>>
 {
-    using bitset_t = bitset_t<max_elems>;
-    static constexpr size_t begin(const bitset_t&) OKAYLIB_NOEXCEPT
+    using bit_array_t = bit_array_t<max_elems>;
+    static constexpr size_t begin(const bit_array_t&) OKAYLIB_NOEXCEPT
     {
         return 0;
     }
-    static constexpr bool is_inbounds(const bitset_t& bs,
+    static constexpr bool is_inbounds(const bit_array_t& bs,
                                       size_t cursor) OKAYLIB_NOEXCEPT
     {
         return cursor < max_elems;
     }
 
-    static constexpr size_t size(const bitset_t& bs) OKAYLIB_NOEXCEPT
+    static constexpr size_t size(const bit_array_t& bs) OKAYLIB_NOEXCEPT
     {
         return max_elems;
     }
 
-    static constexpr bool get(const bitset_t& range, size_t cursor)
+    static constexpr bool get(const bit_array_t& range, size_t cursor)
     {
         return range.get_bit(cursor);
     }
 
-    static constexpr void set(bitset_t& range, size_t cursor, bool value)
+    static constexpr void set(bit_array_t& range, size_t cursor, bool value)
     {
         return range.set_bit(cursor, value);
     }
 };
 
-namespace bitset {
+namespace bit_array {
 namespace detail {
 struct bit_string_t
 {
     template <typename c_array_ref, typename... args_t>
-    using associated_type = bitset_t<ok::detail::c_array_length_t<
+    using associated_type = bit_array_t<ok::detail::c_array_length_t<
         std::remove_reference_t<c_array_ref>>::value>;
 
     template <size_t N>
@@ -199,10 +199,10 @@ struct bit_string_t
     }
 
     template <size_t N>
-    [[nodiscard]] constexpr bitset_t<N - 1>
+    [[nodiscard]] constexpr bit_array_t<N - 1>
     make(const char (&literal)[N]) const OKAYLIB_NOEXCEPT
     {
-        bitset_t<N - 1> out;
+        bit_array_t<N - 1> out;
 
         for (size_t i = 0; i < N - 1; ++i) {
             out.set_bit(i, literal[i] == '1');
@@ -213,47 +213,47 @@ struct bit_string_t
 };
 template <size_t num_bits> struct zeroed_t
 {
-    template <typename...> using associated_type = bitset_t<num_bits>;
+    template <typename...> using associated_type = bit_array_t<num_bits>;
 
     [[nodiscard]] constexpr auto operator()() const OKAYLIB_NOEXCEPT
     {
         return ok::make(*this);
     }
 
-    [[nodiscard]] constexpr bitset_t<num_bits> make() const OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr bit_array_t<num_bits> make() const OKAYLIB_NOEXCEPT
     {
-        bitset_t<num_bits> out;
+        bit_array_t<num_bits> out;
         out.set_all_bits(false);
         return out;
     }
 };
 template <size_t num_bits> struct undefined_t
 {
-    template <typename...> using associated_type = bitset_t<num_bits>;
+    template <typename...> using associated_type = bit_array_t<num_bits>;
 
     [[nodiscard]] constexpr auto operator()() const OKAYLIB_NOEXCEPT
     {
         return ok::make(*this);
     }
 
-    [[nodiscard]] constexpr bitset_t<num_bits> make() const OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr bit_array_t<num_bits> make() const OKAYLIB_NOEXCEPT
     {
-        return bitset_t<num_bits>();
+        return bit_array_t<num_bits>();
         ;
     }
 };
 template <size_t num_bits> struct all_bits_on_t
 {
-    template <typename...> using associated_type = bitset_t<num_bits>;
+    template <typename...> using associated_type = bit_array_t<num_bits>;
 
     [[nodiscard]] constexpr auto operator()() const OKAYLIB_NOEXCEPT
     {
         return ok::make(*this);
     }
 
-    [[nodiscard]] constexpr bitset_t<num_bits> make() const OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr bit_array_t<num_bits> make() const OKAYLIB_NOEXCEPT
     {
-        bitset_t<num_bits> out;
+        bit_array_t<num_bits> out;
         out.set_all_bits(true);
         return out;
     }
@@ -265,7 +265,7 @@ template <size_t num_bits> inline constexpr detail::zeroed_t<num_bits> zeroed;
 template <size_t num_bits>
 inline constexpr detail::undefined_t<num_bits> undefined;
 inline constexpr detail::bit_string_t bit_string;
-} // namespace bitset
+} // namespace bit_array
 } // namespace ok
 
 #endif
