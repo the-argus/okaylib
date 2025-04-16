@@ -4,6 +4,7 @@
 #include "okay/detail/addressof.h"
 #include "okay/detail/noexcept.h"
 #include "okay/detail/ok_enable_if.h"
+#include "okay/detail/template_util/c_array_value_type.h"
 #include "okay/detail/template_util/empty.h"
 #include "okay/detail/template_util/uninitialized_storage.h"
 #include "okay/detail/traits/special_member_traits.h"
@@ -328,8 +329,12 @@ class ref_view<
     }
 
     template <typename derived_t, typename desired_reference_t>
-    constexpr remove_cvref_t<desired_reference_t>&
-    get_view_reference() & noexcept
+    constexpr auto get_view_reference() & noexcept
+        // disable nonconst get_view_reference in the special case that we are a
+        // ref wrapper around a const reference to a c array
+        -> std::enable_if_t<
+            !std::is_const_v<c_array_value_type_or_void<range_t>>,
+            ok::detail::remove_cvref_t<desired_reference_t>&>
     {
         using desired_t = remove_cvref_t<desired_reference_t>;
         static_assert(is_derived_from_v<derived_t, ref_view>);
