@@ -689,14 +689,8 @@ template <typename T> struct empty_t
 
 template <typename T> struct spots_preallocated_t
 {
-    template <typename allocator_impl_t>
-    static ok::arraylist_t<T, allocator_impl_t>
-    associated_type_deducer(allocator_impl_t& allocator, size_t);
-
-    // provide type deduction if you want to use ok::make
-    template <typename... args_t>
-    using associated_type =
-        decltype(associated_type_deducer(std::declval<args_t>()...));
+    template <typename backing_allocator_t>
+    using associated_type = ok::arraylist_t<T, backing_allocator_t>;
 
     template <typename allocator_impl_t>
     [[nodiscard]] constexpr auto
@@ -739,17 +733,10 @@ template <typename T> struct spots_preallocated_t
 
 struct copy_items_from_range_t
 {
-    // has to be public apparently, since its instantiated from another class
-    template <typename allocator_impl_t, typename input_range_t>
-    static ok::arraylist_t<value_type_for<const input_range_t&>,
-                           allocator_impl_t>
-    associated_type_deducer(allocator_impl_t& allocator,
-                            const input_range_t& range);
-
-    // provide type deduction if you want to use ok::make
-    template <typename... args_t>
+    template <typename backing_allocator_t, typename input_range_t>
     using associated_type =
-        decltype(associated_type_deducer(std::declval<args_t>()...));
+        ok::arraylist_t<value_type_for<input_range_t>,
+                        ok::detail::remove_cvref_t<backing_allocator_t>>;
 
     template <typename allocator_impl_t, typename input_range_t>
     [[nodiscard]] constexpr auto
