@@ -17,7 +17,7 @@ struct join_fn_t
     constexpr decltype(auto)
     operator()(input_range_t&& range) const OKAYLIB_NOEXCEPT
     {
-        using range_t = detail::remove_cvref_t<input_range_t>;
+        using range_t = std::remove_reference_t<input_range_t>;
         static_assert(is_range_v<range_t>,
                       "Cannot join given type- it is not a range.");
         static_assert(is_range_v<value_type_for<range_t>>,

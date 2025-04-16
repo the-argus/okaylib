@@ -14,10 +14,10 @@ struct reverse_fn_t
     template <typename range_t>
     constexpr decltype(auto) operator()(range_t&& range) const OKAYLIB_NOEXCEPT
     {
-        using T = remove_cvref_t<range_t>;
-        static_assert(is_range_v<T>,
+        static_assert(is_range_v<range_t>,
                       "Cannot reverse given type- it is not a range.");
-        static_assert(is_random_access_range_v<T> && range_can_size_v<T>,
+        static_assert(is_random_access_range_v<range_t> &&
+                          range_can_size_v<range_t>,
                       "Cannot reverse given type- it is either not random "
                       "access, or its size is not finite or cannot be known in "
                       "constant time.");
@@ -28,7 +28,7 @@ struct reverse_fn_t
 template <typename input_parent_range_t> struct reversed_cursor_t
 {
   private:
-    using parent_range_t = detail::remove_cvref_t<input_parent_range_t>;
+    using parent_range_t = std::remove_reference_t<input_parent_range_t>;
     using parent_cursor_t = cursor_type_for<parent_range_t>;
     using self_t = reversed_cursor_t;
 
@@ -130,7 +130,7 @@ struct range_definition<detail::reversed_view_t<input_range_t>,
 {
     static constexpr bool is_view = true;
 
-    using range_t = detail::remove_cvref_t<input_range_t>;
+    using range_t = std::remove_reference_t<input_range_t>;
     using reverse_t = detail::reversed_view_t<input_range_t>;
     using cursor_t = detail::reversed_cursor_t<input_range_t>;
 

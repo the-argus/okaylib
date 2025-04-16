@@ -27,18 +27,18 @@ struct transform_fn_t
     constexpr decltype(auto)
     operator()(range_t&& range, callable_t&& callable) const OKAYLIB_NOEXCEPT
     {
-        using T = remove_cvref_t<range_t>;
+        using T = detail::remove_cvref_t<range_t>;
         static_assert(is_range_v<T>,
                       "Cannot transform given type- it is not a range.");
         constexpr bool can_call_with_get_ref_const =
             std::is_invocable_v<callable_t, const value_type_for<T>&> &&
-            detail::range_has_get_ref_const_v<T>;
-        constexpr bool can_call_with_copied_value =
+            detail::range_has_get_ref_const_v<range_t>;
+        constexpr bool can_call_with_copyout =
             std::is_invocable_v<callable_t, value_type_for<T>> &&
             (detail::range_has_get_v<T> ||
              detail::range_has_get_ref_const_v<T>);
         static_assert(
-            can_call_with_get_ref_const || can_call_with_copied_value,
+            can_call_with_get_ref_const || can_call_with_copyout,
             "Given transformation function and given range do not match up: "
             "there is no way to do `func(ok::iter_get_ref(const range))` "
             "nor `func(ok::iter_copyout(const range))`. This may also be "
@@ -107,7 +107,7 @@ struct range_definition<detail::transformed_view_t<input_range_t, callable_t>>
 {
     static constexpr bool is_view = true;
 
-    using range_t = detail::remove_cvref_t<input_range_t>;
+    using range_t = std::remove_reference_t<input_range_t>;
     using transformed_t = detail::transformed_view_t<input_range_t, callable_t>;
     using cursor_t = cursor_type_for<range_t>;
 

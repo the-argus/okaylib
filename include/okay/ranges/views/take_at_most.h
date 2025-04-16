@@ -26,7 +26,7 @@ struct take_at_most_cursor_t
                               detail::remove_cvref_t<input_parent_range_t>>
 {
   private:
-    using parent_range_t = detail::remove_cvref_t<input_parent_range_t>;
+    using parent_range_t = std::remove_reference_t<input_parent_range_t>;
     using parent_cursor_t = cursor_type_for<parent_range_t>;
     using wrapper_t =
         cursor_wrapper_t<take_at_most_cursor_t<input_parent_range_t>,

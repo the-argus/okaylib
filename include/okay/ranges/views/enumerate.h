@@ -112,7 +112,7 @@ struct range_definition<detail::enumerated_view_t<input_range_t>,
 
     using enumerated_t = detail::enumerated_view_t<input_range_t>;
     using cursor_t = detail::enumerated_cursor_t<input_range_t>;
-    using range_t = detail::remove_cvref_t<input_range_t>;
+    using range_t = std::remove_reference_t<input_range_t>;
 
     __ok_enable_if_static(range_t, detail::range_definition_has_increment_v<T>,
                           void)
@@ -169,7 +169,7 @@ struct range_definition<detail::enumerated_view_t<input_range_t>,
     constexpr static bool is_view = true;
     constexpr static bool is_arraylike = true;
 
-    using range_t = detail::remove_cvref_t<input_range_t>;
+    using range_t = std::remove_reference_t<input_range_t>;
     using enumerated_t = detail::enumerated_view_t<input_range_t>;
 
     constexpr static auto get(const enumerated_t& range,

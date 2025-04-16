@@ -160,6 +160,7 @@ const test_source_files = &[_][]const u8{
     "algorithm/ranges_equal.cpp",
     "algorithm/ranges_copy.cpp",
     "bit_array/bit_array.cpp",
+    "bit_arraylist/bit_arraylist.cpp",
 };
 
 const universal_tests_source_files = &[_][]const u8{

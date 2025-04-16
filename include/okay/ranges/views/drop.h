@@ -32,7 +32,7 @@ struct drop_cursor_bidir_t
                               detail::remove_cvref_t<input_parent_range_t>>
 {
   private:
-    using range_t = detail::remove_cvref_t<input_parent_range_t>;
+    using range_t = std::remove_reference_t<input_parent_range_t>;
     using parent_cursor_t = cursor_type_for<range_t>;
     using wrapper_t =
         cursor_wrapper_t<drop_cursor_bidir_t<input_parent_range_t>, range_t>;

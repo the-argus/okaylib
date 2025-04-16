@@ -1,12 +1,10 @@
-#include "okay/ranges/algorithm.h"
-#include "okay/ranges/for_each.h"
-#include "okay/ranges/views/all.h"
 #include "test_header.h"
 // test header must be first
 #include "okay/allocators/c_allocator.h"
 #include "okay/containers/array.h"
 #include "okay/containers/bit_array.h"
 #include "okay/containers/bit_arraylist.h"
+#include "okay/ranges/algorithm.h"
 
 using namespace ok;
 
@@ -145,151 +143,6 @@ TEST_SUITE("bit_array containers")
             REQUIRE(a == bit_array::bit_string("00000000000"));
             a.set_all_bits(true);
             REQUIRE(a == bit_array::bit_string("11111111111"));
-        }
-    }
-
-    TEST_CASE("dynamic bit_array")
-    {
-        SUBCASE("construction from allocator")
-        {
-            bit_arraylist_t test(c_allocator);
-            REQUIRE(test.size() == 0);
-        }
-
-        SUBCASE("move constructor upcast to ok::allocator_t")
-        {
-            bit_arraylist_t<c_allocator_t> first(c_allocator);
-            static_assert(
-                std::is_same_v<c_allocator_t, decltype(first)::allocator_type>);
-            bit_arraylist_t second(std::move(first));
-            REQUIRE(second.size() == 0);
-            static_assert(std::is_same_v<decltype(second)::allocator_type,
-                                         decltype(first)::allocator_type>);
-            // upcast, only possible implicitly in move assignment
-            bit_arraylist_t<ok::allocator_t> third(c_allocator);
-            third = std::move(second);
-        }
-
-        SUBCASE("upcasting move constructor")
-        {
-            bit_arraylist_t first(c_allocator);
-            static_assert(
-                std::is_same_v<c_allocator_t, decltype(first)::allocator_type>);
-
-            bit_arraylist_t<ok::allocator_t> second(
-                bit_arraylist::upcast_tag{}, std::move(first));
-
-            REQUIRE(second.size() == 0);
-        }
-
-        SUBCASE("items returns the correct thing by constness")
-        {
-            bit_arraylist_t dbs(c_allocator);
-
-            bit_slice_t bits = dbs.items();
-            const_bit_slice_t bits_const = dbs.items();
-            const_bit_slice_t bits_const_2 =
-                static_cast<const bit_arraylist_t<c_allocator_t>&>(dbs)
-                    .items();
-        }
-
-        SUBCASE("can implicitly convert dynamic bit_array into bit_slice_t")
-        {
-            constexpr auto gets_slice = [](const_bit_slice_t bs) {
-                bs | ok::for_each(
-                         [](bool item) { fmt::print("{}", item ? "0" : "1"); });
-                fmt::print("\n");
-            };
-
-            bit_arraylist_t dbs(c_allocator);
-
-            gets_slice(dbs);
-        }
-
-        SUBCASE("copy booleans from range constructor")
-        {
-            array_t bools = {true, false, true, true};
-            bit_arraylist_t copied =
-                bit_arraylist::copy_booleans_from_range(c_allocator, bools)
-                    .release();
-
-            bit_arraylist_t copied2 =
-                bit_arraylist::copy_booleans_from_range(
-                    c_allocator, bit_array::bit_string("010011011"))
-                    .release();
-
-            REQUIRE(ranges_equal(copied2, bit_array::bit_string("010011011")));
-            REQUIRE(ranges_equal(bools, copied));
-            REQUIRE(ranges_equal(bit_array::bit_string("1011"), copied));
-        }
-
-        SUBCASE("preallocated and zeroed constructor")
-        {
-            bit_arraylist_t dbs = bit_arraylist::preallocated_and_zeroed(
-                                       c_allocator,
-                                       {
-                                           .num_initial_bits = 100,
-                                           .additional_capacity_in_bits = 500,
-                                       })
-                                       .release();
-            REQUIRE(dbs.size() == 100);
-            REQUIRE(dbs.capacity() >= 600);
-
-            const auto all_zeroed = all([](bool a) { return a == false; });
-            const auto all_ones = all([](bool a) { return a == true; });
-            bool good = all_zeroed(dbs);
-            REQUIRE(good);
-
-            dbs.set_all_bits(true);
-            good = all_ones(dbs);
-            REQUIRE(good);
-        }
-
-        SUBCASE("toggle and memcompare_with()")
-        {
-            bit_arraylist_t dbs = bit_arraylist::preallocated_and_zeroed(
-                                       c_allocator,
-                                       {
-                                           .num_initial_bits = 100,
-                                           .additional_capacity_in_bits = 500,
-                                       })
-                                       .release();
-            bit_arraylist_t dbs2 = bit_arraylist::preallocated_and_zeroed(
-                                        c_allocator,
-                                        {
-                                            .num_initial_bits = 100,
-                                            .additional_capacity_in_bits = 500,
-                                        })
-                                        .release();
-
-            REQUIRE(dbs.memcompare_with(dbs2));
-
-            dbs.toggle_bit(1);
-
-            REQUIRE(dbs.get_bit(1));
-
-            REQUIRE(!dbs.memcompare_with(dbs2));
-
-            dbs2.toggle_bit(1);
-            REQUIRE(dbs2.get_bit(1));
-
-            REQUIRE(dbs.memcompare_with(dbs2));
-        }
-
-        SUBCASE("insert_at on empty dbs")
-        {
-            bit_arraylist_t dbs(c_allocator);
-            REQUIREABORTS(auto&& out_of_range = dbs.insert_at(1, true));
-        }
-
-        SUBCASE("insert_at on preinitialized, first_allocation dynamic bit_array")
-        {
-            bit_arraylist_t dbs =
-                bit_arraylist::copy_booleans_from_range(
-                    c_allocator, bit_array::bit_string("01010011"))
-                    .release();
-
-
         }
     }
 }

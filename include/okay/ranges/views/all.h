@@ -40,7 +40,7 @@ template <typename input_range_t, typename input_predicate_t>
 struct all_closure_t : public underlying_view_type<input_range_t>::type
 {
   private:
-    using range_t = detail::remove_cvref_t<input_range_t>;
+    using range_t = std::remove_reference_t<input_range_t>;
     using predicate_t = detail::remove_cvref_t<input_predicate_t>;
     assignment_op_wrapper_t<std::remove_reference_t<input_predicate_t>>
         m_predicate;

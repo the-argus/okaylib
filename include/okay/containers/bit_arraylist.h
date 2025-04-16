@@ -11,8 +11,7 @@ struct upcast_tag
 namespace detail {
 struct preallocated_and_zeroed_t;
 struct copy_booleans_from_range_t;
-// pass a zero sized slice of this when no memory is available;
-inline constexpr uint8_t dummy_mem = 0;
+struct bit_string_t;
 } // namespace detail
 } // namespace bit_arraylist
 template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
@@ -40,6 +39,7 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
   public:
     friend struct ok::bit_arraylist::detail::preallocated_and_zeroed_t;
     friend struct ok::bit_arraylist::detail::copy_booleans_from_range_t;
+    friend struct ok::bit_arraylist::detail::bit_string_t;
 
     template <typename other_allocator_t> friend class ok::bit_arraylist_t;
 
@@ -71,7 +71,7 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
                                                      backing_allocator_t*>,
                                bool> = true>
     constexpr bit_arraylist_t(const bit_arraylist::upcast_tag&,
-                               bit_arraylist_t<other_allocator_t>&& other)
+                              bit_arraylist_t<other_allocator_t>&& other)
         : m(members_t{
               .num_bits = other.m.num_bits,
               .allocation =
@@ -142,8 +142,6 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
     constexpr bit_slice_t items() && = delete;
     constexpr const_bit_slice_t items() const&& = delete;
 
-    [[nodiscard]] constexpr size_t size() const noexcept { return m.num_bits; }
-
     constexpr void set_all_bits(bool value) OKAYLIB_NOEXCEPT
     {
         if (m.allocation.size() == 0) [[unlikely]] {
@@ -153,9 +151,14 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
                     this->size_bytes());
     }
 
-    constexpr size_t size_bytes() const OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr size_t size_bytes() const OKAYLIB_NOEXCEPT
     {
         return round_up_to_multiple_of<8>(m.num_bits) / 8;
+    }
+
+    [[nodiscard]] constexpr size_t size_bits() const OKAYLIB_NOEXCEPT
+    {
+        return m.num_bits;
     }
 
     constexpr void set_bit(size_t idx, bool value) OKAYLIB_NOEXCEPT
@@ -209,16 +212,18 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
         return alloc::error::okay;
     }
 
-    // TODO: these functions
     [[nodiscard]] constexpr status<alloc::error>
     insert_at(size_t idx, bool value) OKAYLIB_NOEXCEPT
     {
-        __ok_internal_assert(this->capacity() >= this->size());
+        if (idx > this->size_bits()) [[unlikely]] {
+            __ok_abort("insert_at into bit_arraylist out of bounds");
+        }
+        __ok_internal_assert(this->capacity_bits() >= this->size_bits());
         if (auto status = this->ensure_additional_capacity(); !status.okay())
             [[unlikely]] {
             return status;
         }
-        __ok_internal_assert(this->capacity() > this->size());
+        __ok_internal_assert(this->capacity_bits() > this->size_bits());
         constexpr uint8_t carry_in_mask = 0b001;
         constexpr uint8_t carry_check_mask = 0b10000000;
 
@@ -227,7 +232,7 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
             __ok_internal_assert(bit_index < 8);
 
             // mask of the bits that should be shifted
-            const uint8_t shift_mask = (~uint8_t(0)) << bit_index;
+            const uint8_t shift_mask = uint8_t(-1) << bit_index;
             const bool carry = (*byte & carry_check_mask) != 0;
             const uint8_t shifted = (*byte & shift_mask) << 1;
 
@@ -269,12 +274,12 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
     [[nodiscard]] constexpr status<alloc::error>
     append(bool value) OKAYLIB_NOEXCEPT
     {
-        return this->insert_at(this->size(), value);
+        return this->insert_at(this->size_bits(), value);
     }
 
     constexpr bool remove(size_t idx) OKAYLIB_NOEXCEPT
     {
-        if (idx >= this->size()) [[unlikely]] {
+        if (idx >= this->size_bits()) [[unlikely]] {
             __ok_abort("Out of bounds access to bit_arraylist_t in remove()");
         }
 
@@ -288,12 +293,12 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
             [](uint8_t* byte, size_t bit_index, bool removal_carry_in) -> bool {
             __ok_internal_assert(bit_index < 8);
 
-            const uint8_t shift_mask = (~uint8_t(0)) << (bit_index + 1);
+            const uint8_t shift_mask = uint8_t(-1) << (bit_index + 1);
             const uint8_t bit_mask = uint8_t(1) << bit_index;
             const uint8_t out = *byte & bit_mask;
             const uint8_t shifted = (*byte & shift_mask) >> 1;
 
-            *byte &= ~((~uint8_t(0)) << bit_index);
+            *byte &= ~(uint8_t(-1) << bit_index);
             *byte |= shifted;
             *byte |= carry_in_mask * removal_carry_in;
             return out;
@@ -341,21 +346,26 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
     [[nodiscard]] constexpr status<alloc::error>
     resize(size_t new_size) OKAYLIB_NOEXCEPT;
 
-    [[nodiscard]] constexpr size_t capacity() const OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr size_t capacity_bits() const OKAYLIB_NOEXCEPT
     {
         return m.allocation.size() * 8;
     }
 
+    [[nodiscard]] constexpr size_t capacity_bytes() const OKAYLIB_NOEXCEPT
+    {
+        return m.allocation.size();
+    }
+
     [[nodiscard]] constexpr bool is_empty() const OKAYLIB_NOEXCEPT
     {
-        return this->size() == 0;
+        return this->size_bits() == 0;
     }
 
     constexpr opt<bool> pop_last() OKAYLIB_NOEXCEPT
     {
         if (this->is_empty())
             return {};
-        return this->remove(this->size() - 1);
+        return this->remove(this->size_bits() - 1);
     }
 
     [[nodiscard]] constexpr const backing_allocator_t&
@@ -435,12 +445,12 @@ struct range_definition<bit_arraylist_t<backing_allocator_t>>
     static constexpr bool is_inbounds(const bit_arraylist_t& bs,
                                       size_t cursor) OKAYLIB_NOEXCEPT
     {
-        return cursor < bs.size();
+        return cursor < bs.size_bits();
     }
 
     static constexpr size_t size(const bit_arraylist_t& bs) OKAYLIB_NOEXCEPT
     {
-        return bs.size();
+        return bs.size_bits();
     }
 
     static constexpr bool get(const bit_arraylist_t& range, size_t cursor)
@@ -448,8 +458,7 @@ struct range_definition<bit_arraylist_t<backing_allocator_t>>
         return range.get_bit(cursor);
     }
 
-    static constexpr void set(bit_arraylist_t& range, size_t cursor,
-                              bool value)
+    static constexpr void set(bit_arraylist_t& range, size_t cursor, bool value)
     {
         return range.set_bit(cursor, value);
     }
@@ -457,6 +466,48 @@ struct range_definition<bit_arraylist_t<backing_allocator_t>>
 
 namespace bit_arraylist {
 namespace detail {
+struct bit_string_t
+{
+    template <typename allocator_t, typename...>
+    using associated_type =
+        bit_arraylist_t<::ok::detail::remove_cvref_t<allocator_t>>;
+
+    template <typename backing_allocator_t, size_t N>
+    [[nodiscard]] constexpr auto
+    operator()(backing_allocator_t& allocator,
+               const char (&literal)[N]) const OKAYLIB_NOEXCEPT
+    {
+        static_assert(
+            ok::detail::is_derived_from_v<backing_allocator_t, ok::allocator_t>,
+            "Type given as first argument to bit_string constructor does not "
+            "appear to be an allocator.");
+        static_assert(N > 1, "bit_string_t doesn't accept empty strings.");
+        return ok::make(*this, allocator, literal);
+    }
+
+    template <typename backing_allocator_t, size_t N>
+    [[nodiscard]] constexpr std::enable_if_t<(N > 1), status<alloc::error>>
+    make_into_uninit(bit_arraylist_t<backing_allocator_t>& uninit,
+                     backing_allocator_t& allocator,
+                     const char (&literal)[N]) const OKAYLIB_NOEXCEPT
+    {
+        using type = bit_arraylist_t<backing_allocator_t>;
+
+        uninit.m.allocator = ok::addressof(allocator);
+        const auto status = uninit.first_allocation(N - 1);
+        if (!status.okay()) [[unlikely]] {
+            return status;
+        }
+
+        uninit.m.num_bits = N - 1;
+
+        for (size_t i = 0; i < N - 1; ++i) {
+            uninit.set_bit(i, literal[i] == '1');
+        }
+
+        return alloc::error::okay;
+    }
+};
 struct preallocated_and_zeroed_t
 {
     struct options_t
@@ -572,9 +623,32 @@ struct copy_booleans_from_range_t
 
 inline constexpr detail::copy_booleans_from_range_t copy_booleans_from_range;
 inline constexpr detail::preallocated_and_zeroed_t preallocated_and_zeroed;
+inline constexpr detail::bit_string_t bit_string;
 
 } // namespace bit_arraylist
 
 } // namespace ok
+
+#ifdef OKAYLIB_USE_FMT
+template <typename backing_allocator_t>
+struct fmt::formatter<ok::bit_arraylist_t<backing_allocator_t>>
+{
+    using formatted_type_t = ok::bit_arraylist_t<backing_allocator_t>;
+    constexpr format_parse_context::iterator parse(format_parse_context& ctx)
+    {
+        auto it = ctx.begin();
+        if (it != ctx.end() && *it != '}')
+            throw_format_error("invalid format");
+        return it;
+    }
+
+    format_context::iterator format(const formatted_type_t& bit_arraylist,
+                                    format_context& ctx) const
+    {
+        return fmt::format_to(ctx.out(), "ok::bit_arraylist_t: [ {} ]",
+                              bit_arraylist.items());
+    }
+};
+#endif
 
 #endif

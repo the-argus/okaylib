@@ -7,12 +7,18 @@
 #include "okay/slice.h"
 #include <cstdint>
 
+#ifdef OKAYLIB_USE_FMT
+#include <fmt/core.h>
+#endif
+
 namespace ok {
 
 namespace bit_array::detail {
 template <size_t num_bits> struct all_bits_on_t;
 template <size_t num_bits> struct zeroed_t;
 template <size_t num_bits> struct undefined_t;
+struct undefined_tag_t
+{};
 struct bit_string_t;
 } // namespace bit_array::detail
 
@@ -24,7 +30,14 @@ template <size_t num_bits> class bit_array_t
     static_assert(num_bytes != 0);
     uint8_t bytes[num_bytes];
 
-    bit_array_t() = default;
+    constexpr bit_array_t() noexcept
+    {
+        // not using memset so we can get constexpr
+        for (size_t i = 0; i < num_bytes; ++i) {
+            bytes[i] = 0;
+        }
+    }
+    constexpr bit_array_t(bit_array::detail::undefined_tag_t) noexcept {}
 
   public:
     friend struct bit_array::detail::all_bits_on_t<num_bits>;
@@ -32,7 +45,8 @@ template <size_t num_bits> class bit_array_t
     friend struct bit_array::detail::undefined_t<num_bits>;
     friend struct bit_array::detail::bit_string_t;
 
-    constexpr bit_array_t operator&(const bit_array_t& other) const OKAYLIB_NOEXCEPT
+    constexpr bit_array_t
+    operator&(const bit_array_t& other) const OKAYLIB_NOEXCEPT
     {
         bit_array_t out;
         for (size_t i = 0; i < num_bytes; ++i) {
@@ -49,7 +63,8 @@ template <size_t num_bits> class bit_array_t
         return *this;
     }
 
-    constexpr bit_array_t operator|(const bit_array_t& other) const OKAYLIB_NOEXCEPT
+    constexpr bit_array_t
+    operator|(const bit_array_t& other) const OKAYLIB_NOEXCEPT
     {
         bit_array_t out;
         for (size_t i = 0; i < num_bytes; ++i) {
@@ -66,7 +81,8 @@ template <size_t num_bits> class bit_array_t
         return *this;
     }
 
-    constexpr bit_array_t operator^(const bit_array_t& other) const OKAYLIB_NOEXCEPT
+    constexpr bit_array_t
+    operator^(const bit_array_t& other) const OKAYLIB_NOEXCEPT
     {
         bit_array_t out;
         for (size_t i = 0; i < num_bytes; ++i) {
@@ -137,7 +153,8 @@ template <size_t num_bits> class bit_array_t
         return items().get_bit(idx);
     }
 
-    friend constexpr bool operator==(const bit_array_t& lhs, const bit_array_t& rhs)
+    friend constexpr bool operator==(const bit_array_t& lhs,
+                                     const bit_array_t& rhs)
     {
         // TODO: use bytewise == comparison here instead of doing math on every
         // bit for no reeason
@@ -148,7 +165,8 @@ template <size_t num_bits> class bit_array_t
         }
         return true;
     }
-    friend constexpr bool operator!=(const bit_array_t& lhs, const bit_array_t& rhs)
+    friend constexpr bool operator!=(const bit_array_t& lhs,
+                                     const bit_array_t& rhs)
     {
         return !(lhs == rhs);
     }
@@ -238,8 +256,7 @@ template <size_t num_bits> struct undefined_t
 
     [[nodiscard]] constexpr bit_array_t<num_bits> make() const OKAYLIB_NOEXCEPT
     {
-        return bit_array_t<num_bits>();
-        ;
+        return bit_array_t<num_bits>(undefined_tag_t{});
     }
 };
 template <size_t num_bits> struct all_bits_on_t
@@ -267,5 +284,26 @@ inline constexpr detail::undefined_t<num_bits> undefined;
 inline constexpr detail::bit_string_t bit_string;
 } // namespace bit_array
 } // namespace ok
+
+#ifdef OKAYLIB_USE_FMT
+template <size_t N> struct fmt::formatter<ok::bit_array_t<N>>
+{
+    using formatted_type_t = ok::bit_array_t<N>;
+    constexpr format_parse_context::iterator parse(format_parse_context& ctx)
+    {
+        auto it = ctx.begin();
+        if (it != ctx.end() && *it != '}')
+            throw_format_error("invalid format");
+        return it;
+    }
+
+    format_context::iterator format(const formatted_type_t& bit_array,
+                                    format_context& ctx) const
+    {
+        return fmt::format_to(ctx.out(), "ok::bit_array_t<{}>: [ {} ]", N,
+                              bit_array.items());
+    }
+};
+#endif
 
 #endif

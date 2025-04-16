@@ -27,7 +27,7 @@ struct keep_if_fn_t
     operator()(range_t&& range,
                predicate_t&& filter_predicate) const OKAYLIB_NOEXCEPT
     {
-        using T = remove_cvref_t<range_t>;
+        using T = std::remove_reference_t<range_t>;
         static_assert(is_range_v<T>,
                       "Cannot keep_if given type- it is not a range.");
         constexpr bool can_call_with_get_ref_const =
@@ -112,7 +112,7 @@ struct range_definition<detail::keep_if_view_t<input_range_t, predicate_t>>
     // dont want people offsetting cursors by random amounts with keep_if
     static constexpr bool disallow_cursor_member_offset = true;
 
-    using range_t = detail::remove_cvref_t<input_range_t>;
+    using range_t = std::remove_reference_t<input_range_t>;
     using keep_if_t = detail::keep_if_view_t<input_range_t, predicate_t>;
     using cursor_t = cursor_type_for<range_t>;
 
