@@ -5,7 +5,7 @@
 #include "okay/ranges/ranges.h"
 
 namespace ok {
-namespace dynamic_bitset {
+namespace bit_arraylist {
 struct upcast_tag
 {};
 namespace detail {
@@ -14,15 +14,15 @@ struct copy_booleans_from_range_t;
 // pass a zero sized slice of this when no memory is available;
 inline constexpr uint8_t dummy_mem = 0;
 } // namespace detail
-} // namespace dynamic_bitset
-template <typename backing_allocator_t = ok::allocator_t> class dynamic_bitset_t
+} // namespace bit_arraylist
+template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
 {
     static_assert(std::is_class_v<backing_allocator_t>,
                   "Do not pass a non-class type (reference, array, pointer) in "
                   "place of an allocator");
     static_assert(
         detail::is_derived_from_v<backing_allocator_t, ok::allocator_t>,
-        "Invalid type given as allocator to dynamic_bitset_t.");
+        "Invalid type given as allocator to bit_arraylist_t.");
     struct members_t
     {
         size_t num_bits;
@@ -38,16 +38,16 @@ template <typename backing_allocator_t = ok::allocator_t> class dynamic_bitset_t
     }
 
   public:
-    friend struct ok::dynamic_bitset::detail::preallocated_and_zeroed_t;
-    friend struct ok::dynamic_bitset::detail::copy_booleans_from_range_t;
+    friend struct ok::bit_arraylist::detail::preallocated_and_zeroed_t;
+    friend struct ok::bit_arraylist::detail::copy_booleans_from_range_t;
 
-    template <typename other_allocator_t> friend class ok::dynamic_bitset_t;
+    template <typename other_allocator_t> friend class ok::bit_arraylist_t;
 
-    dynamic_bitset_t() = delete;
+    bit_arraylist_t() = delete;
 
     using allocator_type = backing_allocator_t;
 
-    explicit dynamic_bitset_t(backing_allocator_t& allocator) OKAYLIB_NOEXCEPT
+    explicit bit_arraylist_t(backing_allocator_t& allocator) OKAYLIB_NOEXCEPT
         : m(members_t{
               .allocation = raw_slice_create_null_empty_unsafe<uint8_t>(),
               .allocator = ok::addressof(allocator),
@@ -55,7 +55,7 @@ template <typename backing_allocator_t = ok::allocator_t> class dynamic_bitset_t
     {
     }
 
-    constexpr dynamic_bitset_t(dynamic_bitset_t&& other) noexcept : m(other.m)
+    constexpr bit_arraylist_t(bit_arraylist_t&& other) noexcept : m(other.m)
     {
         other.m.allocation = raw_slice_create_null_empty_unsafe<uint8_t>();
 #ifndef NDEBUG
@@ -70,8 +70,8 @@ template <typename backing_allocator_t = ok::allocator_t> class dynamic_bitset_t
               std::enable_if_t<std::is_convertible_v<other_allocator_t*,
                                                      backing_allocator_t*>,
                                bool> = true>
-    constexpr dynamic_bitset_t(const dynamic_bitset::upcast_tag&,
-                               dynamic_bitset_t<other_allocator_t>&& other)
+    constexpr bit_arraylist_t(const bit_arraylist::upcast_tag&,
+                               bit_arraylist_t<other_allocator_t>&& other)
         : m(members_t{
               .num_bits = other.m.num_bits,
               .allocation =
@@ -87,10 +87,10 @@ template <typename backing_allocator_t = ok::allocator_t> class dynamic_bitset_t
     }
 
     template <typename other_allocator_t>
-    constexpr auto operator=(dynamic_bitset_t<other_allocator_t>&& other)
+    constexpr auto operator=(bit_arraylist_t<other_allocator_t>&& other)
         -> std::enable_if_t<
             std::is_convertible_v<other_allocator_t*, backing_allocator_t*>,
-            dynamic_bitset_t&>
+            bit_arraylist_t&>
     {
         destroy();
         m = members_t{
@@ -175,7 +175,7 @@ template <typename backing_allocator_t = ok::allocator_t> class dynamic_bitset_t
 
     template <typename other_allocator_t>
     constexpr bool memcompare_with(
-        const dynamic_bitset_t<other_allocator_t>& other) const OKAYLIB_NOEXCEPT
+        const bit_arraylist_t<other_allocator_t>& other) const OKAYLIB_NOEXCEPT
     {
         // make sure both bitsets have data, if theyre both empty then this
         // returns true
@@ -275,7 +275,7 @@ template <typename backing_allocator_t = ok::allocator_t> class dynamic_bitset_t
     constexpr bool remove(size_t idx) OKAYLIB_NOEXCEPT
     {
         if (idx >= this->size()) [[unlikely]] {
-            __ok_abort("Out of bounds access to dynamic_bitset_t in remove()");
+            __ok_abort("Out of bounds access to bit_arraylist_t in remove()");
         }
 
         constexpr uint8_t carry_check_mask = 0b001;
@@ -371,7 +371,7 @@ template <typename backing_allocator_t = ok::allocator_t> class dynamic_bitset_t
 
     constexpr void clear() OKAYLIB_NOEXCEPT { m.num_bits = 0; }
 
-    ~dynamic_bitset_t() { destroy(); }
+    ~bit_arraylist_t() { destroy(); }
 
   private:
     /// This function initializes m.allocation
@@ -379,7 +379,7 @@ template <typename backing_allocator_t = ok::allocator_t> class dynamic_bitset_t
     first_allocation(size_t total_allocated_bits = 40) OKAYLIB_NOEXCEPT
     {
         __ok_assert(m.allocator,
-                    "Attempt to operate on an invalid dynamic_bitset_t");
+                    "Attempt to operate on an invalid bit_arraylist_t");
         __ok_internal_assert(total_allocated_bits != 0);
 
         const size_t bytes_needed =
@@ -425,37 +425,37 @@ template <typename backing_allocator_t = ok::allocator_t> class dynamic_bitset_t
 };
 
 template <typename backing_allocator_t>
-struct range_definition<dynamic_bitset_t<backing_allocator_t>>
+struct range_definition<bit_arraylist_t<backing_allocator_t>>
 {
-    using dynamic_bitset_t = dynamic_bitset_t<backing_allocator_t>;
-    static constexpr size_t begin(const dynamic_bitset_t&) OKAYLIB_NOEXCEPT
+    using bit_arraylist_t = bit_arraylist_t<backing_allocator_t>;
+    static constexpr size_t begin(const bit_arraylist_t&) OKAYLIB_NOEXCEPT
     {
         return 0;
     }
-    static constexpr bool is_inbounds(const dynamic_bitset_t& bs,
+    static constexpr bool is_inbounds(const bit_arraylist_t& bs,
                                       size_t cursor) OKAYLIB_NOEXCEPT
     {
         return cursor < bs.size();
     }
 
-    static constexpr size_t size(const dynamic_bitset_t& bs) OKAYLIB_NOEXCEPT
+    static constexpr size_t size(const bit_arraylist_t& bs) OKAYLIB_NOEXCEPT
     {
         return bs.size();
     }
 
-    static constexpr bool get(const dynamic_bitset_t& range, size_t cursor)
+    static constexpr bool get(const bit_arraylist_t& range, size_t cursor)
     {
         return range.get_bit(cursor);
     }
 
-    static constexpr void set(dynamic_bitset_t& range, size_t cursor,
+    static constexpr void set(bit_arraylist_t& range, size_t cursor,
                               bool value)
     {
         return range.set_bit(cursor, value);
     }
 };
 
-namespace dynamic_bitset {
+namespace bit_arraylist {
 namespace detail {
 struct preallocated_and_zeroed_t
 {
@@ -467,7 +467,7 @@ struct preallocated_and_zeroed_t
 
     template <typename allocator_t, typename...>
     using associated_type =
-        dynamic_bitset_t<::ok::detail::remove_cvref_t<allocator_t>>;
+        bit_arraylist_t<::ok::detail::remove_cvref_t<allocator_t>>;
 
     template <typename backing_allocator_t>
     [[nodiscard]] constexpr auto
@@ -479,11 +479,11 @@ struct preallocated_and_zeroed_t
 
     template <typename backing_allocator_t>
     [[nodiscard]] constexpr status<alloc::error>
-    make_into_uninit(dynamic_bitset_t<backing_allocator_t>& uninit,
+    make_into_uninit(bit_arraylist_t<backing_allocator_t>& uninit,
                      backing_allocator_t& allocator,
                      const options_t& options) const OKAYLIB_NOEXCEPT
     {
-        using type = dynamic_bitset_t<backing_allocator_t>;
+        using type = bit_arraylist_t<backing_allocator_t>;
 
         const size_t total_bits =
             options.num_initial_bits + options.additional_capacity_in_bits;
@@ -511,7 +511,7 @@ struct copy_booleans_from_range_t
 {
     template <typename backing_allocator_t, typename...>
     using associated_type =
-        dynamic_bitset_t<std::remove_reference_t<backing_allocator_t>>;
+        bit_arraylist_t<std::remove_reference_t<backing_allocator_t>>;
 
     template <typename backing_allocator_t, typename input_range_t>
     [[nodiscard]] constexpr auto
@@ -529,16 +529,16 @@ struct copy_booleans_from_range_t
 
     template <typename backing_allocator_t, typename input_range_t>
     [[nodiscard]] constexpr status<alloc::error>
-    make_into_uninit(dynamic_bitset_t<backing_allocator_t>& uninit,
+    make_into_uninit(bit_arraylist_t<backing_allocator_t>& uninit,
                      backing_allocator_t& allocator,
                      const input_range_t& range) const OKAYLIB_NOEXCEPT
     {
         static_assert(ok::detail::range_definition_has_size_v<input_range_t>,
                       "Size of range unknown, refusing to use its items in "
-                      "dynamic_bitset::copy_booleans_from_range constructor.");
+                      "bit_arraylist::copy_booleans_from_range constructor.");
         static_assert(
             std::is_convertible_v<value_type_for<input_range_t>, bool>,
-            "The range given to dynamic_bitset::copy_booleans_from_range does "
+            "The range given to bit_arraylist::copy_booleans_from_range does "
             "not return something which can be converted to a boolean.");
 
         constexpr preallocated_and_zeroed_t other{};
@@ -573,7 +573,7 @@ struct copy_booleans_from_range_t
 inline constexpr detail::copy_booleans_from_range_t copy_booleans_from_range;
 inline constexpr detail::preallocated_and_zeroed_t preallocated_and_zeroed;
 
-} // namespace dynamic_bitset
+} // namespace bit_arraylist
 
 } // namespace ok
 

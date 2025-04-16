@@ -6,7 +6,7 @@
 #include "okay/allocators/c_allocator.h"
 #include "okay/containers/array.h"
 #include "okay/containers/bitset.h"
-#include "okay/containers/dynamic_bitset.h"
+#include "okay/containers/bit_arraylist.h"
 
 using namespace ok;
 
@@ -20,11 +20,11 @@ template <size_t bits> void print_bitset(const bitset_t<bits>& bs)
 
 // cant take a slice of rvalue
 static_assert(
-    !std::is_convertible_v<dynamic_bitset_t<c_allocator_t>&&, bit_slice_t>);
-static_assert(!std::is_convertible_v<dynamic_bitset_t<c_allocator_t>&&,
+    !std::is_convertible_v<bit_arraylist_t<c_allocator_t>&&, bit_slice_t>);
+static_assert(!std::is_convertible_v<bit_arraylist_t<c_allocator_t>&&,
                                      const_bit_slice_t>);
 // cant convert const to nonconst
-static_assert(!std::is_convertible_v<const dynamic_bitset_t<c_allocator_t>&,
+static_assert(!std::is_convertible_v<const bit_arraylist_t<c_allocator_t>&,
                                      bit_slice_t>);
 static_assert(!std::is_convertible_v<bitset_t<1>&&, bit_slice_t>);
 static_assert(!std::is_convertible_v<bitset_t<1>&&, const_bit_slice_t>);
@@ -152,44 +152,44 @@ TEST_SUITE("bitset containers")
     {
         SUBCASE("construction from allocator")
         {
-            dynamic_bitset_t test(c_allocator);
+            bit_arraylist_t test(c_allocator);
             REQUIRE(test.size() == 0);
         }
 
         SUBCASE("move constructor upcast to ok::allocator_t")
         {
-            dynamic_bitset_t<c_allocator_t> first(c_allocator);
+            bit_arraylist_t<c_allocator_t> first(c_allocator);
             static_assert(
                 std::is_same_v<c_allocator_t, decltype(first)::allocator_type>);
-            dynamic_bitset_t second(std::move(first));
+            bit_arraylist_t second(std::move(first));
             REQUIRE(second.size() == 0);
             static_assert(std::is_same_v<decltype(second)::allocator_type,
                                          decltype(first)::allocator_type>);
             // upcast, only possible implicitly in move assignment
-            dynamic_bitset_t<ok::allocator_t> third(c_allocator);
+            bit_arraylist_t<ok::allocator_t> third(c_allocator);
             third = std::move(second);
         }
 
         SUBCASE("upcasting move constructor")
         {
-            dynamic_bitset_t first(c_allocator);
+            bit_arraylist_t first(c_allocator);
             static_assert(
                 std::is_same_v<c_allocator_t, decltype(first)::allocator_type>);
 
-            dynamic_bitset_t<ok::allocator_t> second(
-                dynamic_bitset::upcast_tag{}, std::move(first));
+            bit_arraylist_t<ok::allocator_t> second(
+                bit_arraylist::upcast_tag{}, std::move(first));
 
             REQUIRE(second.size() == 0);
         }
 
         SUBCASE("items returns the correct thing by constness")
         {
-            dynamic_bitset_t dbs(c_allocator);
+            bit_arraylist_t dbs(c_allocator);
 
             bit_slice_t bits = dbs.items();
             const_bit_slice_t bits_const = dbs.items();
             const_bit_slice_t bits_const_2 =
-                static_cast<const dynamic_bitset_t<c_allocator_t>&>(dbs)
+                static_cast<const bit_arraylist_t<c_allocator_t>&>(dbs)
                     .items();
         }
 
@@ -201,7 +201,7 @@ TEST_SUITE("bitset containers")
                 fmt::print("\n");
             };
 
-            dynamic_bitset_t dbs(c_allocator);
+            bit_arraylist_t dbs(c_allocator);
 
             gets_slice(dbs);
         }
@@ -209,12 +209,12 @@ TEST_SUITE("bitset containers")
         SUBCASE("copy booleans from range constructor")
         {
             array_t bools = {true, false, true, true};
-            dynamic_bitset_t copied =
-                dynamic_bitset::copy_booleans_from_range(c_allocator, bools)
+            bit_arraylist_t copied =
+                bit_arraylist::copy_booleans_from_range(c_allocator, bools)
                     .release();
 
-            dynamic_bitset_t copied2 =
-                dynamic_bitset::copy_booleans_from_range(
+            bit_arraylist_t copied2 =
+                bit_arraylist::copy_booleans_from_range(
                     c_allocator, bitset::bit_string("010011011"))
                     .release();
 
@@ -225,7 +225,7 @@ TEST_SUITE("bitset containers")
 
         SUBCASE("preallocated and zeroed constructor")
         {
-            dynamic_bitset_t dbs = dynamic_bitset::preallocated_and_zeroed(
+            bit_arraylist_t dbs = bit_arraylist::preallocated_and_zeroed(
                                        c_allocator,
                                        {
                                            .num_initial_bits = 100,
@@ -247,14 +247,14 @@ TEST_SUITE("bitset containers")
 
         SUBCASE("toggle and memcompare_with()")
         {
-            dynamic_bitset_t dbs = dynamic_bitset::preallocated_and_zeroed(
+            bit_arraylist_t dbs = bit_arraylist::preallocated_and_zeroed(
                                        c_allocator,
                                        {
                                            .num_initial_bits = 100,
                                            .additional_capacity_in_bits = 500,
                                        })
                                        .release();
-            dynamic_bitset_t dbs2 = dynamic_bitset::preallocated_and_zeroed(
+            bit_arraylist_t dbs2 = bit_arraylist::preallocated_and_zeroed(
                                         c_allocator,
                                         {
                                             .num_initial_bits = 100,
@@ -278,14 +278,14 @@ TEST_SUITE("bitset containers")
 
         SUBCASE("insert_at on empty dbs")
         {
-            dynamic_bitset_t dbs(c_allocator);
+            bit_arraylist_t dbs(c_allocator);
             REQUIREABORTS(auto&& out_of_range = dbs.insert_at(1, true));
         }
 
         SUBCASE("insert_at on preinitialized, first_allocation dynamic bitset")
         {
-            dynamic_bitset_t dbs =
-                dynamic_bitset::copy_booleans_from_range(
+            bit_arraylist_t dbs =
+                bit_arraylist::copy_booleans_from_range(
                     c_allocator, bitset::bit_string("01010011"))
                     .release();
 
