@@ -61,6 +61,10 @@ class arraylist_t
             is_std_constructible_v<T, T&&>,
         "Type given to arraylist_t must be either trivially copyable or move "
         "constructible, otherwise it cannot move the items when reallocating.");
+    static_assert(!std::is_const_v<T>,
+                  "Attempt to create an arraylist with const objects, which is "
+                  "not possible. Remove the const, and consider passing a "
+                  "const reference to the arraylist instead.");
 
     using value_type = T;
 
