@@ -25,10 +25,11 @@ template <typename T, typename backing_allocator_t> class segmented_list_t
   public:
     static_assert(!std::is_reference_v<T>,
                   "Cannot create a segmented list of references.");
-    static_assert(!std::is_const_v<T>,
-                  "Attempt to create a segmented list with const objects, "
-                  "which is not possible. Remove the const, and consider "
-                  "passing a const reference to the segmented list instead.");
+    static_assert(
+        !std::is_const_v<T>,
+        "Attempt to create a segmented list with const objects, "
+        "which is not possible. Remove the const, and pass a const reference "
+        "to the segmented list of mutable objects instead.");
 
     template <typename U> friend struct ok::segmented_list::detail::empty_t;
     friend struct ok::segmented_list::detail::copy_items_from_range_t;
