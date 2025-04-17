@@ -675,11 +675,11 @@ namespace arraylist {
 namespace detail {
 template <typename T> struct empty_t
 {
-    template <typename allocator_impl_t>
-    [[nodiscard]] constexpr arraylist_t<T, allocator_impl_t>
-    operator()(allocator_impl_t& allocator) const noexcept
+    template <typename backing_allocator_t>
+    [[nodiscard]] constexpr arraylist_t<T, backing_allocator_t>
+    operator()(backing_allocator_t& allocator) const noexcept
     {
-        return typename arraylist_t<T, allocator_impl_t>::members_t{
+        return typename arraylist_t<T, backing_allocator_t>::members_t{
             .allocated_spots = raw_slice_create_null_empty_unsafe<T>(),
             .spots_occupied = 0,
             .backing_allocator = ok::addressof(allocator),
@@ -692,21 +692,21 @@ template <typename T> struct spots_preallocated_t
     template <typename backing_allocator_t>
     using associated_type = ok::arraylist_t<T, backing_allocator_t>;
 
-    template <typename allocator_impl_t>
+    template <typename backing_allocator_t>
     [[nodiscard]] constexpr auto
-    operator()(allocator_impl_t& allocator,
+    operator()(backing_allocator_t& allocator,
                size_t num_spots_preallocated) const OKAYLIB_NOEXCEPT
     {
         return ok::make(*this, allocator, num_spots_preallocated);
     }
 
-    template <typename allocator_impl_t>
+    template <typename backing_allocator_t>
     [[nodiscard]] constexpr status<alloc::error>
-    make_into_uninit(arraylist_t<T, allocator_impl_t>& output,
-                     allocator_impl_t& allocator,
+    make_into_uninit(arraylist_t<T, backing_allocator_t>& output,
+                     backing_allocator_t& allocator,
                      size_t num_spots_preallocated) const OKAYLIB_NOEXCEPT
     {
-        using output_t = arraylist_t<T, allocator_impl_t>;
+        using output_t = arraylist_t<T, backing_allocator_t>;
         auto res = allocator.allocate(alloc::request_t{
             .num_bytes = sizeof(T) * num_spots_preallocated,
             .alignment = alignof(T),
@@ -738,26 +738,26 @@ struct copy_items_from_range_t
         ok::arraylist_t<value_type_for<input_range_t>,
                         ok::detail::remove_cvref_t<backing_allocator_t>>;
 
-    template <typename allocator_impl_t, typename input_range_t>
+    template <typename backing_allocator_t, typename input_range_t>
     [[nodiscard]] constexpr auto
-    operator()(allocator_impl_t& allocator,
+    operator()(backing_allocator_t& allocator,
                const input_range_t& range) const OKAYLIB_NOEXCEPT
     {
         return ok::make(*this, allocator, range);
     }
 
-    template <typename allocator_impl_t, typename input_range_t>
+    template <typename backing_allocator_t, typename input_range_t>
     [[nodiscard]] constexpr status<alloc::error>
     make_into_uninit(ok::arraylist_t<value_type_for<const input_range_t&>,
-                                     allocator_impl_t>& output,
-                     allocator_impl_t& allocator,
+                                     backing_allocator_t>& output,
+                     backing_allocator_t& allocator,
                      const input_range_t& range) const OKAYLIB_NOEXCEPT
     {
         static_assert(ok::detail::range_definition_has_size_v<input_range_t>,
                       "Size of range unknown, refusing to copy out its items "
                       "using arraylist::copy_items_from_range constructor.");
         using T = value_type_for<const input_range_t&>;
-        using output_t = arraylist_t<T, allocator_impl_t>;
+        using output_t = arraylist_t<T, backing_allocator_t>;
 
         // TODO: make this a warning
         __ok_assert(allocator.features() &
