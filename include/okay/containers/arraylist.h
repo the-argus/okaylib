@@ -689,8 +689,9 @@ template <typename T> struct empty_t
 
 template <typename T> struct spots_preallocated_t
 {
-    template <typename backing_allocator_t>
-    using associated_type = ok::arraylist_t<T, backing_allocator_t>;
+    template <typename backing_allocator_t, typename...>
+    using associated_type =
+        ok::arraylist_t<T, ok::detail::remove_cvref_t<backing_allocator_t>>;
 
     template <typename backing_allocator_t>
     [[nodiscard]] constexpr auto
