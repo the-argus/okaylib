@@ -78,13 +78,7 @@ template <typename T, typename backing_allocator_t> class segmented_list_t
     [[nodiscard]] constexpr const T&
     operator[](size_t index) const& OKAYLIB_NOEXCEPT
     {
-        if (index >= this->size()) [[unlikely]] {
-            __ok_abort("Out of bounds access to ok::segmented_list_t");
-        }
-
-        const size_t block = block_index(index);
-        const size_t sub_index = item_index(index, block);
-        return m.blocklist->blocks[block][sub_index];
+        return (*const_cast<segmented_list_t*>(this))[index];
     }
 
     [[nodiscard]] constexpr T& operator[](size_t index) & OKAYLIB_NOEXCEPT
@@ -93,9 +87,7 @@ template <typename T, typename backing_allocator_t> class segmented_list_t
             __ok_abort("Out of bounds access to ok::segmented_list_t");
         }
 
-        const size_t block = block_index(index);
-        const size_t sub_index = item_index(index, block);
-        return m.blocklist->blocks[block][sub_index];
+        return unchecked_access(index);
     }
 
     constexpr segmented_list_t(segmented_list_t&& other) noexcept
@@ -228,10 +220,24 @@ template <typename T, typename backing_allocator_t> class segmented_list_t
 
     constexpr T remove_and_swap_last(size_t idx) OKAYLIB_NOEXCEPT
     {
-        if (idx > this->size()) [[unlikely]] {
+        if (idx >= this->size()) [[unlikely]] {
             __ok_abort("Out of bounds access to segmented_list_t in "
                        "remove_and_swap_last()");
         }
+
+        T* removal_target = ok::addressof(this->unchecked_access(idx));
+        __ok_internal_assert(this->size() != 0);
+        T* last = ok::addressof(this->unchecked_access(this->size() - 1));
+        T out = std::move(*removal_target);
+        *removal_target = std::move(*last);
+
+        if constexpr (!std::is_trivially_destructible_v<T>) {
+            last->~T();
+        }
+
+        --m.size;
+
+        return out;
     }
 
     constexpr T& last() & OKAYLIB_NOEXCEPT
@@ -245,9 +251,24 @@ template <typename T, typename backing_allocator_t> class segmented_list_t
         return m.blocklist->blocks[last_block_idx][sub_item_idx];
     }
 
-    constexpr T& last() const& OKAYLIB_NOEXCEPT
+    constexpr const T& last() const& OKAYLIB_NOEXCEPT
     {
         return const_cast<segmented_list_t*>(this)->last();
+    }
+
+    constexpr T& first() & OKAYLIB_NOEXCEPT
+    {
+        if (this->is_empty()) [[unlikely]] {
+            __ok_abort(
+                "Attempt to get first() item from empty segmented_list_t.");
+        }
+        __ok_internal_assert(m.blocklist);
+        return m.blocklist->blocks[0][0];
+    }
+
+    constexpr const T& first() const& OKAYLIB_NOEXCEPT
+    {
+        return const_cast<segmented_list_t*>(this)->first();
     }
 
     constexpr void shrink_to_reclaim_unused_memory() OKAYLIB_NOEXCEPT;
@@ -311,6 +332,19 @@ template <typename T, typename backing_allocator_t> class segmented_list_t
                                    sizeof(blocklist_t) +
                                        (m.blocklist->capacity * sizeof(T*)));
         m.allocator->deallocate(bytes);
+    }
+
+    [[nodiscard]] constexpr T& unchecked_access(size_t index) & OKAYLIB_NOEXCEPT
+    {
+        const size_t block = block_index(index);
+        const size_t sub_index = item_index(index, block);
+        return m.blocklist->blocks[block][sub_index];
+    }
+
+    [[nodiscard]] constexpr const T&
+    unchecked_access(size_t index) const& OKAYLIB_NOEXCEPT
+    {
+        return const_cast<segmented_list_t*>(this)->unchecked_access(index);
     }
 
     [[nodiscard]] constexpr size_t
@@ -382,7 +416,7 @@ struct empty_options_t
 {
     // NOTE: the amount that will be alloced on first allocation is this number
     // rounded up to the next power of two.
-    size_t num_initial_contiguous_spots;
+    size_t num_initial_contiguous_spots = 4;
     /// The size of the pointers-to-blocks arraylist. This is small and
     /// reallocation of it is the only part of segmented list that causes
     /// reallocs (and so potential memory fragmentation or loss) so it's a good
