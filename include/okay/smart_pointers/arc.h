@@ -789,8 +789,8 @@ struct unique_rw_arc_t<T, allocator_impl_t>::make
             return unique_rw_arc_t();
         }
 
-        payload_t& payload =
-            *reinterpret_cast<payload_t*>(res.release_ref().data());
+        payload_t& payload = *reinterpret_cast<payload_t*>(
+            res.release_ref().unchecked_address_of_first_item());
 
         // this unique ref holds the lock until it is destroyed. only when
         // unique ref is active is the strong refcount exactly equal to

@@ -4,10 +4,10 @@
 #include "okay/detail/abort.h"
 #include "okay/detail/addressof.h"
 #include "okay/detail/noexcept.h"
-#include "okay/detail/ok_assert.h"
 #include "okay/detail/template_util/remove_cvref.h"
-#include "okay/detail/traits/is_container.h"
+#include "okay/detail/template_util/uninitialized_storage.h"
 #include "okay/detail/traits/is_instance.h"
+#include "okay/detail/traits/is_std_container.h"
 #include "okay/math/rounding.h"
 #include <cassert>
 
@@ -35,16 +35,17 @@ class const_bit_slice_t;
 template <typename viewed_t>
 slice<viewed_t> raw_slice(viewed_t& data, size_t size) OKAYLIB_NOEXCEPT;
 
-/// Only use this if you absolutely know what you're doing. data() will return
-/// nullptr on the slice returned from this.
-template <typename viewed_t>
-slice<viewed_t> raw_slice_create_null_empty_unsafe() OKAYLIB_NOEXCEPT;
-
 constexpr bit_slice_t raw_bit_slice(slice<uint8_t> bytes, size_t num_bits,
                                     uint8_t offset) OKAYLIB_NOEXCEPT;
+
 constexpr const_bit_slice_t raw_bit_slice(slice<const uint8_t> bytes,
                                           size_t num_bits,
                                           uint8_t offset) OKAYLIB_NOEXCEPT;
+
+/// Create a slice with no elements and no data, used for one (1) purpose which
+/// is to allow arraylist to always return a valid slice even when it has no
+/// items
+template <typename viewed_t> slice<viewed_t> make_null_slice() OKAYLIB_NOEXCEPT;
 
 /// A non-owning reference to a section of a contiguously allocated array of
 /// type T. Intended to be passed around like a pointer.
@@ -62,16 +63,22 @@ template <typename viewed_t> class slice
     size_t m_elements;
     viewed_t* m_data;
 
-    constexpr slice(viewed_t* data, size_t size) OKAYLIB_NOEXCEPT
+    constexpr slice(viewed_t& data, size_t size) OKAYLIB_NOEXCEPT
+        : m_data(ok::addressof(data)),
+          m_elements(size)
     {
-        // allow nullptr data only if size is zero
-        __ok_internal_assert(size == 0 || data);
-        if (!data && size != 0) [[unlikely]] {
-            __ok_abort("Something has gone horribly wrong with slice "
-                       "implementation");
-        }
-        m_data = data;
-        m_elements = size;
+    }
+
+    inline static detail::uninitialized_storage_t<viewed_t> null_slice_mem;
+    inline static auto* null_slice_mem_start = ok::addressof(null_slice_mem);
+
+    struct null_slice_tag
+    {};
+
+    constexpr slice(const null_slice_tag&) OKAYLIB_NOEXCEPT
+        : m_data(null_slice_mem_start),
+          m_elements(0)
+    {
     }
 
   public:
@@ -83,21 +90,38 @@ template <typename viewed_t> class slice
 
     template <typename T> friend class slice;
 
-    using value_type = viewed_t;
+    using viewed_type = viewed_t;
 
     // raw access to contents
-    [[nodiscard]] constexpr viewed_t* data() const OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr viewed_type*
+    address_of_first() const OKAYLIB_NOEXCEPT
     {
+        return ok::addressof(first());
+    }
+
+    /// Guaranteed to never return nullptr, it is defined behavior to
+    /// dereference this pointer but it is only defined behavior to write to it
+    /// if the slice is not empty.
+    [[nodiscard]] constexpr viewed_type*
+    unchecked_address_of_first_item() const OKAYLIB_NOEXCEPT
+    {
+        __ok_assert(
+            m_elements,
+            "Attempted to call unchecked_address_of_first_item() but the "
+            "slice points to no valid data.");
         return m_data;
     }
+
     [[nodiscard]] constexpr size_t size() const OKAYLIB_NOEXCEPT
     {
         return m_elements;
     }
+
     [[nodiscard]] constexpr size_t size_bytes() const OKAYLIB_NOEXCEPT
     {
         return m_elements * sizeof(viewed_t);
     }
+
     [[nodiscard]] constexpr size_t size_bits() const OKAYLIB_NOEXCEPT
     {
         return m_elements * sizeof(viewed_t) * 8;
@@ -108,7 +132,7 @@ template <typename viewed_t> class slice
         return m_elements == 0;
     }
 
-    [[nodiscard]] constexpr value_type& first() const OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr viewed_type& first() const OKAYLIB_NOEXCEPT
     {
         if (is_empty()) [[unlikely]] {
             __ok_abort("Attempt to get first() item from empty slice.");
@@ -116,7 +140,7 @@ template <typename viewed_t> class slice
         return m_data[0];
     }
 
-    [[nodiscard]] constexpr value_type& last() OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr viewed_type& last() OKAYLIB_NOEXCEPT
     {
         if (is_empty()) [[unlikely]] {
             __ok_abort("Attempt to get last() item from empty slice.");
@@ -125,36 +149,49 @@ template <typename viewed_t> class slice
     }
 
     // implicitly take a slice of something with data() and size() functions
-    // which is not also a slice.
-    template <
-        typename U,
-        std::enable_if_t<
-            detail::is_container_v<U> && !detail::is_instance<U, ok::slice>() &&
-                std::is_same_v<decltype(*std::declval<const U&>().data()),
-                               viewed_t&>,
-            bool> = false>
-    constexpr slice(const U& other) OKAYLIB_NOEXCEPT : m_data(other.data()),
-                                                       m_elements(other.size())
+    template <typename U,
+              std::enable_if_t<
+                  detail::is_std_container_v<U> &&
+                      std::is_same_v<decltype(*std::declval<const U&>().data()),
+                                     viewed_type&>,
+                  bool> = false>
+    constexpr slice(const U& other) OKAYLIB_NOEXCEPT
     {
+        static_assert(!detail::is_instance_v<U, ok::slice>);
+        const size_t othersize = other.size();
+        if (othersize == 0) {
+            m_elements = 0;
+            m_data = nullptr;
+        } else {
+            m_elements = othersize;
+            m_data = other.data();
+        }
     }
 
     // take slice of thing with data() and size(), nonconst variant
-    template <
-        typename U,
-        std::enable_if_t<
-            // has data() and size()
-            detail::is_container_v<U> && !detail::is_instance<U, ok::slice>() &&
-                // either the value type of the container is the
-                // same as our value type, or it is nonconst and
-                // we are const
-                (std::is_same_v<decltype(*std::declval<U&>().data()),
-                                viewed_t&> ||
-                 std::is_same_v<decltype(*std::declval<U&>().data()),
-                                std::remove_cv_t<viewed_t>&>),
-            bool> = false>
-    constexpr slice(U& other) OKAYLIB_NOEXCEPT : m_data(other.data()),
-                                                 m_elements(other.size())
+    template <typename U,
+              std::enable_if_t<
+                  // has data() and size()
+                  detail::is_std_container_v<U> &&
+                      // either the value type of the container is the
+                      // same as our value type, or it is nonconst and
+                      // we are const
+                      (std::is_same_v<decltype(*std::declval<U&>().data()),
+                                      viewed_type&> ||
+                       std::is_same_v<decltype(*std::declval<U&>().data()),
+                                      std::remove_cv_t<viewed_type>&>),
+                  bool> = false>
+    constexpr slice(U& other) OKAYLIB_NOEXCEPT
     {
+        static_assert(!detail::is_instance_v<U, ok::slice>);
+        const size_t othersize = other.size();
+        if (othersize == 0) {
+            m_elements = 0;
+            m_data = nullptr;
+        } else {
+            m_elements = othersize;
+            m_data = other.data();
+        }
     }
 
     // mark rvalue reference overloads for array-to-slice constructors as
@@ -178,32 +215,44 @@ template <typename viewed_t> class slice
     {
     }
 
-    template <
-        typename nonconst_viewed_t, size_t size,
-        std::enable_if_t<std::is_const_v<viewed_t> &&
-                             std::is_same_v<const nonconst_viewed_t, viewed_t>,
-                         bool> = true>
-    constexpr slice(nonconst_viewed_t (&array)[size]) OKAYLIB_NOEXCEPT
+    // NOTE: no need for type deduction to work here as the above c array
+    // converting constructor is what should provide deduction. you only
+    // coerce to const if you explicitly provide type info like
+    // int i[] = {1, 2, 3 4};
+    // slice<const int> s(i);
+    template <typename nonconst_viewed_type, size_t size,
+              std::enable_if_t<
+                  std::is_const_v<viewed_type> &&
+                      std::is_same_v<const nonconst_viewed_type, viewed_type>,
+                  bool> = true>
+    constexpr slice(nonconst_viewed_type (&array)[size]) OKAYLIB_NOEXCEPT
         : m_data(array),
           m_elements(size)
     {
     }
 
     // can convert to const version of self
-    constexpr operator slice<const viewed_t>() const OKAYLIB_NOEXCEPT
+    constexpr operator slice<const viewed_type>() const OKAYLIB_NOEXCEPT
     {
-        return slice<const viewed_t>(m_data, m_elements);
+        return slice<const viewed_type>(*m_data, m_elements);
     }
 
-    [[nodiscard]] constexpr bool
-    is_alias_for(const slice<const viewed_t>& other) OKAYLIB_NOEXCEPT
+    template <typename V = viewed_type>
+    [[nodiscard]] constexpr auto
+    is_alias_for(const slice<const viewed_type>& other) OKAYLIB_NOEXCEPT
+        -> std::enable_if_t<
+            std::is_same_v<V, viewed_type> && !std::is_const_v<V>, bool>
     {
-        return m_elements == other.size() && m_data == other.data();
+        return m_elements == other.m_elements && m_data == other.m_data;
     };
 
-    // NOTE: not const-correct- constness of value_type& is determined by the
-    // inner type, not by constness of the slice. same behavior as pointers
-    [[nodiscard]] constexpr value_type&
+    [[nodiscard]] constexpr bool
+    is_alias_for(const slice& other) OKAYLIB_NOEXCEPT
+    {
+        return m_elements == other.m_elements && m_data == other.m_data;
+    };
+
+    [[nodiscard]] constexpr viewed_type&
     operator[](size_t idx) const OKAYLIB_NOEXCEPT
     {
         if (idx >= m_elements) [[unlikely]] {
@@ -212,8 +261,15 @@ template <typename viewed_t> class slice
         return m_data[idx];
     }
 
+    [[nodiscard]] constexpr viewed_type&
+    unchecked_access(size_t idx) const OKAYLIB_NOEXCEPT
+    {
+        __ok_assert(idx < m_elements, "Out of bounds access into slice.");
+        return m_data[idx];
+    }
+
     [[nodiscard]] constexpr slice
-    subslice(subslice_options_t options) const OKAYLIB_NOEXCEPT
+    subslice(const subslice_options_t& options) const OKAYLIB_NOEXCEPT
     {
         // NOTE: checking both start and start + length, in case overflow occurs
         // have to do this to be technically safe, but this will probably never
@@ -228,7 +284,7 @@ template <typename viewed_t> class slice
                        "of bounds.");
         }
 
-        return slice(m_data + options.start, options.length);
+        return slice(*(m_data + options.start), options.length);
     }
 
     /// Can't default construct a slice since its always a reference to another
@@ -237,8 +293,7 @@ template <typename viewed_t> class slice
 
     template <typename T>
     friend slice<T> ok::raw_slice(T& data, size_t size) OKAYLIB_NOEXCEPT;
-    template <typename T>
-    friend slice<T> ok::raw_slice_create_null_empty_unsafe() OKAYLIB_NOEXCEPT;
+    template <typename T> slice<T> make_null_slice() OKAYLIB_NOEXCEPT;
 
 #ifdef OKAYLIB_USE_FMT
     friend struct fmt::formatter<slice>;
@@ -248,11 +303,18 @@ template <typename viewed_t> class slice
 template <typename viewed_t, size_t size>
 slice(viewed_t (&)[size]) -> slice<viewed_t>;
 
+namespace detail {
+template <typename T, bool is_const>
+using conditionally_const_t = std::conditional_t<is_const, const T, T>;
+}
+
 template <typename T>
-slice(T) -> slice<std::enable_if_t<
-             detail::is_container_v<detail::remove_cvref_t<T>> &&
-                 !detail::is_instance<detail::remove_cvref_t<T>, slice>(),
-             typename detail::remove_cvref_t<T>::value_type>>;
+slice(T)
+    -> slice<std::enable_if_t<
+        detail::is_std_container_v<detail::remove_cvref_t<T>>,
+        detail::conditionally_const_t<
+            detail::remove_cvref_t<decltype(*std::declval<T>().data())>,
+            std::is_const_v<typename detail::remove_cvref_t<T>::value_type>>>>;
 
 using bytes_t = slice<uint8_t>;
 
@@ -404,20 +466,32 @@ class bit_slice_t : public const_bit_slice_t
 constexpr bit_slice_t raw_bit_slice(bytes_t bytes, size_t num_bits,
                                     uint8_t offset) OKAYLIB_NOEXCEPT
 {
-    if (round_up_to_multiple_of<8>((num_bits + offset)) / 8 > bytes.size()) {
+    if (bytes.is_empty()) [[unlikely]] {
+        // Refusing to create empty bit slices.
+        __ok_abort(
+            "Attempt to create raw_bit_slice from empty slice of bytes.");
+    }
+    if (round_up_to_multiple_of<8>((num_bits + offset)) / 8 > bytes.size())
+        [[unlikely]] {
         __ok_abort("Invalid number of bits requested from slice of bytes in "
                    "raw_bit_slice().");
     }
-    if (offset >= 8) {
+    if (offset >= 8) [[unlikely]] {
         __ok_abort("Offset greater than 7 passed to raw_bit_slice.");
     }
-    return bit_slice_t(bytes.data(), num_bits, offset);
+    return bit_slice_t(bytes.unchecked_address_of_first_item(), num_bits,
+                       offset);
 }
 
 constexpr const_bit_slice_t raw_bit_slice(slice<const uint8_t> bytes,
                                           size_t num_bits,
                                           uint8_t offset) OKAYLIB_NOEXCEPT
 {
+    if (bytes.is_empty()) [[unlikely]] {
+        // Refusing to create empty bit slices.
+        __ok_abort(
+            "Attempt to create raw_bit_slice from empty slice of bytes.");
+    }
     if (round_up_to_multiple_of<8>((num_bits + offset)) / 8 > bytes.size()) {
         __ok_abort("Invalid number of bits requested from slice of bytes in "
                    "raw_bit_slice().");
@@ -425,8 +499,11 @@ constexpr const_bit_slice_t raw_bit_slice(slice<const uint8_t> bytes,
     if (offset >= 8) {
         __ok_abort("Offset greater than 7 passed to raw_bit_slice.");
     }
-    return const_bit_slice_t(const_cast<uint8_t*>(bytes.data()), num_bits,
-                             offset);
+    // const cast here to simplify const bit slice implementation (allows
+    // regular bit slice to be a child class)
+    return const_bit_slice_t(
+        const_cast<uint8_t*>(bytes.unchecked_address_of_first_item()), num_bits,
+        offset);
 }
 
 /// Pointer to an array of items of type viewed_t, which are not initialized.
@@ -469,13 +546,16 @@ template <typename viewed_t> struct undefined_memory_t
                 "but the given number of bytes is not divisible by sizeof(T) "
                 "(ie. there would be some extra space).");
         }
-        if (uintptr_t(bytes.data()) % alignof(viewed_t) != 0) [[unlikely]] {
+        if (uintptr_t(bytes.unchecked_address_of_first_item()) %
+                alignof(viewed_t) !=
+            0) [[unlikely]] {
             __ok_abort("Attempt to construct an undefined_memory_t of a type T "
                        "from a bytes_t, but the given bytes are not aligned "
                        "properly to store type T.");
         }
 
-        return undefined_memory_t(*reinterpret_cast<viewed_t*>(bytes.data()),
+        return undefined_memory_t(*reinterpret_cast<viewed_t*>(
+                                      bytes.unchecked_address_of_first_item()),
                                   bytes.size() / sizeof(viewed_t));
     }
 
@@ -486,7 +566,7 @@ template <typename viewed_t> struct undefined_memory_t
         std::enable_if_t<std::is_trivially_constructible_v<T>, T>>
     leave_undefined() const OKAYLIB_NOEXCEPT
     {
-        return *reinterpret_cast<const slice<viewed_t>*>(this);
+        return raw_slice(*m_data, m_elements);
     }
 
     template <
@@ -503,12 +583,17 @@ template <typename viewed_t> struct undefined_memory_t
                 viewed_t(std::forward<args_t>(constructor_args)...);
         }
 
-        return *reinterpret_cast<const slice<viewed_t>*>(this);
+        return raw_slice(*m_data, m_elements);
     }
 
-    [[nodiscard]] constexpr viewed_t* data() const OKAYLIB_NOEXCEPT
+    template <typename T = viewed_t>
+    [[nodiscard]] constexpr auto zero() const OKAYLIB_NOEXCEPT
+        -> std::enable_if_t<std::is_same_v<T, viewed_t> &&
+                                std::is_trivially_constructible_v<T>,
+                            slice<viewed_t>>
     {
-        return m_data;
+        std::memset((void*)m_data, 0, m_elements);
+        return raw_slice(*m_data, m_elements);
     }
 
     [[nodiscard]] constexpr size_t size() const OKAYLIB_NOEXCEPT
@@ -517,17 +602,16 @@ template <typename viewed_t> struct undefined_memory_t
     }
 };
 
-/// Make a slice of only a part of a contiguous container
-/// container: std::array or std::vector, or another slice, etc
+/// Make a slice of only a part of a contiguous stdlib container
 /// from: index to start subslice from
-/// to: index to end subslice at (must be greater than from and less than
+/// to: index to end subslice at (must be greater than `from` and less than
 /// container.size())
 template <typename container_t>
 [[nodiscard]] constexpr auto
 subslice(container_t& container,
          const subslice_options_t& options) OKAYLIB_NOEXCEPT
     -> std::enable_if_t<
-        detail::is_container_v<container_t>,
+        detail::is_std_container_v<container_t>,
         slice<std::remove_reference_t<decltype(*container.data())>>>
 {
     if (options.start >= container.size()) [[unlikely]] {
@@ -542,20 +626,27 @@ subslice(container_t& container,
     return raw_slice(*(container.data() + options.start), options.length);
 }
 
+template <typename viewed_t>
+[[nodiscard]] constexpr auto
+subslice(const slice<viewed_t>& slice,
+         const subslice_options_t& options) OKAYLIB_NOEXCEPT
+{
+    return slice.subslice(options);
+}
+
 /// Construct a slice from a starting item and a number of items. Generally a
 /// bad idea, but useful when interfacing with things like c-style strings.
 template <typename viewed_t>
 [[nodiscard]] slice<viewed_t> raw_slice(viewed_t& data,
                                         size_t size) OKAYLIB_NOEXCEPT
 {
-    return slice<viewed_t>(ok::addressof(data), size);
+    return slice<viewed_t>(data, size);
 }
 
 template <typename viewed_t>
-[[nodiscard]] slice<viewed_t>
-raw_slice_create_null_empty_unsafe() OKAYLIB_NOEXCEPT
+[[nodiscard]] slice<viewed_t> make_null_slice() OKAYLIB_NOEXCEPT
 {
-    return slice<viewed_t>(nullptr, 0);
+    return slice<viewed_t>(typename slice<viewed_t>::null_slice_tag{});
 }
 
 template <typename T>
@@ -565,6 +656,26 @@ template <typename T>
 }
 
 template <typename range_t, typename enable> struct range_definition;
+
+template <typename viewed_t> struct range_definition<slice<viewed_t>, void>
+{
+    static constexpr bool is_arraylike = true;
+    // a const slice can give nonconst references
+    static constexpr bool allows_inner_nonconstness = true;
+
+    using value_type = detail::remove_cvref_t<viewed_t>;
+
+    static constexpr size_t size(const slice<viewed_t>& slice) OKAYLIB_NOEXCEPT
+    {
+        return slice.size();
+    }
+
+    static constexpr auto& get_ref(const slice<viewed_t>& range,
+                                   size_t cursor) OKAYLIB_NOEXCEPT
+    {
+        return range[cursor];
+    }
+};
 
 template <> struct range_definition<const_bit_slice_t, void>
 {

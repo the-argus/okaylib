@@ -47,7 +47,7 @@ static_assert(
                    const int&>);
 
 // if the innermost type does not provide a get_ref() nonconst, then it should
-// be a view of nonconst
+// be a view of const
 static_assert(
     std::is_same_v<
         decltype(ok::iter_copyout(std::declval<const eview_inner_const&>(),

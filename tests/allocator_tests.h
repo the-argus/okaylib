@@ -80,7 +80,7 @@ template <typename allocator_t> struct allocator_tests
             bytes_t bytes = result.release();
 
             REQUIRE(bytes.size() >= num_bytes);
-            REQUIRE(uintptr_t(bytes.data()) % 16 == 0);
+            REQUIRE(uintptr_t(bytes.address_of_first()) % 16 == 0);
 
             for (u64 i = 0; i < bytes.size(); ++i) {
                 // should be all zeroed

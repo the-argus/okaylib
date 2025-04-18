@@ -18,14 +18,16 @@ static_assert(ok::detail::is_random_access_range_v<ok::slice<int>>);
 static_assert(ok::detail::is_input_range_v<ok::slice<int>>);
 static_assert(ok::detail::is_input_range_v<ok::slice<const int>>);
 static_assert(ok::detail::is_output_range_v<ok::slice<int>>);
-static_assert(!ok::detail::range_has_construction_set_v<ok::slice<const int>, const int&>);
-static_assert(std::is_const_v<ok::slice<const int>::value_type>);
+static_assert(!ok::detail::range_has_construction_set_v<ok::slice<const int>,
+                                                        const int&>);
+static_assert(std::is_const_v<ok::slice<const int>::viewed_type>);
 static_assert(ok::detail::range_has_get_ref_const_v<ok::slice<const int>>);
 static_assert(std::is_same_v<ok::value_type_for<ok::slice<const int>>, int>);
 // get ref is explicitly for nonconst overload
 static_assert(!ok::detail::range_has_get_ref_v<std::array<const int, 1>>);
 static_assert(!ok::detail::range_has_get_ref_v<ok::slice<const int>>);
-static_assert(!ok::detail::range_has_construction_set_v<ok::slice<const int>, const int&>);
+static_assert(!ok::detail::range_has_construction_set_v<ok::slice<const int>,
+                                                        const int&>);
 static_assert(!ok::detail::is_output_range_v<ok::slice<const int>>);
 
 static_assert(ok::detail::is_output_range_v<example_range_cstyle>);

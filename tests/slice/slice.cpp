@@ -1,36 +1,31 @@
-#include "okay/ranges/algorithm.h"
-#include "okay/ranges/views/drop.h"
-#include "okay/stdmem.h"
 #include "test_header.h"
 // test header must be first
 #include "okay/containers/array.h"
-#include "okay/detail/traits/is_container.h"
+#include "okay/detail/traits/is_std_container.h"
 #include "okay/macros/foreach.h"
+#include "okay/ranges/algorithm.h"
 #include "okay/ranges/views/all.h"
+#include "okay/ranges/views/drop.h"
 #include "okay/ranges/views/enumerate.h"
 #include "okay/slice.h"
+#include "okay/stdmem.h"
 #include <array>
 #include <vector>
 
 static_assert(
-    ok::detail::is_container_v<std::array<int, 1>>,
-    "is_container not properly detecting size() and data() functions");
+    ok::detail::is_std_container_v<std::array<int, 1>>,
+    "is_std_container not properly detecting size() and data() functions");
 
 static_assert(
-    ok::detail::is_container_v<std::vector<int>>,
-    "is_container not properly detecting size() and data() functions");
+    ok::detail::is_std_container_v<std::vector<int>>,
+    "is_std_container not properly detecting size() and data() functions");
 
-static_assert(!ok::detail::is_container_v<int>, "int registered as container?");
-
-static_assert(ok::detail::is_container_v<ok::slice<int>>,
-              "slice is not container");
-
-static_assert(ok::detail::is_container_v<ok::slice<const int>>,
-              "const slice is not container");
+static_assert(!ok::detail::is_std_container_v<int>,
+              "int registered as container?");
 
 using namespace ok;
 
-static_assert(std::is_same_v<slice<const uint8_t>::value_type, const uint8_t>,
+static_assert(std::is_same_v<slice<const uint8_t>::viewed_type, const uint8_t>,
               "slice::value_type doesnt work as expected");
 
 // undefined memory should not be iterable
@@ -47,7 +42,7 @@ TEST_SUITE("slice")
             // unfortunately the template argument is not deducable
             slice<uint8_t> sl(mem);
             REQUIRE(sl.size() == mem.size());
-            REQUIRE(sl.data() == mem.data());
+            REQUIRE(sl.unchecked_address_of_first_item() == mem.data());
 
             auto subslice_a = subslice(mem, {.start = 10, .length = 110});
             static_assert(std::is_same_v<decltype(subslice_a), slice<uint8_t>>);
@@ -62,7 +57,7 @@ TEST_SUITE("slice")
                 REQUIRE(subslice_b.is_alias_for(subslice_c));
             }
             REQUIRE(subslice_a.size() == 110);
-            REQUIRE(subslice_a.data() == &mem[10]);
+            REQUIRE(subslice_a.unchecked_address_of_first_item() == &mem[10]);
 
             static_assert(!std::is_default_constructible_v<slice<uint8_t>>,
                           "Slice should not be default constructible because "
@@ -75,7 +70,7 @@ TEST_SUITE("slice")
 
             slice<const int> cslice = carray;
             REQUIRE(carray.size() == cslice.size());
-            REQUIRE(carray.data() == cslice.data());
+            REQUIRE(carray.data() == cslice.unchecked_address_of_first_item());
 
             for (size_t i = 0; i < carray.size(); ++i) {
                 REQUIRE(carray[i] == cslice[i]);
@@ -88,7 +83,7 @@ TEST_SUITE("slice")
 
             slice<const int> cslice = carray;
             REQUIRE(5 == cslice.size());
-            REQUIRE(carray == cslice.data());
+            REQUIRE(carray == cslice.unchecked_address_of_first_item());
 
             for (size_t i = 0; i < 5; ++i) {
                 REQUIRE(carray[i] == cslice[i]);
@@ -101,7 +96,7 @@ TEST_SUITE("slice")
 
             slice<const int> cslice = carray;
             REQUIRE(5 == cslice.size());
-            REQUIRE(carray == cslice.data());
+            REQUIRE(carray == cslice.unchecked_address_of_first_item());
 
             for (size_t i = 0; i < 5; ++i) {
                 REQUIRE(carray[i] == cslice[i]);
@@ -157,19 +152,27 @@ TEST_SUITE("slice")
         {
             int oneint[1] = {0};
             slice<int> ints = slice_from_one(oneint[0]);
-            static_assert(std::is_same_v<int*, decltype(ints.data())>);
+            static_assert(
+                std::is_same_v<
+                    int*, decltype(ints.unchecked_address_of_first_item())>);
 
             slice<const int> ints_const = slice_from_one((int&)oneint[0]);
             static_assert(
-                std::is_same_v<const int*, decltype(ints_const.data())>);
+                std::is_same_v<
+                    const int*,
+                    decltype(ints_const.unchecked_address_of_first_item())>);
 
             auto get_nonconst_by_const_ref = [](const ok::slice<int>& guy) {
-                static_assert(std::is_same_v<decltype(guy.data()), int*>);
+                static_assert(
+                    std::is_same_v<
+                        decltype(guy.unchecked_address_of_first_item()), int*>);
                 return guy;
             };
 
             auto copy = get_nonconst_by_const_ref(ints);
-            static_assert(std::is_same_v<decltype(copy.data()), int*>);
+            static_assert(
+                std::is_same_v<decltype(copy.unchecked_address_of_first_item()),
+                               int*>);
 
             ok::slice<const int> cint_1 = slice_from_one<const int>(oneint[0]);
             cint_1 = slice_from_one(oneint[0]);

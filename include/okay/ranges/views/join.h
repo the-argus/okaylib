@@ -121,10 +121,13 @@ struct range_definition<detail::joined_view_t<input_range_t>>
     static constexpr bool is_view = true;
     static constexpr bool infinite =
         detail::range_marked_infinite_v<input_range_t>;
+    static constexpr bool allows_inner_nonconstness =
+        detail::range_allows_inner_nonconstness_v<inner_range_t>;
 
     using joined_t = detail::joined_view_t<input_range_t>;
     using cursor_t = detail::joined_cursor_t<input_range_t>;
     using view_t = typename cursor_t::view_t;
+    using value_type = value_type_for<inner_range_t>;
 
     static constexpr cursor_t begin(const joined_t& joined) OKAYLIB_NOEXCEPT
     {

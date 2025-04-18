@@ -113,7 +113,8 @@ arena_t<allocator_impl_t>::impl_allocate(const alloc::request_t& request)
 {
     using namespace alloc;
     const bool should_zero = !(request.flags & flags::leave_nonzeroed);
-    void* aligned_start_voidptr = m_available_memory.data();
+    void* aligned_start_voidptr =
+        m_available_memory.unchecked_address_of_first_item();
     size_t space_remaining_after_alignment = m_available_memory.size();
     if (!std::align(request.alignment, request.num_bytes, aligned_start_voidptr,
                     space_remaining_after_alignment)) {
@@ -123,12 +124,13 @@ arena_t<allocator_impl_t>::impl_allocate(const alloc::request_t& request)
     const size_t allocated_size = request.num_bytes;
 
     const size_t amount_moved_to_be_aligned =
-        aligned_start - m_available_memory.data();
+        aligned_start - m_available_memory.unchecked_address_of_first_item();
     __ok_internal_assert(amount_moved_to_be_aligned < request.alignment);
     __ok_internal_assert(request.num_bytes <= space_remaining_after_alignment);
 
     const size_t start_index =
-        (aligned_start + allocated_size) - m_available_memory.data();
+        (aligned_start + allocated_size) -
+        m_available_memory.unchecked_address_of_first_item();
 
     m_available_memory = m_available_memory.subslice({
         .start = start_index,

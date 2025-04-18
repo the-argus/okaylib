@@ -75,7 +75,10 @@ c_allocator_t::impl_allocate(const alloc::request_t& request) OKAYLIB_NOEXCEPT
 
 inline void c_allocator_t::impl_deallocate(bytes_t bytes) OKAYLIB_NOEXCEPT
 {
-    ::free(bytes.data());
+    if (bytes.size() == 0) [[unlikely]] {
+        return;
+    }
+    ::free(bytes.unchecked_address_of_first_item());
 }
 
 [[nodiscard]] inline alloc::result_t<bytes_t> c_allocator_t::impl_reallocate(
@@ -105,8 +108,12 @@ inline void c_allocator_t::impl_deallocate(bytes_t bytes) OKAYLIB_NOEXCEPT
 c_allocator_t::realloc_inner(bytes_t memory, size_t new_size,
                              bool zeroed) OKAYLIB_NOEXCEPT
 {
+    if (memory.size() == 0) [[unlikely]] {
+        __ok_assert(false, "Attempt to realloc a slice of zero bytes.");
+        return alloc::error::unsupported;
+    }
     using namespace alloc;
-    void* mem = ::realloc(memory.data(), new_size);
+    void* mem = ::realloc(memory.unchecked_address_of_first_item(), new_size);
 
     if (!mem) [[unlikely]]
         return error::oom;
@@ -137,6 +144,13 @@ c_allocator_t::realloc_inner(bytes_t memory, size_t new_size,
     if (options.flags & flags::in_place_orelse_fail) {
         // not a supported operation by C allocator
         return error::couldnt_expand_in_place;
+    }
+
+    if (options.memory.size() == 0) [[unlikely]] {
+        __ok_assert(
+            false,
+            "Attempt to reallocate a slice of zero bytes with C allocator.");
+        return error::unsupported;
     }
 
     if (options.flags & flags::expand_front) [[unlikely]] {
@@ -174,10 +188,13 @@ c_allocator_t::realloc_inner(bytes_t memory, size_t new_size,
             size -= bytes_offset_back;
         }
 
-        std::memcpy(newmem, options.memory.data() + bytes_offset_front, size);
+        std::memcpy(newmem,
+                    options.memory.unchecked_address_of_first_item() +
+                        bytes_offset_front,
+                    size);
     }
 
-    ::free(options.memory.data());
+    ::free(options.memory.unchecked_address_of_first_item());
 
     return reallocation_extended_t{
         .memory = raw_slice(*static_cast<uint8_t*>(newmem), new_size),

@@ -107,10 +107,12 @@ ok::memcopy(const memcopy_options_t<T>& options) OKAYLIB_NOEXCEPT -> slice<T>
             "Attempt to memcopy between two slices of memory which overlap.");
     }
 
-    std::memcpy(options.to.data(), options.from.data(),
+    std::memcpy(options.to.unchecked_address_of_first_item(),
+                options.from.unchecked_address_of_first_item(),
                 options.from.size() * sizeof(T));
 
-    return raw_slice(*options.to.data(), options.from.size());
+    return raw_slice(*options.to.unchecked_address_of_first_item(),
+                     options.from.size());
 }
 
 template <typename T>
@@ -120,14 +122,15 @@ ok::memcompare(ok::slice<T> memory_1, ok::slice<T> memory_2) OKAYLIB_NOEXCEPT
     if (memory_1.size() != memory_2.size()) {
         return false;
     }
-    if (memory_1.data() == memory_2.data()) {
+    if (memory_1.unchecked_address_of_first_item() ==
+        memory_2.unchecked_address_of_first_item()) {
         return true;
     }
     const size_t size = memory_1.size() * sizeof(T);
-    const auto* const as_bytes_1 =
-        reinterpret_cast<const uint8_t*>(memory_1.data());
-    const auto* const as_bytes_2 =
-        reinterpret_cast<const uint8_t*>(memory_2.data());
+    const auto* const as_bytes_1 = reinterpret_cast<const uint8_t*>(
+        memory_1.unchecked_address_of_first_item());
+    const auto* const as_bytes_2 = reinterpret_cast<const uint8_t*>(
+        memory_2.unchecked_address_of_first_item());
 
     for (size_t i = 0; i < size; ++i) {
         if (as_bytes_1[i] != as_bytes_2[i]) {
@@ -141,16 +144,25 @@ template <typename T>
 [[nodiscard]] constexpr bool
 ok::memcontains(const memcontains_options_t<T>& options) OKAYLIB_NOEXCEPT
 {
-    return options.outer.data() <= options.inner.data() &&
-           options.outer.data() + options.outer.size() >=
-               options.inner.data() + options.inner.size();
+    if (options.outer.is_empty()) [[unlikely]] {
+        return false;
+    }
+    return options.outer.unchecked_address_of_first_item() <=
+               options.inner.unchecked_address_of_first_item() &&
+           options.outer.unchecked_address_of_first_item() +
+                   options.outer.size() >=
+               options.inner.unchecked_address_of_first_item() +
+                   options.inner.size();
 }
 
 template <typename T>
 [[nodiscard]] constexpr bool ok::memoverlaps(ok::slice<T> a,
                                              ok::slice<T> b) OKAYLIB_NOEXCEPT
 {
-    return a.data() < (b.data() + b.size()) && b.data() < (a.data() + a.size());
+    return a.unchecked_address_of_first_item() <
+               (b.unchecked_address_of_first_item() + b.size()) &&
+           b.unchecked_address_of_first_item() <
+               (a.unchecked_address_of_first_item() + a.size());
 }
 
 template <typename slice_viewed_t, typename... constructor_args_t>
@@ -163,7 +175,7 @@ constexpr void ok::memfill(ok::slice<slice_viewed_t> slice,
         static_assert(
             is_std_constructible_v<uint8_t, constructor_args_t...>,
             "No matching conversion from given arguments to a uint8_t.");
-        std::memset(slice.data(),
+        std::memset(slice.unchecked_address_of_first_item(),
                     uint8_t(std::forward<constructor_args_t>(args)...),
                     slice.size());
     } else {
@@ -174,7 +186,7 @@ constexpr void ok::memfill(ok::slice<slice_viewed_t> slice,
                       "non-failing way) be constructed or destroyed.");
 
         for (size_t i = 0; i < slice.size(); ++i) {
-            auto& item = slice.data()[i];
+            auto& item = slice.unchecked_access(i);
             if constexpr (!std::is_trivially_destructible_v<slice_viewed_t>) {
                 item.~slice_viewed_t();
             }
@@ -190,7 +202,8 @@ ok::reinterpret_as_bytes(ok::slice<T> slice) OKAYLIB_NOEXCEPT
 {
     // NOTE: leave_undefined performs unnecessary copy here
     return ok::undefined_memory_t<uint8_t>(
-               *reinterpret_cast<uint8_t*>(slice.data()),
+               *reinterpret_cast<uint8_t*>(
+                   slice.unchecked_address_of_first_item()),
                slice.size() * sizeof(T))
         .leave_undefined();
 }

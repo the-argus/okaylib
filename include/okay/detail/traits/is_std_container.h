@@ -29,7 +29,7 @@ struct has_data_member_meta_t<
 {};
 
 template <typename T>
-inline constexpr bool is_container_v =
+inline constexpr bool is_std_container_v =
     has_size_member_meta_t<T>::value && has_data_member_meta_t<T>::value;
 
 } // namespace ok::detail

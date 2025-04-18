@@ -1,17 +1,17 @@
 #ifndef __OKAYLIB_RANGES_RANGES_H__
 #define __OKAYLIB_RANGES_RANGES_H__
 
+#include "okay/detail/addressof.h"
 #include "okay/detail/template_util/c_array_length.h"
 #include "okay/detail/template_util/c_array_value_type.h"
+#include "okay/detail/template_util/first_type_in_pack.h"
 #include "okay/detail/template_util/remove_cvref.h"
 #include "okay/detail/traits/is_complete.h"
-#include "okay/detail/traits/is_container.h"
 #include "okay/detail/traits/is_derived_from.h"
 #include "okay/detail/traits/is_instance.h"
+#include "okay/detail/traits/is_std_container.h"
 #include "okay/detail/traits/mathop_traits.h"
 #include "okay/math/ordering.h"
-// provide opt range definition here to avoid circular includes
-#include "okay/opt.h"
 
 /*
  * This header defines customization points and traits for ranges- their
@@ -92,16 +92,6 @@ struct range_definition<
     {
         return detail::c_array_length(i);
     }
-
-    static constexpr value_type* data(range_t& i) OKAYLIB_NOEXCEPT
-    {
-        return &i[0];
-    }
-
-    static constexpr const value_type* data(const range_t& i) OKAYLIB_NOEXCEPT
-    {
-        return &i[0];
-    }
 };
 
 // specialization for things that can be indexed with size_t and have an
@@ -116,7 +106,7 @@ struct range_definition<
         // not specified to inherit some other range definition
         !has_inherited_range_type_v<detail::remove_cvref_t<input_range_t>> &&
         // provides size_t .size() method and pointer data() method
-        detail::is_container_v<input_range_t> &&
+        detail::is_std_container_v<input_range_t> &&
         // iterator_t()[size_t{}] -> iterator_t::value_type&
         std::is_same_v<
             typename detail::remove_cvref_t<input_range_t>::value_type&,
@@ -127,15 +117,15 @@ struct range_definition<
     using range_t = detail::remove_cvref_t<input_range_t>;
 
   public:
+    static_assert(!detail::is_instance_v<range_t, slice>);
     // value type for ranges is different than value type for vector or array.
     // a range over `const int` has a value_type of `int`, and jut only provides
     // `const int& get_ref(const range_t&)`
     using value_type = detail::remove_cvref_t<typename range_t::value_type>;
     static constexpr bool is_arraylike = true;
 
-    // discrepancy between slice and std::array value_type, which may be const
-    // qualified. If operator[] returns a const reference, then we shouldn't
-    // enable a nonconst get_ref.
+    // dont enable mutable get_ref unless the index operator actually returns a
+    // mutable reference (this applies for array<const T> and slice<const T>)
     template <typename T = range_t>
     static constexpr std::enable_if_t<
         std::is_same_v<T, range_t> &&
@@ -144,11 +134,8 @@ struct range_definition<
         value_type&>
     get_ref(range_t& i, size_t c) OKAYLIB_NOEXCEPT
     {
-        // slices have bounds checking already
-        if constexpr (!detail::is_instance_v<range_t, ok::slice>) {
-            if (c >= i.size()) [[unlikely]] {
-                __ok_abort("Out of bounds access into arraylike container.");
-            }
+        if (c >= i.size()) [[unlikely]] {
+            __ok_abort("Out of bounds access into arraylike container.");
         }
         return i[c];
     }
@@ -156,11 +143,8 @@ struct range_definition<
     static constexpr const value_type& get_ref(const range_t& i,
                                                size_t c) OKAYLIB_NOEXCEPT
     {
-        // slices have bounds checking already
-        if constexpr (!detail::is_instance_v<range_t, ok::slice>) {
-            if (c >= i.size()) [[unlikely]] {
-                __ok_abort("Out of bounds access into arraylike container.");
-            }
+        if (c >= i.size()) [[unlikely]] {
+            __ok_abort("Out of bounds access into arraylike container.");
         }
         return i[c];
     }
@@ -168,16 +152,6 @@ struct range_definition<
     static constexpr size_t size(const range_t& i) OKAYLIB_NOEXCEPT
     {
         return i.size();
-    }
-
-    static constexpr value_type* data(range_t& i) OKAYLIB_NOEXCEPT
-    {
-        return &i[0];
-    }
-
-    static constexpr const value_type* data(const range_t& i) OKAYLIB_NOEXCEPT
-    {
-        return &i[0];
     }
 };
 
@@ -209,6 +183,35 @@ struct range_is_arraylike_inner<
     T, std::enable_if_t<range_definition_inner<T>::is_arraylike>>
     : std::true_type
 {};
+
+template <typename T, typename = void>
+struct has_value_type : public std::false_type
+{};
+
+template <typename T>
+struct has_value_type<T, std::void_t<typename T::value_type>>
+    : public std::true_type
+{
+    using type = typename T::value_type;
+};
+
+template <typename T, typename = void>
+struct range_allows_inner_nonconstness : std::false_type
+{};
+
+template <typename T>
+struct range_allows_inner_nonconstness<
+    T, std::enable_if_t<range_definition_inner<T>::allows_inner_nonconstness>>
+    : std::true_type
+{
+    /// Something with inner nonconstness returns unexpected values from
+    /// get_ref(const&) so it needs to explicitly say its value type and not use
+    /// deduction.
+    static_assert(has_value_type<range_definition_inner<T>>::value,
+                  "range_definition is marked with allows_inner_nonconstness, "
+                  "but it does "
+                  "not explicitly define `using value_type = ...`.");
+};
 
 template <typename T>
 constexpr bool is_valid_cursor_v =
@@ -348,16 +351,6 @@ struct range_disallows_cursor_member_offset<
 {};
 
 template <typename T, typename = void>
-struct range_has_data : public std::false_type
-{};
-template <typename T>
-struct range_has_data<
-    T,
-    std::enable_if_t<std::is_pointer_v<decltype(range_definition_inner<T>::data(
-        std::declval<const T&>()))>>> : public std::true_type
-{};
-
-template <typename T, typename = void>
 struct range_is_arraylike : std::false_type
 {};
 
@@ -398,6 +391,9 @@ struct range_is_arraylike<T,
 
 template <typename T>
 constexpr bool range_is_arraylike_v = range_is_arraylike<T>::value;
+template <typename T>
+constexpr bool range_allows_inner_nonconstness_v =
+    range_allows_inner_nonconstness<T>::value;
 template <typename T>
 constexpr bool range_definition_has_begin_v =
     range_definition_has_begin<T>::value;
@@ -522,17 +518,6 @@ template <typename range_t>
 constexpr bool range_has_get_ref_const_unchecked_rettype_v =
     range_has_get_ref_const_unchecked_rettype<range_t>::value;
 
-template <typename T, typename = void>
-struct has_value_type : public std::false_type
-{};
-
-template <typename T>
-struct has_value_type<T, std::void_t<typename T::value_type>>
-    : public std::true_type
-{
-    using type = typename T::value_type;
-};
-
 /// Try to find the value type of an range, either from its
 /// range_definition's value_type member type, or by deducing it from the
 /// return values of get, get_ref_const, and get_ref (in that order). If unable
@@ -621,7 +606,15 @@ constexpr bool range_has_get_ref_v =
                        T>::deduced_value_type,
                    detail::range_deduced_value_type_t<T>>;
 
-// const_ref_or_void: avoid forming a const reference to void
+// ref_or_void: avoid forming a const reference to void
+template <typename T, typename = void> struct ref_or_void
+{
+    using type = void;
+};
+template <typename T> struct ref_or_void<T, std::void_t<T&>>
+{
+    using type = T&;
+};
 template <typename T, typename = void> struct const_ref_or_void
 {
     using type = void;
@@ -633,11 +626,22 @@ template <typename T> struct const_ref_or_void<T, std::void_t<const T&>>
 
 template <typename T>
 constexpr bool range_has_get_ref_const_v =
+    // can call get_ref with a const reference to the thing
     detail::range_has_get_ref_const_unchecked_rettype_v<T> &&
-    std::is_same_v<typename detail::range_has_get_ref_const_unchecked_rettype<
-                       T>::return_type,
-                   typename const_ref_or_void<
-                       detail::range_deduced_value_type_t<T>>::type>;
+
+    // either the get_ref(const&) returns a const value_type& OR
+    (std::is_same_v<typename detail::range_has_get_ref_const_unchecked_rettype<
+                        T>::return_type,
+                    // const_ref_or_void to avoid forming void&
+                    typename const_ref_or_void<
+                        detail::range_deduced_value_type_t<T>>::type>
+     // OR it returns value_type& and allows_inner_nonconstness
+     ||
+     (range_allows_inner_nonconstness_v<T> &&
+      std::is_same_v<
+          typename detail::range_has_get_ref_const_unchecked_rettype<
+              T>::return_type,
+          typename ref_or_void<detail::range_deduced_value_type_t<T>>::type>));
 
 template <typename T>
 constexpr bool has_baseline_functions_v =
@@ -733,7 +737,8 @@ class range_def_for : public detail::range_definition_inner<T>
 
     // should never fire unless something is broken with ranges implementation.
     // value_type is never const- if your value type is "const", then you just
-    // only provide the const get_ref overload.
+    // only provide the const get_ref overload. If your type has pointer/view
+    // semantics then you can use allows_inner_nonconstness.
     static_assert(!std::is_reference_v<value_type> &&
                   !std::is_const_v<value_type>);
 
@@ -895,53 +900,6 @@ using cursor_type_for =
     std::conditional_t<ok::detail::range_is_arraylike_v<T>, size_t,
                        typename detail::range_begin_rettype_or_void<T>::type>;
 
-// ok::opt range_definition. located here to avoid circular includes
-template <typename payload_t> struct ok::range_definition<ok::opt<payload_t>>
-{
-    struct cursor_t
-    {
-        friend class range_definition;
-
-      private:
-        bool is_out_of_bounds = false;
-    };
-
-    using opt_range_t = opt<payload_t>;
-
-    static constexpr cursor_t begin(const opt_range_t& range) OKAYLIB_NOEXCEPT
-    {
-        return cursor_t{};
-    }
-
-    static constexpr void increment(const opt_range_t& range,
-                                    cursor_t& cursor) OKAYLIB_NOEXCEPT
-    {
-        cursor.is_out_of_bounds = true;
-    }
-
-    static constexpr bool is_inbounds(const opt_range_t& range,
-                                      const cursor_t& cursor) OKAYLIB_NOEXCEPT
-    {
-        return range.has_value() && !cursor.is_out_of_bounds;
-    }
-
-    static constexpr size_t size(const opt_range_t& range) OKAYLIB_NOEXCEPT
-    {
-        return size_t(range.has_value());
-    }
-
-    static constexpr auto& get_ref(opt_range_t& range, const cursor_t& cursor)
-    {
-        return range.ref_or_panic();
-    }
-
-    static constexpr const auto& get_ref(const opt_range_t& range,
-                                         const cursor_t& cursor)
-    {
-        return range.ref_or_panic();
-    }
-};
-
 namespace detail {
 
 // forward declare these so we can make overloads that detect them and have
@@ -1084,9 +1042,10 @@ struct iter_get_ref_fn_t
     }
 
     template <typename range_t>
-    constexpr const value_type_for<range_t>& operator() [[nodiscard]] (
+    constexpr auto operator() [[nodiscard]] (
         const range_t& range,
         const cursor_type_for<range_t>& cursor) const OKAYLIB_NOEXCEPT
+        ->decltype(range_definition_inner<range_t>::get_ref(range, cursor))
     {
         static_assert(
             detail::range_has_get_ref_const_v<range_t>,
@@ -1307,19 +1266,6 @@ struct size_fn_t
 
     __ok_range_function_assert_not_partially_called_member(size)
 };
-
-struct data_fn_t
-{
-    template <typename range_t>
-    constexpr auto operator() [[nodiscard]] (const range_t& range) const
-        OKAYLIB_NOEXCEPT->decltype(range_def_for<range_t>::data(range))
-    {
-        return range_def_for<range_t>::data(range);
-    }
-
-    __ok_range_function_assert_not_partially_called_member(data)
-};
-
 } // namespace detail
 
 /// Get a copy of the data pointed at by an iterator. Works on ranges
@@ -1351,8 +1297,6 @@ inline constexpr detail::begin_fn_t begin{};
 inline constexpr detail::is_inbounds_fn_t is_inbounds{};
 
 inline constexpr detail::size_fn_t size{};
-
-inline constexpr detail::size_fn_t data{};
 
 inline constexpr detail::increment_fn_t increment{};
 

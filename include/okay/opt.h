@@ -514,7 +514,7 @@ class opt<wrapped_slice_t,
     inline static constexpr bool is_reference = false;
     inline static constexpr bool is_slice = true;
 
-    using viewed_t = typename wrapped_slice_t::value_type;
+    using viewed_t = typename wrapped_slice_t::viewed_type;
 
     // layout matches slice
     size_t elements;
@@ -719,6 +719,58 @@ class opt<wrapped_slice_t,
     friend struct fmt::formatter<opt>;
 #endif
 };
+
+template <typename range_t, typename enable> struct range_definition;
+
+template <typename payload_t>
+struct ok::range_definition<ok::opt<payload_t>, void>
+{
+    struct cursor_t
+    {
+        friend class range_definition;
+
+      private:
+        bool is_out_of_bounds = false;
+    };
+
+    using opt_range_t = opt<payload_t>;
+
+    static constexpr cursor_t begin(const opt_range_t& range) OKAYLIB_NOEXCEPT
+    {
+        return cursor_t{};
+    }
+
+    static constexpr void increment(const opt_range_t& range,
+                                    cursor_t& cursor) OKAYLIB_NOEXCEPT
+    {
+        cursor.is_out_of_bounds = true;
+    }
+
+    static constexpr bool is_inbounds(const opt_range_t& range,
+                                      const cursor_t& cursor) OKAYLIB_NOEXCEPT
+    {
+        // NOTE: this is defensive, I'm assuming you might use a cursor on
+        // an opt<T> which has had its item added or removed, so check on access
+        return range.has_value() && !cursor.is_out_of_bounds;
+    }
+
+    static constexpr size_t size(const opt_range_t& range) OKAYLIB_NOEXCEPT
+    {
+        return size_t(range.has_value());
+    }
+
+    static constexpr auto& get_ref(opt_range_t& range, const cursor_t& cursor)
+    {
+        return range.ref_or_panic();
+    }
+
+    static constexpr const auto& get_ref(const opt_range_t& range,
+                                         const cursor_t& cursor)
+    {
+        return range.ref_or_panic();
+    }
+};
+
 } // namespace ok
 
 #ifdef OKAYLIB_USE_FMT

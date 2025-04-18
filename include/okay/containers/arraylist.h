@@ -30,8 +30,9 @@ class arraylist_t
     // - 8 bytes: backing_allocator pointer
     struct members_t
     {
-        slice<T> allocated_spots;
-        size_t spots_occupied;
+        T* items;
+        size_t capacity;
+        size_t size;
         backing_allocator_t* backing_allocator;
     };
     members_t m;
@@ -66,72 +67,60 @@ class arraylist_t
                   "not possible. Remove the const, and consider passing a "
                   "const reference to the arraylist instead.");
 
-    using value_type = T;
-
-    // data and size are here so this can be iterated on directly without
-    // calling .items()
-
-    /// If size is zero, whether this points to valid memory or not is undefined
-    [[nodiscard]] constexpr const T* data() const& OKAYLIB_NOEXCEPT
-    {
-        return m.allocated_spots.data();
-    }
-
-    /// If size is zero, whether this points to valid memory or not is undefined
-    [[nodiscard]] constexpr T* data() & OKAYLIB_NOEXCEPT
-    {
-        return m.allocated_spots.data();
-    }
+    using viewed_type = T;
 
     [[nodiscard]] constexpr size_t size() const OKAYLIB_NOEXCEPT
     {
-        return m.spots_occupied;
+        return m.size;
     }
 
     [[nodiscard]] constexpr slice<T> items() & OKAYLIB_NOEXCEPT
     {
-        if (m.allocated_spots.size() == 0) {
-            return m.allocated_spots;
+        if (this->size() == 0) {
+            return make_null_slice<T>();
         }
-        return m.allocated_spots.subslice({.length = m.spots_occupied});
+        return raw_slice(*m.items, m.size);
     }
 
     [[nodiscard]] constexpr slice<const T> items() const& OKAYLIB_NOEXCEPT
     {
-        return const_cast<arraylist_t*>(this)->items(); // call other impl
+        return const_cast<arraylist_t*>(this)->items(); // call nonconst impl
     }
 
     [[nodiscard]] constexpr const T&
     operator[](size_t index) const& OKAYLIB_NOEXCEPT
     {
-        if (index >= m.spots_occupied) [[unlikely]] {
+        if (index >= this->size()) [[unlikely]] {
             __ok_abort("Out of bounds access to ok::arraylist_t");
         }
-        return m.allocated_spots.data()[index];
+        return m.items[index];
     }
     [[nodiscard]] constexpr T& operator[](size_t index) & OKAYLIB_NOEXCEPT
     {
-        if (index >= m.spots_occupied) [[unlikely]] {
+        if (index >= this->size()) [[unlikely]] {
             __ok_abort("Out of bounds access to ok::arraylist_t");
         }
-        return m.allocated_spots.data()[index];
+        return m.items[index];
     }
 
     // no default constructor or copy, but can move
     arraylist_t(const arraylist_t&) = delete;
     arraylist_t& operator=(const arraylist_t&) = delete;
 
-    constexpr arraylist_t(arraylist_t&& other)
-        : m(std::move(other.m)) OKAYLIB_NOEXCEPT
+    constexpr arraylist_t(arraylist_t&& other) : m(other.m) OKAYLIB_NOEXCEPT
     {
-        other.m.allocated_spots = raw_slice_create_null_empty_unsafe<T>();
+        // prevent other from destroying our buffer when it goes, but keep it in
+        // a valid state
+        other.items = nullptr;
+        other.size = 0;
+        other.capacity = 0;
     }
 
     constexpr arraylist_t& operator=(arraylist_t&& other) OKAYLIB_NOEXCEPT
     {
-        this->destroy();
-        this->m = std::move(other.m);
-        other.m.allocated_spots = raw_slice_create_null_empty_unsafe<T>();
+        this->clear();
+        std::swap(other.m, this->m);
+        __ok_internal_assert(other.size() == 0);
         return *this;
     }
 
@@ -139,16 +128,16 @@ class arraylist_t
     [[nodiscard]] constexpr status<alloc::error>
     ensure_additional_capacity() OKAYLIB_NOEXCEPT
     {
-        if (m.allocated_spots.size() == 0) {
+        if (this->capacity() == 0) {
             auto status = this->make_first_allocation();
             if (!status.okay()) [[unlikely]] {
                 return status;
             }
-        } else if (m.allocated_spots.size() <= m.spots_occupied) {
+        } else if (this->capacity() <= this->size()) {
             // 2x growth rate
             auto status =
-                this->reallocate(m.allocated_spots, sizeof(T),
-                                 m.allocated_spots.size() * sizeof(T));
+                this->reallocate(raw_slice(*m.items, this->capacity()),
+                                 sizeof(T), this->capacity() * sizeof(T));
             if (!status.okay()) [[unlikely]] {
                 return status;
             }
@@ -175,29 +164,42 @@ class arraylist_t
             }
         }
 
-        auto& spots = m.allocated_spots;
         // make sure we have one free spot available for the thing being
         // inserted
-        __ok_assert(spots.size() > this->size(),
+        __ok_assert(this->capacity() > this->size(),
                     "Backing allocator for arraylist did not give back "
                     "expected amount of memory");
 
         if (idx < this->size()) {
             // move all other items towards the back of the arraylist
             if constexpr (std::is_trivially_copyable_v<T>) {
-                std::memmove(spots.data() + idx + 1, spots.data() + idx,
+                std::memmove(m.items + idx + 1, m.items + idx,
                              (this->size() - idx) * sizeof(T));
             } else {
-                for (size_t i = this->size(); i > idx; --i) {
-                    auto& target = spots[i];
-                    auto& source = spots[i - 1];
-                    new (ok::addressof(target)) T(std::move(source));
+                __ok_internal_assert(this->size() != 0);
+                // move last item into uninitialized memory
+                new (m.items + this->size())
+                    T(std::move(m.items[this->size() - 1]));
+
+                // move the rest of the items on top of each other
+                for (size_t i = this->size() - 1; i > idx; --i) {
+                    T& target = m.items[i];
+                    T& source = m.items[i - 1];
+                    target = std::move(source);
+                }
+
+                // make the item we are inserting into uninitialized
+                // since we are inserting a new thing over it anyways,
+                // there's not way to benefit from anything like leftover memory
+                // after move optimizations
+                if constexpr (!std::is_trivially_destructible_v<T>) {
+                    m.items[idx].~T();
                 }
             }
         }
 
-        // populate item
-        auto& uninit = spots.data()[idx];
+        // populate moved-out item
+        auto& uninit = m.items[idx];
 
         using make_result_type = decltype(ok::make_into_uninitialized<T>(
             std::declval<T&>(), std::forward<args_t>(args)...));
@@ -219,15 +221,19 @@ class arraylist_t
                 // supposed to be the cold path and it only invokes nonfailing
                 // operations so it should be fine to do this)
                 if constexpr (std::is_trivially_copyable_v<T>) {
-                    std::memmove(spots.data() + idx, spots.data() + idx + 1,
+                    std::memmove(m.items + idx, m.items + idx + 1,
                                  (this->size() - idx) * sizeof(T));
                 } else {
                     // this accesses spots[i + 1] but that is initialized
                     // at this point
                     for (size_t i = idx; i < this->size(); ++i) {
-                        auto& target = spots[i];
-                        auto& source = spots[i + 1];
-                        new (ok::addressof(target)) T(std::move(source));
+                        T& target = m.items[i];
+                        T& source = m.items[i + 1];
+                        target = std::move(source);
+                    }
+                    // make the stuff off the end uninitialized again
+                    if constexpr (!std::is_trivially_destructible_v<T>) {
+                        m.items[this->size()].~T();
                     }
                 }
             }
@@ -248,18 +254,21 @@ class arraylist_t
             __ok_assert(false, "Attempt to increase capacity by 0.");
             return alloc::error::unsupported;
         }
-        if (m.allocated_spots.size() == 0) {
+        if (this->capacity() == 0) {
             return make_first_allocation(new_spots * sizeof(T));
         } else {
-            return reallocate(m.allocated_spots, new_spots * sizeof(T), 0);
+            return reallocate(new_spots * sizeof(T), 0);
         }
     }
 
     constexpr T remove(size_t idx) OKAYLIB_NOEXCEPT
     {
-        auto& spots = m.allocated_spots;
+        if (idx >= this->size()) [[unlikely]] {
+            __ok_abort("Out of bounds access in arraylist_t::remove()");
+        }
+        T& removed = m.items[idx];
         // moved out at index
-        T out(std::move(spots[idx]));
+        T out(std::move(removed));
 
         // we would have crashed at this point if out of bounds, so assume idx
         // is in bounds
@@ -267,18 +276,29 @@ class arraylist_t
         defer decrement([this] { --m.spots_occupied; });
 
         if (idx == this->size() - 1) {
+            // we've left `removed` in a valid state because we thought we were
+            // going to shift stuff above it down into it, but there's nothing
+            // above so just destroy it.
+            if constexpr (!std::is_trivially_destructible_v<T>) {
+                removed.~T();
+            }
             return out;
         }
 
         if constexpr (std::is_trivially_copyable_v<T>) {
             const size_t idxplusone = idx + 1;
-            std::memmove(spots.data() + idx, spots.data() + idxplusone,
+            std::memmove(m.items + idx, m.items + idxplusone,
                          (this->size() - idxplusone) * sizeof(T));
         } else {
             for (size_t i = this->size() - 1; i > idx; --i) {
-                auto& target = spots.data()[i - 1];
-                auto& source = spots.data()[i];
-                new (ok::addressof(target)) T(std::move(source));
+                T& source = m.items[i];
+                T& target = m.items[i - 1];
+                target = std::move(source);
+            }
+
+            // only call the destructor of the last-most item
+            if constexpr (!std::is_trivially_destructible_v<T>) {
+                m.items[this->size() - 1].~T();
             }
         }
         return out;
@@ -286,23 +306,30 @@ class arraylist_t
 
     constexpr T remove_and_swap_last(size_t idx) OKAYLIB_NOEXCEPT
     {
-        auto& spots = m.allocated_spots;
-        if (idx >= m.spots_occupied) [[unlikely]] {
+        if (idx >= this->size()) [[unlikely]] {
             __ok_abort(
                 "Out of bounds access in arraylist_t::remove_and_swap_last()");
         }
-        auto& target = spots.data()[idx];
+        T& target = m.items[idx];
         // moved out at index
         T out(std::move(target));
 
-        defer decrement([this] { --m.spots_occupied; });
+        defer decrement([this, target] { --m.spots_occupied; });
 
         if (idx == this->size() - 1) {
+            if constexpr (!std::is_trivially_destructible_v<T>) {
+                target.~T();
+            }
             return out;
         }
 
-        new (ok::addressof(target))
-            T(std::move(spots.data()[m.spots_occupied - 1]));
+        T& last = m.items[this->size() - 1];
+
+        target = std::move(last);
+
+        if constexpr (!std::is_trivially_destructible_v<T>) {
+            last.~T();
+        }
 
         return out;
     }
@@ -315,11 +342,20 @@ class arraylist_t
             return;
         }
 
-        auto& spots = m.allocated_spots;
+        bytes_t bytes =
+            reinterpret_as_bytes(raw_slice(*m.items, this->capacity()));
+
+        if (this->size() == 0) {
+            m.backing_allocator->deallocate(bytes);
+            m.items = nullptr;
+            m.capacity = 0;
+            m.size = 0;
+            return;
+        }
 
         alloc::result_t<bytes_t> reallocated =
             m.backing_allocator->reallocate(alloc::reallocate_request_t{
-                .memory = reinterpret_as_bytes(spots),
+                .memory = bytes,
                 .new_size_bytes = size() * sizeof(T),
                 // flags besides in_place_orelse_fail not really necessary
                 .flags = alloc::flags::shrink_back |
@@ -327,11 +363,12 @@ class arraylist_t
                          alloc::flags::leave_nonzeroed,
             });
 
-        if (!reallocated.okay())
+        if (!reallocated.okay()) [[unlikely]]
             return;
 
         bytes_t& new_bytes = reallocated.release_ref();
-        __ok_assert((void*)new_bytes.data() == (void*)spots.data(),
+        __ok_assert((void*)new_bytes.unchecked_address_of_first_item() ==
+                        m.items,
                     "Backing allocator for arraylist did not reallocate "
                     "properly, different memory returned but shrink_back and "
                     "in_place_orelse_fail were passed.");
@@ -339,12 +376,21 @@ class arraylist_t
             new_bytes.size() == size() * sizeof(T),
             "Shrinking / rellocating did not return expected size exactly, "
             "which it is supposed to when shrinking in place.");
-        m.allocated_spots = reinterpret_bytes_as<T>(new_bytes);
+
+        // this should never happen considering the above asserts...
+        __ok_assert(uintptr_t(new_bytes.unchecked_address_of_first_item()) %
+                            alignof(T) ==
+                        0,
+                    "Misaligned bytes?");
+
+        m.items =
+            reinterpret_cast<T*>(new_bytes.unchecked_address_of_first_item());
+        m.capacity = new_bytes.size() / sizeof(T);
     }
 
     [[nodiscard]] constexpr size_t capacity() const OKAYLIB_NOEXCEPT
     {
-        return m.allocated_spots.size();
+        return m.capacity;
     }
 
     [[nodiscard]] constexpr bool is_empty() const OKAYLIB_NOEXCEPT
@@ -367,13 +413,12 @@ class arraylist_t
 
     constexpr void clear() OKAYLIB_NOEXCEPT
     {
-        if constexpr (!std::is_trivially_destructible_v<T>) {
-            for (size_t i = 0; i < m.spots_occupied; ++i) {
-                m.allocated_spots.data()[i].~T();
-            }
-        }
+        if (this->capacity() == 0) [[unlikely]]
+            return;
 
-        m.spots_occupied = 0;
+        this->call_destructor_on_all_items();
+
+        m.size = 0;
     }
 
     /// Does not reclaim unused memory when shrinking
@@ -386,56 +431,56 @@ class arraylist_t
         -> std::enable_if_t<is_infallible_constructible_v<T, args_t...>,
                             status<alloc::error>>
     {
-        if (m.allocated_spots.size() == 0) {
-            auto status = make_first_allocation(new_size * sizeof(T));
-            if (!status.okay()) {
-                return status;
-            }
-            auto& spots = m.allocated_spots;
-            __ok_assert(spots.size() >= new_size,
-                        "Allocator did not return enough memory to arraylist");
-            if constexpr (std::is_trivially_default_constructible_v<T> &&
-                          sizeof...(args_t) == 0) {
-                memfill(reinterpret_as_bytes(spots), 0);
-            } else {
-                for (size_t i = 0; i < new_size; ++i) {
-                    ok::make_into_uninitialized<T>(
-                        spots.data()[i], std::forward<args_t>(args)...);
-                }
-            }
-            m.spots_occupied = new_size;
+        if (this->size() == new_size) [[unlikely]] {
             return alloc::error::okay;
         }
 
-        if (m.spots_occupied == new_size) [[unlikely]] {
-            return alloc::error::okay;
-        } else if (new_size == 0) [[unlikely]] {
+        if (new_size == 0) [[unlikely]] {
             clear();
             return alloc::error::okay;
         }
 
-        auto& spots = m.allocated_spots;
-        const bool shrinking = m.spots_occupied > new_size;
+        if (this->capacity() == 0) {
+            auto status = make_first_allocation(new_size * sizeof(T));
+            if (!status.okay()) {
+                return status;
+            }
+            __ok_assert(this->capacity() >= new_size,
+                        "Allocator did not return enough memory to arraylist");
+            if constexpr (std::is_trivially_default_constructible_v<T> &&
+                          sizeof...(args_t) == 0) {
+                std::memset(m.items, 0, sizeof(T) * new_size);
+            } else {
+                for (size_t i = 0; i < new_size; ++i) {
+                    ok::make_into_uninitialized<T>(
+                        m.items[i], std::forward<args_t>(args)...);
+                }
+            }
+            m.size = new_size;
+            return alloc::error::okay;
+        }
+
+        const bool shrinking = this->size() > new_size;
 
         if (shrinking) {
             if constexpr (!std::is_trivially_destructible_v<T>) {
-                for (size_t i = new_size; i < m.spots_occupied; ++i) {
-                    spots[i].~T();
+                for (size_t i = new_size; i < this->size(); ++i) {
+                    m.items[i].~T();
                 }
             }
-            m.spots_occupied = new_size;
+            m.size = new_size;
         } else {
             // growing amount
             if (capacity() < new_size) {
                 status<alloc::error> status =
-                    reallocate(spots, (new_size - capacity()) * sizeof(T), 0);
+                    reallocate((new_size - capacity()) * sizeof(T), 0);
 
                 if (!status.okay())
                     return status;
             }
 
             // reallocation worked, right?
-            __ok_internal_assert(spots.size() >= new_size);
+            __ok_internal_assert(this->size() >= new_size);
 
             // initialize new elements
             if constexpr (std::is_trivially_default_constructible_v<T> &&
@@ -443,16 +488,16 @@ class arraylist_t
                 // manually zero memory
                 // TODO: some ifdef here maybe to avoid zeroing based on build
                 // option? or a template param?
-                std::memset(spots.data() + m.spots_occupied, 0,
-                            (new_size - m.spots_occupied) * sizeof(T));
+                std::memset(m.items + this->size(), 0,
+                            (new_size - this->size()) * sizeof(T));
             } else {
-                for (size_t i = m.spots_occupied; i < new_size; ++i) {
+                for (size_t i = this->size(); i < new_size; ++i) {
                     ok::make_into_uninitialized<T>(
-                        spots.data()[i], std::forward<args_t>(args)...);
+                        m.items[i], std::forward<args_t>(args)...);
                 }
             }
 
-            m.spots_occupied = new_size;
+            m.size = new_size;
         }
 
         return alloc::error::okay;
@@ -463,16 +508,17 @@ class arraylist_t
     {
         shrink_to_reclaim_unused_memory();
 
-        if (m.allocated_spots.size() == 0) [[unlikely]] {
-            __ok_internal_assert(m.spots_occupied == 0);
+        if (this->capacity() == 0) [[unlikely]] {
+            __ok_internal_assert(m.size == 0);
             return nullopt;
         }
 
-        auto out = m.allocated_spots.subslice({.length = m.spots_occupied});
+        opt out = raw_slice(*m.items, m.size);
 
         // we no longer own the memory
-        m.allocated_spots = raw_slice_create_null_empty_unsafe<T>();
-        m.spots_occupied = 0;
+        m.items = nullptr;
+        m.capacity = 0;
+        m.size = 0;
 
         return out;
     }
@@ -482,9 +528,9 @@ class arraylist_t
         -> std::enable_if_t<
             is_constructible_v<T, args_t...>,
             // append may return the error type from an erroring constructor
-            decltype(insert_at(size(), std::forward<args_t>(args)...))>
+            decltype(insert_at(this->size(), std::forward<args_t>(args)...))>
     {
-        return insert_at(size(), std::forward<args_t>(args)...);
+        return insert_at(this->size(), std::forward<args_t>(args)...);
     }
 
     /// Returns an error only if allocation to expand space for the new items
@@ -496,12 +542,13 @@ class arraylist_t
         static_assert(
             is_infallible_constructible_v<T, value_type_for<other_range_t>>,
             "Cannot append the given range: the contents of the arraylist "
-            "cannot (definitely) be constructed from the contents of the given "
-            "range.");
+            "cannot be constructed from the contents of the given range (at "
+            "least not without a potential error at each construction).");
         static_assert(!detail::range_marked_infinite_v<other_range_t>,
                       "Cannot append an infinite range.");
 
         __ok_internal_assert(this->capacity() >= this->size());
+
         if constexpr (detail::range_definition_has_size_v<other_range_t>) {
             const size_t size = ok::size(range);
             const size_t extra_space = this->capacity() - this->size();
@@ -543,21 +590,18 @@ class arraylist_t
             return res.err();
         }
 
-        auto& maybe_defined = res.release_ref();
-        uint8_t* memory = maybe_defined.data();
-        const size_t bytes_allocated = maybe_defined.size();
+        bytes_t& memory = res.release_ref();
+        m.items =
+            reinterpret_cast<T*>(memory.unchecked_address_of_first_item());
+        m.capacity = memory.size() / sizeof(T);
 
-        const size_t spots_allocated = bytes_allocated / sizeof(T);
-
-        m.allocated_spots =
-            raw_slice(*reinterpret_cast<T*>(memory), spots_allocated);
         return alloc::error::okay;
     }
 
     /// "spots" is the currently allocated spots, including uninitialized
     /// capacity. it is modified by this function
     [[nodiscard]] constexpr status<alloc::error>
-    reallocate(slice<T>& spots, size_t required_bytes, size_t preferred_bytes)
+    reallocate(size_t required_bytes, size_t preferred_bytes)
     {
         using namespace alloc;
         const auto realloc_flags = flags::leave_nonzeroed | flags::expand_back;
@@ -565,12 +609,12 @@ class arraylist_t
         if constexpr (!std::is_trivially_copyable_v<T>) {
             // if we're not trivially copyable, dont let the allocator do
             // the memcpying, we will do it ourselves after
-
             result_t<potentially_in_place_reallocation_t> res =
                 reallocate_in_place_orelse_keep_old_nocopy(
                     *m.backing_allocator,
                     reallocate_extended_request_t{
-                        .memory = reinterpret_as_bytes(spots),
+                        .memory = reinterpret_as_bytes(
+                            raw_slice(*m.items, this->capacity())),
                         .required_bytes_back = required_bytes,
                         .preferred_bytes_back = preferred_bytes,
                         .flags = realloc_flags | flags::in_place_orelse_fail,
@@ -584,48 +628,53 @@ class arraylist_t
             if (reallocation.was_in_place) {
                 // sanity checks
                 __ok_assert(
-                    spots.data() ==
-                        reinterpret_cast<T*>(reallocation.memory.data()),
+                    m.items == reinterpret_cast<T*>(
+                                   reallocation.memory
+                                       .unchecked_address_of_first_item()),
                     "Reallocation was supposedly in-place, but returned a "
                     "different pointer.");
                 __ok_assert(reallocation.bytes_offset_front == 0,
                             "No front reallocation was done in arraylist_t but "
                             "some byte offset was given by allocator.");
 
-                spots =
-                    raw_slice(*reinterpret_cast<T*>(reallocation.memory.data()),
-                              reallocation.memory.size() / sizeof(T));
+                m.capacity = reallocation.memory.size() / sizeof(T);
             } else {
                 // perform move
-                T* const src = spots.data();
-                T* const dest =
-                    reinterpret_cast<T*>(reallocation.memory.data());
+                T* const src = m.items;
+                T* const dest = reinterpret_cast<T*>(
+                    reallocation.memory.unchecked_address_of_first_item());
 
                 if constexpr (std::is_trivially_copyable_v<T>) {
                     std::memcpy((void*)dest, (void*)src,
                                 m.spots_occupied * sizeof(T));
                 } else {
                     for (size_t i = 0; i < m.spots_occupied; ++i) {
-                        new (dest + i) T(std::move(src[i]));
+                        T& src_item = src[i];
+                        new (dest + i) T(std::move(src_item));
+                        if constexpr (!std::is_trivially_destructible_v<T>) {
+                            src_item.~T();
+                        }
                     }
                 }
 
                 // free old allocation
-                m.backing_allocator->deallocate(reinterpret_as_bytes(spots));
+                m.backing_allocator->deallocate(
+                    reinterpret_as_bytes(raw_slice(*m.items, m.capacity)));
 
-                spots =
-                    raw_slice(*dest, reallocation.memory.size() / sizeof(T));
+                m.items = dest;
+                m.capacity = reallocation.memory.size() / sizeof(T);
             }
             return alloc::error::okay;
         } else {
+            const size_t capacity_bytes = this->capacity() * sizeof(T);
             result_t<bytes_t> res =
                 m.backing_allocator->reallocate(reallocate_request_t{
-                    .memory = reinterpret_as_bytes(spots),
-                    .new_size_bytes = spots.size_bytes() + required_bytes,
+                    .memory = reinterpret_as_bytes(
+                        raw_slice(*m.items, this->capacity())),
+                    .new_size_bytes = capacity_bytes + required_bytes,
                     .preferred_size_bytes =
-                        preferred_bytes == 0
-                            ? 0
-                            : spots.size_bytes() + preferred_bytes,
+                        preferred_bytes == 0 ? 0
+                                             : capacity_bytes + preferred_bytes,
                     .flags = realloc_flags,
                 });
 
@@ -633,30 +682,35 @@ class arraylist_t
                 return res.err();
             }
 
-            auto& bytes = res.release_ref();
-            T* mem = reinterpret_cast<T*>(bytes.data());
-            const size_t bytes_allocated = bytes.size();
+            bytes_t& bytes = res.release_ref();
 
-            spots = raw_slice(*mem, bytes_allocated / sizeof(T));
+            m.items =
+                reinterpret_cast<T*>(bytes.unchecked_address_of_first_item());
+            m.capacity = bytes.size() / sizeof(T);
             return alloc::error::okay;
+        }
+    }
+
+    constexpr void call_destructor_on_all_items() OKAYLIB_NOEXCEPT
+    {
+        __ok_internal_assert(this->capacity() > 0);
+        if (!std::is_trivially_destructible_v<T>) {
+            for (size_t i = 0; i < m.spots_occupied; ++i) {
+                m.items[i].~T();
+            }
         }
     }
 
     constexpr void destroy() OKAYLIB_NOEXCEPT
     {
-        if (m.allocated_spots.is_empty()) {
+        if (this->capacity() == 0) {
             return;
         }
 
-        if (!std::is_trivially_destructible_v<T>) {
-            T* mem = m.allocated_spots.data();
-            for (size_t i = 0; i < m.spots_occupied; ++i) {
-                mem[i].~T();
-            }
-        }
+        this->call_destructor_on_all_items();
 
         m.backing_allocator->deallocate(
-            reinterpret_as_bytes(m.allocated_spots));
+            reinterpret_as_bytes(raw_slice(*m.items, m.capacity)));
     }
 };
 
@@ -675,9 +729,10 @@ template <typename T> struct empty_t
     operator()(backing_allocator_t& allocator) const noexcept
     {
         return typename arraylist_t<T, backing_allocator_t>::members_t{
-            .allocated_spots = raw_slice_create_null_empty_unsafe<T>(),
-            .spots_occupied = 0,
-            .backing_allocator = ok::addressof(allocator),
+            .items = nullptr,
+            .capacity = 0,
+            .size = 0,
+            .backing_allocator = 0,
         };
     }
 };
@@ -714,13 +769,14 @@ template <typename T> struct spots_preallocated_t
         }
 
         bytes_t& bytes = res.release_ref();
-        auto& start = *reinterpret_cast<T*>(bytes.data());
+        T* start =
+            reinterpret_cast<T*>(bytes.unchecked_address_of_first_item());
         const size_t num_bytes_allocated = bytes.size();
 
         new (ok::addressof(output)) output_t(typename output_t::members_t{
-            .allocated_spots =
-                ok::raw_slice(start, num_bytes_allocated / sizeof(T)),
-            .spots_occupied = 0,
+            .items = start,
+            .capacity = num_bytes_allocated / sizeof(T),
+            .size = 0,
             .backing_allocator = ok::addressof(allocator),
         });
         return alloc::error::okay;
@@ -775,23 +831,22 @@ struct copy_items_from_range_t
         }
 
         auto& bytes = res.release_ref();
-        T* const memory = reinterpret_cast<T*>(bytes.data());
+        T* const memory =
+            reinterpret_cast<T*>(bytes.unchecked_address_of_first_item());
         const size_t bytes_allocated = bytes.size();
 
         // TODO: if contiguous range and trivially copyable, do memcpy
         size_t i = 0;
         for (auto cursor = ok::begin(range); ok::is_inbounds(range, cursor);
              ok::increment(range, cursor)) {
-            // perform a copy either through
-            const auto& item = ok::iter_get_temporary_ref(range, cursor);
-            new (memory + i) T(item);
+            new (memory + i) T(ok::iter_get_temporary_ref(range, cursor));
             ++i;
         }
 
         new (ok::addressof(output)) output_t(typename output_t::members_t{
-            .allocated_spots = raw_slice(*reinterpret_cast<T*>(memory),
-                                         bytes_allocated / sizeof(T)),
-            .spots_occupied = num_items,
+            .items = reinterpret_cast<T*>(memory),
+            .capacity = bytes_allocated / sizeof(T),
+            .size = num_items,
             .backing_allocator = ok::addressof(allocator),
         });
 

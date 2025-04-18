@@ -29,8 +29,8 @@ free_everything_in_block_allocator_buffer(bytes_t memory, size_t blocksize,
 {
     free_block_t* free_list_iter = initial_iter;
     for (size_t i = 0; i < memory.size() / blocksize; ++i) {
-        auto* ptr =
-            reinterpret_cast<free_block_t*>(memory.data() + (i * blocksize));
+        auto* ptr = reinterpret_cast<free_block_t*>(
+            memory.unchecked_address_of_first_item() + (i * blocksize));
         __ok_internal_assert(!(uintptr_t(ptr) % alignof(free_block_t)));
         *ptr = free_block_t{.prev = free_list_iter};
         free_list_iter = ptr;
@@ -194,7 +194,8 @@ constexpr void block_allocator_t<allocator_impl_t>::grow() OKAYLIB_NOEXCEPT
     bytes_t& newmem = reallocation.release_ref();
     // there may be extra space at the end
     const size_t padding = m.memory.size() % m.blocksize;
-    uint8_t* const first_new_byte = newmem.data() + m.memory.size() - padding;
+    uint8_t* const first_new_byte =
+        newmem.unchecked_address_of_first_item() + m.memory.size() - padding;
     const size_t additional_size = newmem.size() - m.memory.size() + padding;
 
     m.free_head =
@@ -248,11 +249,15 @@ inline void block_allocator_t<allocator_impl_t>::impl_deallocate(bytes_t bytes)
     __ok_assert(ok_memcontains(.outer = m.memory, .inner = bytes),
                 "Attempt to free bytes from block allocator which do not all "
                 "belong to that allocator");
-    __ok_assert((bytes.data() - m.memory.data()) % m.blocksize == 0,
+    __ok_assert((bytes.unchecked_address_of_first_item() -
+                 m.memory.unchecked_address_of_first_item()) %
+                        m.blocksize ==
+                    0,
                 "Attempt to free something from block allocator that is not "
                 "aligned to the start of a block.");
 
-    auto* const free_block = reinterpret_cast<free_block_t*>(bytes.data());
+    auto* const free_block = reinterpret_cast<free_block_t*>(
+        bytes.unchecked_address_of_first_item());
     free_block->prev = std::exchange(m.free_head, free_block);
 }
 
@@ -264,9 +269,18 @@ block_allocator_t<allocator_impl_t>::impl_reallocate(
     __ok_assert(ok_memcontains(.outer = m.memory, .inner = request.memory),
                 "Attempt to realloc bytes from block allocator which do not "
                 "all belong to that allocator");
-    __ok_assert((request.memory.data() - m.memory.data()) % m.blocksize == 0,
+    __ok_assert((request.memory.unchecked_address_of_first_item() -
+                 m.memory.unchecked_address_of_first_item()) %
+                        m.blocksize ==
+                    0,
                 "Attempt to realloc something from block allocator that is not "
                 "aligned to the start of a block.");
+    if (request.memory.is_empty()) [[unlikely]] {
+        __ok_assert(!request.memory.is_empty(),
+                    "Attempt to reallocate a zero-sized slice of bytes with "
+                    "block allocator.");
+        return alloc::error::unsupported;
+    }
     if (request.new_size_bytes > m.blocksize) [[unlikely]] {
         return alloc::error::oom;
     }
@@ -277,11 +291,13 @@ block_allocator_t<allocator_impl_t>::impl_reallocate(
             : ok::min(request.preferred_size_bytes, m.blocksize);
 
     if (!(request.flags & alloc::flags::leave_nonzeroed)) {
-        std::memset(request.memory.data() + request.memory.size(), 0,
-                    newsize - request.memory.size());
+        std::memset(request.memory.unchecked_address_of_first_item() +
+                        request.memory.size(),
+                    0, newsize - request.memory.size());
     }
 
-    return ok::raw_slice(*request.memory.data(), newsize);
+    return ok::raw_slice(*request.memory.unchecked_address_of_first_item(),
+                         newsize);
 }
 
 namespace block_allocator {

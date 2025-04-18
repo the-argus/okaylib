@@ -78,7 +78,7 @@ const okaylib_headers = &[_][]const u8{
     "detail/template_util/uninitialized_storage.h",
 
     "detail/traits/is_complete.h",
-    "detail/traits/is_container.h",
+    "detail/traits/is_std_container.h",
     "detail/traits/is_derived_from.h",
     "detail/traits/is_instance.h",
     "detail/traits/is_nonthrowing.h",

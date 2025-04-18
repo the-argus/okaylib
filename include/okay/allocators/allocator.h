@@ -412,7 +412,8 @@ class allocator_t
         if (!allocation_result.okay()) [[unlikely]] {
             return return_type(allocation_result.err());
         }
-        uint8_t* object_start = allocation_result.release_ref().data();
+        uint8_t* object_start =
+            allocation_result.release_ref().unchecked_address_of_first_item();
 
         __ok_assert(uintptr_t(object_start) % alignof(actual_t) == 0,
                     "Misaligned memory produced by allocator");
@@ -589,7 +590,8 @@ ok::allocator_t::make(args_t&&... args) OKAYLIB_NOEXCEPT
         }
     }
 
-    uint8_t* object_start = allocation_result.release_ref().data();
+    uint8_t* object_start =
+        allocation_result.release_ref().unchecked_address_of_first_item();
 
     __ok_assert(uintptr_t(object_start) % alignof(actual_t) == 0,
                 "Misaligned memory produced by allocator");
