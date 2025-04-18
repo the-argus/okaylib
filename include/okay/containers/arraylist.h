@@ -241,7 +241,7 @@ class arraylist_t
     }
 
     [[nodiscard]] constexpr status<alloc::error>
-    increase_capacity_by(size_t new_spots) OKAYLIB_NOEXCEPT
+    increase_capacity_by_at_least(size_t new_spots) OKAYLIB_NOEXCEPT
     {
         if (new_spots == 0) [[unlikely]] {
             // TODO: can we just guarantee that all allocators do this?
@@ -359,13 +359,8 @@ class arraylist_t
         return remove(this->size() - 1);
     }
 
-    [[nodiscard]] constexpr const backing_allocator_t&
+    [[nodiscard]] constexpr backing_allocator_t&
     allocator() const OKAYLIB_NOEXCEPT
-    {
-        return *m.backing_allocator;
-    }
-
-    [[nodiscard]] constexpr backing_allocator_t& allocator() OKAYLIB_NOEXCEPT
     {
         return *m.backing_allocator;
     }

@@ -70,6 +70,17 @@ static_assert(log2_uint(16U) == 4);
 static_assert(log2_uint(32U) == 5);
 static_assert(log2_uint(64U) == 6);
 
+[[nodiscard]] constexpr size_t
+two_to_the_power_of(const size_t exponent) noexcept
+{
+    return 1UL << exponent;
+}
+
+static_assert(two_to_the_power_of(0) == 1);
+static_assert(two_to_the_power_of(1) == 2);
+static_assert(two_to_the_power_of(2) == 4);
+static_assert(two_to_the_power_of(3) == 8);
+
 } // namespace ok
 
 #endif

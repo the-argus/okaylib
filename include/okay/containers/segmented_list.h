@@ -41,7 +41,7 @@ template <typename T, typename backing_allocator_t> class segmented_list_t
         }
 
         size_t total = 0;
-        size_t blocksize = 2 << m.initial_size_exponent;
+        size_t blocksize = two_to_the_power_of(m.initial_size_exponent);
         for (size_t i = 0; i < m.blocklist->num_blocks; ++i) {
             total += blocksize;
             blocksize *= 2;
@@ -49,6 +49,218 @@ template <typename T, typename backing_allocator_t> class segmented_list_t
 
         return total;
     }
+
+    [[nodiscard]] constexpr size_t size() const noexcept
+    {
+        // if no blocklist, size is zero, otherwise it is m.size
+        // (enables encoding other info in size when blocklist is null)
+        return bool(m.blocklist) * m.size;
+    }
+
+    [[nodiscard]] constexpr bool is_empty() const OKAYLIB_NOEXCEPT
+    {
+        return this->size() == 0;
+    }
+
+    constexpr opt<T> pop_last() OKAYLIB_NOEXCEPT
+    {
+        if (is_empty())
+            return {};
+        return this->remove(this->size() - 1);
+    }
+
+    [[nodiscard]] constexpr backing_allocator_t&
+    allocator() const OKAYLIB_NOEXCEPT
+    {
+        return *m.backing_allocator;
+    }
+
+    [[nodiscard]] constexpr const T&
+    operator[](size_t index) const& OKAYLIB_NOEXCEPT
+    {
+        if (index >= this->size()) [[unlikely]] {
+            __ok_abort("Out of bounds access to ok::segmented_list_t");
+        }
+
+        const size_t block = block_index(index);
+        const size_t sub_index = item_index(index, block);
+        return m.blocklist->blocks[block][sub_index];
+    }
+
+    [[nodiscard]] constexpr T& operator[](size_t index) & OKAYLIB_NOEXCEPT
+    {
+        if (index >= this->size()) [[unlikely]] {
+            __ok_abort("Out of bounds access to ok::segmented_list_t");
+        }
+
+        const size_t block = block_index(index);
+        const size_t sub_index = item_index(index, block);
+        return m.blocklist->blocks[block][sub_index];
+    }
+
+    constexpr segmented_list_t(segmented_list_t&& other) noexcept
+        : m(std::move(other.m))
+    {
+        other.m.blocklist = nullptr;
+    }
+
+    constexpr segmented_list_t& operator=(segmented_list_t&& other) noexcept
+    {
+        this->destroy();
+        this->m = std::move(other.m);
+        other.m.blocklist = nullptr;
+    }
+
+    [[nodiscard]] constexpr status<alloc::error>
+    ensure_additional_capacity() OKAYLIB_NOEXCEPT
+    {
+        const size_t size = this->size();
+        const size_t capacity = this->capacity();
+        __ok_internal_assert(size <= capacity);
+
+        if (size != capacity) {
+            return alloc::error::okay;
+        }
+
+        const size_t bytes_needed =
+            (m.blocklist ? size_of_block_at(m.blocklist->num_blocks)
+                         : two_to_the_power_of(m.initial_size_exponent)) *
+            sizeof(T);
+
+        auto new_buffer_result = m.allocator->allocate(alloc::request_t{
+            .num_bytes = bytes_needed,
+            .alignment = alignof(T),
+            .flags = alloc::flags::leave_nonzeroed,
+        });
+
+        if (!new_buffer_result.okay()) [[unlikely]] {
+            return new_buffer_result.err();
+        }
+
+        bytes_t& new_buffer_bytes = new_buffer_result.release_ref();
+        maydefer free_new_buffer = [&] {
+            m.allocator->deallocate(new_buffer_bytes);
+        };
+
+        if (!m.blocklist) {
+            auto blocklist_result = m.allocator->allocate(alloc::request_t{
+                .num_bytes = sizeof(blocklist_t) + (sizeof(T*) * m.size),
+                .alignment = alignof(blocklist_t),
+                .flags = alloc::flags::leave_nonzeroed,
+            });
+
+            if (!blocklist_result.okay()) [[unlikely]] {
+                return blocklist_result.err();
+            }
+
+            bytes_t& blocklist_bytes = blocklist_result.release_ref();
+            m.blocklist =
+                reinterpret_cast<blocklist_t*>(blocklist_bytes.data());
+
+            m.blocklist->num_blocks = 0;
+            m.blocklist->capacity =
+                (blocklist_bytes.size() - sizeof(blocklist_t)) / sizeof(T*);
+            // m.size used to encode initial number of block pointers to
+            // allocate, now it actually stores number of items in this
+            // segmented list
+            m.size = 0;
+        } else if (m.blocklist->capacity <= m.blocklist->num_blocks) {
+            auto new_blocklist_result =
+                m.allocator->reallocate(alloc::reallocate_request_t{
+                    .preferred_size_bytes =
+                        sizeof(blocklist_t) +
+                        (sizeof(T*) * m.blocklist->capacity * 2),
+                    .new_size_bytes = sizeof(blocklist_t) +
+                                      (sizeof(T*) * m.blocklist->capacity + 1),
+                    .flags = alloc::flags::expand_back,
+                });
+
+            if (!new_blocklist_result.okay()) [[unlikely]] {
+                return new_blocklist_result.err();
+            }
+
+            bytes_t& blocklist_bytes = new_blocklist_result.release_ref();
+            m.blocklist =
+                reinterpret_cast<blocklist_t*>(blocklist_bytes.data());
+            m.blocklist->capacity =
+                (blocklist_bytes.size() - sizeof(blocklist_t)) / sizeof(T*);
+        }
+
+        __ok_internal_assert(m.blocklist->capacity > m.blocklist->num_blocks);
+
+        free_new_buffer.cancel();
+
+        m.blocklist->blocks[m.blocklist->num_blocks] =
+            reinterpret_cast<T*>(new_buffer_bytes.data());
+        m.blocklist->num_blocks++;
+
+        return alloc::error::okay;
+    }
+
+    constexpr void clear() OKAYLIB_NOEXCEPT
+    {
+        if (this->is_empty()) [[unlikely]] {
+            return;
+        }
+        if constexpr (!std::is_trivially_destructible_v<T>) {
+
+            size_t block_size = two_to_the_power_of(m.initial_size_exponent);
+            size_t visited = 0;
+            for (size_t block_idx = 0; block_idx < m.blocklist->num_blocks;
+                 ++block_idx) {
+                for (size_t i = 0; i < block_size && visited < this->size();
+                     ++i) {
+                    m.blocklist->blocks[block_idx][i].~T();
+                    ++visited;
+                }
+                block_size *= 2;
+            }
+        }
+
+        // if no blocklist, then m.size is encoding the number of blocklist
+        // pointers to allocate and needs to be preserved between calls to
+        // clear()
+        __ok_internal_assert(m.blocklist);
+        m.size = 0;
+    }
+
+    constexpr T remove(size_t idx) OKAYLIB_NOEXCEPT;
+
+    constexpr T remove_and_swap_last(size_t idx) OKAYLIB_NOEXCEPT
+    {
+        if (idx > this->size()) [[unlikely]] {
+            __ok_abort("Out of bounds access to segmented_list_t in "
+                       "remove_and_swap_last()");
+        }
+    }
+
+    constexpr T& last() & OKAYLIB_NOEXCEPT
+    {
+        if (this->is_empty()) [[unlikely]] {
+            __ok_abort(
+                "Attempt to get last() item from empty segmented_list_t.");
+        }
+        const size_t last_block_idx = block_index(this->size());
+        const size_t sub_item_idx = item_index(this->size(), last_block_idx);
+        return m.blocklist->blocks[last_block_idx][sub_item_idx];
+    }
+
+    constexpr T& last() const& OKAYLIB_NOEXCEPT
+    {
+        return const_cast<segmented_list_t*>(this)->last();
+    }
+
+    constexpr void shrink_to_reclaim_unused_memory() OKAYLIB_NOEXCEPT;
+
+    [[nodiscard]] constexpr status<alloc::error>
+    increase_capacity_by_at_least(size_t new_spots) OKAYLIB_NOEXCEPT;
+
+    template <typename... args_t>
+    [[nodiscard]] constexpr auto insert_at(const size_t idx,
+                                           args_t&&... args) OKAYLIB_NOEXCEPT;
+
+    template <typename... args_t>
+    [[nodiscard]] constexpr auto append(args_t&&... args) OKAYLIB_NOEXCEPT;
 
   private:
     struct blocklist_t
@@ -70,35 +282,89 @@ template <typename T, typename backing_allocator_t> class segmented_list_t
         }
     };
 
-    [[nodiscard]] static constexpr size_t
-    num_blocks_needed_for_spots(size_t initial_size_exponent,
-                                size_t num_spots) noexcept
+    constexpr void destroy()
     {
-        if (num_spots == 0) [[unlikely]] {
-            return 0;
+        if (!m.blocklist)
+            return;
+
+        size_t visited = 0;
+        for (size_t i = 0; i < m.blocklist->num_blocks; ++i) {
+            if constexpr (!std::is_trivially_destructible_v<T>) {
+                auto items =
+                    ok::raw_slice(*m.blocklist->blocks[i], size_of_block_at(i));
+
+                for (size_t j = 0; j < items.size() && visited < this->size();
+                     ++j) {
+                    items[j].~T();
+                    ++visited;
+                }
+                m.allocator->deallocate(reinterpret_as_bytes(items));
+            } else {
+                auto bytes = ok::raw_slice(
+                    *reinterpret_cast<uint8_t*>(m.blocklist->blocks[i]),
+                    size_of_block_at(i) * sizeof(T));
+                m.allocator->deallocate(bytes);
+            }
         }
-        // if initial_size_exponent was zero, meaning our first block has one
-        // item, the equation is:
-        // num_blocks = log2_uint(num_spots) + 1
-        //
-        // accounting for initial_size_exponent by offsetting box and shelf
-        // index:
-        return (ok::log2_uint(
-                    size_t(num_spots + (2UL << initial_size_exponent))) -
-                initial_size_exponent) +
-               1;
+
+        auto bytes = ok::raw_slice(m.blocklist,
+                                   sizeof(blocklist_t) +
+                                       (m.blocklist->capacity * sizeof(T*)));
+        m.allocator->deallocate(bytes);
     }
 
-    static_assert(num_blocks_needed_for_spots(1, 1) == 1);
-    static_assert(num_blocks_needed_for_spots(2, 4) == 1);
-    static_assert(num_blocks_needed_for_spots(2, 8) == 2);
-    static_assert(num_blocks_needed_for_spots(2, 12) == 2);
-    static_assert(num_blocks_needed_for_spots(2, 13) == 3);
+    [[nodiscard]] constexpr size_t
+    block_index(size_t requested_item_index) const noexcept
+    {
+        const size_t initial_size =
+            two_to_the_power_of(m.initial_size_exponent);
+        return log2_uint(requested_item_index + initial_size) -
+               m.initial_size_exponent;
+    }
+
+    [[nodiscard]] constexpr size_t item_index(size_t requested_item_index,
+                                              size_t block_index) const noexcept
+    {
+        const size_t initial_size =
+            two_to_the_power_of(m.initial_size_exponent);
+        return requested_item_index + initial_size -
+               two_to_the_power_of(m.initial_size_exponent + block_index);
+    }
+
+    [[nodiscard]] static constexpr size_t
+    num_blocks_needed_for_spots_impl(size_t initial_size_exponent,
+                                     size_t num_spots) noexcept
+    {
+        const size_t initial_size = two_to_the_power_of(initial_size_exponent);
+        return log2_uint_ceil(num_spots + initial_size) - initial_size_exponent;
+    }
+
+    [[nodiscard]] constexpr size_t
+    num_blocks_needed_for_spots(size_t num_spots) const noexcept
+    {
+        return num_blocks_needed_for_spots_impl(m.initial_size_exponent,
+                                                num_spots);
+    }
+
+    static_assert(num_blocks_needed_for_spots_impl(0, 1) == 1);
+    static_assert(num_blocks_needed_for_spots_impl(0, 2) == 2);
+    static_assert(num_blocks_needed_for_spots_impl(0, 3) == 2);
+    static_assert(num_blocks_needed_for_spots_impl(0, 4) == 3);
+    static_assert(num_blocks_needed_for_spots_impl(0, 5) == 3);
+    static_assert(num_blocks_needed_for_spots_impl(0, 6) == 3);
+    static_assert(num_blocks_needed_for_spots_impl(0, 7) == 3);
+    static_assert(num_blocks_needed_for_spots_impl(0, 8) == 4);
+
+    static_assert(num_blocks_needed_for_spots_impl(1, 1) == 1);
+    static_assert(num_blocks_needed_for_spots_impl(2, 4) == 1);
+    static_assert(num_blocks_needed_for_spots_impl(2, 8) == 2);
+    static_assert(num_blocks_needed_for_spots_impl(2, 12) == 2);
+    static_assert(num_blocks_needed_for_spots_impl(2, 13) == 3);
 
     [[nodiscard]] constexpr size_t
     size_of_block_at(size_t idx) const OKAYLIB_NOEXCEPT
     {
-        return m.initial_size << (idx + 1);
+        return two_to_the_power_of(m.initial_size_exponent + idx);
     }
 
     struct members_t
@@ -158,8 +424,8 @@ template <typename T> struct empty_t
         output.m = M{
             .blocklist = nullptr,
             .initial_size_exponent =
-                2 << ok::log2_uint_ceil(options.num_block_pointers),
-            .size = 0,
+                ok::log2_uint_ceil(options.num_initial_contiguous_spots),
+            .size = options.num_block_pointers,
             .allocator = ok::addressof(allocator),
         };
 
@@ -207,7 +473,8 @@ struct copy_items_from_range_t
 
         alloc::result_t<bytes_t> mainbuf_result =
             allocator.allocate(alloc::request_t{
-                .num_bytes = sizeof(T) * (2 << initial_size_exponent),
+                .num_bytes =
+                    sizeof(T) * (two_to_the_power_of(initial_size_exponent)),
                 .alignment = alignof(T),
                 .flags = alloc::flags::leave_nonzeroed,
             });
@@ -289,7 +556,8 @@ struct fmt::formatter<ok::segmented_list_t<T, backing_allocator_t>>
         fmt::format_to(ctx.out(), "segmented_list_t: [ ");
 
         if (segmented_list.m.blocklist) {
-            size_t block_size = 2 << segmented_list.m.initial_size_exponent;
+            size_t block_size =
+                ok::two_to_the_power_of(segmented_list.m.initial_size_exponent);
 
             for (size_t b = 0; b < segmented_list.m.blocklist->num_blocks;
                  ++b) {
