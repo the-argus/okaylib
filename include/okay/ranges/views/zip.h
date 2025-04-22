@@ -23,7 +23,7 @@ struct zip_fn_t
         // zip puts the output of each range (the input from the view) into
         // tuples. if no get() or get_ref() is provided, then there's nothing to
         // put in the tuple.
-        static_assert((... && is_input_range_v<ranges_t>),
+        static_assert((... && is_producing_range_v<ranges_t>),
                       "Cannot zip given types- they are not all input ranges");
 
         auto out =

@@ -26,9 +26,9 @@ template <typename T> constexpr bool enable_view_v = enable_view<T>::value;
 
 namespace detail {
 
-template <bool is_infinite> struct infinite_static_def_t
+template <bool infinite> struct infinite_static_def_t
 {
-    static constexpr bool infinite = is_infinite;
+    static constexpr bool is_infinite = infinite;
 };
 
 /// Conditionally inherit range_definition from this to mark as sized.
@@ -74,9 +74,9 @@ struct increment_decrement_range_t
 
 template <typename derived_range_t, typename parent_range_t, typename cursor_t>
 using propagate_increment_decrement_t = std::conditional_t<
-    detail::range_definition_has_increment_v<parent_range_t>,
+    detail::range_impls_increment_v<parent_range_t>,
     std::conditional_t<
-        detail::range_definition_has_decrement_v<parent_range_t>,
+        detail::range_impls_decrement_v<parent_range_t>,
         increment_decrement_range_t<derived_range_t, parent_range_t, cursor_t>,
         increment_only_range_t<derived_range_t, parent_range_t, cursor_t>>,
     detail::empty_t>;
@@ -111,8 +111,7 @@ template <typename derived_range_t, typename parent_range_t, typename cursor_t>
 struct propagate_offset_t
 {
     __ok_enable_if_static(cursor_t,
-                          detail::range_definition_has_offset_v<parent_range_t>,
-                          T)
+                          detail::range_impls_offset_v<parent_range_t>, T)
         offset(const derived_range_t& range, cursor_t& cursor)
     {
         detail::range_definition_inner<parent_range_t>::offset(range, cursor);
@@ -122,8 +121,8 @@ struct propagate_offset_t
 template <typename derived_range_t, typename parent_range_t, typename cursor_t>
 struct propagate_compare_t_t
 {
-    __ok_enable_if_static(
-        cursor_t, detail::range_definition_has_compare_v<parent_range_t>, T)
+    __ok_enable_if_static(cursor_t,
+                          detail::range_impls_compare_v<parent_range_t>, T)
         offset(const derived_range_t& range, const cursor_t& cursor_a,
                const cursor_t& cursor_b)
     {
@@ -142,7 +141,7 @@ struct propagate_get_set_t
             std::is_same_v<T, parent_range_t>,
             decltype(range_definition_inner<T>::get(
                 std::declval<const T&>(),
-                std::declval<const cursor_type_unchecked_for<T>>()))>
+                std::declval<const cursor_type_unchecked_for_t<T>>()))>
     {
         return range_definition_inner<T>::get(
             range
@@ -158,7 +157,7 @@ struct propagate_get_set_t
                 !std::is_const_v<std::remove_reference_t<T>>,
             decltype(range_definition_inner<T>::set(
                 std::declval<const T&>(),
-                std::declval<const cursor_type_unchecked_for<T>>(),
+                std::declval<const cursor_type_unchecked_for_t<T>>(),
                 std::forward<value_type_for<T>>(value)))>
     {
         return range_definition_inner<T>::get(
@@ -174,7 +173,7 @@ struct propagate_get_set_t
                 !std::is_const_v<std::remove_reference_t<T>>,
             decltype(range_definition_inner<T>::get_ref(
                 std::declval<T&>(),
-                std::declval<const cursor_type_unchecked_for<T>>()))>
+                std::declval<const cursor_type_unchecked_for_t<T>>()))>
     {
         return range_definition_inner<T>::get_ref(
             range
@@ -186,10 +185,10 @@ struct propagate_get_set_t
     constexpr static auto get_ref(const derived_range_t& range,
                                   const cursor_t& cursor)
         -> std::enable_if_t<
-            std::is_same_v<T, parent_range_t> && range_has_get_ref_const_v<T>,
+            std::is_same_v<T, parent_range_t> && range_can_get_ref_const_v<T>,
             decltype(range_definition_inner<T>::get_ref(
                 std::declval<const T&>(),
-                std::declval<const cursor_type_unchecked_for<T>>()))>
+                std::declval<const cursor_type_unchecked_for_t<T>>()))>
     {
         return range_definition_inner<T>::get_ref(
             range

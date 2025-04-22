@@ -13,7 +13,7 @@ constexpr indices_t indices{};
 
 template <> struct range_definition<indices_t>
 {
-    static constexpr bool infinite = true;
+    static constexpr bool is_infinite = true;
 
     static constexpr size_t begin(const indices_t& i) OKAYLIB_NOEXCEPT
     {

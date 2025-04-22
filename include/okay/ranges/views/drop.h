@@ -212,7 +212,7 @@ struct range_definition<detail::drop_view_t<input_range_t>>
             // that its only possible to go out of bounds by moving off the end,
             // and drop() cannot change what the end is for the parent, so its
             // check should remain valid.
-            static_assert(!detail::range_definition_has_decrement_v<range_t>);
+            static_assert(!detail::range_impls_decrement_v<range_t>);
             return parent_def::is_inbounds(parent_ref, c);
         }
     }

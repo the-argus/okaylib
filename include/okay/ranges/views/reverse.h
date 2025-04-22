@@ -185,7 +185,7 @@ struct range_definition<detail::reversed_view_t<input_range_t>,
         return ok::iter_copyout(parent_ref, size - (cursor + 1));
     }
 
-    __ok_enable_if_static(range_t, detail::range_has_get_ref_v<T>,
+    __ok_enable_if_static(range_t, detail::range_can_get_ref_v<T>,
                           value_type_for<range_t>&)
         get_ref(reversed_t& range, size_t cursor) OKAYLIB_NOEXCEPT
     {
@@ -198,7 +198,7 @@ struct range_definition<detail::reversed_view_t<input_range_t>,
         return ok::iter_get_ref(parent_ref, size - (cursor + 1));
     }
 
-    __ok_enable_if_static(range_t, detail::range_has_get_ref_const_v<T>,
+    __ok_enable_if_static(range_t, detail::range_can_get_ref_const_v<T>,
                           const value_type_for<range_t>&)
         get_ref(const reversed_t& range, size_t cursor) OKAYLIB_NOEXCEPT
     {

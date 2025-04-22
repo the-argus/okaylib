@@ -21,7 +21,7 @@ class std_for_view : public detail::underlying_view_type<T>::type
   public:
     static_assert(is_range_v<T>, "Cannot wrap given type for a standard for "
                                  "loop- it is not a valid range.");
-    using cursor_t = detail::cursor_type_unchecked_for<T>;
+    using cursor_t = detail::cursor_type_unchecked_for_t<T>;
     using parent_t = typename detail::underlying_view_type<T>::type;
 
   public:

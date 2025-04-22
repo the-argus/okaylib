@@ -193,7 +193,7 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>,
         }
     }
 
-    __ok_enable_if_static(range_t, detail::range_definition_has_increment_v<T>,
+    __ok_enable_if_static(range_t, detail::range_impls_increment_v<T>,
                           void)
         increment(const take_at_most_t& i, cursor_t& c) OKAYLIB_NOEXCEPT
     {
@@ -208,7 +208,7 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>,
         c.increment();
     }
 
-    __ok_enable_if_static(range_t, detail::range_definition_has_decrement_v<T>,
+    __ok_enable_if_static(range_t, detail::range_impls_decrement_v<T>,
                           void)
         decrement(const take_at_most_t& i, cursor_t& c) OKAYLIB_NOEXCEPT
     {

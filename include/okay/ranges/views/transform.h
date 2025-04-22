@@ -32,11 +32,11 @@ struct transform_fn_t
                       "Cannot transform given type- it is not a range.");
         constexpr bool can_call_with_get_ref_const =
             std::is_invocable_v<callable_t, const value_type_for<T>&> &&
-            detail::range_has_get_ref_const_v<range_t>;
+            detail::range_can_get_ref_const_v<range_t>;
         constexpr bool can_call_with_copyout =
             std::is_invocable_v<callable_t, value_type_for<T>> &&
             (detail::range_has_get_v<T> ||
-             detail::range_has_get_ref_const_v<T>);
+             detail::range_can_get_ref_const_v<T>);
         static_assert(
             can_call_with_get_ref_const || can_call_with_copyout,
             "Given transformation function and given range do not match up: "
@@ -44,12 +44,12 @@ struct transform_fn_t
             "nor `func(ok::iter_copyout(const range))`. This may also be "
             "caused by a lambda being marked \"mutable\".");
         constexpr bool const_ref_call_doesnt_return_void =
-            (detail::range_has_get_ref_const_v<T> &&
+            (detail::range_can_get_ref_const_v<T> &&
              returns_transformed_type<callable_t,
                                       const value_type_for<T>&>::value);
         constexpr bool copied_value_call_doesnt_return_void =
             ((detail::range_has_get_v<T> ||
-              detail::range_has_get_ref_const_v<T>) &&
+              detail::range_can_get_ref_const_v<T>) &&
              returns_transformed_type<callable_t, value_type_for<T>>::value);
         static_assert(const_ref_call_doesnt_return_void ||
                           copied_value_call_doesnt_return_void,
@@ -111,7 +111,7 @@ struct range_definition<detail::transformed_view_t<input_range_t, callable_t>>
     using transformed_t = detail::transformed_view_t<input_range_t, callable_t>;
     using cursor_t = cursor_type_for<range_t>;
 
-    static_assert(detail::is_input_range_v<range_t>,
+    static_assert(detail::is_producing_range_v<range_t>,
                   "Cannot transform something which is not an input range.");
 
     template <typename T>
@@ -119,8 +119,8 @@ struct range_definition<detail::transformed_view_t<input_range_t, callable_t>>
     get_and_transform(T& t, const cursor_t& cursor) OKAYLIB_NOEXCEPT
     {
         using inner_def = detail::range_definition_inner<range_t>;
-        if constexpr (detail::range_has_get_ref_v<range_t> ||
-                      detail::range_has_get_ref_const_v<range_t>) {
+        if constexpr (detail::range_can_get_ref_v<range_t> ||
+                      detail::range_can_get_ref_const_v<range_t>) {
             return t.transformer_callable()(inner_def::get_ref(
                 t.template get_view_reference<T, range_t>(), cursor));
         } else {

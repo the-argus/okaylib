@@ -572,7 +572,7 @@ struct copy_booleans_from_range_t
         static_assert(::ok::detail::is_derived_from_v<backing_allocator_t,
                                                       ok::allocator_t>,
                       "Invalid allocator passed to copy_booleans_from_range");
-        static_assert(::ok::detail::is_input_range_v<input_range_t>,
+        static_assert(::ok::detail::is_producing_range_v<input_range_t>,
                       "Non-range object passed to second argument of "
                       "copy_booleans_from_range.");
         return ok::make(*this, allocator, range);
@@ -584,7 +584,7 @@ struct copy_booleans_from_range_t
                      backing_allocator_t& allocator,
                      const input_range_t& range) const OKAYLIB_NOEXCEPT
     {
-        static_assert(ok::detail::range_definition_has_size_v<input_range_t>,
+        static_assert(ok::detail::range_impls_size_v<input_range_t>,
                       "Size of range unknown, refusing to use its items in "
                       "bit_arraylist::copy_booleans_from_range constructor.");
         static_assert(

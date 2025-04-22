@@ -27,13 +27,13 @@ struct ranges_equal_fn_t
         static_assert(is_range_v<range_lhs_t>,
                       "Cannot compare given type on left-hand side because it "
                       "is not a range.");
-        static_assert(is_input_range_v<range_lhs_t>,
+        static_assert(is_producing_range_v<range_lhs_t>,
                       "Cannot compare given type on left-hand side because it "
                       "is not an input range.");
         static_assert(is_range_v<range_rhs_t>,
                       "Cannot compare given type on right-hand side because it "
                       "is not a range.");
-        static_assert(is_input_range_v<range_rhs_t>,
+        static_assert(is_producing_range_v<range_rhs_t>,
                       "Cannot compare given type on right-hand side because it "
                       "is not an input range.");
         static_assert(
@@ -48,8 +48,8 @@ struct ranges_equal_fn_t
                       "non-infinite.");
 
         constexpr bool both_ranges_have_known_size =
-            range_definition_has_size_v<range_lhs_t> &&
-            range_definition_has_size_v<range_rhs_t>;
+            range_impls_size_v<range_lhs_t> &&
+            range_impls_size_v<range_rhs_t>;
 
         if constexpr (both_ranges_have_known_size) {
             if (ok::size(lhs) != ok::size(rhs)) {
@@ -164,9 +164,9 @@ template <bool allow_small_destination = false> struct ranges_copy_fn_t
         dest_range_t& dest = dest_wrapper.value();
         const source_range_t& source = source_wrapper.value();
 
-        static_assert(detail::is_output_range_v<dest_range_t>,
+        static_assert(detail::is_consuming_range_v<dest_range_t>,
                       "Range given as `dest` is not an output range.");
-        static_assert(detail::is_input_range_v<source_range_t>,
+        static_assert(detail::is_producing_range_v<source_range_t>,
                       "Range given as `source` is not an input range.");
         static_assert(std::is_convertible_v<value_type_for<source_range_t>,
                                             value_type_for<dest_range_t>>,
@@ -178,8 +178,8 @@ template <bool allow_small_destination = false> struct ranges_copy_fn_t
             "Attempt to copy an infinite range into an infinite range, "
             "this will just loop forever.");
         constexpr bool both_ranges_have_known_size =
-            range_definition_has_size_v<dest_range_t> &&
-            range_definition_has_size_v<source_range_t>;
+            range_impls_size_v<dest_range_t> &&
+            range_impls_size_v<source_range_t>;
 
         if constexpr (both_ranges_have_known_size) {
 

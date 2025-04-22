@@ -23,7 +23,7 @@ struct join_fn_t
         static_assert(is_range_v<value_type_for<range_t>>,
                       "Cannot join given type- it's a range, but it does not "
                       "view other ranges.");
-        static_assert(range_has_get_ref_const_v<range_t> ||
+        static_assert(range_can_get_ref_const_v<range_t> ||
                           range_has_get_v<range_t>,
                       "Cannot join given range- it does not provide a "
                       "const-qualified way to get its internal ranges (neither "
@@ -49,7 +49,7 @@ template <typename input_range_t> struct joined_cursor_t
     using self_t = joined_cursor_t;
 
     using recieved_range_type_t =
-        std::conditional_t<range_has_get_ref_const_v<outer_range_t>,
+        std::conditional_t<range_can_get_ref_const_v<outer_range_t>,
                            const inner_range_t&, inner_range_t&&>;
     using view_t = typename underlying_view_type<recieved_range_type_t>::type;
 
@@ -119,10 +119,8 @@ struct range_definition<detail::joined_view_t<input_range_t>>
     using inner_range_t = value_type_for<outer_range_t>;
 
     static constexpr bool is_view = true;
-    static constexpr bool infinite =
+    static constexpr bool is_infinite =
         detail::range_marked_infinite_v<input_range_t>;
-    static constexpr bool allows_inner_nonconstness =
-        detail::range_allows_inner_nonconstness_v<inner_range_t>;
 
     using joined_t = detail::joined_view_t<input_range_t>;
     using cursor_t = detail::joined_cursor_t<input_range_t>;
@@ -142,7 +140,7 @@ struct range_definition<detail::joined_view_t<input_range_t>>
 
             // make sure we're not empty
             if (ok::is_inbounds(inner, inner_cursor)) {
-                if constexpr (detail::range_has_get_ref_const_v<
+                if constexpr (detail::range_can_get_ref_const_v<
                                   outer_range_t>) {
                     static_assert(
                         std::is_same_v<decltype(inner), const inner_range_t&>);
@@ -192,7 +190,7 @@ struct range_definition<detail::joined_view_t<input_range_t>>
         ok::increment(outer_ref, outer_cursor);
         while (ok::is_inbounds(outer_ref, outer_cursor)) {
 
-            if constexpr (detail::range_has_get_ref_const_v<outer_range_t>) {
+            if constexpr (detail::range_can_get_ref_const_v<outer_range_t>) {
                 inner_view = view_t(ok::iter_get_ref(outer_ref, outer_cursor));
             } else {
                 inner_view = view_t(
@@ -238,7 +236,7 @@ struct range_definition<detail::joined_view_t<input_range_t>>
         return ok::iter_copyout(cursor.view(), cursor.inner());
     }
 
-    __ok_enable_if_static(joined_t, detail::range_has_get_ref_v<view_t>,
+    __ok_enable_if_static(joined_t, detail::range_can_get_ref_v<view_t>,
                           value_type_for<view_t>&)
         get_ref(T& joined, const cursor_t& cursor) OKAYLIB_NOEXCEPT
     {
@@ -254,7 +252,7 @@ struct range_definition<detail::joined_view_t<input_range_t>>
         return ok::iter_get_ref(cursor.view(), cursor.inner());
     }
 
-    __ok_enable_if_static(joined_t, detail::range_has_get_ref_const_v<view_t>,
+    __ok_enable_if_static(joined_t, detail::range_can_get_ref_const_v<view_t>,
                           const value_type_for<view_t>&)
         get_ref(const T& joined, const cursor_t& cursor) OKAYLIB_NOEXCEPT
     {

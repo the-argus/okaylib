@@ -9,42 +9,48 @@
 #include <array>
 #include <vector>
 
+using namespace ok::detail;
+
 ok::range_def_for<const int[500]> array_instantiation;
 static_assert(std::is_same_v<ok::value_type_for<const int[500]>, int>);
-static_assert(!ok::detail::range_has_get_ref_v<const int[500]>);
-static_assert(ok::detail::range_has_get_ref_const_v<const int[500]>);
+static_assert(!ok::detail::range_can_get_ref_v<const int[500]>);
+static_assert(ok::detail::range_can_get_ref_const_v<const int[500]>);
 
 static_assert(ok::detail::is_random_access_range_v<ok::slice<int>>);
-static_assert(ok::detail::is_input_range_v<ok::slice<int>>);
-static_assert(ok::detail::is_input_range_v<ok::slice<const int>>);
-static_assert(ok::detail::is_output_range_v<ok::slice<int>>);
-static_assert(!ok::detail::range_has_construction_set_v<ok::slice<const int>,
-                                                        const int&>);
-static_assert(std::is_const_v<ok::slice<const int>::viewed_type>);
-static_assert(ok::detail::range_has_get_ref_const_v<ok::slice<const int>>);
-static_assert(std::is_same_v<ok::value_type_for<ok::slice<const int>>, int>);
-// get ref is explicitly for nonconst overload
-static_assert(!ok::detail::range_has_get_ref_v<std::array<const int, 1>>);
-static_assert(!ok::detail::range_has_get_ref_v<ok::slice<const int>>);
-static_assert(!ok::detail::range_has_construction_set_v<ok::slice<const int>,
-                                                        const int&>);
-static_assert(!ok::detail::is_output_range_v<ok::slice<const int>>);
+static_assert(ok::detail::is_producing_range_v<ok::slice<int>>);
 
-static_assert(ok::detail::is_output_range_v<example_range_cstyle>);
-static_assert(ok::detail::is_output_range_v<example_range_bidirectional>);
-static_assert(ok::detail::is_input_range_v<example_range_bidirectional>);
+static_assert(ok::detail::is_producing_range_v<ok::slice<const int>>);
+static_assert(ok::detail::is_consuming_range_v<ok::slice<int>>);
+static_assert(!ok::detail::range_impls_construction_set_v<ok::slice<const int>,
+                                                          const int&>);
+static_assert(std::is_const_v<ok::slice<const int>::viewed_type>);
+static_assert(ok::detail::range_can_get_ref_const_v<ok::slice<const int>>);
+static_assert(
+    std::is_same_v<ok::value_type_for<ok::slice<const int>>, const int>);
+// get ref is explicitly for nonconst overload
+static_assert(!ok::detail::range_can_get_ref_v<std::array<const int, 1>>);
+static_assert(!ok::detail::range_can_get_ref_v<ok::slice<const int>>);
+static_assert(!ok::detail::range_impls_construction_set_v<ok::slice<const int>,
+                                                          const int&>);
+static_assert(!ok::detail::is_consuming_range_v<ok::slice<const int>>);
+
+static_assert(ok::detail::is_consuming_range_v<example_range_cstyle>);
+static_assert(range_marked_finite_v<example_range_bidirectional>);
+static_assert(range_has_baseline_functions_v<example_range_bidirectional>);
+static_assert(ok::detail::is_consuming_range_v<example_range_bidirectional>);
+static_assert(ok::detail::is_producing_range_v<example_range_bidirectional>);
 static_assert(
     ok::detail::is_bidirectional_range_v<example_range_bidirectional>);
 static_assert(
     !ok::detail::is_random_access_range_v<example_range_bidirectional>);
-static_assert(ok::detail::is_output_range_v<example_range_cstyle_child>);
+static_assert(ok::detail::is_consuming_range_v<example_range_cstyle_child>);
 static_assert(ok::detail::is_random_access_range_v<example_range_cstyle>);
 static_assert(ok::detail::is_valid_cursor_v<size_t>);
 static_assert(ok::is_range_v<example_range_cstyle>);
-static_assert(ok::detail::range_has_get_ref_v<example_range_cstyle>);
-static_assert(ok::detail::range_has_get_ref_const_v<example_range_cstyle>);
+static_assert(ok::detail::range_can_get_ref_v<example_range_cstyle>);
+static_assert(ok::detail::range_can_get_ref_const_v<example_range_cstyle>);
 
-static_assert(ok::detail::has_baseline_functions_v<std::vector<int>>);
+static_assert(ok::detail::range_has_baseline_functions_v<std::vector<int>>);
 static_assert(ok::detail::is_random_access_range_v<std::vector<int>>);
 static_assert(
     std::is_same_v<std::vector<int>::value_type,
@@ -190,7 +196,7 @@ TEST_SUITE("range traits")
                 const int& tref = ok::iter_get_temporary_ref(ints, i);
                 REQUIRE(tref == i);
                 static_assert(
-                    detail::range_has_get_ref_const_v<std::vector<int>>);
+                    detail::range_can_get_ref_const_v<std::vector<int>>);
                 static_assert(std::is_same_v<
                                   decltype(ok::iter_get_temporary_ref(ints, i)),
                                   const int&>,

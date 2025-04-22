@@ -61,8 +61,8 @@ TEST_SUITE("keep_if")
             std::array<int, 50> ints;
 
             static_assert(
-                !detail::range_definition_has_increment_v<decltype(ints)>);
-            static_assert(detail::range_definition_has_increment_v<
+                !detail::range_impls_increment_v<decltype(ints)>);
+            static_assert(detail::range_impls_increment_v<
                           decltype(ints | keep_if(is_even))>);
             static_assert(detail::is_random_access_range_v<decltype(ints)>);
             static_assert(

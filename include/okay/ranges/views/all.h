@@ -16,7 +16,7 @@ struct all_fn_t
     constexpr decltype(auto)
     operator()(range_t&& range, predicate_t&& pred) const OKAYLIB_NOEXCEPT
     {
-        static_assert(detail::is_input_range_v<range_t>,
+        static_assert(detail::is_producing_range_v<range_t>,
                       "Input to ok::all is not a valid input range (a range "
                       "which can be iterated over to get values.)");
         static_assert(

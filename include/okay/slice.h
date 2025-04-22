@@ -659,19 +659,19 @@ template <typename range_t, typename enable> struct range_definition;
 
 template <typename viewed_t> struct range_definition<slice<viewed_t>, void>
 {
+    static constexpr bool is_ref_wrapper = true;
     static constexpr bool is_arraylike = true;
-    // a const slice can give nonconst references
-    static constexpr bool allows_inner_nonconstness = true;
+    static constexpr bool is_view = false;
 
-    using value_type = detail::remove_cvref_t<viewed_t>;
+    using value_type = viewed_t;
 
     static constexpr size_t size(const slice<viewed_t>& slice) OKAYLIB_NOEXCEPT
     {
         return slice.size();
     }
 
-    static constexpr auto& get_ref(const slice<viewed_t>& range,
-                                   size_t cursor) OKAYLIB_NOEXCEPT
+    static constexpr value_type& get_ref(const slice<viewed_t>& range,
+                                         size_t cursor) OKAYLIB_NOEXCEPT
     {
         return range[cursor];
     }

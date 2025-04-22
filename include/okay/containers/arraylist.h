@@ -549,7 +549,7 @@ class arraylist_t
 
         __ok_internal_assert(this->capacity() >= this->size());
 
-        if constexpr (detail::range_definition_has_size_v<other_range_t>) {
+        if constexpr (detail::range_impls_size_v<other_range_t>) {
             const size_t size = ok::size(range);
             const size_t extra_space = this->capacity() - this->size();
             if (size > extra_space) {
@@ -564,7 +564,7 @@ class arraylist_t
              ok::increment(range, cursor)) {
             auto status =
                 this->append(ok::iter_get_temporary_ref(range, cursor));
-            if constexpr (!detail::range_definition_has_size_v<other_range_t>) {
+            if constexpr (!detail::range_impls_size_v<other_range_t>) {
                 if (!status.okay()) [[unlikely]] {
                     return status;
                 }
@@ -805,7 +805,7 @@ struct copy_items_from_range_t
                      backing_allocator_t& allocator,
                      const input_range_t& range) const OKAYLIB_NOEXCEPT
     {
-        static_assert(ok::detail::range_definition_has_size_v<input_range_t>,
+        static_assert(ok::detail::range_can_size_v<input_range_t>,
                       "Size of range unknown, refusing to copy out its items "
                       "using arraylist::copy_items_from_range constructor.");
         using T = value_type_for<const input_range_t&>;

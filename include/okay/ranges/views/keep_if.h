@@ -32,11 +32,11 @@ struct keep_if_fn_t
                       "Cannot keep_if given type- it is not a range.");
         constexpr bool can_call_with_get_ref_const =
             std::is_invocable_v<predicate_t, const value_type_for<T>&> &&
-            detail::range_has_get_ref_const_v<T>;
+            detail::range_can_get_ref_const_v<T>;
         constexpr bool can_call_with_copied_value =
             std::is_invocable_v<predicate_t, value_type_for<T>> &&
             (detail::range_has_get_v<T> ||
-             detail::range_has_get_ref_const_v<T>);
+             detail::range_can_get_ref_const_v<T>);
         static_assert(
             can_call_with_get_ref_const || can_call_with_copied_value,
             "Given keep_if predicate and given range do not match up: "
@@ -44,12 +44,12 @@ struct keep_if_fn_t
             "the range. This may also be caused by a lambda being "
             "marked \"mutable\".");
         constexpr bool const_ref_call_returns_bool =
-            (detail::range_has_get_ref_const_v<T> &&
+            (detail::range_can_get_ref_const_v<T> &&
              returns_boolean<predicate_t, const value_type_for<T>&>::value);
         // TODO: check copied value is convertible?
         constexpr bool copied_value_call_returns_bool =
             ((detail::range_has_get_v<T> ||
-              detail::range_has_get_ref_const_v<T>) &&
+              detail::range_can_get_ref_const_v<T>) &&
              returns_boolean<predicate_t, value_type_for<T>>::value);
         static_assert(const_ref_call_returns_bool ||
                           copied_value_call_returns_bool,
@@ -116,7 +116,7 @@ struct range_definition<detail::keep_if_view_t<input_range_t, predicate_t>>
     using keep_if_t = detail::keep_if_view_t<input_range_t, predicate_t>;
     using cursor_t = cursor_type_for<range_t>;
 
-    static_assert(detail::range_has_get_ref_const_v<range_t> ||
+    static_assert(detail::range_can_get_ref_const_v<range_t> ||
                       detail::range_has_get_v<range_t>,
                   "Cannot keep_if a range which does not provide const "
                   "get_ref() or get().");

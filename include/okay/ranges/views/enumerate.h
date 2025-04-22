@@ -114,8 +114,9 @@ struct range_definition<detail::enumerated_view_t<input_range_t>,
     using cursor_t = detail::enumerated_cursor_t<input_range_t>;
     using range_t = std::remove_reference_t<input_range_t>;
 
-    __ok_enable_if_static(range_t, detail::range_definition_has_increment_v<T>,
-                          void)
+    using value_type = std::pair<value_type_for<range_t>&, const size_t>;
+
+    __ok_enable_if_static(range_t, detail::range_impls_increment_v<T>, void)
         increment(const enumerated_t& range, cursor_t& c) OKAYLIB_NOEXCEPT
     {
         // perform parent's increment function
@@ -125,8 +126,7 @@ struct range_definition<detail::enumerated_view_t<input_range_t>,
         c.increment();
     }
 
-    __ok_enable_if_static(range_t, detail::range_definition_has_decrement_v<T>,
-                          void)
+    __ok_enable_if_static(range_t, detail::range_impls_decrement_v<T>, void)
         decrement(const enumerated_t& range, cursor_t& c) OKAYLIB_NOEXCEPT
     {
         ok::decrement(

@@ -216,7 +216,7 @@ template <> struct range_definition<example_range_bidirectional>
 {
     using value_type = typename example_range_bidirectional::value_type;
 
-    constexpr static bool infinite = false;
+    constexpr static bool is_infinite = false;
 
     static constexpr value_type&
     get_ref(example_range_bidirectional& i,
@@ -248,7 +248,7 @@ template <> struct range_definition<example_range_bidirectional>
 
 template <> struct range_definition<fifty_items_unknown_size_t>
 {
-    static constexpr bool infinite = false;
+    static constexpr bool is_infinite = false;
 
     static constexpr size_t
     begin(const fifty_items_unknown_size_t&) OKAYLIB_NOEXCEPT
@@ -272,7 +272,7 @@ template <> struct range_definition<fifty_items_unknown_size_t>
 template <> struct range_definition<fifty_items_unknown_size_no_pre_increment_t>
 {
     using self_t = fifty_items_unknown_size_no_pre_increment_t;
-    static constexpr bool infinite = false;
+    static constexpr bool is_infinite = false;
 
     struct cursor_t
     {
@@ -305,7 +305,7 @@ template <> struct range_definition<fifty_items_unknown_size_no_pre_increment_t>
 template <> struct range_definition<fifty_items_bidir_no_pre_decrement_t>
 {
     using self_t = fifty_items_bidir_no_pre_decrement_t;
-    static constexpr bool infinite = false;
+    static constexpr bool is_infinite = false;
 
     struct cursor_t
     {

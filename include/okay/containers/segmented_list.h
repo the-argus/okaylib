@@ -490,7 +490,7 @@ struct copy_items_from_range_t
         const copy_items_from_range_options_t& options) const OKAYLIB_NOEXCEPT
     {
         static_assert(
-            ok::detail::range_definition_has_size_v<input_range_t>,
+            ok::detail::range_impls_size_v<input_range_t>,
             "Size of range unknown, refusing to copy out its items "
             "using segmented_list::copy_items_from_range constructor.");
 
