@@ -152,9 +152,15 @@ struct range_definition<detail::drop_view_t<input_range_t>>
 {
     static constexpr bool is_view = true;
 
+    using value_type = value_type_for<input_range_t>;
+
     using range_t = detail::remove_cvref_t<input_range_t>;
     using drop_t = detail::drop_view_t<input_range_t>;
     using cursor_t = detail::drop_cursor_t<input_range_t>;
+
+    static constexpr bool is_ref_wrapper =
+        !detail::range_impls_get_v<range_t> &&
+        std::is_lvalue_reference_v<input_range_t>;
 
     static_assert(
         !(detail::is_random_access_range_v<range_t> &&

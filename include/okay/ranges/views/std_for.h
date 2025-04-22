@@ -201,11 +201,14 @@ class std_for_view : public detail::underlying_view_type<T>::type
     };
 
     using correct_iterator_t =
-        std::conditional_t<std::is_const_v<T>, const_iterator, iterator>;
+        std::conditional_t<detail::is_consuming_range_v<T>, iterator,
+                           const_iterator>;
 
     constexpr correct_iterator_t begin() OKAYLIB_NOEXCEPT
     {
-        auto&& ref = parent_t::template get_view_reference<std_for_view, T>();
+        auto& ref =
+            this->template get_view_reference<std_for_view,
+                                              detail::remove_cvref_t<T>>();
         return correct_iterator_t(ref, ok::begin(ref));
     }
 
@@ -216,7 +219,9 @@ class std_for_view : public detail::underlying_view_type<T>::type
 
     constexpr const_iterator begin() const OKAYLIB_NOEXCEPT
     {
-        auto&& ref = parent_t::template get_view_reference<std_for_view, T>();
+        auto& ref =
+            this->template get_view_reference<std_for_view,
+                                              detail::remove_cvref_t<T>>();
         return const_iterator(ref, ok::begin(ref));
     }
 

@@ -162,6 +162,12 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>,
     using take_at_most_t = detail::take_at_most_view_t<input_range_t>;
     using cursor_t = detail::take_at_most_cursor_optimized_t<input_range_t>;
 
+    static constexpr bool is_ref_wrapper =
+        !detail::range_impls_get_v<range_t> &&
+        std::is_lvalue_reference_v<input_range_t>;
+
+    using value_type = value_type_for<range_t>;
+
     __ok_enable_if_static(range_t, detail::range_can_is_inbounds_v<T>, bool)
         is_inbounds(const take_at_most_t& i, const cursor_t& c) OKAYLIB_NOEXCEPT
     {
@@ -193,8 +199,7 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>,
         }
     }
 
-    __ok_enable_if_static(range_t, detail::range_impls_increment_v<T>,
-                          void)
+    __ok_enable_if_static(range_t, detail::range_impls_increment_v<T>, void)
         increment(const take_at_most_t& i, cursor_t& c) OKAYLIB_NOEXCEPT
     {
         // if its random access, the cursor type might just be the parent cursor
@@ -208,8 +213,7 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>,
         c.increment();
     }
 
-    __ok_enable_if_static(range_t, detail::range_impls_decrement_v<T>,
-                          void)
+    __ok_enable_if_static(range_t, detail::range_impls_decrement_v<T>, void)
         decrement(const take_at_most_t& i, cursor_t& c) OKAYLIB_NOEXCEPT
     {
         static_assert(!detail::is_random_access_range_v<T>,
@@ -237,6 +241,12 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>,
 
     using range_t = detail::remove_cvref_t<input_range_t>;
     using take_at_most_t = detail::take_at_most_view_t<input_range_t>;
+
+    static constexpr bool is_ref_wrapper =
+        !detail::range_impls_get_v<range_t> &&
+        std::is_lvalue_reference_v<input_range_t>;
+
+    using value_type = value_type_for<range_t>;
 
     static constexpr size_t size(const take_at_most_t& range)
     {

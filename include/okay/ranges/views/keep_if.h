@@ -112,9 +112,15 @@ struct range_definition<detail::keep_if_view_t<input_range_t, predicate_t>>
     // dont want people offsetting cursors by random amounts with keep_if
     static constexpr bool disallow_cursor_member_offset = true;
 
+    using value_type = value_type_for<input_range_t>;
+
     using range_t = std::remove_reference_t<input_range_t>;
     using keep_if_t = detail::keep_if_view_t<input_range_t, predicate_t>;
     using cursor_t = cursor_type_for<range_t>;
+
+    static constexpr bool is_ref_wrapper =
+        !detail::range_impls_get_v<range_t> &&
+        std::is_lvalue_reference_v<input_range_t>;
 
     static_assert(detail::range_can_get_ref_const_v<range_t> ||
                       detail::range_impls_get_v<range_t>,

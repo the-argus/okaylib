@@ -300,21 +300,15 @@ struct range_definition<
     get_impl(const zipped_t& range, const cursor_t& cursor,
              std::index_sequence<indices...>) OKAYLIB_NOEXCEPT
     {
-        // worlds largest and most evil const cast inside of a parameter
-        // expansion. the idea is that we only cast to nonconst if the viewed
-        // type is itself a view or it is a nonconst reference to a range.
-        // This way we respect constness of stuff like std::array, but not
-        // views like ok::reverse etc.
-        return std::make_tuple(ok::detail::get_best(
-            const_cast<std::conditional_t<
-                detail::is_view_v<detail::remove_cvref_t<ranges_t>> ||
-                    !std::is_const_v<std::remove_reference_t<ranges_t>>,
-                detail::remove_cvref_t<
-                    std::tuple_element_t<indices, decltype(range.m_views)>>&,
-                const detail::remove_cvref_t<
-                    std::tuple_element_t<indices, decltype(range.m_views)>>&>>(
-                std::get<indices>(range.m_views)),
-            std::get<indices>(cursor.m_cursors))...);
+        (
+            [&] {
+                static_assert(
+                    is_range_v<decltype(std::get<indices>(range.m_views))>);
+            }(),
+            ...);
+        return std::make_tuple(
+            ok::detail::get_best(std::get<indices>(range.m_views),
+                                 std::get<indices>(cursor.m_cursors))...);
     }
 
   public:
@@ -403,16 +397,14 @@ struct range_definition<
     get_impl(const zipped_t& range, const size_t& cursor,
              std::index_sequence<indices...>) OKAYLIB_NOEXCEPT
     {
-        return std::make_tuple(ok::detail::get_best(
-            const_cast<std::conditional_t<
-                detail::is_view_v<detail::remove_cvref_t<ranges_t>> ||
-                    !std::is_const_v<std::remove_reference_t<ranges_t>>,
-                detail::remove_cvref_t<
-                    std::tuple_element_t<indices, decltype(range.m_views)>>&,
-                const detail::remove_cvref_t<
-                    std::tuple_element_t<indices, decltype(range.m_views)>>&>>(
-                std::get<indices>(range.m_views)),
-            cursor)...);
+        (
+            [&] {
+                static_assert(
+                    is_range_v<decltype(std::get<indices>(range.m_views))>);
+            }(),
+            ...);
+        return std::make_tuple(
+            ok::detail::get_best(std::get<indices>(range.m_views), cursor)...);
     }
 };
 

@@ -149,28 +149,28 @@ struct propagate_get_set_t
             cursor);
     }
 
-    template <typename T = parent_range_t>
+    template <typename T = parent_range_t, typename... constructor_args_t>
     constexpr static auto set(derived_range_t& range, const cursor_t& cursor,
-                              value_type_for<T>&& value)
+                              constructor_args_t&&... args)
         -> std::enable_if_t<
             std::is_same_v<T, parent_range_t> &&
-                !std::is_const_v<std::remove_reference_t<T>>,
+                range_impls_construction_set_v<T, constructor_args_t...>,
             decltype(range_definition_inner<T>::set(
-                std::declval<const T&>(),
+                std::declval<T&>(),
                 std::declval<const cursor_type_unchecked_for_t<T>>(),
-                std::forward<value_type_for<T>>(value)))>
+                std::forward<constructor_args_t>(args)...))>
     {
         return range_definition_inner<T>::get(
             range.template get_view_reference<derived_range_t, T>(), cursor,
-            std::forward<value_type_for<T>>(value));
+            std::forward<constructor_args_t>(args)...);
     }
 
     template <typename T = parent_range_t>
     constexpr static auto get_ref(derived_range_t& range,
                                   const cursor_t& cursor)
         -> std::enable_if_t<
-            std::is_same_v<T, parent_range_t> &&
-                !std::is_const_v<std::remove_reference_t<T>>,
+            std::is_same_v<T, parent_range_t> && range_can_get_ref_v<T> &&
+                !range_is_ref_wrapper_v<T>,
             decltype(range_definition_inner<T>::get_ref(
                 std::declval<T&>(),
                 std::declval<const cursor_type_unchecked_for_t<T>>()))>
@@ -187,13 +187,11 @@ struct propagate_get_set_t
         -> std::enable_if_t<
             std::is_same_v<T, parent_range_t> && range_can_get_ref_const_v<T>,
             decltype(range_definition_inner<T>::get_ref(
-                std::declval<const T&>(),
-                std::declval<const cursor_type_unchecked_for_t<T>>()))>
+                range.template get_view_reference<derived_range_t, T>(),
+                cursor))>
     {
         return range_definition_inner<T>::get_ref(
-            range
-                .template get_view_reference<derived_range_t, parent_range_t>(),
-            cursor);
+            range.template get_view_reference<derived_range_t, T>(), cursor);
     }
 };
 
@@ -328,36 +326,30 @@ class ref_view<
     }
 
     template <typename derived_t, typename desired_reference_t>
-    constexpr auto get_view_reference() & noexcept
-        // disable nonconst get_view_reference in the special case that we are a
-        // ref wrapper around a const reference to a c array
-        -> std::enable_if_t<
-            !std::is_const_v<c_array_value_type_or_void<range_t>>,
-            ok::detail::remove_cvref_t<desired_reference_t>&>
+    constexpr auto& get_view_reference() & noexcept
     {
         using desired_t = remove_cvref_t<desired_reference_t>;
         static_assert(is_derived_from_v<derived_t, ref_view>);
         static_assert(is_convertible_to_v<derived_t&, ref_view&>);
         if constexpr (std::is_convertible_v<derived_t&, desired_t&>) {
-            return *static_cast<derived_t*>(this);
+            // since derived_t is a ref_wrapper
+            return *static_cast<desired_t*>(this);
         } else {
-            static_assert(std::is_convertible_v<range_t&, desired_t&>);
             return *m_range;
         }
     }
+
     template <typename derived_t, typename desired_reference_t>
-    constexpr const remove_cvref_t<desired_reference_t>&
-    get_view_reference() const& noexcept
+    constexpr auto& get_view_reference() const& noexcept
     {
         using desired_t = remove_cvref_t<desired_reference_t>;
         static_assert(is_derived_from_v<derived_t, ref_view>);
         static_assert(is_convertible_to_v<const derived_t&, const ref_view&>);
         if constexpr (std::is_convertible_v<const derived_t&,
                                             const desired_t&>) {
-            return *static_cast<const derived_t*>(this);
+            // since derived_t is a ref_wrapper
+            return *static_cast<const desired_t*>(this);
         } else {
-            static_assert(
-                std::is_convertible_v<const range_t&, const desired_t&>);
             return *m_range;
         }
     }
@@ -368,7 +360,7 @@ template <typename range_t>
 struct ok::range_definition<detail::ref_view<range_t>>
     : detail::propagate_all_range_traits_t<detail::ref_view<range_t>, range_t>
 {
-    static constexpr bool is_ref_wrapper = true;
+    static constexpr bool is_ref_wrapper = !detail::range_impls_get_v<range_t>;
     using value_type = detail::range_deduced_value_type_t<range_t>;
 };
 
