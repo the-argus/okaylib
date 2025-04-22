@@ -626,6 +626,7 @@ TEST_SUITE("opt")
         {
             const opt<char> maybechar;
             opt<const char&> maybechar_ref;
+            using namespace ok::detail;
 
             ok_foreach(auto c, maybechar_ref)
             {

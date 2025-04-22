@@ -735,6 +735,11 @@ struct ok::range_definition<ok::opt<payload_t>, void>
 
     using opt_range_t = opt<payload_t>;
 
+    inline static constexpr bool is_ref_wrapper =
+        std::is_reference_v<payload_t>;
+
+    using value_type = std::remove_reference_t<payload_t>;
+
     static constexpr cursor_t begin(const opt_range_t& range) OKAYLIB_NOEXCEPT
     {
         return cursor_t{};
@@ -759,13 +764,22 @@ struct ok::range_definition<ok::opt<payload_t>, void>
         return size_t(range.has_value());
     }
 
-    static constexpr auto& get_ref(opt_range_t& range, const cursor_t& cursor)
+    /// nonconst get_ref is disabled for reference wrapper optionals which are
+    /// storing a const reference. no need to check if payload_t is a reference
+    /// as it can't be const otherwise.
+    template <typename T = payload_t>
+    static constexpr auto&
+    get_ref(opt_range_t& range,
+            std::enable_if_t<std::is_same_v<T, payload_t> &&
+                                 !std::is_const_v<value_type>,
+                             const cursor_t&>
+                cursor)
     {
         return range.ref_or_panic();
     }
 
-    static constexpr const auto& get_ref(const opt_range_t& range,
-                                         const cursor_t& cursor)
+    static constexpr auto& get_ref(const opt_range_t& range,
+                                   const cursor_t& cursor)
     {
         return range.ref_or_panic();
     }

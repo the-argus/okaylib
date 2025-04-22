@@ -114,7 +114,14 @@ struct range_definition<detail::enumerated_view_t<input_range_t>,
     using cursor_t = detail::enumerated_cursor_t<input_range_t>;
     using range_t = std::remove_reference_t<input_range_t>;
 
-    using value_type = std::pair<value_type_for<range_t>&, const size_t>;
+    using pair_first_type = std::conditional_t<
+        detail::range_can_get_ref_v<range_t>,
+        std::conditional_t<detail::is_consuming_range_v<range_t>,
+                           value_type_for<range_t>&,
+                           const value_type_for<range_t&>>,
+        value_type_for<range_t>>;
+
+    using value_type = std::pair<pair_first_type, const size_t>;
 
     __ok_enable_if_static(range_t, detail::range_impls_increment_v<T>, void)
         increment(const enumerated_t& range, cursor_t& c) OKAYLIB_NOEXCEPT

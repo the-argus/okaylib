@@ -172,7 +172,7 @@ struct range_definition<detail::reversed_view_t<input_range_t>,
     static constexpr bool is_view = true;
     static constexpr bool is_arraylike = true;
 
-    __ok_enable_if_static(range_t, detail::range_has_get_v<T>,
+    __ok_enable_if_static(range_t, detail::range_impls_get_v<T>,
                           value_type_for<range_t>)
         get(const reversed_t& range, size_t cursor) OKAYLIB_NOEXCEPT
     {
@@ -213,7 +213,7 @@ struct range_definition<detail::reversed_view_t<input_range_t>,
 
     template <typename... construction_args_t>
     static constexpr std::enable_if_t<
-        detail::range_has_construction_set_v<range_t, construction_args_t...>>
+        detail::range_impls_construction_set_v<range_t, construction_args_t...>>
     set(const reversed_t& range, size_t cursor,
         construction_args_t&&... args) OKAYLIB_NOEXCEPT
     {

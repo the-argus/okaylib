@@ -463,7 +463,7 @@ struct range_impls_get_ref_unchecked_rettype<
     using return_type = decltype(range_definition_inner<range_t>::get_ref(
         std::declval<range_t&>(),
         std::declval<const cursor_type_unchecked_for_t<range_t>&>()));
-    using deduced_nonrefwrap_value_type = detail::remove_cvref_t<return_type>;
+    using deduced_nonrefwrap_value_type = remove_cvref_t<return_type>;
 };
 
 template <typename range_t, typename = void>
@@ -483,7 +483,7 @@ struct range_impls_get_ref_const_unchecked_rettype<
     using return_type = decltype(range_definition_inner<range_t>::get_ref(
         std::declval<const range_t&>(),
         std::declval<const cursor_type_unchecked_for_t<range_t>&>()));
-    using deduced_nonrefwrap_value_type = detail::remove_cvref_t<return_type>;
+    using deduced_nonrefwrap_value_type = remove_cvref_t<return_type>;
 };
 
 template <typename range_t>
@@ -508,11 +508,6 @@ template <typename range_t, typename = void> struct range_deduced_value_type
     static constexpr bool impls_get_ref_const =
         range_impls_get_ref_const_unchecked_rettype<range_t>::value;
 
-    static_assert(impls_get | impls_get_ref | impls_get_ref_const,
-                  "Attempting to deduce value type for a range which does not "
-                  "explicitly provide it, but that range does not define "
-                  "get(), get_ref(), or get_ref_const().");
-
     using deduced_from_get_ref = typename range_impls_get_ref_unchecked_rettype<
         range_t>::deduced_nonrefwrap_value_type;
     using deduced_from_get_ref_const =
@@ -521,16 +516,13 @@ template <typename range_t, typename = void> struct range_deduced_value_type
 
   public:
     using type = std::conditional_t<
-        impls_get_ref_const && !range_is_ref_wrapper_v<range_t>,
-        std::conditional_t<impls_get_ref, deduced_from_get_ref,
-                           deduced_from_get_ref_const>,
-        typename range_impls_get_unchecked_rettype<range_t>::return_type>;
-
-    static_assert(
-        !std::is_void_v<type>,
-        "Error when deducing value_type for a range. If the type is "
-        "a reference wrapper (slice, for example), you may need to "
-        "explicitly specify `using value_type = ...` in the range_definition.");
+        impls_get | impls_get_ref | impls_get_ref_const,
+        std::conditional_t<
+            impls_get_ref_const && !range_is_ref_wrapper_v<range_t>,
+            std::conditional_t<impls_get_ref, deduced_from_get_ref,
+                               deduced_from_get_ref_const>,
+            typename range_impls_get_unchecked_rettype<range_t>::return_type>,
+        void>;
 };
 
 template <typename range_t>
@@ -595,10 +587,9 @@ constexpr bool range_impls_move_construction_set_v =
 
 template <typename T>
 constexpr bool range_impls_get_v =
-    detail::range_impls_get_unchecked_rettype_v<T> &&
-    std::is_same_v<
-        typename detail::range_impls_get_unchecked_rettype<T>::return_type,
-        detail::range_deduced_value_type_t<T>>;
+    range_impls_get_unchecked_rettype_v<T> &&
+    std::is_same_v<typename range_impls_get_unchecked_rettype<T>::return_type,
+                   range_deduced_value_type_t<T>>;
 
 // ref_or_void: avoid forming a const reference to void
 template <typename T, typename = void> struct ref_or_void
@@ -658,7 +649,7 @@ constexpr bool range_can_get_ref_v =
 template <typename T>
 constexpr bool range_can_get_ref_const_v =
     range_refwrap_impls_get_ref_const_v<T> ||
-    range_nonrefwrap_impls_get_ref_const_v<T>;
+    range_nonrefwrap_impls_get_ref_const_v<T> || range_can_get_ref_v<T>;
 
 template <typename T>
 constexpr bool range_has_baseline_functions_v =
@@ -962,9 +953,6 @@ struct iter_copyout_fn_t
             return def::get_ref(range, cursor);
         }
     }
-
-    __ok_range_function_assert_not_partially_called_member(iter_copyout)
-        __ok_range_function_assert_correct_cursor_type_member
 };
 
 template <typename range_t, typename = void>
@@ -981,7 +969,7 @@ struct iter_get_temporary_ref_meta_t
 template <typename range_t>
 struct iter_get_temporary_ref_meta_t<
     range_t, std::enable_if_t<is_range_v<range_t> &&
-                              !detail::range_can_get_ref_const_v<range_t>>>
+                              !range_can_get_ref_const_v<range_t>>>
 {
     using type = value_type_for<range_t>;
     static constexpr type
@@ -995,8 +983,8 @@ struct iter_get_temporary_ref_meta_t<
 
 template <typename range_t>
 struct iter_get_temporary_ref_meta_t<
-    range_t, std::enable_if_t<is_range_v<range_t> &&
-                              detail::range_can_get_ref_const_v<range_t>>>
+    range_t,
+    std::enable_if_t<is_range_v<range_t> && range_can_get_ref_const_v<range_t>>>
 {
     using type = const value_type_for<range_t>&;
     static constexpr type
@@ -1014,8 +1002,7 @@ struct iter_get_temporary_ref_fn_t
         const range_t& range,
         const cursor_type_for<range_t>& cursor) const OKAYLIB_NOEXCEPT
     {
-        return detail::iter_get_temporary_ref_meta_t<range_t>::call(range,
-                                                                    cursor);
+        return iter_get_temporary_ref_meta_t<range_t>::call(range, cursor);
         static_assert(is_range_v<range_t>,
                       "Invalid range passed in to iter_get_temporary_ref");
     }
@@ -1056,15 +1043,14 @@ struct iter_set_fn_t
     operator()(range_t& range, const cursor_type_for<range_t>& cursor,
                construction_args_t&&... args) const OKAYLIB_NOEXCEPT
     {
-        if constexpr (detail::range_can_get_ref_v<range_t>) {
+        if constexpr (range_can_get_ref_v<range_t>) {
             auto& ref = range_definition_inner<range_t>::get_ref(range, cursor);
 
             // if you supplied only one arg, and it is assignable, and the range
             // uses get_ref, then set performs assignment. otherwise, it
             // manually calls destruction and then constructs in place
             if constexpr (sizeof...(construction_args_t) == 1) {
-                using first_type =
-                    detail::first_type_in_pack_t<construction_args_t...>;
+                using first_type = first_type_in_pack_t<construction_args_t...>;
                 if constexpr (std::is_assignable_v<decltype(ref), first_type>) {
                     const auto applyer = [&ref](auto&& a) {
                         ref = std::forward<first_type>(a);
@@ -1084,8 +1070,7 @@ struct iter_set_fn_t
             }
         } else {
             static_assert(
-                detail::range_impls_construction_set_v<range_t,
-                                                       construction_args_t...>,
+                range_impls_construction_set_v<range_t, construction_args_t...>,
                 "Cannot set for given range- it does not define iter_set which "
                 "takes the given arguments, nor does it define get_ref + a "
                 "move constructor for value type.");
@@ -1121,13 +1106,13 @@ struct increment_fn_t
     operator()(const range_t& range,
                cursor_type_for<range_t>& cursor) const OKAYLIB_NOEXCEPT
     {
-        if constexpr (detail::range_impls_increment_v<range_t>) {
+        if constexpr (range_impls_increment_v<range_t>) {
             range_def_for<range_t>::increment(range, cursor);
-        } else if constexpr (detail::range_impls_offset_v<range_t>) {
+        } else if constexpr (range_impls_offset_v<range_t>) {
             range_def_for<range_t>::offset(range, cursor, int64_t(1));
         } else {
-            static_assert(detail::has_pre_increment_v<
-                          detail::cursor_type_unchecked_for_t<range_t>>);
+            static_assert(
+                has_pre_increment_v<cursor_type_unchecked_for_t<range_t>>);
             ++cursor;
         }
     }
@@ -1143,13 +1128,13 @@ struct decrement_fn_t
     operator()(const range_t& range,
                cursor_type_for<range_t>& cursor) const OKAYLIB_NOEXCEPT
     {
-        if constexpr (detail::range_impls_increment_v<range_t>) {
+        if constexpr (range_impls_increment_v<range_t>) {
             range_def_for<range_t>::decrement(range, cursor);
-        } else if constexpr (detail::range_impls_offset_v<range_t>) {
+        } else if constexpr (range_impls_offset_v<range_t>) {
             range_def_for<range_t>::offset(range, cursor, int64_t(-1));
         } else {
-            static_assert(detail::has_pre_increment_v<
-                          detail::cursor_type_unchecked_for_t<range_t>>);
+            static_assert(
+                has_pre_increment_v<cursor_type_unchecked_for_t<range_t>>);
             --cursor;
         }
     }
@@ -1169,7 +1154,7 @@ struct iter_compare_fn_t
             range_can_compare_v<range_t>,
             "Cannot call iter_compare on a range which does not allow "
             "comparing cursors.");
-        if constexpr (detail::range_impls_compare_v<range_t>) {
+        if constexpr (range_impls_compare_v<range_t>) {
             return range_def_for<range_t>::compare(range, cursor_a, cursor_b);
         } else {
             static_assert(is_orderable_v<cursor_type_for<range_t>>);
@@ -1191,7 +1176,7 @@ struct iter_offset_fn_t
         static_assert(range_can_offset_v<range_t>,
                       "Cannot call iter_offset on a range which does not allow "
                       "offsetting cursors.");
-        if constexpr (detail::range_impls_offset_v<range_t>) {
+        if constexpr (range_impls_offset_v<range_t>) {
             return range_def_for<range_t>::offset(range, cursor, offset);
         } else {
             static_assert(has_inplace_addition_with_i64_v<range_t>);

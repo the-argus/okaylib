@@ -24,7 +24,7 @@ struct join_fn_t
                       "Cannot join given type- it's a range, but it does not "
                       "view other ranges.");
         static_assert(range_can_get_ref_const_v<range_t> ||
-                          range_has_get_v<range_t>,
+                          range_impls_get_v<range_t>,
                       "Cannot join given range- it does not provide a "
                       "const-qualified way to get its internal ranges (neither "
                       "`get() const` or `get_ref() const`)");
@@ -146,7 +146,7 @@ struct range_definition<detail::joined_view_t<input_range_t>>
                         std::is_same_v<decltype(inner), const inner_range_t&>);
                     return cursor_t(std::move(outer_cursor), inner);
                 } else {
-                    static_assert(detail::range_has_get_v<outer_range_t>);
+                    static_assert(detail::range_impls_get_v<outer_range_t>);
                     static_assert(
                         std::is_same_v<decltype(inner), inner_range_t&&>);
                     return cursor_t(std::move(outer_cursor), std::move(inner));
@@ -220,8 +220,8 @@ struct range_definition<detail::joined_view_t<input_range_t>>
         return ok::is_inbounds(outer_ref, cursor.outer());
     }
 
-    __ok_enable_if_static(joined_t, detail::range_has_get_v<view_t>,
-                          value_type_for<view_t>)
+    __ok_enable_if_static(joined_t, detail::range_impls_get_v<view_t>,
+                          detail::range_deduced_value_type_t<view_t>)
         get(const T& joined, const cursor_t& cursor) OKAYLIB_NOEXCEPT
     {
         __ok_assert(cursor.has_value(), "Invalid cursor passed to join view, "
@@ -237,7 +237,7 @@ struct range_definition<detail::joined_view_t<input_range_t>>
     }
 
     __ok_enable_if_static(joined_t, detail::range_can_get_ref_v<view_t>,
-                          value_type_for<view_t>&)
+                          detail::range_deduced_value_type_t<view_t>&)
         get_ref(T& joined, const cursor_t& cursor) OKAYLIB_NOEXCEPT
     {
         __ok_assert(cursor.has_value(), "Invalid cursor passed to join view, "
@@ -253,7 +253,7 @@ struct range_definition<detail::joined_view_t<input_range_t>>
     }
 
     __ok_enable_if_static(joined_t, detail::range_can_get_ref_const_v<view_t>,
-                          const value_type_for<view_t>&)
+                          const detail::range_deduced_value_type_t<view_t>&)
         get_ref(const T& joined, const cursor_t& cursor) OKAYLIB_NOEXCEPT
     {
         __ok_assert(cursor.has_value(), "Invalid cursor passed to join view, "

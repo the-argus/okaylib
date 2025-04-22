@@ -58,7 +58,7 @@ class res<contained_t, enum_t,
     static_assert(
         std::is_enum_v<enum_t>,
         "The second type parameter to res must be a statuscode enum.");
-    static_assert(std::is_same_v<std::decay_t<enum_t>, enum_t>,
+    static_assert(std::is_same_v<detail::remove_cvref_t<enum_t>, enum_t>,
                   "Do not cv or ref qualify statuscode type.");
     static_assert(!std::is_rvalue_reference_v<contained_t>,
                   "opt cannot store rvalue references");
@@ -236,7 +236,7 @@ class res<contained_t, enum_t,
     static_assert(
         std::is_enum_v<enum_t>,
         "The second type parameter to res must be a statuscode enum.");
-    static_assert(std::is_same_v<std::decay_t<enum_t>, enum_t>,
+    static_assert(std::is_same_v<detail::remove_cvref_t<enum_t>, enum_t>,
                   "Do not cv or ref qualify statuscode type.");
     static_assert(
         !std::is_same_v<std::remove_cv_t<contained_t>,

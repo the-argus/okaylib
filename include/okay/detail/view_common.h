@@ -367,7 +367,10 @@ class ref_view<
 template <typename range_t>
 struct ok::range_definition<detail::ref_view<range_t>>
     : detail::propagate_all_range_traits_t<detail::ref_view<range_t>, range_t>
-{};
+{
+    static constexpr bool is_ref_wrapper = true;
+    using value_type = detail::range_deduced_value_type_t<range_t>;
+};
 
 namespace detail {
 
@@ -376,7 +379,7 @@ template <typename range_t> owning_view(range_t&&) -> owning_view<range_t>;
 
 template <typename T>
 constexpr bool is_view_v =
-    is_range_v<std::decay_t<T>> && enable_view_v<T> && is_moveable_v<T>;
+    is_range_v<T> && enable_view_v<T> && is_moveable_v<T>;
 
 template <typename T> struct underlying_view_type
 {
@@ -386,11 +389,10 @@ template <typename T> struct underlying_view_type
     wrap_range_with_view(range_t&& view) OKAYLIB_NOEXCEPT
     {
         static_assert(
-            is_view_v<std::decay_t<range_t>> ||
-                std::is_lvalue_reference_v<decltype(view)> ||
+            is_view_v<range_t> || std::is_lvalue_reference_v<decltype(view)> ||
                 std::is_rvalue_reference_v<decltype(view)>,
             "Attempt to wrap something like a value type which is not a view.");
-        if constexpr (is_view_v<std::decay_t<range_t>>)
+        if constexpr (is_view_v<range_t>)
             return std::forward<range_t>(view);
         else if constexpr (std::is_lvalue_reference_v<decltype(view)>)
             return ref_view{std::forward<range_t>(view)};

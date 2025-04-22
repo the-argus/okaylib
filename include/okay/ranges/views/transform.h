@@ -35,7 +35,7 @@ struct transform_fn_t
             detail::range_can_get_ref_const_v<range_t>;
         constexpr bool can_call_with_copyout =
             std::is_invocable_v<callable_t, value_type_for<T>> &&
-            (detail::range_has_get_v<T> ||
+            (detail::range_impls_get_v<T> ||
              detail::range_can_get_ref_const_v<T>);
         static_assert(
             can_call_with_get_ref_const || can_call_with_copyout,
@@ -48,7 +48,7 @@ struct transform_fn_t
              returns_transformed_type<callable_t,
                                       const value_type_for<T>&>::value);
         constexpr bool copied_value_call_doesnt_return_void =
-            ((detail::range_has_get_v<T> ||
+            ((detail::range_impls_get_v<T> ||
               detail::range_can_get_ref_const_v<T>) &&
              returns_transformed_type<callable_t, value_type_for<T>>::value);
         static_assert(const_ref_call_doesnt_return_void ||
@@ -124,7 +124,7 @@ struct range_definition<detail::transformed_view_t<input_range_t, callable_t>>
             return t.transformer_callable()(inner_def::get_ref(
                 t.template get_view_reference<T, range_t>(), cursor));
         } else {
-            static_assert(detail::range_has_get_v<range_t>);
+            static_assert(detail::range_impls_get_v<range_t>);
             return t.transformer_callable()(inner_def::get(
                 t.template get_view_reference<T, range_t>(), cursor));
         }
