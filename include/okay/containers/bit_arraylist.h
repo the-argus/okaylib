@@ -49,7 +49,7 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
 
     explicit bit_arraylist_t(backing_allocator_t& allocator) OKAYLIB_NOEXCEPT
         : m(members_t{
-              .allocation = raw_slice_create_null_empty_unsafe<uint8_t>(),
+              .allocation = make_null_slice<uint8_t>(),
               .allocator = ok::addressof(allocator),
           })
     {
@@ -57,7 +57,7 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
 
     constexpr bit_arraylist_t(bit_arraylist_t&& other) noexcept : m(other.m)
     {
-        other.m.allocation = raw_slice_create_null_empty_unsafe<uint8_t>();
+        other.m.allocation = make_null_slice<uint8_t>();
 #ifndef NDEBUG
         other.m.allocator = nullptr;
         other.m.num_bits = 0;
@@ -75,8 +75,7 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
         : m(members_t{
               .num_bits = other.m.num_bits,
               .allocation =
-                  std::exchange(other.m.allocation,
-                                raw_slice_create_null_empty_unsafe<uint8_t>()),
+                  std::exchange(other.m.allocation, make_null_slice<uint8_t>()),
               .allocator = static_cast<backing_allocator_t*>(other.m.allocator),
           })
     {
@@ -96,8 +95,7 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
         m = members_t{
             .num_bits = other.m.num_bits,
             .allocation =
-                std::exchange(other.m.allocation,
-                              raw_slice_create_null_empty_unsafe<uint8_t>()),
+                std::exchange(other.m.allocation, make_null_slice<uint8_t>()),
             .allocator = static_cast<backing_allocator_t*>(other.m.allocator),
         };
 #ifndef NDEBUG
@@ -115,18 +113,6 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
     {
         return raw_bit_slice(m.allocation, m.num_bits, 0);
     }
-
-    [[nodiscard]] constexpr uint8_t* data() & OKAYLIB_NOEXCEPT
-    {
-        return m.allocation.data();
-    }
-    uint8_t* data() && = delete;
-
-    [[nodiscard]] constexpr const uint8_t* data() const& OKAYLIB_NOEXCEPT
-    {
-        return m.allocation.data();
-    }
-    const uint8_t* data() const&& = delete;
 
     constexpr operator bit_slice_t() & OKAYLIB_NOEXCEPT { return items(); }
     constexpr operator const_bit_slice_t() const& OKAYLIB_NOEXCEPT
@@ -147,8 +133,8 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
         if (m.allocation.size() == 0) [[unlikely]] {
             return;
         }
-        std::memset(m.allocation.data(), value ? char(-1) : char(0),
-                    this->size_bytes());
+        std::memset(m.allocation.unchecked_address_of_first_item(),
+                    value ? char(-1) : char(0), this->size_bytes());
     }
 
     [[nodiscard]] constexpr size_t size_bytes() const OKAYLIB_NOEXCEPT
@@ -215,7 +201,7 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
     [[nodiscard]] constexpr status<alloc::error>
     insert_at(size_t idx, bool value) OKAYLIB_NOEXCEPT
     {
-        if (idx > this->size_bits()) [[unlikely]] {
+        if (idx >= this->size_bits()) [[unlikely]] {
             __ok_abort("insert_at into bit_arraylist out of bounds");
         }
         __ok_internal_assert(this->capacity_bits() >= this->size_bits());
@@ -251,7 +237,8 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
         const size_t sub_byte_bit_index = idx % 8;
 
         bool carry = shift_byte_zero_return_carry(
-            m.allocation.data() + first_byte_index, sub_byte_bit_index, value);
+            m.allocation.unchecked_address_of_first_item() + first_byte_index,
+            sub_byte_bit_index, value);
 
         // loop from zero to the number of bytes in use, shifting everything up
         // TODO: check if this gets optimized, maybe a good idea for
@@ -262,9 +249,12 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
 
         for (size_t iter = first_byte_index + 2; iter < num_bytes; ++iter) {
             const size_t i = iter - 1;
-            const bool new_carry = m.allocation.data()[i] & carry_check_mask;
-            m.allocation.data()[i] <<= 1;
-            m.allocation.data()[i] ^= carry_in_mask * carry;
+            const bool new_carry =
+                m.allocation.unchecked_address_of_first_item()[i] &
+                carry_check_mask;
+            m.allocation.unchecked_address_of_first_item()[i] <<= 1;
+            m.allocation.unchecked_address_of_first_item()[i] ^=
+                carry_in_mask * carry;
             carry = new_carry;
         }
 
@@ -312,15 +302,18 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
         // NOTE: skipping last byte in this for loop
         for (size_t i = num_bytes_in_use; i > byte_index; --i) {
             const bool new_carry =
-                (m.allocation.data()[i] & carry_check_mask) != 0;
-            m.allocation.data()[i] >> 1;
+                (m.allocation.unchecked_address_of_first_item()[i] &
+                 carry_check_mask) != 0;
+            m.allocation.unchecked_address_of_first_item()[i] >> 1;
             // add most significant bit if it carried from above
-            m.allocation.data()[i] |= (carry * carry_in_mask);
+            m.allocation.unchecked_address_of_first_item()[i] |=
+                (carry * carry_in_mask);
             carry = new_carry;
         }
         m.num_bits -= 1;
         return shift_last_byte_and_return_whether_bit_was_on(
-            m.allocation.data() + byte_index, sub_byte_bit_index, carry);
+            m.allocation.unchecked_address_of_first_item() + byte_index,
+            sub_byte_bit_index, carry);
     }
 
     constexpr status<alloc::error>
