@@ -154,7 +154,7 @@ struct reallocate_request_t
             flags::shrink_front | flags::expand_front;
 
         // cannot expand or shrink front
-        return !(flags & forbidden) &&
+        return !(flags & forbidden) && !memory.is_empty() &&
                // no attempt to... free the memory?
                (new_size_bytes != 0) &&
                // preferred should be zero OR ( (we're growing OR staying the

@@ -126,8 +126,10 @@ class linked_blockpool_allocator_t : public ok::allocator_t
                                                     size_t block_min_alignment,
                                                     size_t block_size) noexcept
         {
-            __ok_internal_assert(static_cast<void*>(containing.data()) ==
-                                 static_cast<void*>(this));
+            __ok_internal_assert(
+                static_cast<void*>(
+                    containing.unchecked_address_of_first_item()) ==
+                static_cast<void*>(this));
             __ok_internal_assert(containing.size() > sizeof(pool_t));
 
             size_t remaining_space = containing.size();
@@ -216,11 +218,13 @@ linked_blockpool_allocator_t<allocator_impl_t>::alloc_new_blockpool()
     __ok_assert(allocation.size() >= next_size,
                 "Backing allocator for linked_block_allocator_t did not "
                 "return the expected amount of memory.");
-    __ok_assert((uintptr_t(allocation.data()) % m.minimum_alignment) == 0,
+    __ok_assert((uintptr_t(allocation.unchecked_address_of_first_item()) %
+                 m.minimum_alignment) == 0,
                 "Backing allocator for linked_block_allocator_t gave "
                 "misaligned memory.");
 
-    pool_t* const new_pool = reinterpret_cast<pool_t*>(allocation.data());
+    pool_t* const new_pool =
+        reinterpret_cast<pool_t*>(allocation.unchecked_address_of_first_item());
     bool success = new_pool->init_in_buffer(allocation, m.last_pool,
                                             m.minimum_alignment, m.blocksize);
     if (!success) [[unlikely]] {
@@ -305,11 +309,14 @@ inline void linked_blockpool_allocator_t<allocator_impl_t>::impl_deallocate(
 #define __ok_bytes_within_linked_blockpool_check(bytes_sym)
 #endif
     __ok_bytes_within_linked_blockpool_check(bytes);
-    __ok_assert(uintptr_t(bytes.data()) % m.minimum_alignment == 0,
+    __ok_assert(uintptr_t(bytes.unchecked_address_of_first_item()) %
+                        m.minimum_alignment ==
+                    0,
                 "Attempt to deallocate pointer from linked_blockpool_allocator "
                 "which does not appear to have come from that allocator.");
 
-    free_block_t* new_free = reinterpret_cast<free_block_t*>(bytes.data());
+    free_block_t* new_free = reinterpret_cast<free_block_t*>(
+        bytes.unchecked_address_of_first_item());
 #ifndef NDEBUG
     // hopefully catch some use-after-frees this way
     std::memset(new_free, 111, m.blocksize);
@@ -325,7 +332,9 @@ linked_blockpool_allocator_t<allocator_impl_t>::impl_reallocate(
 {
     __ok_bytes_within_linked_blockpool_check(request.memory);
 #undef __ok_bytes_within_linked_blockpool_check
-    __ok_assert(uintptr_t(request.memory.data()) % m.minimum_alignment == 0,
+    __ok_assert(uintptr_t(request.memory.unchecked_address_of_first_item()) %
+                        m.minimum_alignment ==
+                    0,
                 "Attempt to reallocate pointer from linked_blockpool_allocator "
                 "which does not appear to have come from that allocator.");
     if (request.new_size_bytes > m.blocksize) {
@@ -338,11 +347,13 @@ linked_blockpool_allocator_t<allocator_impl_t>::impl_reallocate(
             : ok::min(request.preferred_size_bytes, m.blocksize);
 
     if (!(request.flags & alloc::flags::leave_nonzeroed)) {
-        std::memset(request.memory.data() + request.memory.size(), 0,
-                    newsize - request.memory.size());
+        std::memset(request.memory.unchecked_address_of_first_item() +
+                        request.memory.size(),
+                    0, newsize - request.memory.size());
     }
 
-    return ok::raw_slice(*request.memory.data(), newsize);
+    return ok::raw_slice(*request.memory.unchecked_address_of_first_item(),
+                         newsize);
 }
 
 namespace linked_blockpool_allocator {
@@ -401,7 +412,8 @@ struct start_with_one_pool_t
 
         bytes_t allocation = allocation_result.release();
 
-        auto* pool = reinterpret_cast<pool_t*>(allocation.data());
+        auto* pool = reinterpret_cast<pool_t*>(
+            allocation.unchecked_address_of_first_item());
         const bool success = pool->init_in_buffer(
             allocation, nullptr, actual_minimum_alignment, actual_blocksize);
         if (!success) [[unlikely]] {

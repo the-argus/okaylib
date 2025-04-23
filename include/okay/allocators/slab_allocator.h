@@ -183,8 +183,9 @@ slab_allocator_t<allocator_impl_t, num_blocksizes>::impl_reallocate(
         auto&& _ = ok_memcopy(.to = newbytes, .from = request.memory);
 
         if (!(request.flags & alloc::flags::leave_nonzeroed)) {
-            std::memset(newbytes.data() + request.memory.size(), 0,
-                        newbytes.size() - request.memory.size());
+            std::memset(newbytes.unchecked_address_of_first_item() +
+                            request.memory.size(),
+                        0, newbytes.size() - request.memory.size());
         }
 
         deallocate(request.memory);
