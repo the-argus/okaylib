@@ -104,15 +104,15 @@ class reserving_page_allocator_t : public allocator_t
             page_size = 4096;
         }
         const auto code =
-            mmap::memory_unmap(bytes.data(), page_size * m_pages_reserved);
+            mmap::memory_unmap(bytes.unchecked_address_of_first_item(),
+                               page_size * m_pages_reserved);
         __ok_internal_assert(code == 0);
     }
 
     [[nodiscard]] inline alloc::result_t<bytes_t> impl_reallocate(
         const alloc::reallocate_request_t& request) OKAYLIB_NOEXCEPT final
     {
-        __ok_assert(uintptr_t(request.memory.data()) % mmap::get_page_size() ==
-                        0,
+        __ok_assert(uintptr_t(&request.memory[0]) % mmap::get_page_size() == 0,
                     "misaligned memory requested for reallocation");
 
         __ok_usage_error(request.flags & alloc::flags::leave_nonzeroed,
@@ -141,12 +141,14 @@ class reserving_page_allocator_t : public allocator_t
             runtime_round_up_to_multiple_of(page_size, actual_size_bytes);
         const size_t num_pages = num_bytes / page_size;
 
-        int64_t code = mmap::commit_pages(request.memory.data(), num_pages);
+        int64_t code = mmap::commit_pages(
+            request.memory.unchecked_address_of_first_item(), num_pages);
         if (code != 0) [[unlikely]] {
             return alloc::error::oom;
         }
 
-        return raw_slice(*request.memory.data(), num_bytes);
+        return raw_slice(*request.memory.unchecked_address_of_first_item(),
+                         num_bytes);
     }
 
     [[nodiscard]] inline alloc::result_t<alloc::reallocation_extended_t>

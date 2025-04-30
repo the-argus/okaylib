@@ -335,7 +335,8 @@ class allocator_t
 
     constexpr void deallocate(bytes_t bytes) OKAYLIB_NOEXCEPT
     {
-        impl_deallocate(bytes);
+        if (!bytes.is_empty()) [[likely]]
+            impl_deallocate(bytes);
     }
 
     [[nodiscard]] constexpr alloc::result_t<bytes_t>
