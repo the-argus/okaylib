@@ -319,6 +319,13 @@ slice(T)
 
 using bytes_t = slice<uint8_t>;
 
+namespace detail {
+struct null_bit_slice_tag
+{};
+inline static uint8_t dummy_byte = 0;
+inline static uint8_t* const dummy_byte_ptr = &dummy_byte;
+} // namespace detail
+
 class const_bit_slice_t
 {
   protected:
@@ -333,6 +340,15 @@ class const_bit_slice_t
         if (first_byte == nullptr && num_bits != 0) [[unlikely]] {
             __ok_abort("Attempt to use null data but size is not zero.");
         }
+    }
+
+    const_bit_slice_t(detail::null_bit_slice_tag)
+        : m(members_t{
+              .num_bits = 0,
+              .first_byte = detail::dummy_byte_ptr,
+              .offset = 0,
+          })
+    {
     }
 
     struct members_t
@@ -410,6 +426,11 @@ class bit_slice_t : public const_bit_slice_t
     {
     }
 
+    bit_slice_t(detail::null_bit_slice_tag)
+        : const_bit_slice_t(detail::null_bit_slice_tag{})
+    {
+    }
+
   public:
 #ifdef OKAYLIB_USE_FMT
     friend struct fmt::formatter<bit_slice_t>;
@@ -468,9 +489,7 @@ constexpr bit_slice_t raw_bit_slice(bytes_t bytes, size_t num_bits,
                                     uint8_t offset) OKAYLIB_NOEXCEPT
 {
     if (bytes.is_empty()) [[unlikely]] {
-        // Refusing to create empty bit slices.
-        __ok_abort(
-            "Attempt to create raw_bit_slice from empty slice of bytes.");
+        return bit_slice_t(detail::null_bit_slice_tag{});
     }
     if (round_up_to_multiple_of<8>((num_bits + offset)) / 8 > bytes.size())
         [[unlikely]] {
@@ -489,9 +508,7 @@ constexpr const_bit_slice_t raw_bit_slice(slice<const uint8_t> bytes,
                                           uint8_t offset) OKAYLIB_NOEXCEPT
 {
     if (bytes.is_empty()) [[unlikely]] {
-        // Refusing to create empty bit slices.
-        __ok_abort(
-            "Attempt to create raw_bit_slice from empty slice of bytes.");
+        return const_bit_slice_t(detail::null_bit_slice_tag{});
     }
     if (round_up_to_multiple_of<8>((num_bits + offset)) / 8 > bytes.size()) {
         __ok_abort("Invalid number of bits requested from slice of bytes in "

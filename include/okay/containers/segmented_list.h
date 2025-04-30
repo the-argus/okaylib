@@ -146,8 +146,8 @@ template <typename T, typename backing_allocator_t> class segmented_list_t
             }
 
             bytes_t& blocklist_bytes = blocklist_result.release_ref();
-            m.blocklist =
-                reinterpret_cast<blocklist_t*>(blocklist_bytes.data());
+            m.blocklist = reinterpret_cast<blocklist_t*>(
+                blocklist_bytes.unchecked_address_of_first_item());
 
             m.blocklist->num_blocks = 0;
             m.blocklist->capacity =
@@ -172,8 +172,8 @@ template <typename T, typename backing_allocator_t> class segmented_list_t
             }
 
             bytes_t& blocklist_bytes = new_blocklist_result.release_ref();
-            m.blocklist =
-                reinterpret_cast<blocklist_t*>(blocklist_bytes.data());
+            m.blocklist = reinterpret_cast<blocklist_t*>(
+                blocklist_bytes.unchecked_address_of_first_item());
             m.blocklist->capacity =
                 (blocklist_bytes.size() - sizeof(blocklist_t)) / sizeof(T*);
         }
@@ -182,8 +182,8 @@ template <typename T, typename backing_allocator_t> class segmented_list_t
 
         free_new_buffer.cancel();
 
-        m.blocklist->blocks[m.blocklist->num_blocks] =
-            reinterpret_cast<T*>(new_buffer_bytes.data());
+        m.blocklist->blocks[m.blocklist->num_blocks] = reinterpret_cast<T*>(
+            new_buffer_bytes.unchecked_address_of_first_item());
         m.blocklist->num_blocks++;
 
         return alloc::error::okay;
