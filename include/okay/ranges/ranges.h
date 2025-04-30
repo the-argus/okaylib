@@ -637,9 +637,12 @@ template <typename T>
 constexpr bool range_refwrap_impls_get_ref_const_v =
     range_is_ref_wrapper_v<T> &&
     range_impls_get_ref_const_unchecked_rettype_v<T> &&
-    std::is_same_v<
-        typename ref_or_void<range_deduced_value_type_t<T>>::type,
-        typename range_impls_get_ref_const_unchecked_rettype<T>::return_type>;
+    (std::is_same_v<typename ref_or_void<range_deduced_value_type_t<T>>::type,
+                    typename range_impls_get_ref_const_unchecked_rettype<
+                        T>::return_type> ||
+     std::is_same_v<
+         typename const_ref_or_void<range_deduced_value_type_t<T>>::type,
+         typename range_impls_get_ref_const_unchecked_rettype<T>::return_type>);
 
 template <typename T>
 constexpr bool range_can_get_ref_v =

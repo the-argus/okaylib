@@ -137,11 +137,11 @@ struct propagate_get_set_t
     template <typename T = parent_range_t>
     constexpr static auto get(const derived_range_t& range,
                               const cursor_t& cursor)
-        -> std::enable_if_t<
-            std::is_same_v<T, parent_range_t>,
-            decltype(range_definition_inner<T>::get(
-                std::declval<const T&>(),
-                std::declval<const cursor_type_unchecked_for_t<T>>()))>
+        -> std::enable_if_t<std::is_same_v<T, parent_range_t>,
+                            decltype(range_definition_inner<T>::get(
+                                range.template get_view_reference<
+                                    derived_range_t, parent_range_t>(),
+                                cursor))>
     {
         return range_definition_inner<T>::get(
             range
@@ -156,8 +156,7 @@ struct propagate_get_set_t
             std::is_same_v<T, parent_range_t> &&
                 range_impls_construction_set_v<T, constructor_args_t...>,
             decltype(range_definition_inner<T>::set(
-                std::declval<T&>(),
-                std::declval<const cursor_type_unchecked_for_t<T>>(),
+                range.template get_view_reference<derived_range_t, T>(), cursor,
                 std::forward<constructor_args_t>(args)...))>
     {
         return range_definition_inner<T>::get(
@@ -172,13 +171,11 @@ struct propagate_get_set_t
             std::is_same_v<T, parent_range_t> && range_can_get_ref_v<T> &&
                 !range_is_ref_wrapper_v<T>,
             decltype(range_definition_inner<T>::get_ref(
-                std::declval<T&>(),
-                std::declval<const cursor_type_unchecked_for_t<T>>()))>
+                range.template get_view_reference<derived_range_t, T>(),
+                cursor))>
     {
         return range_definition_inner<T>::get_ref(
-            range
-                .template get_view_reference<derived_range_t, parent_range_t>(),
-            cursor);
+            range.template get_view_reference<derived_range_t, T>(), cursor);
     }
 
     template <typename T = parent_range_t>

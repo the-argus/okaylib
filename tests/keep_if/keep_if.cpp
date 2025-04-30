@@ -1,5 +1,6 @@
 #include "test_header.h"
 // test header must be first
+#include "okay/containers/array.h"
 #include "okay/macros/foreach.h"
 #include "okay/ranges/views/enumerate.h"
 #include "okay/ranges/views/keep_if.h"
@@ -60,10 +61,10 @@ TEST_SUITE("keep_if")
 
             std::array<int, 50> ints;
 
+            static_assert(!detail::range_impls_increment_v<decltype(ints)>);
             static_assert(
-                !detail::range_impls_increment_v<decltype(ints)>);
-            static_assert(detail::range_impls_increment_v<
-                          decltype(ints | keep_if(is_even))>);
+                detail::range_impls_increment_v<decltype(ints |
+                                                         keep_if(is_even))>);
             static_assert(detail::is_random_access_range_v<decltype(ints)>);
             static_assert(
                 detail::is_bidirectional_range_v<decltype(ints |
@@ -126,6 +127,21 @@ TEST_SUITE("keep_if")
             ok_foreach(const int i, ints | enumerate | skip_even | get_first)
             {
                 REQUIRE(i % 2 == 1);
+            }
+        }
+
+        SUBCASE("keep_if of const ref to array is a range")
+        {
+            const auto keep_if_less_than_100 =
+                ok::keep_if([](int i) -> bool { return i < 100; });
+
+            constexpr ok::array_t nums = {0, 100, 1, 100, 2, 100, 3, 100};
+
+            int counter = 0;
+            ok_foreach(int i, nums | keep_if_less_than_100)
+            {
+                REQUIRE(i == counter);
+                ++counter;
             }
         }
 
