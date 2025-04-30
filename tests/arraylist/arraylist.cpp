@@ -237,11 +237,8 @@ TEST_SUITE("arraylist")
             REQUIRE(all_three_equal);
         }
 
-        SUBCASE("items size and data matches direct size and data")
+        SUBCASE("items size matches direct size")
         {
-            REQUIRE(list.data() == list.items().data());
-            static_assert(std::is_same_v<decltype(list.data()),
-                                         decltype(list.items().data())>);
             REQUIRE(list.size() == list.items().size());
         }
 
@@ -255,18 +252,13 @@ TEST_SUITE("arraylist")
             REQUIRE(direct_size == items_size);
         }
 
-        SUBCASE("can call size on empty arraylist but not data or items")
+        SUBCASE(
+            "can call size and items on empty arraylist regardless of const")
         {
             arraylist_t alist = arraylist::empty<int>(allocator);
             const auto& const_alist = alist;
 
             REQUIRE(alist.size() == 0);
-            {
-                auto _ = alist.data();
-            }
-            {
-                auto _ = const_alist.data();
-            }
             {
                 auto _ = alist.items();
             }
@@ -795,7 +787,7 @@ TEST_SUITE("arraylist")
             REQUIRE(ranges_equal(alist, array_t{0, 6, 2, 3, 4, 5, 1}));
 
             // okay now reallocate
-            auto status = alist.increase_capacity_by(100);
+            auto status = alist.increase_capacity_by_at_least(100);
             const bool good = status.okay() &&
                               ranges_equal(alist, array_t{0, 6, 2, 3, 4, 5, 1});
             REQUIRE(good);
@@ -817,7 +809,7 @@ TEST_SUITE("arraylist")
 
         REQUIRE(alist.size() == 50);
 
-        slice<size_t> items = alist.shrink_and_leak().ref_or_panic();
+        slice<size_t> items = alist.shrink_and_leak();
 
         REQUIRE(items.size() == 50);
 
@@ -1024,7 +1016,7 @@ TEST_SUITE("arraylist")
                                     backing, indices | take_at_most(100))
                                     .release();
             REQUIRE(alist.capacity() == 100);
-            auto status = alist.increase_capacity_by(100);
+            auto status = alist.increase_capacity_by_at_least(100);
             const bool good = status.okay() && alist.capacity() >= 200;
             REQUIRE(good);
         }
@@ -1033,7 +1025,7 @@ TEST_SUITE("arraylist")
         {
             c_allocator_t backing;
             arraylist_t alist = arraylist::empty<size_t>(backing);
-            auto status = alist.increase_capacity_by(100);
+            auto status = alist.increase_capacity_by_at_least(100);
             const bool good = status.okay() && alist.capacity() >= 100;
             REQUIRE(good);
         }

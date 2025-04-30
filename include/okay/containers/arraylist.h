@@ -111,9 +111,9 @@ class arraylist_t
     {
         // prevent other from destroying our buffer when it goes, but keep it in
         // a valid state
-        other.items = nullptr;
-        other.size = 0;
-        other.capacity = 0;
+        other.m.items = nullptr;
+        other.m.size = 0;
+        other.m.capacity = 0;
     }
 
     constexpr arraylist_t& operator=(arraylist_t&& other) OKAYLIB_NOEXCEPT
@@ -136,8 +136,7 @@ class arraylist_t
         } else if (this->capacity() <= this->size()) {
             // 2x growth rate
             auto status =
-                this->reallocate(raw_slice(*m.items, this->capacity()),
-                                 sizeof(T), this->capacity() * sizeof(T));
+                this->reallocate(sizeof(T), this->capacity() * sizeof(T));
             if (!status.okay()) [[unlikely]] {
                 return status;
             }
@@ -213,9 +212,8 @@ class arraylist_t
             auto result = ok::make_into_uninitialized<T>(
                 uninit, std::forward<args_t>(args)...);
 
-            // only add to occupied spots if the construction was successful
             if (result.okay()) [[likely]] {
-                ++m.spots_occupied;
+                ++m.size;
             } else {
                 // move all other items BACK to where they were before (this is
                 // supposed to be the cold path and it only invokes nonfailing
@@ -241,7 +239,7 @@ class arraylist_t
         } else {
             ok::make_into_uninitialized<T>(uninit,
                                            std::forward<args_t>(args)...);
-            ++m.spots_occupied;
+            ++m.size;
             return status(alloc::error::okay);
         }
     }
@@ -270,10 +268,7 @@ class arraylist_t
         // moved out at index
         T out(std::move(removed));
 
-        // we would have crashed at this point if out of bounds, so assume idx
-        // is in bounds
-
-        defer decrement([this] { --m.spots_occupied; });
+        defer decrement([this] { --m.size; });
 
         if (idx == this->size() - 1) {
             // we've left `removed` in a valid state because we thought we were
@@ -314,7 +309,7 @@ class arraylist_t
         // moved out at index
         T out(std::move(target));
 
-        defer decrement([this, target] { --m.spots_occupied; });
+        defer decrement([this, target] { --m.size; });
 
         if (idx == this->size() - 1) {
             if constexpr (!std::is_trivially_destructible_v<T>) {
@@ -422,9 +417,10 @@ class arraylist_t
     }
 
     /// Does not reclaim unused memory when shrinking
-    /// If type stored is trivially constructible, then new memory is zeroed
-    /// Only possible if T is default constructible.
-    /// Args `args` must select nonfailing constructor.
+    /// If type stored is trivially default constructible, and the default
+    /// constructor is selected, then new memory is zeroed.
+    /// Args `args` must select a nonfailing constructor.
+    /// The constructor may get called multiple times, for each new element.
     template <typename... args_t>
     [[nodiscard]] constexpr auto resize(size_t new_size,
                                         args_t&&... args) OKAYLIB_NOEXCEPT
@@ -480,7 +476,7 @@ class arraylist_t
             }
 
             // reallocation worked, right?
-            __ok_internal_assert(this->size() >= new_size);
+            __ok_internal_assert(this->capacity() >= new_size);
 
             // initialize new elements
             if constexpr (std::is_trivially_default_constructible_v<T> &&
@@ -504,16 +500,16 @@ class arraylist_t
     }
 
     /// the old shrink and leak. the shrinky leaky
-    [[nodiscard]] constexpr opt<slice<T>> shrink_and_leak() OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr slice<T> shrink_and_leak() OKAYLIB_NOEXCEPT
     {
         shrink_to_reclaim_unused_memory();
 
         if (this->capacity() == 0) [[unlikely]] {
             __ok_internal_assert(m.size == 0);
-            return nullopt;
+            return make_null_slice<T>();
         }
 
-        opt out = raw_slice(*m.items, m.size);
+        slice<T> out = raw_slice(*m.items, m.size);
 
         // we no longer own the memory
         m.items = nullptr;
@@ -553,7 +549,8 @@ class arraylist_t
             const size_t size = ok::size(range);
             const size_t extra_space = this->capacity() - this->size();
             if (size > extra_space) {
-                auto status = this->increase_capacity_by(size - extra_space);
+                auto status =
+                    this->increase_capacity_by_at_least(size - extra_space);
                 if (!status.okay()) [[unlikely]] {
                     return status;
                 }
@@ -645,10 +642,9 @@ class arraylist_t
                     reallocation.memory.unchecked_address_of_first_item());
 
                 if constexpr (std::is_trivially_copyable_v<T>) {
-                    std::memcpy((void*)dest, (void*)src,
-                                m.spots_occupied * sizeof(T));
+                    std::memcpy((void*)dest, (void*)src, m.size * sizeof(T));
                 } else {
-                    for (size_t i = 0; i < m.spots_occupied; ++i) {
+                    for (size_t i = 0; i < m.size; ++i) {
                         T& src_item = src[i];
                         new (dest + i) T(std::move(src_item));
                         if constexpr (!std::is_trivially_destructible_v<T>) {
@@ -694,8 +690,8 @@ class arraylist_t
     constexpr void call_destructor_on_all_items() OKAYLIB_NOEXCEPT
     {
         __ok_internal_assert(this->capacity() > 0);
-        if (!std::is_trivially_destructible_v<T>) {
-            for (size_t i = 0; i < m.spots_occupied; ++i) {
+        if constexpr (!std::is_trivially_destructible_v<T>) {
+            for (size_t i = 0; i < m.size; ++i) {
                 m.items[i].~T();
             }
         }
@@ -732,7 +728,7 @@ template <typename T> struct empty_t
             .items = nullptr,
             .capacity = 0,
             .size = 0,
-            .backing_allocator = 0,
+            .backing_allocator = ok::addressof(allocator),
         };
     }
 };
@@ -863,6 +859,33 @@ inline constexpr detail::spots_preallocated_t<T> spots_preallocated;
 
 inline constexpr detail::copy_items_from_range_t copy_items_from_range;
 }; // namespace arraylist
+
+template <typename T, typename backing_allocator_t>
+struct range_definition<ok::arraylist_t<T, backing_allocator_t>>
+{
+    static inline constexpr bool is_arraylike = true;
+
+    using range_t = ok::arraylist_t<T, backing_allocator_t>;
+
+    using value_type = T;
+
+    static constexpr value_type& get_ref(range_t& r, size_t c) OKAYLIB_NOEXCEPT
+    {
+        return r[c];
+    }
+
+    static constexpr const value_type& get_ref(const range_t& r,
+                                               size_t c) OKAYLIB_NOEXCEPT
+    {
+        return r[c];
+    }
+
+    static constexpr size_t size(const range_t& r) OKAYLIB_NOEXCEPT
+    {
+        return r.size();
+    }
+};
+
 } // namespace ok
 
 #ifdef OKAYLIB_USE_FMT
