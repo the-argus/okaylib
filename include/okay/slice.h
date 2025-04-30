@@ -70,12 +70,13 @@ template <typename viewed_t> class slice
     }
 
     inline static detail::uninitialized_storage_t<viewed_t> null_slice_mem;
-    inline static auto* null_slice_mem_start = ok::addressof(null_slice_mem);
+    inline static auto* null_slice_mem_start =
+        ok::addressof(null_slice_mem.value);
 
     struct null_slice_tag
     {};
 
-    constexpr slice(const null_slice_tag&) OKAYLIB_NOEXCEPT
+    constexpr slice(null_slice_tag) OKAYLIB_NOEXCEPT
         : m_data(null_slice_mem_start),
           m_elements(0)
     {
@@ -293,7 +294,7 @@ template <typename viewed_t> class slice
 
     template <typename T>
     friend slice<T> ok::raw_slice(T& data, size_t size) OKAYLIB_NOEXCEPT;
-    template <typename T> slice<T> make_null_slice() OKAYLIB_NOEXCEPT;
+    template <typename T> friend slice<T> make_null_slice() OKAYLIB_NOEXCEPT;
 
 #ifdef OKAYLIB_USE_FMT
     friend struct fmt::formatter<slice>;
