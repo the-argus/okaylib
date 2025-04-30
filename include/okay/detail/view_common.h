@@ -292,8 +292,8 @@ struct ok::range_definition<detail::owning_view<range_t>>
 namespace detail {
 
 template <typename range_t>
-class ref_view<
-    range_t, std::enable_if_t<std::is_object_v<range_t> && is_range_v<range_t>>>
+class ref_view<range_t, std::enable_if_t<!std::is_reference_v<range_t> &&
+                                         is_range_v<range_t>>>
 {
   private:
     range_t* m_range;

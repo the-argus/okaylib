@@ -23,10 +23,13 @@ TEST_SUITE("join")
 
             static_assert(detail::is_random_access_range_v<decltype(a)>);
             static_assert(detail::is_random_access_range_v<decltype(arrays)>);
+            // i wish... maybe if the sizes of all the arrays were statically
+            // known
             static_assert(
                 !detail::is_random_access_range_v<decltype(arrays | join)>);
 
             size_t counter = 0;
+            auto&& rng = arrays | join;
             ok_foreach(int i, arrays | join)
             {
                 switch (i) {
