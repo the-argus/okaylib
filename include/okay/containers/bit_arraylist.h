@@ -201,7 +201,7 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
     [[nodiscard]] constexpr status<alloc::error>
     insert_at(size_t idx, bool value) OKAYLIB_NOEXCEPT
     {
-        if (idx >= this->size_bits()) [[unlikely]] {
+        if (idx > this->size_bits()) [[unlikely]] {
             __ok_abort("insert_at into bit_arraylist out of bounds");
         }
         __ok_internal_assert(this->capacity_bits() >= this->size_bits());
@@ -247,16 +247,22 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
         const size_t num_bytes =
             round_up_to_multiple_of<8>(m.num_bits - idx) / 8;
 
-        for (size_t iter = first_byte_index + 2; iter < num_bytes; ++iter) {
+        for (size_t iter = first_byte_index + 1; iter < num_bytes; ++iter) {
             const size_t i = iter - 1;
             const bool new_carry =
-                m.allocation.unchecked_address_of_first_item()[i] &
-                carry_check_mask;
-            m.allocation.unchecked_address_of_first_item()[i] <<= 1;
-            m.allocation.unchecked_address_of_first_item()[i] ^=
-                carry_in_mask * carry;
+                m.allocation.unchecked_access(i) & carry_check_mask;
+            m.allocation.unchecked_access(i) <<= 1;
+            m.allocation.unchecked_access(i) ^= carry_in_mask * carry;
             carry = new_carry;
         }
+
+        // if we need to carry into the next bytes
+        if (carry && this->size_bits() % 8 == 7) {
+            const size_t size_bytes = this->size_bytes();
+            __ok_internal_assert(size_bytes < this->capacity_bytes());
+            m.allocation.unchecked_access(size_bytes) = 1;
+        }
+        ++m.num_bits;
 
         return alloc::error::okay;
     }
