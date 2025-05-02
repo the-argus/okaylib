@@ -79,8 +79,9 @@ TEST_SUITE("bit_arraylist_t")
         SUBCASE("can implicitly convert dynamic bit_array into bit_slice_t")
         {
             constexpr auto gets_slice = [](const_bit_slice_t bs) {
-                bs | ok::for_each(
-                         [](bool item) { fmt::print("{}", item ? "0" : "1"); });
+                bs | ok::for_each([](ok::bit item) {
+                    fmt::print("{}", item ? "0" : "1");
+                });
                 fmt::print("\n");
             };
 
@@ -118,12 +119,12 @@ TEST_SUITE("bit_arraylist_t")
             REQUIRE(dbs.size_bits() == 100);
             REQUIRE(dbs.capacity_bits() >= 600);
 
-            const auto all_zeroed = all([](bool a) { return a == false; });
-            const auto all_ones = all([](bool a) { return a == true; });
+            const auto all_zeroed = all([](ok::bit a) { return a == false; });
+            const auto all_ones = all([](ok::bit a) { return a == true; });
             bool good = all_zeroed(dbs);
             REQUIRE(good);
 
-            dbs.set_all_bits(true);
+            dbs.set_all_bits(bit_on);
             good = all_ones(dbs);
             REQUIRE(good);
         }
@@ -177,33 +178,32 @@ TEST_SUITE("bit_arraylist_t")
         SUBCASE("insert_at on initially empty dbs")
         {
             bit_arraylist_t dbs(c_allocator);
-            REQUIREABORTS(auto&& out_of_range = dbs.insert_at(1, true));
-            REQUIRE(dbs.insert_at(0, true).okay());
+            REQUIREABORTS(auto&& out_of_range = dbs.insert_at(1, bit_on));
+            REQUIRE(dbs.insert_at(0, bit_on).okay());
             constexpr auto bs = bit_array::bit_string("1");
             REQUIRE_RANGES_EQUAL(dbs, bs);
 
-            REQUIRE(dbs.insert_at(1, false).okay());
+            REQUIRE(dbs.insert_at(1, bit_off).okay());
             REQUIRE(ranges_equal(dbs, bit_array::bit_string("10")));
-            REQUIRE(dbs.insert_at(2, true).okay());
+            REQUIRE(dbs.insert_at(2, bit_on).okay());
             REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("101"));
-            REQUIRE(dbs.insert_at(3, false).okay());
+            REQUIRE(dbs.insert_at(3, bit_off).okay());
             REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("1010"));
-            REQUIRE(dbs.insert_at(4, true).okay());
+            REQUIRE(dbs.insert_at(4, bit_on).okay());
             REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("10101"));
-            REQUIRE(dbs.insert_at(5, false).okay());
+            REQUIRE(dbs.insert_at(5, bit_off).okay());
             REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("101010"));
-            REQUIRE(dbs.insert_at(6, true).okay());
+            REQUIRE(dbs.insert_at(6, bit_on).okay());
             REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("1010101"));
-            REQUIRE(dbs.insert_at(7, false).okay());
+            REQUIRE(dbs.insert_at(7, bit_off).okay());
             REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("10101010"));
-            REQUIRE(dbs.insert_at(8, true).okay());
+            REQUIRE(dbs.insert_at(8, bit_on).okay());
             REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("101010101"));
-            REQUIRE(dbs.insert_at(9, false).okay());
+            REQUIRE(dbs.insert_at(9, bit_off).okay());
             REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("1010101010"));
         }
 
-        SUBCASE(
-            "insert_at on preinitialized, first_allocation dynamic bit_array")
+        SUBCASE("insert_at which causes reallocation and carry to next byte")
         {
             constexpr auto preinit = bit_array::bit_string("01010011");
             bit_arraylist_t dbs =
@@ -212,9 +212,9 @@ TEST_SUITE("bit_arraylist_t")
 
             REQUIRE(dbs.size_bits() == preinit.size_bits());
 
-            REQUIRE(dbs.insert_at(2, true).okay());
+            REQUIRE(dbs.insert_at(0, bit_on).okay());
 
-            constexpr auto after_insert = bit_array::bit_string("010110011");
+            constexpr auto after_insert = bit_array::bit_string("101010011");
             REQUIRE_RANGES_EQUAL(dbs, after_insert);
         }
     }

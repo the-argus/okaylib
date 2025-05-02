@@ -326,6 +326,57 @@ inline static uint8_t dummy_byte = 0;
 inline static uint8_t* const dummy_byte_ptr = &dummy_byte;
 } // namespace detail
 
+class bit
+{
+  public:
+    explicit constexpr bit(bool b) : m_bool(b) {}
+
+    constexpr void flip() noexcept { m_bool = !m_bool; }
+
+    [[nodiscard]] constexpr ok::bit flipped() const noexcept
+    {
+        return ok::bit(!m_bool);
+    }
+
+    constexpr explicit operator bool() const { return m_bool; }
+
+    [[nodiscard]] constexpr friend bool operator==(bit a, bit b) noexcept
+    {
+        return a.m_bool == b.m_bool;
+    }
+
+    [[nodiscard]] constexpr friend bool operator!=(bit a, bit b) noexcept
+    {
+        return a.m_bool != b.m_bool;
+    }
+
+    [[nodiscard]] constexpr friend bool operator==(bit a, bool b) noexcept
+    {
+        return a.m_bool == b;
+    }
+
+    [[nodiscard]] constexpr friend bool operator==(bool b, bit a) noexcept
+    {
+        return a.m_bool == b;
+    }
+
+    [[nodiscard]] constexpr friend bool operator!=(bit a, bool b) noexcept
+    {
+        return a.m_bool != b;
+    }
+
+    [[nodiscard]] constexpr friend bool operator!=(bool b, bit a) noexcept
+    {
+        return a.m_bool != b;
+    }
+
+  private:
+    bool m_bool;
+};
+
+static inline constexpr bit bit_off{false};
+static inline constexpr bit bit_on{true};
+
 class const_bit_slice_t
 {
   protected:
@@ -391,8 +442,7 @@ class const_bit_slice_t
         return round_up_to_multiple_of<8>(m.num_bits + m.offset);
     }
 
-    [[nodiscard]] constexpr bool
-    get_bit(const size_t idx) const OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr bit get_bit(const size_t idx) const OKAYLIB_NOEXCEPT
     {
         if (idx >= this->size()) [[unlikely]] {
             __ok_abort("Out of bounds access to const_bit_slice_t::get_bit.");
@@ -401,7 +451,7 @@ class const_bit_slice_t
         const size_t byte = bit_idx / 8;
         const size_t bit = bit_idx % 8;
         const uint8_t mask = uint8_t(1) << bit;
-        return m.first_byte[byte] & mask;
+        return ok::bit(m.first_byte[byte] & mask);
     }
 
     [[nodiscard]] constexpr const_bit_slice_t
@@ -441,7 +491,7 @@ class bit_slice_t : public const_bit_slice_t
                       uint8_t offset) OKAYLIB_NOEXCEPT;
 
     constexpr void set_bit(const size_t idx,
-                           const bool on) const OKAYLIB_NOEXCEPT
+                           const bit status) const OKAYLIB_NOEXCEPT
     {
         if (idx >= this->size()) [[unlikely]] {
             __ok_abort("Out of bounds access to bit_slice_t::set_bit.");
@@ -452,7 +502,7 @@ class bit_slice_t : public const_bit_slice_t
 
         const uint8_t mask = uint8_t(1) << bit;
 
-        if (on) {
+        if (status == bit_on) {
             m.first_byte[byte] |= mask;
         } else {
             m.first_byte[byte] &= ~mask;
@@ -713,7 +763,7 @@ template <> struct range_definition<const_bit_slice_t, void>
         return bs.size();
     }
 
-    static constexpr bool get(const const_bit_slice_t& range, size_t cursor)
+    static constexpr bit get(const const_bit_slice_t& range, size_t cursor)
     {
         return range.get_bit(cursor);
     }
@@ -737,12 +787,12 @@ template <> struct range_definition<bit_slice_t, void>
         return bs.size();
     }
 
-    static constexpr bool get(const bit_slice_t& range, size_t cursor)
+    static constexpr bit get(const bit_slice_t& range, size_t cursor)
     {
         return range.get_bit(cursor);
     }
 
-    static constexpr void set(bit_slice_t& range, size_t cursor, bool value)
+    static constexpr void set(bit_slice_t& range, size_t cursor, bit value)
     {
         return range.set_bit(cursor, value);
     }
@@ -751,6 +801,24 @@ template <> struct range_definition<bit_slice_t, void>
 } // namespace ok
 
 #ifdef OKAYLIB_USE_FMT
+template <> struct fmt::formatter<ok::bit>
+{
+    constexpr auto
+    parse(format_parse_context& ctx) -> format_parse_context::iterator
+    {
+        auto it = ctx.begin();
+        if (it != ctx.end() && *it != '}')
+            throw_format_error("invalid format");
+        return it;
+    }
+
+    auto format(const ok::bit& b,
+                format_context& ctx) const -> format_context::iterator
+    {
+        return fmt::format_to(ctx.out(), b ? "1" : "0");
+    }
+};
+
 template <typename viewed_t> struct fmt::formatter<ok::slice<viewed_t>>
 {
     constexpr auto
@@ -793,7 +861,7 @@ template <> struct fmt::formatter<ok::const_bit_slice_t>
     {
         fmt::format_to(ctx.out(), "0b");
         for (size_t i = 0; i < bs.size(); ++i) {
-            fmt::format_to(ctx.out(), bs.get_bit(i) ? "1" : "0");
+            fmt::format_to(ctx.out(), "{}", bs.get_bit(i));
         }
         return fmt::format_to(ctx.out(), "");
     }

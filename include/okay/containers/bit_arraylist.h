@@ -128,7 +128,7 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
     constexpr bit_slice_t items() && = delete;
     constexpr const_bit_slice_t items() const&& = delete;
 
-    constexpr void set_all_bits(bool value) OKAYLIB_NOEXCEPT
+    constexpr void set_all_bits(ok::bit value) OKAYLIB_NOEXCEPT
     {
         if (m.allocation.size() == 0) [[unlikely]] {
             return;
@@ -147,12 +147,12 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
         return m.num_bits;
     }
 
-    constexpr void set_bit(size_t idx, bool value) OKAYLIB_NOEXCEPT
+    constexpr void set_bit(size_t idx, ok::bit value) OKAYLIB_NOEXCEPT
     {
         items().set_bit(idx, value);
     }
 
-    [[nodiscard]] constexpr bool get_bit(size_t idx) const OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr ok::bit get_bit(size_t idx) const OKAYLIB_NOEXCEPT
     {
         return items().get_bit(idx);
     }
@@ -199,7 +199,7 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
     }
 
     [[nodiscard]] constexpr status<alloc::error>
-    insert_at(size_t idx, bool value) OKAYLIB_NOEXCEPT
+    insert_at(size_t idx, ok::bit value) OKAYLIB_NOEXCEPT
     {
         if (idx > this->size_bits()) [[unlikely]] {
             __ok_abort("insert_at into bit_arraylist out of bounds");
@@ -214,7 +214,7 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
         constexpr uint8_t carry_check_mask = 0b10000000;
 
         constexpr auto shift_byte_zero_return_carry =
-            [](uint8_t* byte, size_t bit_index, bool bit_is_on) -> bool {
+            [](uint8_t* byte, size_t bit_index, ok::bit bit) -> bool {
             __ok_internal_assert(bit_index < 8);
 
             // mask of the bits that should be shifted
@@ -228,7 +228,7 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
             // insert the shifted stuff
             *byte |= shifted;
             // insert the byte we're setting. if (!bit_is_on), this does nothing
-            *byte |= (bit_is_on ? uint8_t(1) : uint8_t(0)) << bit_index;
+            *byte |= (bit ? uint8_t(1) : uint8_t(0)) << bit_index;
 
             return carry;
         };
@@ -260,6 +260,7 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
         if (carry && this->size_bits() % 8 == 7) {
             const size_t size_bytes = this->size_bytes();
             __ok_internal_assert(size_bytes < this->capacity_bytes());
+            // only the first bit (little endian) is 1
             m.allocation.unchecked_access(size_bytes) = 1;
         }
         ++m.num_bits;
@@ -452,12 +453,13 @@ struct range_definition<bit_arraylist_t<backing_allocator_t>>
         return bs.size_bits();
     }
 
-    static constexpr bool get(const bit_arraylist_t& range, size_t cursor)
+    static constexpr ok::bit get(const bit_arraylist_t& range, size_t cursor)
     {
         return range.get_bit(cursor);
     }
 
-    static constexpr void set(bit_arraylist_t& range, size_t cursor, bool value)
+    static constexpr void set(bit_arraylist_t& range, size_t cursor,
+                              ok::bit value)
     {
         return range.set_bit(cursor, value);
     }
@@ -501,7 +503,7 @@ struct bit_string_t
         uninit.m.num_bits = N - 1;
 
         for (size_t i = 0; i < N - 1; ++i) {
-            uninit.set_bit(i, literal[i] == '1');
+            uninit.set_bit(i, ok::bit(literal[i] == '1'));
         }
 
         return alloc::error::okay;
@@ -587,7 +589,7 @@ struct copy_booleans_from_range_t
                       "Size of range unknown, refusing to use its items in "
                       "bit_arraylist::copy_booleans_from_range constructor.");
         static_assert(
-            std::is_convertible_v<value_type_for<input_range_t>, bool>,
+            is_std_constructible_v<bool, value_type_for<input_range_t>>,
             "The range given to bit_arraylist::copy_booleans_from_range does "
             "not return something which can be converted to a boolean.");
 
@@ -610,8 +612,8 @@ struct copy_booleans_from_range_t
         size_t count = 0;
         for (auto c = ok::begin(range); ok::is_inbounds(range, c);
              ok::increment(range, c)) {
-            uninit.items().set_bit(count,
-                                   bool(iter_get_temporary_ref(range, c)));
+            uninit.items().set_bit(
+                count, ok::bit(bool(iter_get_temporary_ref(range, c))));
             ++count;
         }
 

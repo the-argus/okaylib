@@ -22,8 +22,8 @@ static_assert(
 static_assert(!std::is_convertible_v<bit_arraylist_t<c_allocator_t>&&,
                                      const_bit_slice_t>);
 // cant convert const to nonconst
-static_assert(!std::is_convertible_v<const bit_arraylist_t<c_allocator_t>&,
-                                     bit_slice_t>);
+static_assert(
+    !std::is_convertible_v<const bit_arraylist_t<c_allocator_t>&, bit_slice_t>);
 static_assert(!std::is_convertible_v<bit_array_t<1>&&, bit_slice_t>);
 static_assert(!std::is_convertible_v<bit_array_t<1>&&, const_bit_slice_t>);
 // cant convert const to nonconst
@@ -42,10 +42,16 @@ TEST_SUITE("bit_array containers")
 
             // clang-format off
             REQUIRE(ok::ranges_equal(array_t{
-                    false, false, false, false,
-                    false, false, false, false,
-                    false, false, false, false,
-                    false, false, false, false,
+                        bit_off, bit_off, bit_off, bit_off,
+                        bit_off, bit_off, bit_off, bit_off,
+                        bit_off, bit_off, bit_off, bit_off,
+                        bit_off, bit_off, bit_off, bit_off,
+                    }, bs));
+            REQUIRE(ok::ranges_equal(array_t{
+                        false, false, false, false,
+                        false, false, false, false,
+                        false, false, false, false,
+                        false, false, false, false,
                     }, bs));
             // clang-format on
         }
@@ -85,12 +91,15 @@ TEST_SUITE("bit_array containers")
 
         SUBCASE("bit_array == and != operators")
         {
-            REQUIRE(bit_array::bit_string("01010") == bit_array::bit_string("01010"));
-            REQUIRE(bit_array::bit_string("11010") != bit_array::bit_string("01010"));
-            REQUIRE(bit_array::bit_string("100000000000000000000000000000000000000"
-                                       "000000000000000000") !=
-                    bit_array::bit_string("000000000000000000000000000000000000000"
-                                       "000000000000000000"));
+            REQUIRE(bit_array::bit_string("01010") ==
+                    bit_array::bit_string("01010"));
+            REQUIRE(bit_array::bit_string("11010") !=
+                    bit_array::bit_string("01010"));
+            REQUIRE(
+                bit_array::bit_string("100000000000000000000000000000000000000"
+                                      "000000000000000000") !=
+                bit_array::bit_string("000000000000000000000000000000000000000"
+                                      "000000000000000000"));
         }
 
         SUBCASE("toggle bit")
@@ -139,9 +148,9 @@ TEST_SUITE("bit_array containers")
         SUBCASE("bit_array set_all_bits")
         {
             bit_array_t a = bit_array::bit_string("01010000111");
-            a.set_all_bits(false);
+            a.set_all_bits(bit_off);
             REQUIRE(a == bit_array::bit_string("00000000000"));
-            a.set_all_bits(true);
+            a.set_all_bits(bit_on);
             REQUIRE(a == bit_array::bit_string("11111111111"));
         }
     }
