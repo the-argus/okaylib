@@ -284,7 +284,7 @@ TEST_SUITE("slice")
             REQUIRE(sizeof(bytes) * 8 == bs.size());
 
             // require all bits are off
-            const bool eql = bs | all([](bool b) { return !b; });
+            const bool eql = bs | all([](ok::bit b) { return !b; });
             REQUIRE(eql);
             REQUIRE(!bs.is_empty());
         }
@@ -300,7 +300,7 @@ TEST_SUITE("slice")
             REQUIRE(sizeof(bytes) * 8 == bs.size());
 
             // require all bits are off
-            const bool eql = bs | all([](bool b) { return !b; });
+            const bool eql = bs | all([](ok::bit b) { return !b; });
             REQUIRE(eql);
             REQUIRE(!bs.is_empty());
         }
@@ -325,7 +325,7 @@ TEST_SUITE("slice")
             // set all the bits to on in the first half
             for (auto c = ok::begin(first_half); ok::is_inbounds(first_half, c);
                  ok::increment(first_half, c)) {
-                ok::iter_set(first_half, c, 1);
+                ok::iter_set(first_half, c, bit_on);
             }
 
             constexpr uint8_t all_ones = ~uint8_t(0);
@@ -352,7 +352,7 @@ TEST_SUITE("slice")
                 raw_bit_slice(slice(a), a.items().size_bits() - 5, 5);
 
             for (size_t i = 0; i < offsetted.size(); ++i) {
-                offsetted.set_bit(i, true);
+                offsetted.set_bit(i, bit_on);
             }
 
             // all bits have been set to 1
