@@ -42,10 +42,10 @@ TEST_SUITE("bit_array containers")
 
             // clang-format off
             REQUIRE(ok::ranges_equal(array_t{
-                        bit_off, bit_off, bit_off, bit_off,
-                        bit_off, bit_off, bit_off, bit_off,
-                        bit_off, bit_off, bit_off, bit_off,
-                        bit_off, bit_off, bit_off, bit_off,
+                        bit::off(), bit::off(), bit::off(), bit::off(),
+                        bit::off(), bit::off(), bit::off(), bit::off(),
+                        bit::off(), bit::off(), bit::off(), bit::off(),
+                        bit::off(), bit::off(), bit::off(), bit::off(),
                     }, bs));
             REQUIRE(ok::ranges_equal(array_t{
                         false, false, false, false,
@@ -148,9 +148,9 @@ TEST_SUITE("bit_array containers")
         SUBCASE("bit_array set_all_bits")
         {
             bit_array_t a = bit_array::bit_string("01010000111");
-            a.set_all_bits(bit_off);
+            a.set_all_bits(bit::off());
             REQUIRE(a == bit_array::bit_string("00000000000"));
-            a.set_all_bits(bit_on);
+            a.set_all_bits(bit::on());
             REQUIRE(a == bit_array::bit_string("11111111111"));
         }
     }

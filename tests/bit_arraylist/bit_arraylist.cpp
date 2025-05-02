@@ -124,7 +124,7 @@ TEST_SUITE("bit_arraylist_t")
             bool good = all_zeroed(dbs);
             REQUIRE(good);
 
-            dbs.set_all_bits(bit_on);
+            dbs.set_all_bits(bit::on());
             good = all_ones(dbs);
             REQUIRE(good);
         }
@@ -178,28 +178,28 @@ TEST_SUITE("bit_arraylist_t")
         SUBCASE("insert_at on initially empty dbs")
         {
             bit_arraylist_t dbs(c_allocator);
-            REQUIREABORTS(auto&& out_of_range = dbs.insert_at(1, bit_on));
-            REQUIRE(dbs.insert_at(0, bit_on).okay());
+            REQUIREABORTS(auto&& out_of_range = dbs.insert_at(1, bit::on()));
+            REQUIRE(dbs.insert_at(0, bit::on()).okay());
             constexpr auto bs = bit_array::bit_string("1");
             REQUIRE_RANGES_EQUAL(dbs, bs);
 
-            REQUIRE(dbs.insert_at(1, bit_off).okay());
+            REQUIRE(dbs.insert_at(1, bit::off()).okay());
             REQUIRE(ranges_equal(dbs, bit_array::bit_string("10")));
-            REQUIRE(dbs.insert_at(2, bit_on).okay());
+            REQUIRE(dbs.insert_at(2, bit::on()).okay());
             REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("101"));
-            REQUIRE(dbs.insert_at(3, bit_off).okay());
+            REQUIRE(dbs.insert_at(3, bit::off()).okay());
             REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("1010"));
-            REQUIRE(dbs.insert_at(4, bit_on).okay());
+            REQUIRE(dbs.insert_at(4, bit::on()).okay());
             REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("10101"));
-            REQUIRE(dbs.insert_at(5, bit_off).okay());
+            REQUIRE(dbs.insert_at(5, bit::off()).okay());
             REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("101010"));
-            REQUIRE(dbs.insert_at(6, bit_on).okay());
+            REQUIRE(dbs.insert_at(6, bit::on()).okay());
             REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("1010101"));
-            REQUIRE(dbs.insert_at(7, bit_off).okay());
+            REQUIRE(dbs.insert_at(7, bit::off()).okay());
             REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("10101010"));
-            REQUIRE(dbs.insert_at(8, bit_on).okay());
+            REQUIRE(dbs.insert_at(8, bit::on()).okay());
             REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("101010101"));
-            REQUIRE(dbs.insert_at(9, bit_off).okay());
+            REQUIRE(dbs.insert_at(9, bit::off()).okay());
             REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("1010101010"));
         }
 
@@ -212,7 +212,7 @@ TEST_SUITE("bit_arraylist_t")
 
             REQUIRE(dbs.size_bits() == preinit.size_bits());
 
-            REQUIRE(dbs.insert_at(0, bit_on).okay());
+            REQUIRE(dbs.insert_at(0, bit::on()).okay());
 
             constexpr auto after_insert = bit_array::bit_string("101010011");
             REQUIRE_RANGES_EQUAL(dbs, after_insert);

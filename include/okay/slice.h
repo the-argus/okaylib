@@ -370,12 +370,14 @@ class bit
         return a.m_bool != b;
     }
 
+    // using functions here so that it can be constexpr, "static const" is other
+    // option
+    [[nodiscard]] constexpr static bit on() noexcept { return bit(true); }
+    [[nodiscard]] constexpr static bit off() noexcept { return bit(false); }
+
   private:
     bool m_bool;
 };
-
-static inline constexpr bit bit_off{false};
-static inline constexpr bit bit_on{true};
 
 class const_bit_slice_t
 {
@@ -502,7 +504,7 @@ class bit_slice_t : public const_bit_slice_t
 
         const uint8_t mask = uint8_t(1) << bit;
 
-        if (status == bit_on) {
+        if (status == bit::on()) {
             m.first_byte[byte] |= mask;
         } else {
             m.first_byte[byte] &= ~mask;

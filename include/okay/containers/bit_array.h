@@ -242,7 +242,7 @@ template <size_t num_bits> struct zeroed_t
     [[nodiscard]] constexpr bit_array_t<num_bits> make() const OKAYLIB_NOEXCEPT
     {
         bit_array_t<num_bits> out;
-        out.set_all_bits(bit_off);
+        out.set_all_bits(bit::off());
         return out;
     }
 };
@@ -272,7 +272,7 @@ template <size_t num_bits> struct all_bits_on_t
     [[nodiscard]] constexpr bit_array_t<num_bits> make() const OKAYLIB_NOEXCEPT
     {
         bit_array_t<num_bits> out;
-        out.set_all_bits(bit_on);
+        out.set_all_bits(bit::on());
         return out;
     }
 };
