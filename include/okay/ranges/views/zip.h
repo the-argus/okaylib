@@ -7,6 +7,10 @@
 #include "okay/ranges/adaptors.h"
 #include "okay/ranges/ranges.h"
 
+#ifdef OKAYLIB_USE_FMT
+#include <fmt/core.h>
+#endif
+
 namespace ok {
 namespace detail {
 
@@ -40,6 +44,7 @@ template <typename... ranges_t> struct zipped_view_t
     friend struct zip_fn_t;
     friend struct ok::range_definition<zipped_view_t, void>;
     friend struct sized_zip_definition_t<ranges_t...>;
+    friend struct fmt::formatter<zipped_view_t>;
 
     // NOTE: because we don't inherit from underlying_view_type with
     // zipped_view, we have to replicate this aspect of its API since normally
@@ -412,4 +417,47 @@ constexpr detail::range_adaptor_t<detail::zip_fn_t> zip;
 
 } // namespace ok
 
+#ifdef OKAYLIB_USE_FMT
+template <typename... ranges_t>
+struct fmt::formatter<
+    ok::detail::zipped_view_t<ranges_t...>,
+    std::enable_if_t<(... && fmt::is_formattable<
+                                 ok::detail::remove_cvref_t<ranges_t>>::value)>>
+{
+    using formatted_type_t = ok::detail::zipped_view_t<ranges_t...>;
+
+    constexpr format_parse_context::iterator parse(format_parse_context& ctx)
+    {
+        auto it = ctx.begin();
+        if (it != ctx.end() && *it != '}')
+            throw_format_error("invalid format");
+        return it;
+    }
+
+    format_context::iterator format(const formatted_type_t& zipped_view,
+                                    format_context& ctx) const
+    {
+        fmt::format_to(ctx.out(), "zipped_view_t< ");
+
+        format_views_folded<std::make_index_sequence<sizeof...(ranges_t)>>(
+            zipped_view, ctx);
+
+        return fmt::format_to(ctx.out(), ">");
+    }
+
+  private:
+    template <size_t... indices>
+    static constexpr void
+    format_views_folded(const formatted_type_t& zip, format_context& ctx,
+                        std::index_sequence<indices...>) OKAYLIB_NOEXCEPT
+    {
+        (
+            [&] {
+                fmt::format_to(ctx.out(), "{} ",
+                               std::get<indices>(zip.m_views));
+            }(),
+            ...);
+    }
+};
+#endif
 #endif

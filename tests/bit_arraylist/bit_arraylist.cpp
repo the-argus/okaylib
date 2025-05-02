@@ -101,9 +101,9 @@ TEST_SUITE("bit_arraylist_t")
                     c_allocator, bit_array::bit_string("010011011"))
                     .release();
 
-            REQUIRE(ranges_equal(copied2, bit_array::bit_string("010011011")));
-            REQUIRE(ranges_equal(bools, copied));
-            REQUIRE(ranges_equal(bit_array::bit_string("1011"), copied));
+            REQUIRE_RANGES_EQUAL(copied2, bit_array::bit_string("010011011"));
+            REQUIRE_RANGES_EQUAL(bools, copied);
+            REQUIRE_RANGES_EQUAL(bit_array::bit_string("1011"), copied);
         }
 
         SUBCASE("preallocated and zeroed constructor")
@@ -166,30 +166,56 @@ TEST_SUITE("bit_arraylist_t")
             bit_arraylist_t dbs2 =
                 bit_arraylist::bit_string(c_allocator, literal).release();
 
-            REQUIRE(ranges_equal(dbs2, bit_array::bit_string(literal)));
+            REQUIRE_RANGES_EQUAL(dbs2, bit_array::bit_string(literal));
             // take_at_most is here to skip null terminator
-            REQUIRE(ranges_equal(
+            REQUIRE_RANGES_EQUAL(
                 dbs2, literal |
                           take_at_most(detail::c_array_length(literal) - 1) |
-                          transform([](char c) { return c == '1'; })));
+                          transform([](char c) { return c == '1'; }));
         }
 
-        SUBCASE("insert_at on empty dbs")
+        SUBCASE("insert_at on initially empty dbs")
         {
             bit_arraylist_t dbs(c_allocator);
             REQUIREABORTS(auto&& out_of_range = dbs.insert_at(1, true));
             REQUIRE(dbs.insert_at(0, true).okay());
             constexpr auto bs = bit_array::bit_string("1");
-            REQUIRE(ranges_equal(dbs, bs));
+            REQUIRE_RANGES_EQUAL(dbs, bs);
+
+            REQUIRE(dbs.insert_at(1, false).okay());
+            REQUIRE(ranges_equal(dbs, bit_array::bit_string("10")));
+            REQUIRE(dbs.insert_at(2, true).okay());
+            REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("101"));
+            REQUIRE(dbs.insert_at(3, false).okay());
+            REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("1010"));
+            REQUIRE(dbs.insert_at(4, true).okay());
+            REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("10101"));
+            REQUIRE(dbs.insert_at(5, false).okay());
+            REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("101010"));
+            REQUIRE(dbs.insert_at(6, true).okay());
+            REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("1010101"));
+            REQUIRE(dbs.insert_at(7, false).okay());
+            REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("10101010"));
+            REQUIRE(dbs.insert_at(8, true).okay());
+            REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("101010101"));
+            REQUIRE(dbs.insert_at(9, false).okay());
+            REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("1010101010"));
         }
 
         SUBCASE(
             "insert_at on preinitialized, first_allocation dynamic bit_array")
         {
+            constexpr auto preinit = bit_array::bit_string("01010011");
             bit_arraylist_t dbs =
-                bit_arraylist::copy_booleans_from_range(
-                    c_allocator, bit_array::bit_string("01010011"))
+                bit_arraylist::copy_booleans_from_range(c_allocator, preinit)
                     .release();
+
+            REQUIRE(dbs.size_bits() == preinit.size_bits());
+
+            REQUIRE(dbs.insert_at(2, true).okay());
+
+            constexpr auto after_insert = bit_array::bit_string("010110011");
+            REQUIRE_RANGES_EQUAL(dbs, after_insert);
         }
     }
 }

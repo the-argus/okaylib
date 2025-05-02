@@ -5,6 +5,10 @@
 #include "okay/ranges/adaptors.h"
 #include "okay/ranges/ranges.h"
 
+#ifdef OKAYLIB_USE_FMT
+#include <fmt/core.h>
+#endif
+
 namespace ok {
 namespace detail {
 template <typename range_t, typename callable_t> struct transformed_view_t;
@@ -174,5 +178,36 @@ struct range_definition<detail::transformed_view_t<input_range_t, callable_t>>
 constexpr detail::range_adaptor_t<detail::transform_fn_t> transform;
 
 } // namespace ok
+
+#ifdef OKAYLIB_USE_FMT
+template <typename range_t, typename callable_t>
+struct fmt::formatter<ok::detail::transformed_view_t<range_t, callable_t>>
+{
+    static_assert(
+        fmt::is_formattable<ok::detail::remove_cvref_t<range_t>>::value,
+        "Attempt to format transformed_view_t whose inner range is not "
+        "formattable.");
+
+    using formatted_type_t =
+        ok::detail::transformed_view_t<range_t, callable_t>;
+
+    constexpr format_parse_context::iterator parse(format_parse_context& ctx)
+    {
+        auto it = ctx.begin();
+        if (it != ctx.end() && *it != '}')
+            throw_format_error("invalid format");
+        return it;
+    }
+
+    format_context::iterator format(const formatted_type_t& transformed_view,
+                                    format_context& ctx) const
+    {
+        return fmt::format_to(
+            ctx.out(), "transformed_view_t< {} >",
+            transformed_view
+                .template get_view_reference<formatted_type_t, range_t>());
+    }
+};
+#endif
 
 #endif

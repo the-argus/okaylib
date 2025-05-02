@@ -190,6 +190,9 @@ Size of `alist`: 0
 
 ## misc improvements / backlog
 
+- [ ] Remove static_asserts from all fmt::formatters so users can check if
+      something with a view in it is formattable with fmt::is_formattable.
+      replace w/ enable_if.
 - [ ] Remove dependency on `<memory>` header from `okay/detail/addressof.h`
 - [ ] Add option to disable undefined behavior checks which are normally on in
       both release and debug mode (such as array bounds checks on iterators)

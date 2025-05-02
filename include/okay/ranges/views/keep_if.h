@@ -5,6 +5,10 @@
 #include "okay/ranges/adaptors.h"
 #include "okay/ranges/ranges.h"
 
+#ifdef OKAYLIB_USE_FMT
+#include <fmt/core.h>
+#endif
+
 namespace ok {
 namespace detail {
 template <typename range_t, typename predicate_t> struct keep_if_view_t;
@@ -168,5 +172,34 @@ struct range_definition<detail::keep_if_view_t<input_range_t, predicate_t>>
 constexpr detail::range_adaptor_t<detail::keep_if_fn_t> keep_if;
 
 } // namespace ok
+
+#ifdef OKAYLIB_USE_FMT
+template <typename range_t, typename callable_t>
+struct fmt::formatter<ok::detail::keep_if_view_t<range_t, callable_t>>
+{
+    using formatted_type_t = ok::detail::keep_if_view_t<range_t, callable_t>;
+    static_assert(
+        fmt::is_formattable<ok::detail::remove_cvref_t<range_t>>::value,
+        "Attempt to format keep_if_view_t whose inner range type is not "
+        "formattable.");
+
+    constexpr format_parse_context::iterator parse(format_parse_context& ctx)
+    {
+        auto it = ctx.begin();
+        if (it != ctx.end() && *it != '}')
+            throw_format_error("invalid format");
+        return it;
+    }
+
+    format_context::iterator format(const formatted_type_t& keep_if_view,
+                                    format_context& ctx) const
+    {
+        return fmt::format_to(
+            ctx.out(), "keep_if_view_t< {} >",
+            keep_if_view
+                .template get_view_reference<formatted_type_t, range_t>());
+    }
+};
+#endif
 
 #endif
