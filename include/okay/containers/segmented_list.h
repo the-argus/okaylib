@@ -458,7 +458,9 @@ template <typename T> struct empty_t
         output.m = M{
             .blocklist = nullptr,
             .initial_size_exponent =
-                ok::log2_uint_ceil(options.num_initial_contiguous_spots),
+                options.num_initial_contiguous_spots == 0
+                    ? 0
+                    : ok::log2_uint_ceil(options.num_initial_contiguous_spots),
             .size = options.num_block_pointers,
             .allocator = ok::addressof(allocator),
         };
