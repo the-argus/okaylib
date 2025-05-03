@@ -862,7 +862,7 @@ template <> struct fmt::formatter<ok::const_bit_slice_t>
                 format_context& ctx) const -> format_context::iterator
     {
         fmt::format_to(ctx.out(), "0b");
-        for (size_t i = 0; i < bs.size(); ++i) {
+        for (int64_t i = bs.size() - 1; i >= 0; --i) {
             fmt::format_to(ctx.out(), "{}", bs.get_bit(i));
         }
         return fmt::format_to(ctx.out(), "");
