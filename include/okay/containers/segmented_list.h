@@ -458,7 +458,7 @@ template <typename T> struct empty_t
         output.m = M{
             .blocklist = nullptr,
             .initial_size_exponent =
-                options.num_initial_contiguous_spots == 0
+                options.num_initial_contiguous_spots < 1
                     ? 0
                     : ok::log2_uint_ceil(options.num_initial_contiguous_spots),
             .size = options.num_block_pointers,
@@ -481,7 +481,7 @@ struct copy_items_from_range_t
         backing_allocator_t& allocator, const input_range_t& range,
         const copy_items_from_range_options_t& options) const OKAYLIB_NOEXCEPT
     {
-        return ok::make(*this, allocator, range);
+        return ok::make(*this, allocator, range, options);
     }
 
     template <typename backing_allocator_t, typename input_range_t>
@@ -520,7 +520,7 @@ struct copy_items_from_range_t
         }
 
         bytes_t& mainbuf = mainbuf_result.release_ref();
-        maydefer free_mainbuf = [&] { allocator.deallocate(mainbuf); };
+        maydefer free_mainbuf([&] { allocator.deallocate(mainbuf); });
 
         alloc::result_t<bytes_t> blocklist_result =
             allocator.allocate(alloc::request_t{
@@ -536,7 +536,8 @@ struct copy_items_from_range_t
 
         bytes_t& blocklist_bytes = blocklist_result.release_ref();
 
-        blocklist_t* blocklist = &blocklist_bytes[0];
+        auto* blocklist = reinterpret_cast<blocklist_t*>(
+            blocklist_bytes.unchecked_address_of_first_item());
 
         *blocklist = blocklist_t{
             .num_blocks = 0,
@@ -544,7 +545,8 @@ struct copy_items_from_range_t
         };
 
         // give blocklist pointer to our first buffer
-        blocklist->blocks[0] = &mainbuf[0];
+        blocklist->blocks[0] =
+            reinterpret_cast<T*>(mainbuf.unchecked_address_of_first_item());
 
         output.m = M{
             .blocklist = blocklist,
