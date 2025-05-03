@@ -25,9 +25,6 @@ const testing_flags = &[_][]const u8{
     "-fno-rtti",
     "-Werror",
     "-Wno-deprecated",
-
-    "-I./tests/",
-    "-I./include/",
     "-DOKAYLIB_NOEXCEPT=", // allow exceptions in testing mode
 
     "-DOKAYLIB_TESTING",
@@ -104,6 +101,7 @@ const okaylib_headers = &[_][]const u8{
     "macros/foreach.h",
     "macros/try.h",
 
+    "math/math.h",
     "math/ordering.h",
     "math/rounding.h",
 
@@ -221,6 +219,9 @@ pub fn build(b: *std.Build) !void {
             .flags = flags_owned,
         });
         test_exe.linkLibCpp();
+
+        test_exe.addIncludePath(b.path("tests"));
+        test_exe.addIncludePath(b.path("include"));
 
         // backtraces
         test_exe.linkLibrary(universal_tests_lib);
