@@ -271,8 +271,6 @@ template <typename T, typename backing_allocator_t> class segmented_list_t
         return const_cast<segmented_list_t*>(this)->first();
     }
 
-    constexpr void shrink_to_reclaim_unused_memory() OKAYLIB_NOEXCEPT;
-
     [[nodiscard]] constexpr status<alloc::error>
     increase_capacity_by_at_least(size_t new_spots) OKAYLIB_NOEXCEPT;
 
@@ -282,6 +280,21 @@ template <typename T, typename backing_allocator_t> class segmented_list_t
 
     template <typename... args_t>
     [[nodiscard]] constexpr auto append(args_t&&... args) OKAYLIB_NOEXCEPT;
+
+    /// Returns an error only if allocation to expand space for the new items
+    /// errored.
+    template <typename other_range_t>
+    [[nodiscard]] constexpr status<alloc::error>
+    append_range(const other_range_t& range) OKAYLIB_NOEXCEPT
+    {
+        static_assert(
+            is_infallible_constructible_v<T, value_type_for<other_range_t>>,
+            "Cannot append the given range: the contents of the arraylist "
+            "cannot be constructed from the contents of the given range (at "
+            "least not without a potential error at each construction).");
+        static_assert(!detail::range_marked_infinite_v<other_range_t>,
+                      "Cannot append an infinite range.");
+    }
 
   private:
     struct blocklist_t
@@ -567,6 +580,31 @@ inline constexpr segmented_list::detail::copy_items_from_range_t
     copy_items_from_range;
 
 } // namespace segmented_list
+
+template <typename T, typename backing_allocator_t>
+struct range_definition<ok::segmented_list_t<T, backing_allocator_t>>
+{
+    static inline constexpr bool is_arraylike = true;
+
+    using range_t = ok::segmented_list_t<T, backing_allocator_t>;
+    using value_type = T;
+
+    static constexpr value_type& get_ref(range_t& r, size_t c) OKAYLIB_NOEXCEPT
+    {
+        return r[c];
+    }
+
+    static constexpr const value_type& get_ref(const range_t& r,
+                                               size_t c) OKAYLIB_NOEXCEPT
+    {
+        return r[c];
+    }
+
+    static constexpr size_t size(const range_t& r) OKAYLIB_NOEXCEPT
+    {
+        return r.size();
+    }
+};
 
 } // namespace ok
 
