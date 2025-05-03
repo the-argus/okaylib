@@ -276,7 +276,7 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
         return this->insert_at(this->size_bits(), value);
     }
 
-    constexpr bool remove(size_t idx) OKAYLIB_NOEXCEPT
+    constexpr ok::bit remove(size_t idx) OKAYLIB_NOEXCEPT
     {
         if (idx >= this->size_bits()) [[unlikely]] {
             __ok_abort("Out of bounds access to bit_arraylist_t in remove()");
@@ -313,16 +313,16 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
             const bool new_carry =
                 (m.allocation.unchecked_address_of_first_item()[i] &
                  carry_check_mask) != 0;
-            m.allocation.unchecked_address_of_first_item()[i] >> 1;
+            m.allocation.unchecked_address_of_first_item()[i] >>= 1;
             // add most significant bit if it carried from above
             m.allocation.unchecked_address_of_first_item()[i] |=
                 (carry * carry_in_mask);
             carry = new_carry;
         }
         m.num_bits -= 1;
-        return shift_last_byte_and_return_whether_bit_was_on(
+        return ok::bit(shift_last_byte_and_return_whether_bit_was_on(
             m.allocation.unchecked_address_of_first_item() + byte_index,
-            sub_byte_bit_index, carry);
+            sub_byte_bit_index, carry));
     }
 
     constexpr status<alloc::error>

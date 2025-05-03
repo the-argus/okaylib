@@ -251,5 +251,41 @@ TEST_SUITE("bit_arraylist_t")
                     "101010101010100101010101010010101010100101"),
                 dbs);
         }
+
+        SUBCASE("remove item from bit arraylist which has not reallocated")
+        {
+            auto ba =
+                bit_arraylist::bit_string(c_allocator, "001000101").release();
+
+            REQUIRE(ba.remove(2));
+
+            REQUIRE_RANGES_EQUAL(ba, bit_array::bit_string("00000101"));
+        }
+
+        SUBCASE("remove item from bit arraylist which has reallocated")
+        {
+            auto ba =
+                bit_arraylist::bit_string(c_allocator, "001000101").release();
+
+            ba.increase_capacity_by(400);
+
+            REQUIRE(ba.remove(2));
+
+            REQUIRE_RANGES_EQUAL(ba, bit_array::bit_string("00000101"));
+        }
+
+        SUBCASE("remove out of bounds aborts")
+        {
+            auto ba =
+                bit_arraylist::bit_string(c_allocator, "001000101").release();
+
+            REQUIREABORTS(ba.remove(ba.size_bits()));
+
+            ba.clear();
+            REQUIRE(ba.is_empty());
+            REQUIRE(ba.size_bits() == 0);
+
+            REQUIREABORTS(ba.remove(0));
+        }
     }
 }
