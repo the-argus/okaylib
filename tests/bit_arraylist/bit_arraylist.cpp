@@ -212,7 +212,10 @@ TEST_SUITE("bit_arraylist_t")
 
             REQUIRE(dbs.size_bits() == preinit.size_bits());
 
-            REQUIRE(dbs.insert_at(0, bit::on()).okay());
+            {
+                auto&& res = dbs.insert_at(0, bit::on());
+                REQUIRE(res.okay());
+            }
 
             constexpr auto after_insert = bit_array::bit_string("101010011");
             REQUIRE_RANGES_EQUAL(dbs, after_insert);

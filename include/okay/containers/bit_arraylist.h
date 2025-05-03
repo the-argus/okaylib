@@ -189,12 +189,13 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
             if (!status.okay()) [[unlikely]] {
                 return status;
             }
-        } else if (m.allocation.size() <= m.num_bits * 8) {
+        } else if (this->size_bytes() == this->capacity_bytes()) {
             auto status = reallocate(1, m.allocation.size() * 2);
             if (!status.okay()) [[unlikely]] {
                 return status;
             }
         }
+        __ok_internal_assert(this->size_bytes() < this->capacity_bytes());
         return alloc::error::okay;
     }
 
@@ -204,12 +205,11 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
         if (idx > this->size_bits()) [[unlikely]] {
             __ok_abort("insert_at into bit_arraylist out of bounds");
         }
-        __ok_internal_assert(this->capacity_bits() >= this->size_bits());
+        __ok_internal_assert(this->capacity_bytes() >= this->size_bytes());
         if (auto status = this->ensure_additional_capacity(); !status.okay())
             [[unlikely]] {
             return status;
         }
-        __ok_internal_assert(this->capacity_bits() > this->size_bits());
         constexpr uint8_t carry_in_mask = 0b001;
         constexpr uint8_t carry_check_mask = 0b10000000;
 
@@ -247,22 +247,23 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
         const size_t num_bytes =
             round_up_to_multiple_of<8>(m.num_bits - idx) / 8;
 
-        for (size_t iter = first_byte_index + 1; iter < num_bytes; ++iter) {
-            const size_t i = iter - 1;
+        // num_bytes + 1 going off the end, but bytes are zeroed and we
+        // have additional byte capacity, so we can read there
+        for (size_t i = first_byte_index + 1; i < num_bytes + 1; ++i) {
             const bool new_carry =
                 m.allocation.unchecked_access(i) & carry_check_mask;
+
+            // at the end (when iter == num_bytes), we should not be carrying
+            // unless we have perfectly filled up the previous byte
+            __ok_internal_assert(i != num_bytes - 1 ||
+                                 this->size_bits() % 8 != 0 || !new_carry);
+
             m.allocation.unchecked_access(i) <<= 1;
             m.allocation.unchecked_access(i) ^= carry_in_mask * carry;
             carry = new_carry;
         }
-
-        // if we need to carry into the next bytes
-        if (carry && this->size_bits() % 8 == 7) {
-            const size_t size_bytes = this->size_bytes();
-            __ok_internal_assert(size_bytes < this->capacity_bytes());
-            // only the first bit (little endian) is 1
-            m.allocation.unchecked_access(size_bytes) = 1;
-        }
+        // carry should be zero at the end, last byte is extra/uninitialized
+        __ok_internal_assert(!carry);
         ++m.num_bits;
 
         return alloc::error::okay;
