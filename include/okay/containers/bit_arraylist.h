@@ -249,7 +249,8 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
 
         // num_bytes + 1 going off the end, but bytes are zeroed and we
         // have additional byte capacity, so we can read there
-        for (size_t i = first_byte_index + 1; i < num_bytes + 1; ++i) {
+        for (size_t i = first_byte_index + 1;
+             i < first_byte_index + num_bytes + 1; ++i) {
             const bool new_carry =
                 m.allocation.unchecked_access(i) & carry_check_mask;
 

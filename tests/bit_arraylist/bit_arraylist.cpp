@@ -220,5 +220,36 @@ TEST_SUITE("bit_arraylist_t")
             constexpr auto after_insert = bit_array::bit_string("101010011");
             REQUIRE_RANGES_EQUAL(dbs, after_insert);
         }
+
+        SUBCASE(
+            "insert_at which causes reallocation from the middle of the list")
+        {
+            bit_arraylist_t dbs =
+                bit_arraylist::copy_booleans_from_range(
+                    c_allocator, bit_array::bit_string("01010001"))
+                    .release();
+
+            REQUIRE(dbs.insert_at(6, bit::on()).okay());
+            REQUIRE_RANGES_EQUAL(bit_array::bit_string("010100101"), dbs);
+
+            constexpr auto bs =
+                bit_array::bit_string("0101010101010101010101010101010100"
+                                      "101010101010010101010100101");
+            dbs = bit_arraylist::copy_booleans_from_range(c_allocator, bs)
+                      .release();
+
+            REQUIRE(bs.size_bits() == dbs.size_bits());
+
+            {
+                auto&& res = dbs.insert_at(20, bit::on());
+                REQUIRE(res.okay());
+            }
+
+            REQUIRE_RANGES_EQUAL(
+                bit_array::bit_string(
+                    "01010101010101010101"
+                    "101010101010100101010101010010101010100101"),
+                dbs);
+        }
     }
 }
