@@ -40,14 +40,7 @@ template <typename T, typename backing_allocator_t> class segmented_list_t
             return 0;
         }
 
-        size_t total = 0;
-        size_t blocksize = two_to_the_power_of(m.initial_size_exponent);
-        for (size_t i = 0; i < m.blocklist->num_blocks; ++i) {
-            total += blocksize;
-            blocksize *= 2;
-        }
-
-        return total;
+        return this->get_num_spots_for_blocks(m.blocklist->num_blocks);
     }
 
     [[nodiscard]] constexpr size_t size() const noexcept
@@ -73,6 +66,84 @@ template <typename T, typename backing_allocator_t> class segmented_list_t
     allocator() const OKAYLIB_NOEXCEPT
     {
         return *m.backing_allocator;
+    }
+
+    template <typename incoming_allocator_t = ok::allocator_t>
+    [[nodiscard]] constexpr alloc::result_t<slice<slice<const T>>>
+    get_blocks(incoming_allocator_t& allocator) const& OKAYLIB_NOEXCEPT
+    {
+        static_assert(
+            detail::is_derived_from_v<incoming_allocator_t, ok::allocator_t>,
+            "First argument to segmented_list_t::get_blocks is not an "
+            "allocator.");
+
+        if (this->is_empty()) {
+            return make_null_slice<slice<const T>>();
+        }
+
+        const size_t num_blocks_in_use =
+            this->num_blocks_needed_for_spots(this->size());
+
+        const size_t bytes_needed = sizeof(slice<const T>) * num_blocks_in_use;
+        alloc::result_t<bytes_t> alloc_result =
+            allocator.allocate(alloc::request_t{
+                .num_bytes = bytes_needed,
+                .alignment = alignof(slice<const T>),
+                .flags = alloc::flags::leave_nonzeroed,
+            });
+
+        if (!alloc_result.okay()) [[unlikely]] {
+            return alloc_result.err();
+        }
+
+        slice<slice<const T>> blocks = reinterpret_bytes_as<slice<const T>>(
+            alloc_result.release_ref().subslice({.length = bytes_needed}));
+
+        __ok_internal_assert(
+            this->get_num_spots_for_blocks(num_blocks_in_use) >= this->size());
+        const size_t extra_spots =
+            this->get_num_spots_for_blocks(num_blocks_in_use) - this->size();
+
+        // initialize the slices in `blocks` to point to all the blocks
+        {
+            size_t block_size = two_to_the_power_of(m.initial_size_exponent);
+
+            for (size_t i = 0; i < blocks.size(); ++i) {
+                slice<const T>& uninit = blocks.unchecked_access(i);
+                new (&uninit)
+                    slice<const T>(raw_slice(*m.get_block(i), block_size));
+                block_size *= 2;
+            }
+        }
+
+        // chop off the last `extra_spots` of the last block
+        blocks.last() = blocks.last().subslice(
+            {.length = blocks.last().size() - extra_spots});
+
+        return blocks;
+    }
+
+    template <typename incoming_allocator_t = ok::allocator_t>
+        [[nodiscard]] constexpr alloc::result_t<slice<slice<T>>>
+        get_blocks(incoming_allocator_t& allocator) & OKAYLIB_NOEXCEPT
+    {
+        //  HACK: this is to reduce code duplication for now but it might be
+        //  causing unecessary copies in and out of results
+        if (this->is_empty()) {
+            return make_null_slice<slice<T>>();
+        }
+
+        auto result =
+            static_cast<const segmented_list_t*>(this)->get_blocks(allocator);
+        if (!result.okay()) [[unlikely]] {
+            return result.err();
+        }
+
+        slice<slice<const T>>& blocks = result.release_ref();
+
+        return raw_slice(*reinterpret_cast<slice<T>*>(
+                             blocks.unchecked_address_of_first_item()),
+                         blocks.size());
     }
 
     [[nodiscard]] constexpr const T&
@@ -407,6 +478,31 @@ template <typename T, typename backing_allocator_t> class segmented_list_t
     static_assert(num_blocks_needed_for_spots_impl(2, 8) == 2);
     static_assert(num_blocks_needed_for_spots_impl(2, 12) == 2);
     static_assert(num_blocks_needed_for_spots_impl(2, 13) == 3);
+
+    [[nodiscard]] static constexpr size_t
+    get_num_spots_for_blocks_impl(const size_t num_blocks,
+                                  const size_t initial_size_exponent) noexcept
+    {
+        return (two_to_the_power_of(num_blocks) - 1) -
+               (two_to_the_power_of(initial_size_exponent) - 1);
+    };
+
+    static_assert(get_num_spots_for_blocks_impl(0, 0) == 0);
+    static_assert(get_num_spots_for_blocks_impl(1, 0) == 1);
+    static_assert(get_num_spots_for_blocks_impl(2, 0) == 3);
+    static_assert(get_num_spots_for_blocks_impl(3, 0) == 7);
+    static_assert(get_num_spots_for_blocks_impl(4, 0) == 15);
+
+    static_assert(get_num_spots_for_blocks_impl(0, 2) == 0);
+    static_assert(get_num_spots_for_blocks_impl(1, 2) == 4);
+    static_assert(get_num_spots_for_blocks_impl(2, 2) == 12);
+    static_assert(get_num_spots_for_blocks_impl(3, 2) == 28);
+
+    [[nodiscard]] constexpr size_t
+    get_num_spots_for_blocks(const size_t num_blocks) noexcept
+    {
+        return get_num_spots_for_blocks(num_blocks, m.initial_size_exponent);
+    }
 
     [[nodiscard]] constexpr size_t
     size_of_block_at(size_t idx) const OKAYLIB_NOEXCEPT

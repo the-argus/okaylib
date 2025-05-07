@@ -330,6 +330,12 @@ TEST_SUITE("segmented list")
         }
     }
 
+    TEST_CASE("get_blocks")
+    {
+        SUBCASE("const") {}
+        SUBCASE("nonconst") {}
+    }
+
     TEST_CASE("clear() calls destructors") {}
 
     TEST_CASE("being move-assigned over calls destructors") {}
@@ -350,5 +356,5 @@ TEST_SUITE("segmented list")
 
     TEST_CASE("increase_capacity_by_at_least()") {}
 
-    TEST_CASE("append_range")
+    TEST_CASE("append_range") {}
 }
