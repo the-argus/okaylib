@@ -287,7 +287,80 @@ template <typename T, typename backing_allocator_t> class segmented_list_t
         m.size = 0;
     }
 
-    constexpr T remove(size_t idx) OKAYLIB_NOEXCEPT;
+    constexpr T remove(size_t idx) OKAYLIB_NOEXCEPT
+    {
+        if (idx >= this->size()) [[unlikely]] {
+            __ok_abort("Out of bounds access to segmented_list_t in "
+                       "remove()");
+        }
+
+        T* removal_target = ok::addressof(this->unchecked_access(idx));
+        T out = std::move(*removal_target);
+        defer decr_size([this] { m.size--; });
+
+        // early out if youre popping the last item
+        if (idx == this->size() - 1) {
+            if constexpr (!std::is_trivially_destructible_v<T>) {
+                removal_target->~T();
+            }
+            return out;
+        }
+
+        auto [block_idx, item_offset_in_block] =
+            this->get_block_index_and_offset(idx);
+
+        auto [_, end_idx_in_block] =
+            this->get_block_index_and_offset(this->size() - 1);
+
+        const size_t blocks_in_use = num_blocks_needed_for_spots(this->size());
+        // use memmove
+        slice<T> block = make_null_slice<T>();
+        for (size_t i = block_idx; i < blocks_in_use; ++i) {
+            {
+                slice<T> newblock =
+                    this->get_block_slice(i).drop(item_offset_in_block);
+
+                // if the previous block points to something, we need to
+                // copy our first item back into its last item
+                if (!block.is_empty()) {
+                    if constexpr (std::is_trivially_copyable_v<T>) {
+                        std::memcpy(block.unchecked_address_of_first_item(),
+                                    newblock.unchecked_address_of_first_item(),
+                                    sizeof(T));
+                    } else {
+                        // call move assignment, it was moved out of but is
+                        // still in a valid state
+                        block.unchecked_access(block.size() - 1) =
+                            std::move(newblock.first());
+                    }
+                }
+
+                block = newblock;
+            }
+            // if we are on the last block, do not perform a memmove of
+            // any of the uninitialized memory at the end of the block.
+            if (i == blocks_in_use - 1) {
+                block = block.subslice({.length = end_idx_in_block + 1});
+            }
+            // move everything above the item by 1 down into the item.
+            if constexpr (std::is_trivially_copyable_v<T>) {
+                ok_memmove(.to = block, .from = block.drop(1));
+            } else {
+                for (size_t i = 0; i < block.size() - 1; ++i) {
+                    block.unchecked_access(i) =
+                        std::move(block.unchecked_access(i) + 1);
+                }
+            }
+            // there should only be item offset first time around the loop
+            item_offset_in_block = 0;
+        }
+
+        if (!std::is_trivially_destructible_v<T>) {
+            // take what was previously the last item (now has been moved out
+            // of) and destroy it
+            block.unchecked_access(end_idx_in_block).~T();
+        }
+    }
 
     constexpr T remove_and_swap_last(size_t idx) OKAYLIB_NOEXCEPT
     {
@@ -317,9 +390,7 @@ template <typename T, typename backing_allocator_t> class segmented_list_t
             __ok_abort(
                 "Attempt to get last() item from empty segmented_list_t.");
         }
-        const size_t last_block_idx = block_index(this->size());
-        const size_t sub_item_idx = item_index(this->size(), last_block_idx);
-        return m.blocklist->blocks[last_block_idx][sub_item_idx];
+        return this->unchecked_access(this->size() - 1);
     }
 
     constexpr const T& last() const& OKAYLIB_NOEXCEPT
@@ -420,33 +491,15 @@ template <typename T, typename backing_allocator_t> class segmented_list_t
 
     [[nodiscard]] constexpr T& unchecked_access(size_t index) & OKAYLIB_NOEXCEPT
     {
-        const size_t block = block_index(index);
-        const size_t sub_index = item_index(index, block);
+        auto [block, sub_index] = this->get_block_index_and_offset(index);
         return m.blocklist->blocks[block][sub_index];
     }
 
     [[nodiscard]] constexpr const T&
     unchecked_access(size_t index) const& OKAYLIB_NOEXCEPT
     {
-        return const_cast<segmented_list_t*>(this)->unchecked_access(index);
-    }
-
-    [[nodiscard]] constexpr size_t
-    block_index(size_t requested_item_index) const noexcept
-    {
-        const size_t initial_size =
-            two_to_the_power_of(m.initial_size_exponent);
-        return log2_uint(requested_item_index + initial_size) -
-               m.initial_size_exponent;
-    }
-
-    [[nodiscard]] constexpr size_t item_index(size_t requested_item_index,
-                                              size_t block_index) const noexcept
-    {
-        const size_t initial_size =
-            two_to_the_power_of(m.initial_size_exponent);
-        return requested_item_index + initial_size -
-               two_to_the_power_of(m.initial_size_exponent + block_index);
+        auto [block, sub_index] = this->get_block_index_and_offset(index);
+        return m.blocklist->blocks[block][sub_index];
     }
 
     [[nodiscard]] static constexpr size_t
@@ -499,15 +552,56 @@ template <typename T, typename backing_allocator_t> class segmented_list_t
     static_assert(get_num_spots_for_blocks_impl(3, 2) == 28);
 
     [[nodiscard]] constexpr size_t
-    get_num_spots_for_blocks(const size_t num_blocks) noexcept
+    get_num_spots_for_blocks(const size_t num_blocks) const noexcept
     {
         return get_num_spots_for_blocks(num_blocks, m.initial_size_exponent);
+    }
+
+    [[nodiscard]] static constexpr std::tuple<size_t, size_t>
+    get_block_index_and_offset_impl(const size_t idx,
+                                    const size_t initial_size_exponent) noexcept
+    {
+        const size_t blocks_needed =
+            num_blocks_needed_for_spots_impl(idx + 1, initial_size_exponent);
+        return std::make_tuple(blocks_needed,
+                               get_num_spots_for_blocks_impl(
+                                   blocks_needed, initial_size_exponent) -
+                                   idx);
+    }
+
+    /// Returns a tuple of the index of the block this item belongs to in the
+    /// blocklist, and the sub-index of that item within the block (ie. its
+    /// offset within the block)
+    [[nodiscard]] constexpr std::tuple<size_t, size_t>
+    get_block_index_and_offset(const size_t idx) const noexcept
+    {
+        const size_t blocks_needed = this->num_blocks_needed_for_spots(idx + 1);
+        return std::make_tuple(
+            blocks_needed, this->get_num_spots_for_blocks(blocks_needed) - idx);
     }
 
     [[nodiscard]] constexpr size_t
     size_of_block_at(size_t idx) const OKAYLIB_NOEXCEPT
     {
         return two_to_the_power_of(m.initial_size_exponent + idx);
+    }
+
+    [[nodiscard]] constexpr slice<T>
+        get_block_slice(size_t idx) & OKAYLIB_NOEXCEPT
+    {
+        __ok_internal_assert(m.blocklist);
+        const size_t block_idx = this->num_blocks_needed_for_spots(idx + 1);
+        return raw_slice(*m.blocklist->get_block(idx),
+                         size_of_block_at(block_idx));
+    }
+
+    [[nodiscard]] constexpr slice<const T>
+    get_block_slice(size_t idx) const& OKAYLIB_NOEXCEPT
+    {
+        __ok_internal_assert(m.blocklist);
+        const size_t block_idx = this->num_blocks_needed_for_spots(idx + 1);
+        return raw_slice(*m.blocklist->get_block(idx),
+                         size_of_block_at(block_idx));
     }
 
     struct members_t

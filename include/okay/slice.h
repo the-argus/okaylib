@@ -288,6 +288,18 @@ template <typename viewed_t> class slice
         return slice(*(m_data + options.start), options.length);
     }
 
+    /// Creates a subslice which does not contain the first `num_to_drop` items
+    /// from this slice.
+    [[nodiscard]] constexpr slice
+    drop(const size_t num_to_drop) const OKAYLIB_NOEXCEPT
+    {
+        if (num_to_drop > this->size()) [[unlikely]] {
+            __ok_abort("Attempt to drop more items from a slice than it holds");
+        }
+
+        return slice(*(m_data + num_to_drop), this->size() - num_to_drop);
+    }
+
     /// Can't default construct a slice since its always a reference to another
     /// thing.
     slice() = delete;

@@ -46,8 +46,14 @@ template <typename T>
 [[nodiscard]] constexpr slice<T>
 memcopy(const memcopy_options_t<T>& options) OKAYLIB_NOEXCEPT;
 
+/// Invokes std::memmove on the slices. Requires that T is trivially copyable.
+template <typename T>
+[[nodiscard]] constexpr slice<T>
+memmove(const memcopy_options_t<T>& options) OKAYLIB_NOEXCEPT;
+
 /// Macro for memcopy to avoid writing the options typename
 #define ok_memcopy(...) ok::memcopy(memcopy_options_t{__VA_ARGS__})
+#define ok_memmove(...) ok::memcopy(memcopy_options_t{__VA_ARGS__})
 
 /// Compare two slices of memory. The types must not define operator== overloads
 /// nor orderable or partial orderable traits (in that case, use the slices as
@@ -101,15 +107,45 @@ ok::memcopy(const memcopy_options_t<T>& options) OKAYLIB_NOEXCEPT -> slice<T>
 {
     static_assert(std::is_trivially_copyable_v<T>,
                   "Cannot memcopy non-trivially copyable type.");
+
+    if (options.from.is_empty()) {
+        return options.to.subslice({.length = 0});
+    }
+
     if (options.to.size() < options.from.size() ||
         memoverlaps(options.to, options.from)) [[unlikely]] {
-        __ok_abort(
-            "Attempt to memcopy between two slices of memory which overlap.");
+        __ok_abort("Attempt to memcopy but the memory given either overlaps or "
+                   "has a smaller destination than source.");
     }
 
     std::memcpy(options.to.unchecked_address_of_first_item(),
                 options.from.unchecked_address_of_first_item(),
                 options.from.size() * sizeof(T));
+
+    return raw_slice(*options.to.unchecked_address_of_first_item(),
+                     options.from.size());
+}
+
+template <typename T>
+[[nodiscard]] constexpr ok::slice<T>
+memmove(const ok::memcopy_options_t<T>& options) OKAYLIB_NOEXCEPT
+{
+    static_assert(
+        std::is_trivially_copyable_v<T>,
+        "Refusing to invoke ok::memmove on a non-trivially copyable type.");
+
+    if (options.from.is_empty()) {
+        return options.to.subslice({.length = 0});
+    }
+
+    if (options.to.size() < options.from.size()) [[unlikely]] {
+        __ok_abort("Attempt to memmove, but destination is not big enough to "
+                   "hold the source memory.");
+    }
+
+    std::memmove(options.to.unchecked_address_of_first_item(),
+                 options.from.unchecked_address_of_first_item(),
+                 sizeof(T) * options.from.size());
 
     return raw_slice(*options.to.unchecked_address_of_first_item(),
                      options.from.size());
