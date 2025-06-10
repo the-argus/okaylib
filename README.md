@@ -1,10 +1,10 @@
 # okaylib
 
-C++17/20 STL replacement for realtime and memory-constrained domains.
+C++20 STL replacement for realtime and memory-constrained domains.
 
 ## goals
 
-Replace some of the C++17 STL with absolutely no concern for backwards compatibility.
+Replace some of the C++20 STL with absolutely no concern for backwards compatibility.
 Backport and improve `std::ranges` ranges and range adaptors such as `enumerate`,
 `sliding_window`, etc. Provide a variety of containers which all use polymorphic
 allocators by default, and error by value instead of using exceptions. Additionally
@@ -21,7 +21,7 @@ support for build systems that people actually use, like CMake) are a ways off.
 
 ## examples
 
-A demonstration of `ok::enumerate`, `ok::for_each` and the `ok::slice`. All C++17.
+A demonstration of `ok::enumerate`, `ok::for_each` and the `ok::slice`. All C++20.
 
 ```cpp
 int main(int argc, char* argv[])
@@ -110,7 +110,7 @@ Size of `alist`: 0
 - [x] defer statement
 - [x] stdmem: functions for checking if slices are overlapping, contained
       within, etc
-- [x] new iterators, with lower barrier to entry. c++17 compatible but not backwards
+- [x] new iterators, with lower barrier to entry. not backwards
       compatible with algorithms that use legacy iterators or c++20 iterators. Designed
       for easy implementation, good codegen, and immediate rangelike support (type
       with iterator stuff should also be a range)

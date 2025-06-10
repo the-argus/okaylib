@@ -130,7 +130,7 @@ class block_allocator_t : public ok::allocator_t
     block_allocator_t& operator=(const block_allocator_t&) = delete;
     block_allocator_t(const block_allocator_t&) = delete;
 
-    inline ~block_allocator_t() OKAYLIB_NOEXCEPT_FORCE { destroy(); }
+    constexpr ~block_allocator_t() OKAYLIB_NOEXCEPT_FORCE { destroy(); }
 
     constexpr size_t block_size() const noexcept { return m.blocksize; }
     constexpr size_t block_align() const noexcept

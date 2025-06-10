@@ -1,7 +1,7 @@
 #include "test_header.h"
 // test header must be first
+#include "okay/error.h"
 #include "okay/macros/try.h"
-#include "okay/res.h"
 #include "testing_types.h"
 
 #include <array>
@@ -10,8 +10,15 @@
 
 using namespace ok;
 
-static_assert(sizeof(slice<uint8_t>) ==
-              sizeof(res<slice<uint8_t>, StatusCodeA>));
+static_assert(status_enum<StatusCodeA>);
+static_assert(status_enum<StatusCodeB>);
+static_assert(status_object<status<StatusCodeA>>);
+static_assert(status_object<status<StatusCodeB>>);
+// can't nest a res as a status object
+static_assert(!status_object<res<int, status<StatusCodeB>>>);
+// if status and payload are both trivially copyable, then so is the res
+static_assert(std::is_trivially_copyable_v<res<int, status<StatusCodeB>>>);
+static_assert(std::is_trivially_copyable_v<res<int&, status<StatusCodeB>>>);
 
 struct destroyed
 {
@@ -38,10 +45,10 @@ TEST_SUITE("res")
                 }
             };
 
-            REQUIRE((getresiftrue(true).okay()));
-            REQUIRE((getresiftrue(true).release().whatever == 10));
-            REQUIRE((!getresiftrue(false).okay()));
-            REQUIRE(getresiftrue(false).err() == StatusCodeA::bad_access);
+            REQUIRE((getresiftrue(true).is_success()));
+            REQUIRE((getresiftrue(true).unwrap().whatever == 10));
+            REQUIRE((!getresiftrue(false).is_success()));
+            REQUIRE(getresiftrue(false).status() == StatusCodeA::bad_access);
         }
 
         SUBCASE("construct type directly into result")
@@ -63,10 +70,10 @@ TEST_SUITE("res")
                             : result(StatusCodeA::oom);
             };
 
-            REQUIRE(constructed_result(true).okay());
-            REQUIRE(constructed_result(true).release().string != nullptr);
-            REQUIRE(!constructed_result(false).okay());
-            REQUIRE(constructed_result(false).err() == StatusCodeA::oom);
+            REQUIRE(constructed_result(true).is_success());
+            REQUIRE(constructed_result(true).unwrap().string != nullptr);
+            REQUIRE(!constructed_result(false).is_success());
+            REQUIRE(constructed_result(false).status() == StatusCodeA::oom);
         }
     }
 
@@ -82,8 +89,8 @@ TEST_SUITE("res")
             refresult_t refresult(target);
             fmt::println("Result int: {}", result);
             fmt::println("Reference result int: {}", refresult);
-            auto unused = result.release();
-            auto unusedref = refresult.release();
+            auto unused = result.unwrap();
+            auto unusedref = refresult.unwrap();
             fmt::println("Released result: {}", result);
             fmt::println("Reference result int: {}", refresult);
         }
@@ -93,7 +100,7 @@ TEST_SUITE("res")
         {
             using res = res<int, StatusCodeB>;
             res result(StatusCodeB::nothing);
-            REQUIREABORTS({ auto nothing = result.release(); });
+            REQUIREABORTS({ auto nothing = result.unwrap(); });
         }
 
         SUBCASE("Result released code after release is called")
@@ -103,10 +110,10 @@ TEST_SUITE("res")
                 .whatever = 19,
                 .nothing = nullptr,
             });
-            REQUIRE(result.okay());
-            REQUIRE(result.release().whatever == 19);
-            REQUIRE(!result.okay());
-            REQUIRE(result.err() == StatusCodeB::no_value);
+            REQUIRE(result.is_success());
+            REQUIRE(result.unwrap().whatever == 19);
+            REQUIRE(!result.is_success());
+            REQUIRE(result.status() == StatusCodeB::no_value);
         }
 
         enum class VectorCreationStatusCode : uint8_t
@@ -121,14 +128,14 @@ TEST_SUITE("res")
             using res = res<std::vector<size_t>, VectorCreationStatusCode>;
 
             res vec_result((std::vector<size_t>()));
-            REQUIRE(vec_result.okay());
-            auto vec = vec_result.release();
-            REQUIRE(!vec_result.okay());
+            REQUIRE(vec_result.is_success());
+            auto vec = vec_result.unwrap();
+            REQUIRE(!vec_result.is_success());
             vec.push_back(42);
             // pass a copy of the vector into the result
             res vec_result_modified(std::move(vec));
 
-            std::vector<size_t> vec_modified = vec_result_modified.release();
+            std::vector<size_t> vec_modified = vec_result_modified.unwrap();
             REQUIRE(vec_modified.size() == 1);
             REQUIRE(vec_modified[0] == 42);
         }
@@ -154,7 +161,7 @@ TEST_SUITE("res")
             };
 
             auto getRes = []() -> res<Test, TestCode> {
-                return res<Test, TestCode>{std::in_place};
+                return res<Test, TestCode>{ok::in_place};
             };
 
             auto myres = getRes();
@@ -184,15 +191,15 @@ TEST_SUITE("res")
                 }
             };
 
-            REQUIRE(!makeveciftrue(false).okay());
-            REQUIREABORTS({ auto nothing = makeveciftrue(false).release(); });
+            REQUIRE(!makeveciftrue(false).is_success());
+            REQUIREABORTS({ auto nothing = makeveciftrue(false).unwrap(); });
 
             res result = makeveciftrue(true);
-            REQUIRE(result.okay());
-            auto& vec = result.release();
+            REQUIRE(result.is_success());
+            auto& vec = result.unwrap();
             REQUIRE(vec[0] == 5);
             vec.push_back(10);
-            REQUIRE(!result.okay());
+            REQUIRE(!result.is_success());
             delete &vec;
         }
 
@@ -202,10 +209,10 @@ TEST_SUITE("res")
 
             int i = 9;
             res test = i;
-            REQUIRE(test.okay() == test.to_opt().has_value());
+            REQUIRE(test.is_success() == test.to_opt().has_value());
             REQUIRE(test.to_opt().is_alias_for(i));
             res test2 = StatusCodeA::oom;
-            REQUIRE(test2.okay() == test2.to_opt().has_value());
+            REQUIRE(test2.is_success() == test2.to_opt().has_value());
         }
 
         SUBCASE("res::to_opt() for value result")
@@ -214,9 +221,9 @@ TEST_SUITE("res")
 
             int i = 9;
             res test = i;
-            REQUIRE(test.okay() == test.to_opt().has_value());
+            REQUIRE(test.is_success() == test.to_opt().has_value());
             res test2 = StatusCodeA::oom;
-            REQUIRE(test2.okay() == test2.to_opt().has_value());
+            REQUIRE(test2.is_success() == test2.to_opt().has_value());
         }
 
         SUBCASE("const reference result")
@@ -240,17 +247,17 @@ TEST_SUITE("res")
                 }
             };
 
-            REQUIRE(!makeveciftrue(false).okay());
-            REQUIREABORTS({ auto nothing = makeveciftrue(false).release(); });
+            REQUIRE(!makeveciftrue(false).is_success());
+            REQUIREABORTS({ auto nothing = makeveciftrue(false).unwrap(); });
 
             res result = makeveciftrue(true);
-            REQUIRE(result.okay());
+            REQUIRE(result.is_success());
             // this doesnt work
-            // std::vector<int>& vec = result.release();
-            const auto& vec = result.release();
+            // std::vector<int>& vec = result.unwrap();
+            const auto& vec = result.unwrap();
             // this doesnt work
             // vec.push_back(10);
-            REQUIRE(!result.okay());
+            REQUIRE(!result.is_success());
             delete &vec;
         }
 
@@ -313,7 +320,7 @@ TEST_SUITE("res")
 
             // no copy, only move
             res res_1 = increment_on_copy_or_move(1, 2);
-            REQUIRE(res_1.okay());
+            REQUIRE(res_1.is_success());
             REQUIRE(copies == 0);
             REQUIRE(moves == 1);
             auto& resref_1 = res_1.release_ref();
@@ -323,10 +330,10 @@ TEST_SUITE("res")
             // moves increment to move the item into the result
             REQUIRE(moves == 2);
             REQUIRE(copies == 0);
-            REQUIRE(res_2.okay());
-            REQUIREABORTS({ auto nothing = res_1.release(); });
-            increment_on_copy_or_move dummy_2 = res_2.release();
-            // moves incremented because release() moves the item out of the
+            REQUIRE(res_2.is_success());
+            REQUIREABORTS({ auto nothing = res_1.unwrap(); });
+            increment_on_copy_or_move dummy_2 = res_2.unwrap();
+            // moves incremented because unwrap() moves the item out of the
             // result
             REQUIRE(copies == 0);
             REQUIRE(moves == 3);
@@ -345,17 +352,17 @@ TEST_SUITE("res")
             destroyed::destructions = 0;
             {
                 res<destroyed, StatusCodeA> r1;
-                REQUIRE(r1.err() == StatusCodeA::no_value);
+                REQUIRE(r1.status() == StatusCodeA::no_value);
                 res<destroyed, StatusCodeA> r2;
                 res<destroyed, StatusCodeA> r3;
                 res<destroyed, StatusCodeA> r4;
             }
             REQUIRE(destroyed::destructions == 0);
             {
-                res<destroyed, StatusCodeA> r1(std::in_place);
-                res<destroyed, StatusCodeA> r2(std::in_place);
-                res<destroyed, StatusCodeA> r3(std::in_place);
-                res<destroyed, StatusCodeA> r4(std::in_place);
+                res<destroyed, StatusCodeA> r1(ok::in_place);
+                res<destroyed, StatusCodeA> r2(ok::in_place);
+                res<destroyed, StatusCodeA> r3(ok::in_place);
+                res<destroyed, StatusCodeA> r4(ok::in_place);
             }
             REQUIRE(destroyed::destructions == 4);
         }
@@ -370,10 +377,10 @@ TEST_SUITE("res")
         SUBCASE("slice release_ref and conversion")
         {
             auto slice_res = get_slice();
-            REQUIRE(slice_res.okay());
+            REQUIRE(slice_res.is_success());
 
             static_assert(
-                std::is_same_v<decltype(slice_res.release()), slice<int>>);
+                std::is_same_v<decltype(slice_res.unwrap()), slice<int>>);
             static_assert(
                 std::is_same_v<decltype(slice_res.release_ref()), slice<int>&>);
 
@@ -387,8 +394,8 @@ TEST_SUITE("res")
         SUBCASE("slice release copy")
         {
             auto slice_res = get_slice();
-            REQUIRE(slice_res.okay());
-            auto slice = slice_res.release();
+            REQUIRE(slice_res.is_success());
+            auto slice = slice_res.unwrap();
             for (size_t i = 0; i < slice.size(); ++i) {
                 REQUIRE(slice[i] == mem.at(i));
             }
@@ -397,8 +404,8 @@ TEST_SUITE("res")
         SUBCASE("slice not always okay")
         {
             slice_int_result res = StatusCodeA::oom;
-            REQUIRE(!res.okay());
-            REQUIRE(res.err() == StatusCodeA::oom);
+            REQUIRE(!res.is_success());
+            REQUIRE(res.status() == StatusCodeA::oom);
         }
 
         SUBCASE("cannot assign okay to res")
@@ -414,15 +421,15 @@ TEST_SUITE("res")
 
         // this would mean slice is default constructible
         static_assert(
-            !is_std_constructible_v<slice_int_result, std::in_place_t>);
+            !is_std_constructible_v<slice_int_result, ok::in_place_t>);
 
         SUBCASE("slice res to opt")
         {
             std::array<int, 100> myints;
             slice_int_result myslice = myints;
-            REQUIRE(myslice.okay() == myslice.to_opt().has_value());
+            REQUIRE(myslice.is_success() == myslice.to_opt().has_value());
             slice_int_result myslicetwo = StatusCodeA::oom;
-            REQUIRE(myslicetwo.okay() == myslicetwo.to_opt().has_value());
+            REQUIRE(myslicetwo.is_success() == myslicetwo.to_opt().has_value());
         }
     }
 
@@ -467,8 +474,8 @@ TEST_SUITE("res")
                 REQUIRE(memory[i] == 1);
             }
             auto succeeded_result = make_zeroed_buffer(true, 100);
-            REQUIRE(!failed_result.okay());
-            REQUIRE(succeeded_result.okay());
+            REQUIRE(!failed_result.is_success());
+            REQUIRE(succeeded_result.is_success());
             for (size_t i = 0; i < 100; ++i) {
                 REQUIRE(memory[i] == 0);
             }
@@ -492,7 +499,7 @@ TEST_SUITE("res")
             auto try_make_big_thing =
                 [](bool should_succeed) -> res<BigThing, ExampleError> {
                 if (should_succeed)
-                    return res<BigThing, ExampleError>{std::in_place};
+                    return res<BigThing, ExampleError>{ok::in_place};
                 else
                     return ExampleError::error;
             };
@@ -530,7 +537,7 @@ TEST_SUITE("res")
             auto try_make_big_thing_optional =
                 [](bool should_succeed) -> std::optional<BigThing> {
                 if (should_succeed)
-                    return std::optional<BigThing>{std::in_place};
+                    return std::optional<BigThing>{ok::in_place};
                 else
                     return {};
             };

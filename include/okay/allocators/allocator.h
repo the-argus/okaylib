@@ -285,7 +285,7 @@ template <typename T, typename allocator_impl_t = ok::allocator_t> struct owned
         return *static_cast<T*>(std::exchange(m_allocation, nullptr));
     }
 
-    inline ~owned() { destroy(); }
+    constexpr ~owned() { destroy(); }
 
   private:
     constexpr void destroy() noexcept

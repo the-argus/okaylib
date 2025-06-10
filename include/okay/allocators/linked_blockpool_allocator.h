@@ -54,7 +54,7 @@ class linked_blockpool_allocator_t : public ok::allocator_t
         return m.minimum_alignment;
     }
 
-    inline ~linked_blockpool_allocator_t() { destroy(); }
+    constexpr ~linked_blockpool_allocator_t() { destroy(); }
 
   protected:
     [[nodiscard]] inline alloc::result_t<bytes_t>

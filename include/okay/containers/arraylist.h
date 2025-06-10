@@ -570,7 +570,7 @@ class arraylist_t
         return alloc::error::okay;
     }
 
-    inline ~arraylist_t() { destroy(); }
+    constexpr ~arraylist_t() { destroy(); }
 
   private:
     [[nodiscard]] constexpr status<alloc::error>

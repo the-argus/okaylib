@@ -162,7 +162,7 @@ class res<contained_t, enum_t,
     template <typename T = contained_t>
     constexpr res(
         std::enable_if_t<!is_reference && std::is_default_constructible_v<T>,
-                         std::in_place_t>) OKAYLIB_NOEXCEPT
+                         ok::in_place_t>) OKAYLIB_NOEXCEPT
     {
         this->get_error_payload() = 0;
         this->construct_no_destroy_payload();
@@ -251,7 +251,7 @@ class res<contained_t, enum_t,
     constexpr res& operator=(res&& other) = delete;
     constexpr res& operator=(const res& other) = delete;
 
-    // NOTE: not defining std::in_place constructor here because slice cannot
+    // NOTE: not defining ok::in_place constructor here because slice cannot
     // default construct
     template <
         typename... args_t,

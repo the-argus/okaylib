@@ -397,13 +397,13 @@ template <typename payload_t>
 struct uninitialized_storage_default_constructible_t
 {
     constexpr uninitialized_storage_default_constructible_t() OKAYLIB_NOEXCEPT
-        : m_value(std::in_place)
+        : m_value(ok::in_place)
     {
     }
 
     template <typename... args_t>
     constexpr uninitialized_storage_default_constructible_t(args_t&&... args)
-        OKAYLIB_NOEXCEPT : m_value(std::in_place, std::forward<args_t>(args)...)
+        OKAYLIB_NOEXCEPT : m_value(ok::in_place, std::forward<args_t>(args)...)
     {
     }
 
@@ -417,7 +417,7 @@ struct uninitialized_storage_deleted_default_constructor_t
     template <typename... args_t>
     constexpr uninitialized_storage_deleted_default_constructor_t(
         args_t&&... args) OKAYLIB_NOEXCEPT
-        : m_value(std::in_place, std::forward<args_t>(args)...)
+        : m_value(ok::in_place, std::forward<args_t>(args)...)
     {
     }
 
@@ -492,7 +492,7 @@ struct assignment_op_wrapper_t
         return *this;
     }
 
-    inline ~assignment_op_wrapper_t() { value().~payload_t(); }
+    constexpr ~assignment_op_wrapper_t() { value().~payload_t(); }
 };
 
 // extend an arbitrary cursor type with additional members or functionality,

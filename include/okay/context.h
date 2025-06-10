@@ -54,7 +54,7 @@ class context_switch_t
         __context = &m_context;
     }
 
-    inline ~context_switch_t() noexcept
+    constexpr ~context_switch_t() noexcept
     {
         // check if somebody set and forgot to restore the context
         assert(ok::addressof(m_context) == ok::addressof(context()));

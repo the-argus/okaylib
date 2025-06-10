@@ -4,13 +4,12 @@ const zcc = @import("compile_commands");
 
 const release_flags = &[_][]const u8{
     "-DNDEBUG",
-    "-std=c++17",
-    "-DOKAYLIB_NO_CHECKED_MOVES",
+    "-std=c++20",
 };
 
 const debug_flags = &[_][]const u8{
     "-g",
-    "-std=c++17",
+    "-std=c++20",
     // TODO: fix tests to only use non throwing types, so tests still run and
     // compile with disallow exceptions on
     // "-DOKAYLIB_DISALLOW_EXCEPTIONS",

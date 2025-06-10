@@ -1,16 +1,12 @@
 #ifndef __OKAYLIB_DETAIL_TRAITS_SPECIAL_MEMBER_TRAITS_H__
 #define __OKAYLIB_DETAIL_TRAITS_SPECIAL_MEMBER_TRAITS_H__
 
-#include "okay/detail/template_util/first_type_in_pack.h"
 #include "okay/detail/template_util/remove_cvref.h"
-#include "okay/detail/traits/is_derived_from.h"
+#include "okay/detail/traits/error_traits.h"
 #include "okay/detail/traits/is_instance.h"
-#include "okay/status.h"
 #include <type_traits>
 
 namespace ok {
-template <typename contained_t, typename enum_t, typename> class res;
-
 template <typename T, typename... args_t>
 constexpr bool is_std_constructible_v =
 #ifdef OKAYLIB_DISALLOW_EXCEPTIONS
@@ -129,8 +125,7 @@ template <typename... args_t> struct constructor_analysis
         using return_type = decltype(std::declval<const constructor_t&>().make(
             std::declval<args_t>()...));
 
-        static_assert(!detail::is_instance_v<return_type, res> &&
-                          !detail::is_instance_v<return_type, status>,
+        static_assert(!status_object<return_type>,
                       "Do not return a status or res from a make() function- "
                       "this function is only used for non-failing constructors "
                       "and should return the constructed object directly.");
@@ -173,10 +168,9 @@ template <typename... args_t> struct constructor_analysis
         using return_type =
             decltype(std::declval<const constructor_t&>().make_into_uninit(
                 std::declval<T&>(), std::declval<args_t>()...));
-        static_assert(std::is_void_v<return_type> ||
-                          detail::is_instance_v<return_type, status>,
+        static_assert(std::is_void_v<return_type> || status_object<return_type>,
                       "Return type from make_into_uninit() should be void (if "
-                      "the function can't fail) or an ok::status.");
+                      "the function can't fail) or a status object.");
     };
 
     template <typename constructor_t, typename = void>
@@ -210,11 +204,10 @@ template <typename... args_t> struct constructor_analysis
         : public std::true_type
     {
         using type = typename make_fn_analysis<constructor_t>::return_type;
-        static_assert(!detail::is_instance_v<type, status> &&
-                          !detail::is_instance_v<type, res>,
+        static_assert(!status_object<type>,
                       "make() function should not return an error type- you "
                       "probably want to implement make_into_uninit and then "
-                      "simly use ok::make to return a res<...> on the stack.");
+                      "simply use ok::make to return a res<...> on the stack.");
     };
 
     template <typename constructor_t, typename = void>
@@ -245,10 +238,8 @@ template <typename... args_t> struct constructor_analysis
 
         constexpr static bool can_fail =
             has_inplace && !has_rvo &&
-            detail::is_instance_v<
-                typename make_into_uninit_fn_analysis<
-                    associated_type, constructor_t>::return_type,
-                status>;
+            status_object<typename make_into_uninit_fn_analysis<
+                associated_type, constructor_t>::return_type>;
 
         static_assert(can_fail || !has_inplace ||
                           std::is_void_v<typename make_into_uninit_fn_analysis<

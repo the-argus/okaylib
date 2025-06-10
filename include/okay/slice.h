@@ -829,7 +829,7 @@ template <> struct fmt::formatter<ok::bit>
     auto format(const ok::bit& b,
                 format_context& ctx) const -> format_context::iterator
     {
-        return fmt::format_to(ctx.out(), b ? "1" : "0");
+        return fmt::format_to(ctx.out(), "{}", bool(b) ? '1' : '0');
     }
 };
 

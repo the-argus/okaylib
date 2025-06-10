@@ -2,7 +2,7 @@
 #define __OKAYLIB_MACRO_TRY_H__
 
 #include "okay/detail/is_lvalue.h"
-#include "okay/res.h"
+#include "okay/error.h"
 
 #define TRY(capture, result)                                       \
     static_assert(!decltype(ok::detail::is_lvalue(result))::value, \

@@ -22,11 +22,13 @@ template <typename T, size_t num_items> struct undefined_t;
 } // namespace detail
 } // namespace array
 
+// NOTE: this class was originally written for c++17 and only had aggregate
+// initialization (default constructor was marked private). Unfortunately, C++20
+// forces the class to have no declared constructors, so it is now possible to
+// leave arrays of trivially constructible objects uninitialized by default
+// constructing them.
 template <typename T, size_t num_items> class array_t
 {
-  private:
-    constexpr array_t() = default;
-
   public:
     static_assert(!std::is_reference_v<T>,
                   "ok::array_t cannot store references.");
@@ -35,11 +37,6 @@ template <typename T, size_t num_items> class array_t
     static_assert(num_items != 0, "Cannot create an array_t of zero items.");
 
     using value_type = T;
-
-    constexpr array_t(const array_t&) = default;
-    constexpr array_t& operator=(const array_t&) = default;
-    constexpr array_t(array_t&&) = default;
-    constexpr array_t& operator=(array_t&&) = default;
 
     // factory functions
     friend struct ok::array::detail::defaulted_or_zeroed_t<T, num_items>;

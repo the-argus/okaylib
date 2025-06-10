@@ -90,7 +90,7 @@ struct joined_cursor_t
         std::enable_if_t<std::is_same_v<T, input_inner_range_t>, bool> = true>
     constexpr joined_cursor_t(outer_cursor_t&& outer_cursor,
                               T&& inner_range) OKAYLIB_NOEXCEPT
-        : m(std::in_place, std::move(outer_cursor),
+        : m(ok::in_place, std::move(outer_cursor),
             std::forward<T>(inner_range))
     {
     }

@@ -95,7 +95,7 @@ struct unique_rw_arc_t
     [[nodiscard]] constexpr weak_arc_t<T, allocator_impl_t>
     spawn_weak_arc() OKAYLIB_NOEXCEPT;
 
-    inline ~unique_rw_arc_t() noexcept { destroy(); }
+    constexpr ~unique_rw_arc_t() noexcept { destroy(); }
 
   private:
     unique_rw_arc_t() = default;
@@ -249,7 +249,7 @@ struct ro_arc_t
     [[nodiscard]] constexpr weak_arc_t<T, allocator_impl_t>
     spawn_weak_arc() OKAYLIB_NOEXCEPT;
 
-    inline ~ro_arc_t() noexcept { destroy(); }
+    constexpr ~ro_arc_t() noexcept { destroy(); }
 
   private:
     ro_arc_t() = default;
@@ -387,7 +387,7 @@ struct weak_arc_t
         return ok::opt<ro_arc_t>(ro_arc_t(m_payload));
     }
 
-    inline ~weak_arc_t() OKAYLIB_NOEXCEPT { destroy(); }
+    constexpr ~weak_arc_t() OKAYLIB_NOEXCEPT { destroy(); }
 
   private:
     constexpr void destroy() OKAYLIB_NOEXCEPT
@@ -732,7 +732,7 @@ struct variant_arc_t
         return *this;
     }
 
-    inline ~variant_arc_t() { destroy(); }
+    constexpr ~variant_arc_t() { destroy(); }
 
   private:
     constexpr void destroy()

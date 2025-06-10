@@ -34,8 +34,12 @@ static_assert(!std::is_convertible_v<int*, const int&>);
 static_assert(!std::is_convertible_v<std::optional<int*>, const int&>);
 static_assert(!std::is_convertible_v<opt<int&>, const int&>);
 
-static_assert(sizeof(opt<slice<int>>) == sizeof(slice<int>),
-              "Optional slice types are a different size than slices");
+static_assert(std::is_trivially_copyable_v<opt<int>>);
+static_assert(std::is_move_constructible_v<opt<int>>);
+static_assert(!std::is_trivially_copyable_v<opt<std::vector<int>>>);
+static_assert(!std::is_trivially_move_constructible_v<opt<std::vector<int>>>);
+static_assert(std::is_move_constructible_v<opt<std::vector<int>>>);
+static_assert(std::is_copy_constructible_v<opt<std::vector<int>>>);
 
 static_assert(sizeof(opt<int&>) == sizeof(int*),
               "Optional reference types are a different size than pointers");
@@ -119,22 +123,8 @@ TEST_SUITE("opt")
             }
         }
 
-        SUBCASE("non owning slice")
-        {
-            std::vector<uint8_t> bytes = {20, 32, 124, 99, 1};
-            opt<slice<uint8_t>> maybe_array;
-            REQUIRE(!maybe_array.has_value());
-
-            // opt<std::vector<uint8_t>> optional_vector_copy(bytes);
-            // maybe_array = optional_vector_copy;
-
-            // TODO: make sure slice and opt<slice> cannot assume ownership
-            // of objects that are not trivially moveable
-        }
-
-#ifndef OKAYLIB_NO_CHECKED_MOVES
 #ifndef OKAYLIB_DISALLOW_EXCEPTIONS
-        SUBCASE("moved type is marked as nullopt")
+        SUBCASE("moved type is not marked as nullopt")
         {
             std::vector<int> nums = {1203, 12390, 12930, 430};
 
@@ -144,7 +134,9 @@ TEST_SUITE("opt")
 
                 REQUIRE(!maybe_moved.ref_or_panic().empty());
                 opt<std::vector<int>> our_nums = std::move(maybe_moved);
-                REQUIRE(!maybe_moved.has_value());
+                REQUIRE(maybe_moved.has_value());
+                opt taken = maybe_moved.take();
+                REQUIRE(!maybe_moved);
                 REQUIRE(!our_nums.ref_or_panic().empty());
                 our_nums.ref_or_panic().resize(0);
             };
@@ -152,7 +144,8 @@ TEST_SUITE("opt")
             opt<std::vector<int>> maybe_copy;
             REQUIRE(!maybe_copy);
             consume(std::move(maybe_copy));
-            REQUIRE(!maybe_copy); // this is defined behavior with checked moves
+            // consume sets the moved type to null
+            REQUIRE(!maybe_copy);
 
             opt<std::vector<int>> maybe_moved = std::move(nums);
             REQUIRE(maybe_moved);
@@ -160,7 +153,6 @@ TEST_SUITE("opt")
             consume(std::move(maybe_moved));
             REQUIRE(!maybe_moved);
         }
-#endif
 #endif
 
         SUBCASE("destruction called when not nullopt")
@@ -188,7 +180,10 @@ TEST_SUITE("opt")
                 d2.emplace();
                 opt<destroyed> d3;
                 d3.emplace();
+                // before exiting scope, no one has been destroyed
+                REQUIRE(destroyed::destructions == 1);
             }
+            // after exiting, all the optionals were active and got destroyed
             REQUIRE(destroyed::destructions == 5);
         }
     }
@@ -331,7 +326,7 @@ TEST_SUITE("opt")
 
             auto try_make_big_thing = [](bool should_succeed) -> opt<BigThing> {
                 if (should_succeed)
-                    return opt<BigThing>{std::in_place};
+                    return opt<BigThing>{ok::in_place};
                 else
                     return {};
             };
@@ -377,7 +372,7 @@ TEST_SUITE("opt")
 
             static_assert(
                 std::is_same_v<decltype(get_maybe_slice().ref_or_panic()),
-                               slice<uint8_t>&>);
+                               slice<uint8_t>&&>);
 
             slice<uint8_t> my_slice = get_maybe_slice().ref_or_panic();
             ok::memfill(my_slice, 0);
@@ -406,28 +401,28 @@ TEST_SUITE("opt")
         {
             opt<int> i = 1;
 
-            int j = i.move_out().ref_or_panic();
+            int j = i.take().ref_or_panic();
             REQUIRE(j == 1);
             REQUIRE(!i);
             i.reset();
-            REQUIRE(!i.move_out().has_value());
+            REQUIRE(!i.take().has_value());
             i.emplace(2);
             REQUIRE(i.copy_out_or(3) == 2);
             i.reset();
             REQUIRE(i.copy_out_or(3) == 3);
-            REQUIRE(i.move_out_or(3) == 3);
+            REQUIRE(i.take_or(3) == 3);
             REQUIRE(!i);
             i.emplace(4);
-            REQUIRE(i.move_out_or(1) == 4);
+            REQUIRE(i.take_or(1) == 4);
             i.reset();
             REQUIRE(i.copy_out_or_run([] { return 1000; }) == 1000);
             REQUIRE(!i);
-            REQUIRE(i.move_out_or_run([] { return 1000; }) == 1000);
+            REQUIRE(i.take_or_run([] { return 1000; }) == 1000);
             REQUIRE(!i);
             i.emplace(10);
             REQUIRE(i.copy_out_or_run([] { return 1000; }) == 10);
             REQUIRE(i);
-            REQUIRE(i.move_out_or_run([] { return 1000; }) == 10);
+            REQUIRE(i.take_or_run([] { return 1000; }) == 10);
             REQUIRE(!i);
         }
 
@@ -436,12 +431,12 @@ TEST_SUITE("opt")
             array_t<uint8_t, 3> bytes = {0, 1, 2};
             opt<slice<const uint8_t>> i = bytes;
 
-            slice<const uint8_t> j = i.move_out().ref_or_panic();
+            slice<const uint8_t> j = i.take().ref_or_panic();
             REQUIRE(ranges_equal(bytes, j));
             REQUIRE(!i);
             i.reset();
             // move out of empty thing returns another empty thing
-            REQUIRE(!i.move_out().has_value());
+            REQUIRE(!i.take().has_value());
             i.emplace(bytes);
 
             array_t<uint8_t, 3> dummy = {2, 3, 1};
@@ -449,17 +444,17 @@ TEST_SUITE("opt")
             REQUIRE(i.ref_or_panic().is_alias_for(bytes));
             i.reset();
             REQUIRE(i.copy_out_or(dummy).is_alias_for(dummy));
-            REQUIRE(i.move_out_or(dummy).is_alias_for(dummy));
+            REQUIRE(i.take_or(dummy).is_alias_for(dummy));
             REQUIRE(!i);
             i.emplace(bytes);
-            REQUIRE(i.move_out_or(dummy).is_alias_for(bytes));
+            REQUIRE(i.take_or(dummy).is_alias_for(bytes));
             REQUIRE(!i);
             // copy out but it runs the given callable
             {
                 bool ran = false;
-                auto t = i.copy_out_or_run([&] {
+                auto t = i.copy_out_or_run([&]() -> slice<const uint8_t> {
                     ran = true;
-                    return bytes_t(dummy);
+                    return dummy;
                 });
                 bool alias = t.is_alias_for(dummy);
                 REQUIRE(alias);
@@ -476,7 +471,7 @@ TEST_SUITE("opt")
             // move out but it runs the given callable
             {
                 bool ran = false;
-                REQUIRE(i.move_out_or_run([&] {
+                REQUIRE(i.take_or_run([&] {
                              ran = true;
                              return bytes_t(dummy);
                          }).is_alias_for(dummy));
@@ -486,7 +481,7 @@ TEST_SUITE("opt")
             i.emplace(bytes);
             REQUIRE(i);
             // move out but it does NOT run the given callable
-            REQUIRE(i.move_out_or_run([&] {
+            REQUIRE(i.take_or_run([&] {
                          REQUIRE(false);
                          return bytes_t(dummy);
                      }).is_alias_for(bytes));
@@ -496,7 +491,7 @@ TEST_SUITE("opt")
                          return bytes_t(bytes);
                      }).is_alias_for(bytes));
             REQUIRE(!i);
-            REQUIRE(i.move_out_or_run([&] {
+            REQUIRE(i.take_or_run([&] {
                          return bytes_t(bytes);
                      }).is_alias_for(bytes));
             REQUIRE(!i);

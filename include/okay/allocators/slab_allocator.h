@@ -52,7 +52,7 @@ class slab_allocator_t : public ok::allocator_t
     slab_allocator_t& operator=(const slab_allocator_t&) = delete;
     slab_allocator_t(const slab_allocator_t&) = delete;
 
-    inline ~slab_allocator_t() = default;
+    constexpr ~slab_allocator_t() = default;
 
   protected:
     [[nodiscard]] inline alloc::result_t<bytes_t>
