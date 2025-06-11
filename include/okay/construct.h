@@ -2,7 +2,7 @@
 #define __OKAYLIB_NOEXCEPT_SPECIAL_MEMBER_FUNCTIONS_H__
 
 #include "okay/detail/traits/special_member_traits.h"
-#include "okay/res.h"
+#include "okay/error.h"
 
 namespace ok {
 namespace detail {

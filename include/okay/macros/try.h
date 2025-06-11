@@ -8,19 +8,19 @@
     static_assert(!decltype(ok::detail::is_lvalue(result))::value, \
                   "Attempting to try an lvalue.");                 \
     decltype(result) _private_result_##capture(result);            \
-    if (!_private_result_##capture.okay()) {                       \
-        return _private_result_##capture.err();                    \
+    if (!_private_result_##capture.is_success()) {                 \
+        return _private_result_##capture.status();                 \
     }                                                              \
-    auto capture = _private_result_##capture.release();
+    auto capture = _private_result_##capture.unwrap();
 
 #define TRY_REF(capture, result)                                   \
     static_assert(!decltype(ok::detail::is_lvalue(result))::value, \
                   "Attempting to try an lvalue.");                 \
     decltype(result) _private_result_##capture(result);            \
-    if (!_private_result_##capture.okay()) {                       \
-        return _private_result_##capture.err();                    \
+    if (!_private_result_##capture.is_success()) {                 \
+        return _private_result_##capture.status();                 \
     }                                                              \
-    auto& capture = _private_result_##capture.release_ref();
+    auto& capture = _private_result_##capture.unwrap();
 
 #define TRY_BLOCK(capture, result, code) \
     {                                    \

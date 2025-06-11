@@ -8,7 +8,7 @@ template <class T, typename... args_t>
 constexpr T* construct_at(T* location, args_t&&... args)
 {
     // c++20 :)
-    return std::construct_at(location, args...);
+    return std::construct_at(location, std::forward<args_t>(args)...);
 }
 } // namespace ok
 

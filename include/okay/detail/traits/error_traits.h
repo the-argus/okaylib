@@ -59,6 +59,15 @@ concept status_type = requires { status_enum<T> || status_object<T>; };
 template <typename success_t, status_type status_t, typename = void>
 __OK_RES_REQUIRES_CLAUSE class res;
 
+template <status_type T> auto make_success() noexcept
+{
+    if constexpr (status_enum<T>) {
+        return T::success;
+    } else {
+        return T::make_success();
+    }
+}
+
 } // namespace ok
 
 #endif

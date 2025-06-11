@@ -2,6 +2,7 @@
 // test header must be first
 #include "okay/error.h"
 #include "okay/macros/try.h"
+#include "okay/slice.h"
 #include "testing_types.h"
 
 #include <array>
@@ -112,14 +113,13 @@ TEST_SUITE("res")
             });
             REQUIRE(result.is_success());
             REQUIRE(result.unwrap().whatever == 19);
-            REQUIRE(!result.is_success());
-            REQUIRE(result.status() == StatusCodeB::no_value);
+            REQUIRE(result.is_success());
+            REQUIRE(result.status() == StatusCodeB::success);
         }
 
         enum class VectorCreationStatusCode : uint8_t
         {
-            okay,
-            no_value,
+            success,
             oom,
         };
 
@@ -127,10 +127,9 @@ TEST_SUITE("res")
         {
             using res = res<std::vector<size_t>, VectorCreationStatusCode>;
 
-            res vec_result((std::vector<size_t>()));
+            res vec_result = std::vector<size_t>();
             REQUIRE(vec_result.is_success());
             auto vec = vec_result.unwrap();
-            REQUIRE(!vec_result.is_success());
             vec.push_back(42);
             // pass a copy of the vector into the result
             res vec_result_modified(std::move(vec));
@@ -155,27 +154,80 @@ TEST_SUITE("res")
 
             enum TestCode : uint8_t
             {
-                okay,
-                no_value,
+                success,
                 error
             };
 
             auto getRes = []() -> res<Test, TestCode> {
-                return res<Test, TestCode>{ok::in_place};
+                return res<Test, TestCode>(ok::in_place);
             };
 
+            copies = 0;
+
             auto myres = getRes();
-            auto& testref = myres.release_ref();
+            Test& testref = myres.unwrap();
 
             REQUIRE(copies == 0);
+        }
+
+        SUBCASE("creating a successful res only calls move if possible")
+        {
+            static size_t copies = 0;
+            static size_t moves = 0;
+            static size_t destructions = 0;
+            struct Test
+            {
+                std::vector<int> contents;
+
+                Test() = delete;
+                Test(int i) { contents.resize(i); }
+                Test(const Test& other) =
+                    delete; //: contents(other.contents) { ++copies; }
+                Test& operator=(const Test& other) = delete;
+                // {
+                //     ++copies;
+                //     contents = other.contents;
+                //     return *this;
+                // }
+                Test(Test&& other) : contents(std::move(other.contents))
+                {
+                    ++moves;
+                }
+                Test& operator=(Test&& other)
+                {
+                    ++moves;
+                    contents = std::move(other.contents);
+                    return *this;
+                }
+                ~Test() { ++destructions; }
+            };
+
+            auto maketest = [] { return res<Test, StatusCodeA>(Test(1)); };
+
+            copies = 0;
+            moves = 0;
+            destructions = 0;
+
+            auto res = maketest();
+
+            REQUIRE(copies == 0);
+            REQUIRE(moves == 1);
+            REQUIRE(destructions == 1);
+
+            res = maketest();
+
+            REQUIRE(copies == 0);
+            // move when constructing res in the function, then assignment
+            REQUIRE(moves == 3);
+            // each move has the previous shell get destroyed
+            REQUIRE(destructions == 3);
         }
 
         SUBCASE("reference result")
         {
             enum class ReferenceCreationStatusCode : uint8_t
             {
-                okay,
-                no_value,
+                success,
                 null_reference,
             };
 
@@ -199,7 +251,6 @@ TEST_SUITE("res")
             auto& vec = result.unwrap();
             REQUIRE(vec[0] == 5);
             vec.push_back(10);
-            REQUIRE(!result.is_success());
             delete &vec;
         }
 
@@ -230,8 +281,7 @@ TEST_SUITE("res")
         {
             enum class ReferenceCreationStatusCode : uint8_t
             {
-                okay,
-                no_value,
+                success,
                 null_reference,
             };
 
@@ -257,7 +307,6 @@ TEST_SUITE("res")
             const auto& vec = result.unwrap();
             // this doesnt work
             // vec.push_back(10);
-            REQUIRE(!result.is_success());
             delete &vec;
         }
 
@@ -311,8 +360,7 @@ TEST_SUITE("res")
 
             enum class dummy_status_code_e : uint8_t
             {
-                okay,
-                no_value,
+                success,
                 dummy_error,
             };
 
@@ -323,7 +371,7 @@ TEST_SUITE("res")
             REQUIRE(res_1.is_success());
             REQUIRE(copies == 0);
             REQUIRE(moves == 1);
-            auto& resref_1 = res_1.release_ref();
+            auto& resref_1 = res_1.unwrap();
             REQUIRE(copies == 0);
             REQUIRE(moves == 1);
             res res_2 = increment_on_copy_or_move(1, 2);
@@ -331,10 +379,7 @@ TEST_SUITE("res")
             REQUIRE(moves == 2);
             REQUIRE(copies == 0);
             REQUIRE(res_2.is_success());
-            REQUIREABORTS({ auto nothing = res_1.unwrap(); });
-            increment_on_copy_or_move dummy_2 = res_2.unwrap();
-            // moves incremented because unwrap() moves the item out of the
-            // result
+            increment_on_copy_or_move dummy_2 = std::move(res_2).unwrap();
             REQUIRE(copies == 0);
             REQUIRE(moves == 3);
             increment_on_copy_or_move dummy_3 = dummy_2; // NOLINT
@@ -351,18 +396,17 @@ TEST_SUITE("res")
             REQUIRE(destroyed::destructions == 1);
             destroyed::destructions = 0;
             {
-                res<destroyed, StatusCodeA> r1;
-                REQUIRE(r1.status() == StatusCodeA::no_value);
-                res<destroyed, StatusCodeA> r2;
-                res<destroyed, StatusCodeA> r3;
-                res<destroyed, StatusCodeA> r4;
+                res<destroyed, StatusCodeA> r1 = StatusCodeA::oom;
+                res<destroyed, StatusCodeA> r2 = StatusCodeA::oom;
+                res<destroyed, StatusCodeA> r3 = StatusCodeA::oom;
+                res<destroyed, StatusCodeA> r4 = StatusCodeA::oom;
             }
             REQUIRE(destroyed::destructions == 0);
             {
-                res<destroyed, StatusCodeA> r1(ok::in_place);
-                res<destroyed, StatusCodeA> r2(ok::in_place);
-                res<destroyed, StatusCodeA> r3(ok::in_place);
-                res<destroyed, StatusCodeA> r4(ok::in_place);
+                res<destroyed, StatusCodeA> r1 = ok::in_place;
+                res<destroyed, StatusCodeA> r2 = ok::in_place;
+                res<destroyed, StatusCodeA> r3 = ok::in_place;
+                res<destroyed, StatusCodeA> r4 = ok::in_place;
             }
             REQUIRE(destroyed::destructions == 4);
         }
@@ -372,19 +416,18 @@ TEST_SUITE("res")
     {
         static std::array<int, 8> mem{};
         using slice_int_result = res<slice<int>, StatusCodeA>;
+        static_assert(std::is_convertible_v<decltype(mem)&, slice<int>>);
         auto get_slice = []() -> slice_int_result { return mem; };
 
-        SUBCASE("slice release_ref and conversion")
+        SUBCASE("slice unwrap and conversion")
         {
             auto slice_res = get_slice();
             REQUIRE(slice_res.is_success());
 
             static_assert(
-                std::is_same_v<decltype(slice_res.unwrap()), slice<int>>);
-            static_assert(
-                std::is_same_v<decltype(slice_res.release_ref()), slice<int>&>);
+                std::is_same_v<decltype(slice_res.unwrap()), slice<int>&>);
 
-            auto& slice = slice_res.release_ref();
+            auto& slice = slice_res.unwrap();
 
             for (size_t i = 0; i < slice.size(); ++i) {
                 REQUIRE(slice[i] == mem.at(i));
@@ -401,17 +444,17 @@ TEST_SUITE("res")
             }
         }
 
-        SUBCASE("slice not always okay")
+        SUBCASE("slice not always success")
         {
             slice_int_result res = StatusCodeA::oom;
             REQUIRE(!res.is_success());
             REQUIRE(res.status() == StatusCodeA::oom);
         }
 
-        SUBCASE("cannot assign okay to res")
+        SUBCASE("cannot assign success to res")
         {
             try {
-                slice_int_result res = StatusCodeA::okay;
+                slice_int_result res = StatusCodeA::success;
                 REQUIRE(false); // above should throw
             } catch (reserve::_abort_exception& e) {
                 // minor detail to decrease spamming of logs here
@@ -437,8 +480,7 @@ TEST_SUITE("res")
     {
         enum class ExampleError : uint8_t
         {
-            okay,
-            no_value,
+            success,
             error,
         };
         SUBCASE("try with matching return type")
@@ -520,7 +562,7 @@ TEST_SUITE("res")
                     for (int& number : big_thing.numbers) {
                         number = 0;
                     }
-                    return ExampleError::okay;
+                    return ExampleError::success;
                 });
             };
 
@@ -530,14 +572,14 @@ TEST_SUITE("res")
                     for (int& number : big_thing.numbers) {
                         number = 0;
                     }
-                    return ExampleError::okay;
+                    return ExampleError::success;
                 });
             };
 
             auto try_make_big_thing_optional =
                 [](bool should_succeed) -> std::optional<BigThing> {
                 if (should_succeed)
-                    return std::optional<BigThing>{ok::in_place};
+                    return std::optional<BigThing>{std::in_place};
                 else
                     return {};
             };

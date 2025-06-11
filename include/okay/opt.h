@@ -256,7 +256,7 @@ template <typename payload_t, typename> class opt
     // emplacement constructor
     template <typename... args_t>
     explicit constexpr opt(ok::in_place_t, args_t&&... args) OKAYLIB_NOEXCEPT
-        requires(is_std_constructible_v<payload_t, args_t...>)
+        requires(is_infallible_constructible_v<payload_t, args_t...>)
         : m_payload(ok::in_place, std::forward<args_t>(args)...),
           m_has_value(true)
     {

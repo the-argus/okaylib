@@ -136,6 +136,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
             }
         }
         m_status = other.m_status;
+        return *this;
     }
 
     constexpr res(res&& other) OKAYLIB_NOEXCEPT
@@ -155,7 +156,9 @@ __OK_RES_REQUIRES_CLAUSE class res<
         }
     }
     constexpr res& operator=(res&& other) OKAYLIB_NOEXCEPT
-        requires(!std::is_move_assignable_v<decltype(m_success)>)
+        requires(!std::is_move_assignable_v<decltype(m_success)> &&
+                 std::is_move_assignable_v<success_t> &&
+                 std::is_move_constructible_v<success_t>)
     {
         if (other.is_success()) {
             if (this->is_success()) {
@@ -165,6 +168,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
             }
         }
         m_status = std::move(other.m_status);
+        return *this;
     }
 
     constexpr res(status_t status) OKAYLIB_NOEXCEPT : m_status(status)
@@ -179,15 +183,33 @@ __OK_RES_REQUIRES_CLAUSE class res<
                        "but a status that says there is one.");
     }
 
-    constexpr res(success_t success) OKAYLIB_NOEXCEPT
-        requires status_object<status_t>
-        : m_status(status_t::make_success()), m_success(ok::in_place, success)
+    constexpr res(const success_t& success) OKAYLIB_NOEXCEPT
+        requires std::is_copy_constructible_v<success_t>
+        : m_status(ok::make_success<status_t>()),
+          m_success(ok::in_place, success)
     {
     }
 
-    constexpr res(success_t success) OKAYLIB_NOEXCEPT
-        requires status_enum<status_t>
-        : m_status(status_t::success), m_success(ok::in_place, success)
+    constexpr res(success_t&& success) OKAYLIB_NOEXCEPT
+        requires std::is_move_constructible_v<success_t>
+        : m_status(ok::make_success<status_t>()),
+          m_success(ok::in_place, std::move(success))
+    {
+    }
+
+    template <typename... args_t>
+        requires is_infallible_constructible_v<success_t, args_t...>
+    constexpr res(ok::in_place_t, args_t&&... args) OKAYLIB_NOEXCEPT
+        : m_status(ok::make_success<status_t>()),
+          m_success(ok::in_place, std::forward<args_t>(args)...)
+    {
+    }
+    // converting constructor
+    template <typename incoming_t>
+    constexpr res(incoming_t&& incoming) OKAYLIB_NOEXCEPT
+        requires is_std_constructible_v<success_t, decltype(incoming)>
+        : m_status(ok::make_success<status_t>()),
+          m_success(ok::in_place, std::forward<incoming_t>(incoming))
     {
     }
 
@@ -237,7 +259,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
 
     [[nodiscard]] constexpr success_t& unwrap() & OKAYLIB_NOEXCEPT
     {
-        if (!this->is_success())
+        if (!this->is_success()) [[unlikely]]
             __ok_abort(
                 "Attempt to unwrap success value of a res which is error.");
 
@@ -246,7 +268,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
 
     [[nodiscard]] constexpr const success_t& unwrap() const& OKAYLIB_NOEXCEPT
     {
-        if (!this->is_success())
+        if (!this->is_success()) [[unlikely]]
             __ok_abort(
                 "Attempt to unwrap success value of a res which is error.");
 
@@ -255,7 +277,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
 
     [[nodiscard]] constexpr success_t&& unwrap() && OKAYLIB_NOEXCEPT
     {
-        if (!this->is_success())
+        if (!this->is_success()) [[unlikely]]
             __ok_abort(
                 "Attempt to unwrap success value of a res which is error.");
 
@@ -440,14 +462,8 @@ __OK_RES_REQUIRES_CLAUSE class res<
     }
 
     constexpr res(success_t success) OKAYLIB_NOEXCEPT
-        requires status_object<status_t>
-        : m_status(status_t::make_success()), m_success(ok::addressof(success))
-    {
-    }
-
-    constexpr res(success_t success) OKAYLIB_NOEXCEPT
-        requires status_enum<status_t>
-        : m_status(status_t::success), m_success(ok::addressof(success))
+        : m_status(ok::make_success<status_t>()),
+          m_success(ok::addressof(success))
     {
     }
 
@@ -539,9 +555,9 @@ template <ok::status_enum enum_t> struct fmt::formatter<ok::status<enum_t>>
 };
 
 template <typename success_t, typename status_t>
-struct fmt::formatter<ok::res<success_t, status_t>,
-                      std::enable_if_t<std::is_reference_v<success_t> ||
-                                       fmt::is_formattable<success_t>::value>>
+    requires(std::is_reference_v<success_t> ||
+             fmt::is_formattable<success_t>::value)
+struct fmt::formatter<ok::res<success_t, status_t>>
 {
     using res_t = ok::res<success_t, status_t>;
 
