@@ -2,10 +2,8 @@
 #define __OKAYLIB_ERROR_H__
 
 #include "okay/detail/noexcept.h"
-#include "okay/detail/template_util/remove_cvref.h"
 #include "okay/detail/template_util/uninitialized_storage.h"
 #include "okay/detail/traits/error_traits.h"
-#include "okay/detail/traits/is_nonthrowing.h"
 #include "okay/opt.h"
 
 #include <concepts>
@@ -99,6 +97,9 @@ __OK_RES_REQUIRES_CLAUSE class res<
     }
 
   public:
+    using success_type = success_t;
+    using status_type = status_t;
+
     // use compiler generated copy assignment if one is present in the
     // uninitialized_storage_t
     constexpr res(const res& other) OKAYLIB_NOEXCEPT

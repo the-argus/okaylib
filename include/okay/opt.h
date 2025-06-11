@@ -7,6 +7,7 @@
 #include "okay/detail/noexcept.h"
 #include "okay/detail/template_util/remove_cvref.h"
 #include "okay/detail/template_util/uninitialized_storage.h"
+#include "okay/detail/traits/cloneable.h"
 #include "okay/detail/traits/is_nonthrowing.h"
 #include "okay/detail/traits/mathop_traits.h"
 #include "okay/detail/traits/special_member_traits.h"
@@ -505,6 +506,61 @@ template <typename payload_t, typename> class opt
     {
         if (m_has_value) {
             this->ref_unchecked().~payload_t();
+        }
+    }
+
+    constexpr auto clone() const OKAYLIB_NOEXCEPT
+        requires cloneable<payload_t>
+    {
+        if constexpr (cloneable_can_error_v<payload_t>) {
+            if (this->has_value()) {
+                return res<opt, cloneable_status_type_t<payload_t>>(
+                    ok::in_place, ok::clone(this->ref_unchecked()));
+            } else {
+                return res<opt, cloneable_status_type_t<payload_t>>(
+                    ok::in_place, nullopt);
+            }
+        } else {
+            if (this->has_value()) {
+                return opt(ok::clone(this->ref_unchecked()));
+            } else {
+                return opt(nullopt);
+            }
+        }
+    }
+
+    constexpr auto clone_into(opt& dest) const OKAYLIB_NOEXCEPT
+        requires cloneable<payload_t>
+    {
+        if constexpr (cloneable_can_error_v<payload_t>) {
+            if (this->has_value()) {
+                if (dest.has_value()) {
+                    return ok::clone_into(this->ref_unchecked(),
+                                          dest.ref_unchecked());
+                } else {
+                    if (auto res = ok::clone(this->ref_unchecked());
+                        res.is_success()) {
+                        dest.emplace_nodestroy(std::move(res.unwrap()));
+                        return res.status();
+                    } else {
+                        return res.status();
+                    }
+                }
+            } else {
+                dest.reset();
+                return ok::make_success<cloneable_status_type_t<payload_t>>();
+            }
+        } else {
+            if (this->has_value()) {
+                if (dest.has_value()) {
+                    ok::clone_into(this->ref_unchecked(), dest.ref_unchecked());
+                } else {
+                    dest.emplace_nodestroy(
+                        std::move(ok::clone(this->ref_unchecked())));
+                }
+            } else {
+                dest.reset();
+            }
         }
     }
 
