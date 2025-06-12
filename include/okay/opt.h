@@ -5,7 +5,7 @@
 #include "okay/detail/addressof.h"
 #include "okay/detail/construct_at.h"
 #include "okay/detail/noexcept.h"
-#include "okay/detail/template_util/remove_cvref.h"
+#include "okay/detail/opt_decl.h"
 #include "okay/detail/template_util/uninitialized_storage.h"
 #include "okay/detail/traits/cloneable.h"
 #include "okay/detail/traits/is_nonthrowing.h"
@@ -18,13 +18,6 @@
 #endif
 
 namespace ok {
-
-struct nullopt_t
-{};
-
-inline constexpr nullopt_t nullopt{};
-
-template <typename payload_t, typename = void> class opt;
 
 namespace detail {
 enum class opt_impl_type
@@ -509,17 +502,17 @@ template <typename payload_t, typename> class opt
         }
     }
 
-    constexpr auto try_clone() const
-        & OKAYLIB_NOEXCEPT -> res<opt, try_clone_status<payload_t>>
-              requires try_cloneable<payload_t>
+    constexpr auto try_clone() const& OKAYLIB_NOEXCEPT
+        requires try_cloneable<payload_t>
     {
         if (this->has_value()) {
             // res can convert from another res with the same status since
             // the success types (payload_t and opt<payload_t>) are convertible
-            return res<opt, try_clone_status<payload_t>>(
+            return res<opt, try_clone_status_t<payload_t>>(
                 ok::in_place, std::move(ok::try_clone(this->ref_unchecked())));
         } else {
-            return res<opt, try_clone_status<payload_t>>(ok::in_place, nullopt);
+            return res<opt, try_clone_status_t<payload_t>>(ok::in_place,
+                                                           nullopt);
         }
     }
 
@@ -533,7 +526,7 @@ template <typename payload_t, typename> class opt
         }
     }
 
-    constexpr try_clone_status<payload_t>
+    constexpr try_clone_status_t<payload_t>
     try_clone_into(opt& dest) const& OKAYLIB_NOEXCEPT
         requires try_cloneable<payload_t>
     {
@@ -552,7 +545,7 @@ template <typename payload_t, typename> class opt
             }
         } else {
             dest.reset();
-            return ok::make_success<try_clone_status<payload_t>>();
+            return ok::make_success<try_clone_status_t<payload_t>>();
         }
     }
 

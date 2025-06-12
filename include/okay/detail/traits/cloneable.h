@@ -11,6 +11,8 @@ namespace ok {
 namespace detail {
 template <typename T>
 concept cloneable_member_impl = requires(const T& t, T& nonconst) {
+    { t.clone() };
+    { t.clone_into() };
     std::is_same_v<decltype(t.clone()), T>&&
         std::is_void_v<decltype(t.clone_into(nonconst))>;
     noexcept(t.clone());
@@ -18,6 +20,8 @@ concept cloneable_member_impl = requires(const T& t, T& nonconst) {
 };
 template <typename T>
 concept cloneable_member_impl_fallible = requires(const T& t, T& nonconst) {
+    { t.try_clone() };
+    { t.try_clone_into() };
     detail::is_instance_v<decltype(t.try_clone()), res>&&
         std::is_same_v<typename decltype(t.try_clone())::success_type,
                        T>&& status_type<decltype(t.try_clone_into(nonconst))>&&
@@ -27,8 +31,11 @@ concept cloneable_member_impl_fallible = requires(const T& t, T& nonconst) {
                            decltype(t.try_clone_into(nonconst))>;
 };
 template <typename T>
-concept cloneable_copy_derive =
-    requires(const T& t, T& nonconst) { std::is_constructible_v<T, const T&>; };
+concept cloneable_copy_derive = requires(const T& t, T& nonconst) {
+    std::is_copy_constructible_v<T>;
+    std::is_copy_assignable_v<T>;
+    !cloneable_member_impl_fallible<T>;
+};
 
 } // namespace detail
 
@@ -74,9 +81,21 @@ template <try_cloneable C> auto try_clone_into(const C& src, C& dest)
     return src.clone_into(dest);
 }
 
+namespace detail {
+template <typename T, typename = void> struct try_clone_status
+{
+    using type = void;
+};
+
+template <try_cloneable T>
+struct try_clone_status<T, std::void_t<decltype(std::declval<T>().try_clone())>>
+{
+    using type = decltype(std::declval<const T&>().try_clone())::status_type;
+};
+} // namespace detail
+
 template <try_cloneable C>
-using try_clone_status =
-    decltype(std::declval<const C&>().try_clone())::status_type;
+using try_clone_status_t = detail::try_clone_status<C>::type;
 
 } // namespace ok
 
