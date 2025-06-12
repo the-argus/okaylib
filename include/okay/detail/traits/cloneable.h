@@ -3,7 +3,7 @@
 
 #include "okay/detail/traits/error_traits.h"
 #include "okay/detail/traits/is_instance.h"
-#include <concepts>
+
 namespace ok {
 // TODO: allow cloneable things to use a customization point object instead of
 // member functions
@@ -11,17 +11,20 @@ namespace ok {
 namespace detail {
 template <typename T>
 concept cloneable_member_impl = requires(const T& t, T& nonconst) {
-    // has a .clone() method which should either return T or a result with T on
-    // success
-    (std::is_same_v<decltype(t.clone()), T> &&
-     std::is_void_v<decltype(t.clone_into(nonconst))>) ||
-        (detail::is_instance_v<decltype(t.clone()), res> &&
-         std::is_same_v<typename decltype(t.clone())::success_type, T> &&
-         status_type<decltype(t.clone_into(nonconst))> &&
-         // the res returned by t.clone() should have the same status type as
-         // clone_into()
-         std::is_same_v<typename decltype(t.clone())::status_type,
-                        decltype(t.clone_into(nonconst))>);
+    std::is_same_v<decltype(t.clone()), T>&&
+        std::is_void_v<decltype(t.clone_into(nonconst))>;
+    noexcept(t.clone());
+    noexcept(t.clone_into(nonconst));
+};
+template <typename T>
+concept cloneable_member_impl_fallible = requires(const T& t, T& nonconst) {
+    detail::is_instance_v<decltype(t.try_clone()), res>&&
+        std::is_same_v<typename decltype(t.try_clone())::success_type,
+                       T>&& status_type<decltype(t.try_clone_into(nonconst))>&&
+            // the res returned by t.clone() should have the same status type as
+            // clone_into()
+            std::is_same_v<typename decltype(t.try_clone())::status_type,
+                           decltype(t.try_clone_into(nonconst))>;
 };
 template <typename T>
 concept cloneable_copy_derive =
@@ -36,6 +39,15 @@ concept cloneable_copy_derive =
 template <typename T>
 concept cloneable = requires {
     detail::cloneable_member_impl<T> || detail::cloneable_copy_derive<T>;
+};
+
+template <typename T>
+concept try_cloneable = requires {
+    detail::cloneable_member_impl_fallible<T>;
+    // if something is both cloneable and try cloneable, then the try cloneable
+    // implementation is ignored. the two concepts are meant to be mutally
+    // exclusive
+    !cloneable<T>;
 };
 
 // can be customized later to use CPO
@@ -56,27 +68,15 @@ template <cloneable C> auto clone_into(const C& src, C& dest)
         return src.clone_into(dest);
     }
 }
-
-template <cloneable C>
-inline constexpr bool cloneable_can_error_v =
-    !std::is_same_v<decltype(ok::clone(std::declval<C>())), C>;
-
-namespace detail {
-template <cloneable C, typename = void> struct cloneable_status_type
+template <try_cloneable C> auto try_clone(const C& c) { return c.clone(); }
+template <try_cloneable C> auto try_clone_into(const C& src, C& dest)
 {
-    using type = void;
-};
-template <cloneable C>
-struct cloneable_status_type<C, std::enable_if_t<cloneable_can_error_v<C>>>
-{
-    using type =
-        decltype(std::declval<const C&>().clone_into(std::declval<C&>()));
-};
+    return src.clone_into(dest);
+}
 
-} // namespace detail
-
-template <cloneable C>
-using cloneable_status_type_t = detail::cloneable_status_type<C>::type;
+template <try_cloneable C>
+using try_clone_status =
+    decltype(std::declval<const C&>().try_clone())::status_type;
 
 } // namespace ok
 

@@ -509,58 +509,65 @@ template <typename payload_t, typename> class opt
         }
     }
 
-    constexpr auto clone() const OKAYLIB_NOEXCEPT
-        requires cloneable<payload_t>
+    constexpr auto try_clone() const
+        & OKAYLIB_NOEXCEPT -> res<opt, try_clone_status<payload_t>>
+              requires try_cloneable<payload_t>
     {
-        if constexpr (cloneable_can_error_v<payload_t>) {
-            if (this->has_value()) {
-                return res<opt, cloneable_status_type_t<payload_t>>(
-                    ok::in_place, ok::clone(this->ref_unchecked()));
-            } else {
-                return res<opt, cloneable_status_type_t<payload_t>>(
-                    ok::in_place, nullopt);
-            }
+        if (this->has_value()) {
+            // res can convert from another res with the same status since
+            // the success types (payload_t and opt<payload_t>) are convertible
+            return res<opt, try_clone_status<payload_t>>(
+                ok::in_place, std::move(ok::try_clone(this->ref_unchecked())));
         } else {
-            if (this->has_value()) {
-                return opt(ok::clone(this->ref_unchecked()));
-            } else {
-                return opt(nullopt);
-            }
+            return res<opt, try_clone_status<payload_t>>(ok::in_place, nullopt);
         }
     }
 
-    constexpr auto clone_into(opt& dest) const OKAYLIB_NOEXCEPT
+    constexpr opt clone() const& OKAYLIB_NOEXCEPT
         requires cloneable<payload_t>
     {
-        if constexpr (cloneable_can_error_v<payload_t>) {
-            if (this->has_value()) {
-                if (dest.has_value()) {
-                    return ok::clone_into(this->ref_unchecked(),
+        if (this->has_value()) {
+            return ok::clone(this->ref_unchecked());
+        } else {
+            return nullopt;
+        }
+    }
+
+    constexpr try_clone_status<payload_t>
+    try_clone_into(opt& dest) const& OKAYLIB_NOEXCEPT
+        requires try_cloneable<payload_t>
+    {
+        if (this->has_value()) {
+            if (dest.has_value()) {
+                return ok::try_clone_into(this->ref_unchecked(),
                                           dest.ref_unchecked());
-                } else {
-                    if (auto res = ok::clone(this->ref_unchecked());
-                        res.is_success()) {
-                        dest.emplace_nodestroy(std::move(res.unwrap()));
-                        return res.status();
-                    } else {
-                        return res.status();
-                    }
-                }
             } else {
-                dest.reset();
-                return ok::make_success<cloneable_status_type_t<payload_t>>();
+                if (auto res = ok::try_clone(this->ref_unchecked());
+                    res.is_success()) {
+                    dest.emplace_nodestroy(std::move(res.unwrap()));
+                    return res.status();
+                } else {
+                    return res.status();
+                }
             }
         } else {
-            if (this->has_value()) {
-                if (dest.has_value()) {
-                    ok::clone_into(this->ref_unchecked(), dest.ref_unchecked());
-                } else {
-                    dest.emplace_nodestroy(
-                        std::move(ok::clone(this->ref_unchecked())));
-                }
+            dest.reset();
+            return ok::make_success<try_clone_status<payload_t>>();
+        }
+    }
+
+    constexpr void clone_into(opt& dest) const& OKAYLIB_NOEXCEPT
+        requires cloneable<payload_t>
+    {
+        if (this->has_value()) {
+            if (dest.has_value()) {
+                ok::clone_into(this->ref_unchecked(), dest.ref_unchecked());
             } else {
-                dest.reset();
+                dest.emplace_nodestroy(
+                    std::move(ok::clone(this->ref_unchecked())));
             }
+        } else {
+            dest.reset();
         }
     }
 

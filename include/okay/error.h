@@ -214,6 +214,109 @@ __OK_RES_REQUIRES_CLAUSE class res<
     {
     }
 
+    // NOTE: res only implements try_clone if the status can be cloned without
+    // error.
+    constexpr auto try_clone() const OKAYLIB_NOEXCEPT
+        -> res<res<success_t, status_t>, try_clone_status<success_t>>
+        requires try_cloneable<success_t> && cloneable<status_t>
+    {
+        if (this->is_success()) {
+            auto cloned = ok::try_clone(this->unwrap_unchecked());
+            if (cloned.is_success()) {
+                return res<res, try_clone_status<success_t>>(
+                    ok::in_place, std::move(cloned.unwrap_unchecked()));
+            } else {
+                return res<res, try_clone_status<success_t>>(
+                    std::move(cloned.status()));
+            }
+        } else {
+            return res<res, try_clone_status<success_t>>(
+                ok::in_place, ok::clone(this->status()));
+        }
+    }
+
+    constexpr res clone() const OKAYLIB_NOEXCEPT
+        requires cloneable<success_t> && cloneable<status_t>
+    {
+        if (this->is_success()) {
+            return res(ok::clone(this->unwrap_unchecked()));
+        } else {
+            return res(ok::clone(this->status()));
+        }
+    }
+
+    // NOTE: res will only implement try_clone_into() if its success type
+    // is try_cloneable and its status type is just cloneable.
+    constexpr try_clone_status<success_t>
+    try_clone_into(res& dest) const& OKAYLIB_NOEXCEPT
+        requires try_cloneable<success_t> && cloneable<status_t>
+    {
+        const auto set_other_status = [this, dest] {
+            // clone our status and move it into the other's status
+            if constexpr (std::is_move_assignable_v<status_t>) {
+                dest.m_status = std::move(ok::clone(this->status()));
+            } else {
+                // emulate move assignment with destruction and construction
+                dest.m_status.~status_t();
+                ok::construct_at(ok::addressof(dest.m_status),
+                                 std::move(ok::clone(this->status())));
+            }
+        };
+
+        if (this->is_success()) {
+            const bool other_was_success = dest.is_success();
+            set_other_status();
+            if (other_was_success) {
+                return ok::try_clone_into(this->unwrap_unchecked(),
+                                          dest.unwrap_unchecked());
+            } else {
+                auto res = ok::try_clone(this->unwrap_unchecked());
+                if (res.is_success()) {
+                    dest.emplace_nodestroy(std::move(res.unwrap_unchecked()));
+                }
+                return res.status();
+            }
+
+        } else {
+            if (dest.is_success()) {
+                dest.m_success.value.~success_t();
+            }
+
+            set_other_status();
+
+            return ok::make_success<try_clone_status<success_t>>();
+        }
+    }
+
+    constexpr void clone_into(res& dest) const& OKAYLIB_NOEXCEPT
+        requires cloneable<success_t> && cloneable<status_t>
+    {
+        // update state of other success value
+        if (this->is_success()) {
+            if (dest.is_success()) {
+                ok::clone_into(this->unwrap_unchecked(),
+                               dest.unwrap_unchecked());
+            } else {
+                ok::construct_at(ok::addressof(dest.m_success),
+                                 ok::clone(this->unwrap_unchecked()));
+            }
+        } else {
+            if (dest.is_success()) {
+                dest.m_success.value.~success_t();
+            }
+        }
+
+        // clone our status and move it into the other's status
+        if constexpr (std::is_move_assignable_v<status_t>) {
+            dest.m_status = std::move(ok::clone(this->status()));
+        } else {
+            // emulate move assignment with destruction and construction
+            dest.m_status.~status_t();
+            ok::construct_at(ok::addressof(dest.m_status),
+                             std::move(ok::clone(this->status())));
+        }
+    }
+
     [[nodiscard]] constexpr bool is_success() const OKAYLIB_NOEXCEPT
     {
         if constexpr (status_enum<status_t>) {
