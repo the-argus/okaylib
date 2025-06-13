@@ -99,7 +99,8 @@ template <typename payload_t, typename> class opt
         requires(std::is_trivially_move_constructible_v<payload_t>)
     = default;
     constexpr opt(opt&& other)
-        requires(!std::is_trivially_move_constructible_v<payload_t>)
+        requires(!std::is_trivially_move_constructible_v<payload_t> &&
+                 std::is_move_constructible_v<payload_t>)
     OKAYLIB_NOEXCEPT
     {
         if (other) {
@@ -114,8 +115,8 @@ template <typename payload_t, typename> class opt
         requires(std::is_trivially_move_assignable_v<payload_t>)
     = default;
     constexpr opt& operator=(opt&& other) &
-        requires(!std::is_trivially_move_assignable_v<payload_t>)
-    OKAYLIB_NOEXCEPT
+        requires(!std::is_trivially_move_assignable_v<payload_t> &&
+                 std::is_move_assignable_v<payload_t>) OKAYLIB_NOEXCEPT
     {
         if (other) {
             if (this->has_value()) {
@@ -132,8 +133,11 @@ template <typename payload_t, typename> class opt
     constexpr opt(const opt& other)
         requires(std::is_trivially_copy_constructible_v<payload_t>)
     = default;
+    // just in case someone wants to define a non trivial copy constructor for
+    // something and then put that in an opt
     constexpr opt(const opt& other)
-        requires(!std::is_trivially_copy_constructible_v<payload_t>)
+        requires(!std::is_trivially_copy_constructible_v<payload_t> &&
+                 std::is_copy_constructible_v<payload_t>)
     OKAYLIB_NOEXCEPT
     {
         if (other) {
@@ -147,9 +151,11 @@ template <typename payload_t, typename> class opt
     constexpr opt& operator=(const opt& other) &
         requires(std::is_trivially_copy_assignable_v<payload_t>)
     = default;
+    // just in case someone wants to define a non trivial copy assignment for
+    // something and then put that in an opt
     constexpr opt& operator=(const opt& other) &
-        requires(!std::is_trivially_copy_assignable_v<payload_t>)
-    OKAYLIB_NOEXCEPT
+        requires(!std::is_trivially_copy_assignable_v<payload_t> &&
+                 std::is_copy_assignable_v<payload_t>) OKAYLIB_NOEXCEPT
     {
         if (other) {
             if (this->has_value()) {
@@ -166,7 +172,8 @@ template <typename payload_t, typename> class opt
     // constructors which perform conversion of incoming type
     template <typename convert_from_t = payload_t>
     constexpr opt(convert_from_t&& t) OKAYLIB_NOEXCEPT
-        requires(not_self<convert_from_t> && not_tag<convert_from_t> &&
+        requires(!detail::is_instance_v<convert_from_t, opt> &&
+                 not_tag<convert_from_t> &&
                  is_std_constructible_v<payload_t, convert_from_t> &&
                  std::is_convertible_v<convert_from_t, payload_t>)
         : m_payload(ok::in_place, std::forward<convert_from_t>(t)),
@@ -178,7 +185,8 @@ template <typename payload_t, typename> class opt
     // difference is that it is marked explicit
     template <typename convert_from_t = payload_t>
     explicit constexpr opt(convert_from_t&& t) OKAYLIB_NOEXCEPT
-        requires(not_self<convert_from_t> && not_tag<convert_from_t> &&
+        requires(!detail::is_instance_v<convert_from_t, opt> &&
+                 not_tag<convert_from_t> &&
                  is_std_constructible_v<payload_t, convert_from_t> &&
                  !std::is_convertible_v<convert_from_t, payload_t>)
         : m_payload(ok::in_place, std::forward<convert_from_t>(t)),
@@ -186,90 +194,9 @@ template <typename payload_t, typename> class opt
     {
     }
 
-    // converting constructor which takes optional of another convertible type
-    template <typename incoming_t>
-    constexpr opt(const opt<incoming_t>& t) OKAYLIB_NOEXCEPT
-        requires(!std::is_same_v<payload_t, incoming_t> &&
-                 is_std_constructible_v<payload_t, const incoming_t&> &&
-                 std::is_convertible_v<const incoming_t&, payload_t> &&
-                 !detail::converts_from_opt<payload_t, incoming_t>)
-    {
-        if (t) {
-            this->emplace_nodestroy(t.ref_unchecked());
-            m_has_value = true;
-        } else {
-            m_has_value = false;
-        }
-    }
-
-    // same as above, but incoming type is not convertible, so construction
-    // should be explicit
-    template <typename incoming_t>
-    explicit constexpr opt(const opt<incoming_t>& t) OKAYLIB_NOEXCEPT
-        requires(!std::is_same_v<payload_t, incoming_t> &&
-                 is_std_constructible_v<payload_t, const incoming_t&> &&
-                 !std::is_convertible_v<const incoming_t&, payload_t> &&
-                 !detail::converts_from_opt<payload_t, incoming_t>)
-    {
-        if (t) {
-            this->emplace_nodestroy(t.ref_unchecked());
-            m_has_value = true;
-        } else {
-            m_has_value = false;
-        }
-    }
-
-    // convert an optional of a convertible type being moved into this optional
-    template <typename incoming_t>
-    constexpr opt(opt<incoming_t>&& t) OKAYLIB_NOEXCEPT
-        requires(!std::is_same_v<payload_t, incoming_t> &&
-                 is_std_constructible_v<payload_t, incoming_t> &&
-                 std::is_convertible_v<incoming_t, payload_t> &&
-                 !detail::converts_from_opt<payload_t, incoming_t>)
-    {
-        if (t) {
-            this->emplace_nodestroy(std::move(t.ref_unchecked()));
-            m_has_value = true;
-        } else {
-            m_has_value = false;
-        }
-    }
-
-    // also convert moved optional's contents into ours, but this time explicit
-    // because the two are not implicitly convertible
-    template <typename incoming_t>
-    explicit constexpr opt(opt<incoming_t>&& t) OKAYLIB_NOEXCEPT
-        requires(!std::is_same_v<payload_t, incoming_t> &&
-                 is_std_constructible_v<payload_t, incoming_t> &&
-                 !std::is_convertible_v<incoming_t, payload_t> &&
-                 !detail::converts_from_opt<payload_t, incoming_t>)
-    {
-        if (t) {
-            this->emplace_nodestroy(std::move(t.ref_unchecked()));
-            m_has_value = true;
-        } else {
-            m_has_value = false;
-        }
-    }
-
-    // emplacement constructor
-    template <typename... args_t>
-    explicit constexpr opt(ok::in_place_t, args_t&&... args) OKAYLIB_NOEXCEPT
-        requires(is_infallible_constructible_v<payload_t, args_t...>)
-        : m_payload(ok::in_place, std::forward<args_t>(args)...),
-          m_has_value(true)
-    {
-    }
-
-    constexpr opt& operator=(nullopt_t) & OKAYLIB_NOEXCEPT
-    {
-        this->reset();
-        return *this;
-    }
-
     template <typename incoming_t>
         constexpr opt& operator=(incoming_t&& incoming) & OKAYLIB_NOEXCEPT
-            requires(not_self<incoming_t> &&
+            requires(!detail::is_instance_v<incoming_t, opt> &&
                      // TODO: cant have payload and decayed incoming_t be the
                      // same, only if scalar though. why? copied this from STL
                      // implementation
@@ -287,50 +214,65 @@ template <typename payload_t, typename> class opt
         return *this;
     }
 
-    // converting opt constructor: if the inner types of two opts can
-    // be converted, allow the opts to be converted
-    template <typename incoming_t>
-        constexpr opt& operator=(const opt<incoming_t>& incoming) &
-        OKAYLIB_NOEXCEPT
-            requires(!std::is_same_v<payload_t, incoming_t> &&
-                     is_std_constructible_v<payload_t, const incoming_t&> &&
-                     std::is_assignable_v<payload_t&, const incoming_t&> &&
-                     !detail::converts_from_opt<payload_t, incoming_t> &&
-                     !detail::assigns_from_opt<payload_t, incoming_t>)
+    // emplacement constructor
+    template <typename... args_t>
+    explicit constexpr opt(ok::in_place_t, args_t&&... args) OKAYLIB_NOEXCEPT
+        requires(is_infallible_constructible_v<payload_t, args_t...>)
+        : m_payload(ok::in_place, std::forward<args_t>(args)...),
+          m_has_value(true)
     {
-        if (incoming) {
-            if (m_has_value) {
-                this->ref_unchecked() = incoming.ref_unchecked();
-            } else {
-                this->emplace_nodestroy(incoming.ref_unchecked());
-                m_has_value = true;
-            }
-        } else {
-            this->reset();
-        }
+    }
+
+    constexpr opt& operator=(nullopt_t) & OKAYLIB_NOEXCEPT
+    {
+        this->reset();
         return *this;
     }
 
-    // variant of above converting opt constructor which performs move
-    template <typename incoming_t>
-    constexpr opt& operator=(opt<incoming_t>&& incoming) OKAYLIB_NOEXCEPT
-        requires(!std::is_same_v<payload_t, incoming_t> &&
-                 is_std_constructible_v<payload_t, incoming_t> &&
-                 std::is_assignable_v<payload_t&, incoming_t> &&
-                 !detail::converts_from_opt<payload_t, incoming_t> &&
-                 !detail::assigns_from_opt<payload_t, incoming_t>)
+    template <typename T>
+        requires(std::is_convertible_v<payload_t, T>)
+    constexpr operator opt<T>() const&
     {
-        if (incoming) {
-            if (m_has_value) {
-                this->ref_unchecked() = std::move(incoming.ref_unchecked());
-            } else {
-                this->emplace_nodestroy(std::move(incoming.ref_unchecked()));
-                m_has_value = true;
-            }
+        if (this->has_value()) {
+            return opt<T>(ok::in_place, this->ref_unchecked());
         } else {
-            this->reset();
+            return opt<T>();
         }
-        return *this;
+    }
+
+    template <typename T>
+        requires(std::is_convertible_v<payload_t, T>)
+    constexpr operator opt<T>() &&
+    {
+        if (this->has_value()) {
+            return opt<T>(ok::in_place, std::move(this->ref_unchecked()));
+        } else {
+            return opt<T>();
+        }
+    }
+
+    template <typename T>
+        requires(!std::is_convertible_v<payload_t, T> &&
+                 std::is_constructible_v<T, const payload_t&>)
+    explicit constexpr operator opt<T>() const&
+    {
+        if (this->has_value()) {
+            return opt<T>(ok::in_place, this->ref_unchecked());
+        } else {
+            return opt<T>();
+        }
+    }
+
+    template <typename T>
+        requires(!std::is_convertible_v<payload_t, T> &&
+                 std::is_constructible_v<T, payload_t &&>)
+    explicit constexpr operator opt<T>() &&
+    {
+        if (this->has_value()) {
+            return opt<T>(ok::in_place, std::move(this->ref_unchecked()));
+        } else {
+            return opt<T>();
+        }
     }
 
     template <typename... args_t>

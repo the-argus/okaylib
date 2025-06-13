@@ -28,6 +28,18 @@ struct destroyed
 };
 int destroyed::destructions = 0;
 
+// not *always* trivially copyable
+static_assert(
+    !std::is_trivially_copyable_v<res<destroyed, status<StatusCodeB>>>);
+static_assert(!std::is_trivially_copyable_v<res<destroyed, StatusCodeB>>);
+// convertible if internal types are
+static_assert(
+    std::is_convertible_v<res<int, StatusCodeB>, res<float, StatusCodeB>>);
+static_assert(std::is_convertible_v<res<int, StatusCodeB>,
+                                    res<int, status<StatusCodeB>>>);
+static_assert(std::is_convertible_v<res<float, StatusCodeB>,
+                                    res<int, status<StatusCodeB>>>);
+
 TEST_SUITE("res")
 {
     TEST_CASE("Construction and type behavior")

@@ -40,6 +40,11 @@ static_assert(std::is_convertible_v<opt<float>, opt<int>>);
 // make sure conversion isn't just allowing anything to convert
 static_assert(!std::is_convertible_v<opt<big>, opt<float>>);
 
+opt<int> test() {
+    opt<float> lol;
+    return lol;
+}
+
 TEST_SUITE("opt")
 {
     TEST_CASE("Construction and type behavior")

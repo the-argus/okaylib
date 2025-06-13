@@ -10,7 +10,6 @@
 #include "okay/detail/traits/error_traits.h"
 #include "okay/opt.h"
 
-#include <concepts>
 #include <type_traits>
 
 #ifdef OKAYLIB_USE_FMT
@@ -104,46 +103,14 @@ __OK_RES_REQUIRES_CLAUSE class res<
     using success_type = success_t;
     using status_type = status_t;
 
-    // use compiler generated copy assignment if one is present in the
-    // uninitialized_storage_t
+    // use compiler generated copy/move if one is present in the
+    // uninitialized_storage_t (meaning the success_t is trivialy)
     constexpr res(const res& other) OKAYLIB_NOEXCEPT
         requires(std::is_copy_constructible_v<decltype(m_success)>)
     = default;
     constexpr res& operator=(const res& other) OKAYLIB_NOEXCEPT
         requires(std::is_copy_assignable_v<decltype(m_success)>)
     = default;
-
-    // if no compiler generated copying is present in the storage, we
-    // can recreate copying by only performing copy of success value if it is
-    // initialized.
-    constexpr res(const res& other) OKAYLIB_NOEXCEPT
-        requires(!std::is_copy_constructible_v<decltype(m_success)> &&
-                 std::is_copy_constructible_v<success_t> &&
-                 std::is_copy_constructible_v<status_t>)
-        : m_status(other.m_status)
-    {
-        if (other.is_success()) {
-            this->emplace_nodestroy(other.unwrap_unchecked());
-        }
-    }
-
-    constexpr res& operator=(const res& other) OKAYLIB_NOEXCEPT
-        requires(!std::is_copy_assignable_v<decltype(m_success)> &&
-                 std::is_copy_assignable_v<success_t> &&
-                 std::is_copy_constructible_v<success_t> &&
-                 std::is_copy_assignable_v<status_t>)
-    {
-        if (other.is_success()) {
-            if (this->is_success()) {
-                this->unwrap_unchecked() = other.unwrap_unchecked();
-            } else {
-                this->emplace_nodestroy(other.unwrap_unchecked());
-            }
-        }
-        m_status = other.m_status;
-        return *this;
-    }
-
     constexpr res(res&& other) OKAYLIB_NOEXCEPT
         requires std::is_move_constructible_v<decltype(m_success)>
     = default;
