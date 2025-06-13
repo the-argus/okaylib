@@ -5,10 +5,10 @@
 #include "okay/detail/addressof.h"
 #include "okay/detail/construct_at.h"
 #include "okay/detail/noexcept.h"
-#include "okay/detail/opt_decl.h"
 #include "okay/detail/template_util/uninitialized_storage.h"
 #include "okay/detail/traits/cloneable.h"
 #include "okay/detail/traits/error_traits.h"
+#include "okay/opt.h"
 
 #include <concepts>
 #include <type_traits>
@@ -221,7 +221,6 @@ __OK_RES_REQUIRES_CLAUSE class res<
     // NOTE: res only implements try_clone if the status can be cloned without
     // error.
     constexpr auto try_clone() const OKAYLIB_NOEXCEPT
-        -> res<res<success_t, status_t>, try_clone_status_t<success_t>>
         requires try_cloneable<success_t> && cloneable<status_t>
     {
         if (this->is_success()) {

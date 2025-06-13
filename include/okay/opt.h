@@ -5,7 +5,6 @@
 #include "okay/detail/addressof.h"
 #include "okay/detail/construct_at.h"
 #include "okay/detail/noexcept.h"
-#include "okay/detail/opt_decl.h"
 #include "okay/detail/template_util/uninitialized_storage.h"
 #include "okay/detail/traits/cloneable.h"
 #include "okay/detail/traits/is_nonthrowing.h"
@@ -18,6 +17,12 @@
 #endif
 
 namespace ok {
+struct nullopt_t
+{};
+
+inline constexpr nullopt_t nullopt{};
+
+template <typename payload_t, typename = void> class opt;
 
 namespace detail {
 enum class opt_impl_type

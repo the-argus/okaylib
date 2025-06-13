@@ -12,6 +12,7 @@
 #include "okay/detail/traits/is_std_container.h"
 #include "okay/detail/traits/mathop_traits.h"
 #include "okay/math/ordering.h"
+#include "okay/slice.h"
 
 /*
  * This header defines customization points and traits for ranges- their
@@ -31,8 +32,6 @@
  */
 
 namespace ok {
-
-template <typename viewed_t> class slice;
 
 template <typename range_t, typename enable = void> struct range_definition
 {

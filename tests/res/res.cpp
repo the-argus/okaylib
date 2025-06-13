@@ -2,7 +2,6 @@
 // test header must be first
 #include "okay/error.h"
 #include "okay/macros/try.h"
-#include "okay/slice.h"
 #include "testing_types.h"
 
 #include <array>
