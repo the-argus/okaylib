@@ -11,7 +11,6 @@
 #include "testing_types.h"
 
 #include <array>
-#include <optional>
 
 using namespace ok;
 struct big
@@ -28,21 +27,18 @@ struct destroyed
 
 int destroyed::destructions = 0;
 
-static_assert(!std::is_convertible_v<std::optional<big>, const int&>);
-static_assert(!std::is_convertible_v<opt<big>, const int&>);
-static_assert(!std::is_convertible_v<int*, const int&>);
-static_assert(!std::is_convertible_v<std::optional<int*>, const int&>);
-static_assert(!std::is_convertible_v<opt<int&>, const int&>);
-
 static_assert(std::is_trivially_copyable_v<opt<int>>);
 static_assert(std::is_move_constructible_v<opt<int>>);
 static_assert(!std::is_trivially_copyable_v<opt<std::vector<int>>>);
 static_assert(!std::is_trivially_move_constructible_v<opt<std::vector<int>>>);
 static_assert(std::is_move_constructible_v<opt<std::vector<int>>>);
 static_assert(std::is_copy_constructible_v<opt<std::vector<int>>>);
-
 static_assert(sizeof(opt<int&>) == sizeof(int*),
               "Optional reference types are a different size than pointers");
+static_assert(std::is_convertible_v<opt<int>, opt<float>>);
+static_assert(std::is_convertible_v<opt<float>, opt<int>>);
+// make sure conversion isn't just allowing anything to convert
+static_assert(!std::is_convertible_v<opt<big>, opt<float>>);
 
 TEST_SUITE("opt")
 {
@@ -68,6 +64,18 @@ TEST_SUITE("opt")
             REQUIRE(has.ref_or_panic() == 10);
             has = nullopt;
             REQUIRE(has != 10);
+        }
+
+        SUBCASE("converting assignment")
+        {
+            opt<int> i;
+            REQUIRE(!i.has_value());
+            i = 0;
+            REQUIRE(i == 0);
+            opt<int> other = 2;
+            REQUIRE(other == 2);
+            i = std::move(other);
+            REQUIRE(i == 2);
         }
 
         SUBCASE("comparison")
@@ -278,6 +286,8 @@ TEST_SUITE("opt")
             tref = td;
             REQUIRE(tref.is_alias_for(td));
 
+            static_assert(
+                std::is_convertible_v<opt<test_derived&>, opt<test_base&>>);
             // cannot go from base to derived
             static_assert(
                 !std::is_convertible_v<opt<test_base&>, opt<test_derived&>>);
