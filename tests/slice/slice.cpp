@@ -13,14 +13,14 @@
 #include <vector>
 
 static_assert(
-    ok::detail::is_std_container_v<std::array<int, 1>>,
+    ok::detail::std_arraylike_container<std::array<int, 1>>,
     "is_std_container not properly detecting size() and data() functions");
 
 static_assert(
-    ok::detail::is_std_container_v<std::vector<int>>,
+    ok::detail::std_arraylike_container<std::vector<int>>,
     "is_std_container not properly detecting size() and data() functions");
 
-static_assert(!ok::detail::is_std_container_v<int>,
+static_assert(!ok::detail::std_arraylike_container<int>,
               "int registered as container?");
 
 using namespace ok;
@@ -107,19 +107,39 @@ TEST_SUITE("slice")
             "construct from const qualified array with non-const value type")
         {
             const std::array<int, 5> carray = {12, 34, 43, 98, 28};
+            std::array<const int, 5> carray_2 = {12, 34, 43, 98, 28};
+
+            static_assert(
+                detail::std_arraylike_container_of<decltype(carray), int>);
+            static_assert(!detail::std_arraylike_container_of<decltype(carray),
+                                                              const int>);
+            static_assert(
+                !detail::std_arraylike_container_of<decltype(carray_2), int>);
+            static_assert(detail::std_arraylike_container_of<decltype(carray_2),
+                                                             const int>);
 
             static_assert(std::is_same_v<decltype(carray.data()), const int*>);
 
             static_assert(
                 !is_std_constructible_v<slice<int>, decltype(carray)&>);
-            // should not be constructible from value type but should be from
-            // reference
+            static_assert(!std::is_constructible_v<slice<int>,
+                                                   std::array<const int, 5>&>);
+            // cannot be constructed by a value ofc
             static_assert(
-                !is_std_constructible_v<slice<const int>, decltype(carray)>);
+                !std::is_constructible_v<slice<int>, std::array<int, 5>>);
+
+            // can never be constructed from rvalues to things
             static_assert(
-                is_std_constructible_v<slice<const int>, decltype(carray)&>);
+                !is_std_constructible_v<slice<const int>, decltype(carray)&&>);
+            static_assert(!is_std_constructible_v<slice<const int>,
+                                                  decltype(carray_2)&&>);
+            static_assert(
+                !is_std_constructible_v<slice<int>, decltype(carray)&&>);
+            static_assert(
+                !is_std_constructible_v<slice<int>, decltype(carray_2)&&>);
 
             slice<const int> cslice = carray;
+            slice<const int> cslice_2 = carray_2;
         }
 
         SUBCASE("convert nonconst slice to const slice")

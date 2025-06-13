@@ -105,7 +105,7 @@ struct range_definition<
         // not specified to inherit some other range definition
         !has_inherited_range_type_v<detail::remove_cvref_t<input_range_t>> &&
         // provides size_t .size() method and pointer data() method
-        detail::is_std_container_v<input_range_t> &&
+        detail::std_arraylike_container<input_range_t> &&
         // iterator_t()[size_t{}] -> iterator_t::value_type&
         std::is_same_v<
             typename detail::remove_cvref_t<input_range_t>::value_type&,
