@@ -5,6 +5,7 @@
 #include "okay/detail/addressof.h"
 #include "okay/detail/construct_at.h"
 #include "okay/detail/noexcept.h"
+#include "okay/detail/ok_assert.h"
 #include "okay/detail/template_util/uninitialized_storage.h"
 #include "okay/detail/traits/cloneable.h"
 #include "okay/detail/traits/is_nonthrowing.h"
@@ -71,6 +72,9 @@ template <typename payload_t, typename> class opt
   private:
     inline static constexpr detail::opt_impl_type impl_type =
         detail::opt_impl_type::object;
+
+    // friends with all other types of opts
+    template <typename T, typename> friend class opt;
 
     template <typename T>
     inline static constexpr bool not_self =
@@ -230,49 +234,54 @@ template <typename payload_t, typename> class opt
     }
 
     template <typename T>
-        requires(std::is_convertible_v<payload_t, T>)
-    constexpr operator opt<T>() const&
+        requires(std::is_convertible_v<const T&, payload_t>)
+    constexpr opt(const opt<T>& other) : m_has_value(other.m_has_value)
     {
-        if (this->has_value()) {
-            return opt<T>(ok::in_place, this->ref_unchecked());
-        } else {
-            return opt<T>();
-        }
+        if (other.has_value())
+            this->emplace_nodestroy(other.ref_unchecked());
     }
 
     template <typename T>
-        requires(std::is_convertible_v<payload_t, T>)
-    constexpr operator opt<T>() &&
+        requires(std::is_convertible_v<T&, payload_t>)
+    constexpr opt(opt<T>& other) : m_has_value(other.m_has_value)
     {
-        if (this->has_value()) {
-            return opt<T>(ok::in_place, std::move(this->ref_unchecked()));
-        } else {
-            return opt<T>();
-        }
+        if (other.has_value())
+            this->emplace_nodestroy(other.ref_unchecked());
     }
 
     template <typename T>
-        requires(!std::is_convertible_v<payload_t, T> &&
-                 std::is_constructible_v<T, const payload_t&>)
-    explicit constexpr operator opt<T>() const&
+        requires(std::is_convertible_v<T &&, payload_t>)
+    constexpr opt(opt<T>&& other) : m_has_value(other.m_has_value)
     {
-        if (this->has_value()) {
-            return opt<T>(ok::in_place, this->ref_unchecked());
-        } else {
-            return opt<T>();
-        }
+        if (other.has_value())
+            this->emplace_nodestroy(std::move(other.ref_unchecked()));
     }
 
     template <typename T>
-        requires(!std::is_convertible_v<payload_t, T> &&
-                 std::is_constructible_v<T, payload_t &&>)
-    explicit constexpr operator opt<T>() &&
+        requires(is_std_constructible_v<payload_t, const T&> &&
+                 !std::is_convertible_v<const T&, payload_t>)
+    explicit constexpr opt(const opt<T>& other) : m_has_value(other.m_has_value)
     {
-        if (this->has_value()) {
-            return opt<T>(ok::in_place, std::move(this->ref_unchecked()));
-        } else {
-            return opt<T>();
-        }
+        if (other.has_value())
+            this->emplace_nodestroy(other.ref_unchecked());
+    }
+
+    template <typename T>
+        requires(is_std_constructible_v<payload_t, T&> &&
+                 !std::is_convertible_v<T&, payload_t>)
+    explicit constexpr opt(opt<T>& other) : m_has_value(other.m_has_value)
+    {
+        if (other.has_value())
+            this->emplace_nodestroy(other.ref_unchecked());
+    }
+
+    template <typename T>
+        requires(is_std_constructible_v<payload_t, T &&> &&
+                 !std::is_convertible_v<T &&, payload_t>)
+    explicit constexpr opt(opt<T>&& other) : m_has_value(other.m_has_value)
+    {
+        if (other.has_value())
+            this->emplace_nodestroy(std::move(other.ref_unchecked()));
     }
 
     template <typename... args_t>
@@ -319,17 +328,20 @@ template <typename payload_t, typename> class opt
 
     [[nodiscard]] constexpr payload_t& ref_unchecked() & OKAYLIB_NOEXCEPT
     {
+        __ok_assert(this->has_value(), "Bad access to opt payload.");
         return m_payload.value;
     }
 
     [[nodiscard]] constexpr payload_t&& ref_unchecked() && OKAYLIB_NOEXCEPT
     {
+        __ok_assert(this->has_value(), "Bad access to opt payload.");
         return std::move(m_payload.value);
     }
 
     [[nodiscard]] constexpr const payload_t&
     ref_unchecked() const& OKAYLIB_NOEXCEPT
     {
+        __ok_assert(this->has_value(), "Bad access to opt payload.");
         return m_payload.value;
     }
 

@@ -439,6 +439,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
     /// if the contents is an error. Check is_success() before calling this.
     [[nodiscard]] constexpr success_t& unwrap_unchecked() & OKAYLIB_NOEXCEPT
     {
+        __ok_assert(this->is_success(), "Bad access to result.");
         return this->m_success.value;
     }
 
@@ -447,6 +448,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
     [[nodiscard]] constexpr const success_t&
     unwrap_unchecked() const& OKAYLIB_NOEXCEPT
     {
+        __ok_assert(this->is_success(), "Bad access to result.");
         return this->m_success.value;
     }
 
@@ -454,6 +456,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
     /// if the contents is an error. Check is_success() before calling this.
     [[nodiscard]] constexpr success_t&& unwrap_unchecked() && OKAYLIB_NOEXCEPT
     {
+        __ok_assert(this->is_success(), "Bad access to result.");
         return std::move(this->m_success.value);
     }
 
