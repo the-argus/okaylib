@@ -251,12 +251,17 @@ __OK_RES_REQUIRES_CLAUSE class res<
     {
     }
     // converting constructor
-    // TODO: make this respect implicitness/explicitness of the constructor of
-    // success_t. ATM explicitly convertible contents can become implicitly
-    // convertible if wrapped in a res.
+    template <typename incoming_t>
+    explicit constexpr res(incoming_t&& incoming) OKAYLIB_NOEXCEPT
+        requires(is_std_constructible_v<success_t, decltype(incoming)> &&
+                 !std::is_convertible_v<decltype(incoming), success_t>)
+        : m_status(ok::make_success<status_t>()),
+          m_success(ok::in_place, std::forward<incoming_t>(incoming))
+    {
+    }
     template <typename incoming_t>
     constexpr res(incoming_t&& incoming) OKAYLIB_NOEXCEPT
-        requires is_std_constructible_v<success_t, decltype(incoming)>
+        requires std::is_convertible_v<decltype(incoming), success_t>
         : m_status(ok::make_success<status_t>()),
           m_success(ok::in_place, std::forward<incoming_t>(incoming))
     {
