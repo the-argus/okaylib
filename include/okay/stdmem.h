@@ -2,7 +2,6 @@
 #define __OKAYLIB_STDMEM_H__
 
 #include "okay/construct.h"
-#include "okay/detail/addressof.h"
 #include "okay/detail/noexcept.h"
 #include "okay/detail/traits/special_member_traits.h"
 #include "okay/slice.h"
