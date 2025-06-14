@@ -1,0 +1,183 @@
+#include <type_traits>
+#include <cstdio>
+#include <vector>
+
+template <typename callable_t, bool reference = false> class maydefer
+{
+    std::conditional_t<reference, const callable_t&, callable_t> statement;
+    bool should_call = true;
+    static_assert(std::is_invocable_r_v<void, callable_t>,
+                  "Callable is not invocable with no arguments, and/or it does "
+                  "not return void.");
+
+  public:
+    using callable_type = callable_t;
+    maydefer(callable_t&& f) : statement(std::forward<callable_t>(f)) {}
+
+    // you cannot move or copy or really mess with a defer at all
+    maydefer& operator=(const maydefer&) = delete;
+    maydefer(const maydefer&) = delete;
+
+    maydefer& operator=(maydefer&&) = delete;
+    maydefer(maydefer&&) = delete;
+
+    inline constexpr void cancel() { should_call = false; }
+
+    ~maydefer()
+    {
+        if (should_call)
+            statement();
+    }
+};
+
+template <bool reference>
+struct make_maydefer
+{
+    template <typename callable_t>
+    constexpr static auto call(callable_t&& callable) noexcept
+    {
+        if constexpr (reference) {
+            static_assert(!std::is_rvalue_reference_v<decltype(callable)>);
+            return maydefer<callable_t, true>(std::forward<callable_t>(callable));
+        } else {
+            return maydefer<callable_t, false>(std::forward<callable_t>(callable));
+        }
+    }
+};
+
+#define ok_maydefer_ex(NAME, LAMBDA)                        \
+    const auto&& __lambda_##NAME = (LAMBDA);             \
+    auto NAME = make_maydefer<true>::call(__lambda_##NAME)
+
+#define ok_maydefer(NAME) maydefer NAME = [&]
+#define ok_defer maydefer __LINE__##__FUNCTION__ = [&]
+
+int main() {
+    int* myints = new int[500];
+    maydefer keep([&] { delete[] myints; });
+    tracker many_ints;
+
+    maydefer printer([many_ints, myints] { 
+        for (size_t i = 0; i < many_ints.member.size(); ++i)
+            if (many_ints.member[i] != myints[i])
+                return;
+        printf("matched!\n");
+     });
+    
+    ok_maydefer_ex(printer2, ([many_ints, myints, &printer] { 
+        for (size_t i = 0; i < many_ints.member.size(); ++i)
+            if (many_ints.member[i] != myints[i])
+                return;
+        printer.cancel();
+        printf("matched!\n");
+     }));
+    
+    ok_maydefer(printer3) {
+        for (size_t i = 0; i < many_ints.member.size(); ++i)
+            if (many_ints.member[i] != myints[i])
+                return;
+        printf("matched!\n");
+    };
+
+    ok_defer { printer3.cancel(); };
+
+    for (size_t i = 0; i < 500; ++i)
+        myints[i] = i;
+
+    for (size_t i = 0 ; i < 500; ++i)
+        printf("%d\n", myints[i]);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+FROM CHATGPT
+#include <type_traits>
+#include <utility>
+#include <cstdio>
+
+template <typename Callable, bool StoreByRef>
+class maydefer_impl;
+
+// Reference specialization
+template <typename Callable>
+class maydefer_impl<Callable, true> {
+    Callable& statement;
+    bool should_call = true;
+
+public:
+    explicit maydefer_impl(Callable& f) : statement(f) {}
+
+    maydefer_impl(const maydefer_impl&) = delete;
+    maydefer_impl& operator=(const maydefer_impl&) = delete;
+    maydefer_impl(maydefer_impl&&) = delete;
+    maydefer_impl& operator=(maydefer_impl&&) = delete;
+
+    void cancel() { should_call = false; }
+
+    ~maydefer_impl() {
+        if (should_call)
+            statement();
+    }
+};
+
+// Value specialization
+template <typename Callable>
+class maydefer_impl<Callable, false> {
+    Callable statement;
+    bool should_call = true;
+
+public:
+    explicit maydefer_impl(Callable&& f) : statement(std::move(f)) {}
+
+    maydefer_impl(const maydefer_impl&) = delete;
+    maydefer_impl& operator=(const maydefer_impl&) = delete;
+    maydefer_impl(maydefer_impl&&) = delete;
+    maydefer_impl& operator=(maydefer_impl&&) = delete;
+
+    void cancel() { should_call = false; }
+
+    ~maydefer_impl() {
+        if (should_call)
+            statement();
+    }
+};
+
+// Helper for SFINAE
+template <typename T>
+constexpr bool is_lvalue_ref = std::is_lvalue_reference<T>::value;
+
+// Factory function
+template <typename Callable>
+auto make_maydefer(Callable&& f) {
+    constexpr bool is_lvalue = std::is_lvalue_reference<decltype(f)>::value;
+    using DecayedCallable = std::decay_t<Callable>;
+    if constexpr (std::is_lvalue_reference<Callable>::value) {
+        return maydefer_impl<DecayedCallable, true>(f);
+    } else {
+        return maydefer_impl<DecayedCallable, false>(std::move(f));
+    }
+}
+
+int* myints = new int[500];
+auto cleanup = make_maydefer([&] { delete[] myints; });
+
+std::vector<int> data = {0, 1, 2};
+auto heavy = make_maydefer([d = std::move(data)] {
+    std::printf("Size: %zu\n", d.size());
+});

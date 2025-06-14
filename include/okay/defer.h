@@ -1,55 +1,45 @@
 #ifndef __OKAYLIB_DEFER_H__
 #define __OKAYLIB_DEFER_H__
 
-#include "okay/detail/addressof.h"
+#include "okay/detail/noexcept.h"
 #include <type_traits>
+#include <utility>
 
 namespace ok {
-template <typename callable_t> class maydefer
+/// A type which stores a lambda and calls it when it is destroyed. It can store
+/// the callable by reference- but make sure you know what you're doing before
+/// enabling that. It's intended for use by the defer macros
+/// (see "okay/macros/defer.h")
+template <typename callable_t, bool store_by_reference = false> class defer
 {
-    callable_t* statement;
-    static_assert(std::is_invocable_r_v<void, callable_t>,
-                  "Callable is not invocable with no arguments, and/or it does "
-                  "not return void.");
+    std::conditional_t<store_by_reference, const callable_t&, callable_t>
+        statement;
+    bool should_call = true;
+
+    static_assert(std::is_invocable_v<const callable_t&>,
+                  "Cannot call the given lambda with no arguments.");
+    static_assert(std::is_void_v<decltype(std::declval<const callable_t&>()())>,
+                  "Cannot return a value from a deferred block.");
 
   public:
-    explicit maydefer(callable_t&& f) : statement(ok::addressof(f)) {}
-
-    // you cannot move or copy or really mess with a defer at all
-    maydefer& operator=(const maydefer&) = delete;
-    maydefer(const maydefer&) = delete;
-
-    maydefer& operator=(maydefer&&) = delete;
-    maydefer(maydefer&&) = delete;
-
-    inline constexpr void cancel() { statement = nullptr; }
-
-    constexpr ~maydefer()
+    constexpr defer(callable_t&& f) OKAYLIB_NOEXCEPT
+        : statement(std::forward<callable_t>(f))
     {
-        if (statement)
-            (*statement)();
     }
-};
-
-template <typename callable_t> class defer
-{
-    callable_t&& statement;
-    static_assert(std::is_invocable_r_v<void, callable_t>,
-                  "Callable is not invocable with no arguments, and/or it does "
-                  "not return void.");
-
-  public:
-    explicit defer(callable_t&& f) : statement(std::forward<callable_t>(f)) {}
 
     // you cannot move or copy or really mess with a defer at all
     defer& operator=(const defer&) = delete;
     defer(const defer&) = delete;
-
     defer& operator=(defer&&) = delete;
     defer(defer&&) = delete;
 
-    constexpr ~defer() { statement(); }
-};
+    constexpr void cancel() { should_call = false; }
 
+    constexpr ~defer()
+    {
+        if (should_call)
+            statement();
+    }
+};
 } // namespace ok
 #endif
