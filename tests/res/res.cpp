@@ -35,10 +35,18 @@ static_assert(!std::is_trivially_copyable_v<res<destroyed, StatusCodeB>>);
 // convertible if internal types are
 static_assert(
     std::is_convertible_v<res<int, StatusCodeB>, res<float, StatusCodeB>>);
+// first make sure status types are actually implicitly convertible as expected
+static_assert(std::is_convertible_v<StatusCodeB, status<StatusCodeB>>);
+static_assert(std::is_convertible_v<status<StatusCodeB>, StatusCodeB>);
+// make sure that propagates to a res
 static_assert(std::is_convertible_v<res<int, StatusCodeB>,
                                     res<int, status<StatusCodeB>>>);
 static_assert(std::is_convertible_v<res<float, StatusCodeB>,
                                     res<int, status<StatusCodeB>>>);
+static_assert(std::is_convertible_v<res<int, status<StatusCodeB>>,
+                                    res<int, StatusCodeB>>);
+static_assert(std::is_convertible_v<res<float, status<StatusCodeB>>,
+                                    res<int, StatusCodeB>>);
 
 TEST_SUITE("res")
 {
@@ -420,6 +428,33 @@ TEST_SUITE("res")
                 res<destroyed, StatusCodeA> r4 = ok::in_place;
             }
             REQUIRE(destroyed::destructions == 4);
+        }
+
+        SUBCASE("conversion operators with trivial types")
+        {
+            res<int, StatusCodeA> one = 1;
+            res<float, StatusCodeA> two = one;
+            REQUIRE(one.unwrap() == 1);
+            REQUIRE(two.unwrap() == 1.f);
+
+            struct Test {
+                constexpr operator int() { return 101; }
+            };
+
+            res<Test, StatusCodeA> test = Test{};
+            res<int, StatusCodeA> otherthing(test);
+        }
+
+        SUBCASE("conversion operators with nontrivial types that should move")
+        {
+            res<std::vector<int>, StatusCodeA> test = std::vector{100, 2, 3};
+            res<std::vector<int>, StatusCodeA> test2 = std::vector{ 3, 2 };
+
+            REQUIRE(test.unwrap().size() == 3);
+            REQUIRE(test2.unwrap().size() == 2);
+            static_assert(std::is_convertible_v<std::vector<int>&, slice<int>>);
+            static_assert(is_std_constructible_v<slice<int>, std::vector<int>&>);
+            res<slice<int>, StatusCodeA> sliceres(test);
         }
     }
 

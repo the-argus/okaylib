@@ -42,6 +42,8 @@ template <status_enum enum_t> class status
 
     constexpr status(enum_t failure) OKAYLIB_NOEXCEPT { m_status = failure; }
 
+    constexpr operator enum_t() noexcept { return m_status; }
+
     // must explicitly initialize status with enum value
     status() = delete;
 
@@ -143,6 +145,78 @@ __OK_RES_REQUIRES_CLAUSE class res<
         return *this;
     }
 
+    template <typename other_success_t, typename other_status_t>
+        requires(std::is_convertible_v<const other_success_t&, success_t> &&
+                 std::is_convertible_v<const other_status_t&, status_t>)
+    constexpr res(const res<other_success_t, other_status_t>& other)
+        : m_status(other.status())
+    {
+        if (other.is_success()) {
+            this->emplace_nodestroy(other.unwrap_unchecked());
+        }
+    }
+
+    template <typename other_success_t, typename other_status_t>
+        requires(std::is_convertible_v<other_success_t&, success_t> &&
+                 std::is_convertible_v<other_status_t&, status_t>)
+    constexpr res(res<other_success_t, other_status_t>& other)
+        : m_status(other.status())
+    {
+        if (other.is_success()) {
+            this->emplace_nodestroy(other.unwrap_unchecked());
+        }
+    }
+
+    template <typename other_success_t, typename other_status_t>
+        requires(std::is_convertible_v<other_success_t &&, success_t> &&
+                 std::is_convertible_v<other_status_t &&, status_t>)
+    constexpr res(res<other_success_t, other_status_t>&& other)
+        : m_status(std::move(other.status()))
+    {
+        if (other->is_success()) {
+            this->emplace_nodestroy(std::move(other.unwrap_unchecked()));
+        }
+    }
+
+    template <typename other_success_t, typename other_status_t>
+        requires(is_std_constructible_v<success_t, const other_success_t&> &&
+                 is_std_constructible_v<status_t, const other_status_t&> &&
+                 (!std::is_convertible_v<const other_status_t&, status_t> ||
+                  !std::is_convertible_v<const other_success_t&, success_t>))
+    explicit constexpr res(const res<other_success_t, other_status_t>& other)
+        : m_status(other.status())
+    {
+        if (other->is_success()) {
+            this->emplace_nodestroy(other.unwrap_unchecked());
+        }
+    }
+
+    template <typename other_success_t, typename other_status_t>
+        requires(is_std_constructible_v<success_t, other_success_t&> &&
+                 is_std_constructible_v<status_t, other_status_t&> &&
+                 (!std::is_convertible_v<other_status_t&, status_t> ||
+                  !std::is_convertible_v<other_success_t&, success_t>))
+    explicit constexpr res(res<other_success_t, other_status_t>& other)
+        : m_status(other.status())
+    {
+        if (other->is_success()) {
+            this->emplace_nodestroy(other.unwrap_unchecked());
+        }
+    }
+
+    template <typename other_success_t, typename other_status_t>
+        requires(is_std_constructible_v<success_t, other_success_t &&> &&
+                 is_std_constructible_v<status_t, other_status_t &&> &&
+                 (!std::is_convertible_v<other_status_t &&, status_t> ||
+                  !std::is_convertible_v<other_success_t &&, success_t>))
+    explicit constexpr res(res<other_success_t, other_status_t>&& other)
+        : m_status(std::move(other.status()))
+    {
+        if (other->is_success()) {
+            this->emplace_nodestroy(std::move(other.unwrap_unchecked()));
+        }
+    }
+
     constexpr res(status_t status) OKAYLIB_NOEXCEPT : m_status(status)
     {
         bool other_is_success;
@@ -177,6 +251,9 @@ __OK_RES_REQUIRES_CLAUSE class res<
     {
     }
     // converting constructor
+    // TODO: make this respect implicitness/explicitness of the constructor of
+    // success_t. ATM explicitly convertible contents can become implicitly
+    // convertible if wrapped in a res.
     template <typename incoming_t>
     constexpr res(incoming_t&& incoming) OKAYLIB_NOEXCEPT
         requires is_std_constructible_v<success_t, decltype(incoming)>
