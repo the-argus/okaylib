@@ -437,7 +437,8 @@ TEST_SUITE("res")
             REQUIRE(one.unwrap() == 1);
             REQUIRE(two.unwrap() == 1.f);
 
-            struct Test {
+            struct Test
+            {
                 constexpr operator int() { return 101; }
             };
 
@@ -448,12 +449,13 @@ TEST_SUITE("res")
         SUBCASE("conversion operators with nontrivial types that should move")
         {
             res<std::vector<int>, StatusCodeA> test = std::vector{100, 2, 3};
-            res<std::vector<int>, StatusCodeA> test2 = std::vector{ 3, 2 };
+            res<std::vector<int>, StatusCodeA> test2 = std::vector{3, 2};
 
             REQUIRE(test.unwrap().size() == 3);
             REQUIRE(test2.unwrap().size() == 2);
             static_assert(std::is_convertible_v<std::vector<int>&, slice<int>>);
-            static_assert(is_std_constructible_v<slice<int>, std::vector<int>&>);
+            static_assert(
+                is_std_constructible_v<slice<int>, std::vector<int>&>);
             res<slice<int>, StatusCodeA> sliceres(test);
         }
     }
