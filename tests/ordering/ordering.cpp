@@ -75,10 +75,10 @@ TEST_SUITE("ordering")
             REQUIRE(test == ok::ordering::greater);
             REQUIRE(ok::ordering::greater == test);
 
-            static_assert(!std::is_convertible_v<
+            static_assert(!is_convertible_to_c<
                           decltype(ok::partial_ordering::unordered),
                           decltype(ok::ordering::less)>);
-            static_assert(!std::is_convertible_v<
+            static_assert(!is_convertible_to_c<
                           decltype(ok::ordering::less),
                           decltype(ok::partial_ordering::unordered)>);
         }

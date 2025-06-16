@@ -13,6 +13,7 @@
 #include <type_traits>
 
 #ifdef OKAYLIB_USE_FMT
+#include "okay/ctti/ctti.h"
 #include <fmt/core.h>
 #endif
 
@@ -55,33 +56,34 @@ template <status_enum enum_t> class status
 namespace detail {
 template <typename callable_t, typename success_t, typename status_t>
 concept and_then_callable = requires(callable_t c) {
-    detail::is_instance_v<decltype(c(std::declval<success_t>())), res>;
-    std::is_same_v<typename decltype(c(std::declval<success_t>()))::status_type,
-                   status_t>;
+    requires detail::is_instance_c<decltype(c(std::declval<success_t>())), res>;
+    requires std::is_same_v<
+        typename decltype(c(std::declval<success_t>()))::status_type, status_t>;
 };
 template <typename callable_t, typename status_t>
 concept and_then_callable_noargs = requires(callable_t c) {
-    detail::is_instance_v<decltype(c()), res>;
-    std::is_same_v<typename decltype(c())::status_type, status_t>;
+    requires detail::is_instance_c<decltype(c()), res>;
+    requires std::is_same_v<typename decltype(c())::status_type, status_t>;
 };
 template <typename callable_t, typename status_t>
 concept convert_error_callable = requires(callable_t c) {
-    status_object<decltype(c(std::declval<status_t>()))> ||
-        status_enum<decltype(c(std::declval<status_t>()))>;
+    requires status_object<decltype(c(std::declval<status_t>()))> ||
+                 status_enum<decltype(c(std::declval<status_t>()))>;
 };
 template <typename callable_t>
 concept convert_error_callable_noargs = requires(callable_t c) {
-    status_object<decltype(c())> || status_enum<decltype(c())>;
+    requires status_object<decltype(c())> || status_enum<decltype(c())>;
 };
 template <typename callable_t, typename success_t, typename status_t>
 concept transform_callable = requires(callable_t c) {
     // it is valid to form res with the returned type and the same error type
-    !std::is_void_v<res<decltype(c(std::declval<success_t>())), status_t>>;
+    requires !std::is_void_v<
+        res<decltype(c(std::declval<success_t>())), status_t>>;
 };
 template <typename callable_t, typename status_t>
 concept transform_callable_noargs = requires(callable_t c) {
     // it is valid to form res with the returned type and the same error type
-    !std::is_void_v<res<decltype(c()), status_t>>;
+    requires !std::is_void_v<res<decltype(c()), status_t>>;
 };
 } // namespace detail
 
@@ -146,8 +148,8 @@ __OK_RES_REQUIRES_CLAUSE class res<
     }
 
     template <typename other_success_t, typename other_status_t>
-        requires(std::is_convertible_v<const other_success_t&, success_t> &&
-                 std::is_convertible_v<const other_status_t&, status_t>)
+        requires(is_convertible_to_c<const other_success_t&, success_t> &&
+                 is_convertible_to_c<const other_status_t&, status_t>)
     constexpr res(const res<other_success_t, other_status_t>& other)
         : m_status(other.status())
     {
@@ -157,8 +159,8 @@ __OK_RES_REQUIRES_CLAUSE class res<
     }
 
     template <typename other_success_t, typename other_status_t>
-        requires(std::is_convertible_v<other_success_t&, success_t> &&
-                 std::is_convertible_v<other_status_t&, status_t>)
+        requires(is_convertible_to_c<other_success_t&, success_t> &&
+                 is_convertible_to_c<other_status_t&, status_t>)
     constexpr res(res<other_success_t, other_status_t>& other)
         : m_status(other.status())
     {
@@ -168,8 +170,8 @@ __OK_RES_REQUIRES_CLAUSE class res<
     }
 
     template <typename other_success_t, typename other_status_t>
-        requires(std::is_convertible_v<other_success_t &&, success_t> &&
-                 std::is_convertible_v<other_status_t &&, status_t>)
+        requires(is_convertible_to_c<other_success_t &&, success_t> &&
+                 is_convertible_to_c<other_status_t &&, status_t>)
     constexpr res(res<other_success_t, other_status_t>&& other)
         : m_status(std::move(other.status()))
     {
@@ -179,10 +181,10 @@ __OK_RES_REQUIRES_CLAUSE class res<
     }
 
     template <typename other_success_t, typename other_status_t>
-        requires(is_std_constructible_v<success_t, const other_success_t&> &&
-                 is_std_constructible_v<status_t, const other_status_t&> &&
-                 (!std::is_convertible_v<const other_status_t&, status_t> ||
-                  !std::is_convertible_v<const other_success_t&, success_t>))
+        requires(is_std_constructible_c<success_t, const other_success_t&> &&
+                 is_std_constructible_c<status_t, const other_status_t&> &&
+                 (!is_convertible_to_c<const other_status_t&, status_t> ||
+                  !is_convertible_to_c<const other_success_t&, success_t>))
     explicit constexpr res(const res<other_success_t, other_status_t>& other)
         : m_status(other.status())
     {
@@ -192,10 +194,10 @@ __OK_RES_REQUIRES_CLAUSE class res<
     }
 
     template <typename other_success_t, typename other_status_t>
-        requires(is_std_constructible_v<success_t, other_success_t&> &&
-                 is_std_constructible_v<status_t, other_status_t&> &&
-                 (!std::is_convertible_v<other_status_t&, status_t> ||
-                  !std::is_convertible_v<other_success_t&, success_t>))
+        requires(is_std_constructible_c<success_t, other_success_t&> &&
+                 is_std_constructible_c<status_t, other_status_t&> &&
+                 (!is_convertible_to_c<other_status_t&, status_t> ||
+                  !is_convertible_to_c<other_success_t&, success_t>))
     explicit constexpr res(res<other_success_t, other_status_t>& other)
         : m_status(other.status())
     {
@@ -205,10 +207,10 @@ __OK_RES_REQUIRES_CLAUSE class res<
     }
 
     template <typename other_success_t, typename other_status_t>
-        requires(is_std_constructible_v<success_t, other_success_t &&> &&
-                 is_std_constructible_v<status_t, other_status_t &&> &&
-                 (!std::is_convertible_v<other_status_t &&, status_t> ||
-                  !std::is_convertible_v<other_success_t &&, success_t>))
+        requires(is_std_constructible_c<success_t, other_success_t &&> &&
+                 is_std_constructible_c<status_t, other_status_t &&> &&
+                 (!is_convertible_to_c<other_status_t &&, status_t> ||
+                  !is_convertible_to_c<other_success_t &&, success_t>))
     explicit constexpr res(res<other_success_t, other_status_t>&& other)
         : m_status(std::move(other.status()))
     {
@@ -231,38 +233,43 @@ __OK_RES_REQUIRES_CLAUSE class res<
 
     constexpr res(const success_t& success) OKAYLIB_NOEXCEPT
         requires std::is_copy_constructible_v<success_t>
-        : m_status(ok::make_success<status_t>()),
+        : m_status(
+              ok::make_success<status_t>("Success value was copied into res")),
           m_success(ok::in_place, success)
     {
     }
 
     constexpr res(success_t&& success) OKAYLIB_NOEXCEPT
         requires std::is_move_constructible_v<success_t>
-        : m_status(ok::make_success<status_t>()),
+        : m_status(
+              ok::make_success<status_t>("Success value was moved into res")),
           m_success(ok::in_place, std::move(success))
     {
     }
 
     template <typename... args_t>
-        requires is_infallible_constructible_v<success_t, args_t...>
+        requires is_infallible_constructible_c<success_t, args_t...>
     constexpr res(ok::in_place_t, args_t&&... args) OKAYLIB_NOEXCEPT
-        : m_status(ok::make_success<status_t>()),
+        : m_status(ok::make_success<status_t>(
+              "Success value was emplaced into res")),
           m_success(ok::in_place, std::forward<args_t>(args)...)
     {
     }
     // converting constructor
     template <typename incoming_t>
     explicit constexpr res(incoming_t&& incoming) OKAYLIB_NOEXCEPT
-        requires(is_std_constructible_v<success_t, decltype(incoming)> &&
-                 !std::is_convertible_v<decltype(incoming), success_t>)
-        : m_status(ok::make_success<status_t>()),
+        requires(is_std_constructible_c<success_t, decltype(incoming)> &&
+                 !is_convertible_to_c<decltype(incoming), success_t>)
+        : m_status(ok::make_success<status_t>(
+              "Success value was copied (explicitly) into res")),
           m_success(ok::in_place, std::forward<incoming_t>(incoming))
     {
     }
     template <typename incoming_t>
     constexpr res(incoming_t&& incoming) OKAYLIB_NOEXCEPT
-        requires std::is_convertible_v<decltype(incoming), success_t>
-        : m_status(ok::make_success<status_t>()),
+        requires is_convertible_to_c<decltype(incoming), success_t>
+        : m_status(ok::make_success<status_t>(
+              "Success value was moved (explicitly) into res")),
           m_success(ok::in_place, std::forward<incoming_t>(incoming))
     {
     }
@@ -270,7 +277,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
     // NOTE: res only implements try_clone if the status can be cloned without
     // error.
     constexpr auto try_clone() const OKAYLIB_NOEXCEPT
-        requires try_cloneable<success_t> && cloneable<status_t>
+        requires try_cloneable_c<success_t> && cloneable_c<status_t>
     {
         if (this->is_success()) {
             auto cloned = ok::try_clone(this->unwrap_unchecked());
@@ -288,7 +295,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
     }
 
     constexpr res clone() const OKAYLIB_NOEXCEPT
-        requires cloneable<success_t> && cloneable<status_t>
+        requires cloneable_c<success_t> && cloneable_c<status_t>
     {
         if (this->is_success()) {
             return res(ok::clone(this->unwrap_unchecked()));
@@ -299,10 +306,10 @@ __OK_RES_REQUIRES_CLAUSE class res<
 
     // NOTE: res will only implement try_clone_into() if its success type
     // is try_cloneable and its status type is just cloneable.
-    constexpr try_clone_status_t<success_t>
-    try_clone_into(res& dest) const& OKAYLIB_NOEXCEPT
-        requires try_cloneable<success_t> && cloneable<status_t>
+    constexpr auto try_clone_into(res& dest) const& OKAYLIB_NOEXCEPT
+        requires try_cloneable_c<success_t> && cloneable_c<status_t>
     {
+        using ret_type = try_clone_status_t<success_t>;
         const auto set_other_status = [this, dest] {
             // clone our status and move it into the other's status
             if constexpr (std::is_move_assignable_v<status_t>) {
@@ -319,14 +326,14 @@ __OK_RES_REQUIRES_CLAUSE class res<
             const bool other_was_success = dest.is_success();
             set_other_status();
             if (other_was_success) {
-                return ok::try_clone_into(this->unwrap_unchecked(),
-                                          dest.unwrap_unchecked());
+                return ret_type(ok::try_clone_into(this->unwrap_unchecked(),
+                                                   dest.unwrap_unchecked()));
             } else {
                 auto res = ok::try_clone(this->unwrap_unchecked());
                 if (res.is_success()) {
                     dest.emplace_nodestroy(std::move(res.unwrap_unchecked()));
                 }
-                return res.status();
+                return ret_type(res.status());
             }
 
         } else {
@@ -336,12 +343,14 @@ __OK_RES_REQUIRES_CLAUSE class res<
 
             set_other_status();
 
-            return ok::make_success<try_clone_status_t<success_t>>();
+            return ok::make_success<ret_type>(
+                "Cloned while in a res but the res was an error, so no clone "
+                "occurred.");
         }
     }
 
     constexpr void clone_into(res& dest) const& OKAYLIB_NOEXCEPT
-        requires cloneable<success_t> && cloneable<status_t>
+        requires cloneable_c<success_t> && cloneable_c<status_t>
     {
         // update state of other success value
         if (this->is_success()) {
@@ -699,15 +708,15 @@ template <ok::status_enum enum_t> struct fmt::formatter<ok::status<enum_t>>
     format_context::iterator format(const status_template_t& status,
                                     format_context& ctx) const
     {
-        // TODO: use ctti to get nice typename for enum_t here
         if constexpr (fmt::is_formattable<enum_t>::value) {
-            return fmt::format_to(ctx.out(), "[status::{}]", status.as_enum());
+            return fmt::format_to(ctx.out(), "{}", status.as_enum());
         } else {
             if (status.is_success()) {
-                return fmt::format_to(ctx.out(), "[status::success]");
+                return fmt::format_to(ctx.out(), "{:s}::success",
+                                      ok::ctti::nameof<enum_t>());
             } else {
                 return fmt::format_to(
-                    ctx.out(), "[status::{}]",
+                    ctx.out(), "{:s}::{}", ok::ctti::nameof<enum_t>(),
                     std::underlying_type_t<enum_t>(status.as_enum()));
             }
         }
@@ -736,15 +745,15 @@ struct fmt::formatter<ok::res<success_t, status_t>>
             if constexpr (std::is_reference_v<success_t>) {
                 if constexpr (fmt::is_formattable<
                                   std::remove_reference_t<success_t>>::value) {
-                    return fmt::format_to(ctx.out(), "{}",
+                    return fmt::format_to(ctx.out(), "res<{} &>",
                                           result.unwrap_unchecked());
                 } else {
-                    // TODO: use ctti to get nice typeof/typename here?
-                    return fmt::format_to(ctx.out(), "{:p}",
+                    return fmt::format_to(ctx.out(), "res<{:s}: {:p}>",
+                                          ok::ctti::nameof<success_t>(),
                                           static_cast<void*>(result.m_success));
                 }
             } else {
-                return fmt::format_to(ctx.out(), "{}",
+                return fmt::format_to(ctx.out(), "res<{}>",
                                       result.unwrap_unchecked());
             }
         } else {

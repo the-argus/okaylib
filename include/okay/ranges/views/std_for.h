@@ -19,7 +19,7 @@ template <typename T>
 class std_for_view : public detail::underlying_view_type<T>::type
 {
   public:
-    static_assert(is_range_v<T>, "Cannot wrap given type for a standard for "
+    static_assert(range_c<T>, "Cannot wrap given type for a standard for "
                                  "loop- it is not a valid range.");
     using cursor_t = detail::cursor_type_unchecked_for_t<T>;
     using parent_t = typename detail::underlying_view_type<T>::type;
@@ -52,7 +52,7 @@ class std_for_view : public detail::underlying_view_type<T>::type
         using pointer = value_type*;
 
         static_assert(
-            std::is_convertible_v<reference, value_type>,
+            is_convertible_to_c<reference, value_type>,
             "Unable to convert the value that would be gotten for an "
             "ok_foreach loop into the value type. This conversion is needed to "
             "make an STL compatible input iterator. You may need to define a "

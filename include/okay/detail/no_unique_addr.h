@@ -4,8 +4,11 @@
 #if __cplusplus < 202002L
 #define OKAYLIB_NO_UNIQUE_ADDR
 #else
-// TODO: check for msvc, if so use [[msvc::no_unique_address]]
+#ifdef _MSC_VER
+#define OKAYLIB_NO_UNIQUE_ADDR [[msvc::no_unique_address]]
+#else
 #define OKAYLIB_NO_UNIQUE_ADDR [[no_unique_address]]
+#endif
 #endif
 
 #endif

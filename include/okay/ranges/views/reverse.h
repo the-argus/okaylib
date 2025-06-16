@@ -18,7 +18,7 @@ struct reverse_fn_t
     template <typename range_t>
     constexpr decltype(auto) operator()(range_t&& range) const OKAYLIB_NOEXCEPT
     {
-        static_assert(is_range_v<range_t>,
+        static_assert(range_c<range_t>,
                       "Cannot reverse given type- it is not a range.");
         static_assert(is_random_access_range_v<range_t> &&
                           range_can_size_v<range_t>,

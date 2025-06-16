@@ -6,50 +6,18 @@
 namespace ok {
 namespace detail {
 
-template <typename lhs, typename rhs, typename = void>
-struct is_comparable : public std::false_type
-{};
-
-template <typename lhs, typename rhs>
-struct is_comparable<lhs, rhs,
-                     std::enable_if_t<std::is_same_v<
-                         bool, decltype(std::declval<const lhs&>() ==
-                                        std::declval<const rhs&>())>>>
-    : public std::true_type
-{};
-
 struct ranges_equal_fn_t
 {
-    template <typename range_lhs_t, typename range_rhs_t>
+    template <producing_range_c range_lhs_t, producing_range_c range_rhs_t>
+        requires(is_equality_comparable_to_c<value_type_for<range_lhs_t>,
+                                             value_type_for<range_rhs_t>> &&
+                 (!range_marked_infinite_c<range_lhs_t> ||
+                  !range_marked_infinite_c<range_rhs_t>))
     constexpr decltype(auto)
     operator()(range_lhs_t&& lhs, range_rhs_t&& rhs) const OKAYLIB_NOEXCEPT
     {
-        static_assert(is_range_v<range_lhs_t>,
-                      "Cannot compare given type on left-hand side because it "
-                      "is not a range.");
-        static_assert(is_producing_range_v<range_lhs_t>,
-                      "Cannot compare given type on left-hand side because it "
-                      "is not an input range.");
-        static_assert(is_range_v<range_rhs_t>,
-                      "Cannot compare given type on right-hand side because it "
-                      "is not a range.");
-        static_assert(is_producing_range_v<range_rhs_t>,
-                      "Cannot compare given type on right-hand side because it "
-                      "is not an input range.");
-        static_assert(
-            is_comparable<value_type_for<range_lhs_t>,
-                          value_type_for<range_rhs_t>>::value,
-            "Cannot call ranges_equal on the given types, there is no "
-            "operator== between their value types which returns a boolean.");
-
-        static_assert(!range_marked_infinite_v<range_lhs_t> ||
-                          !range_marked_infinite_v<range_rhs_t>,
-                      "At least one range passed to ok::range_equal must be "
-                      "non-infinite.");
-
         constexpr bool both_ranges_have_known_size =
-            range_impls_size_v<range_lhs_t> &&
-            range_impls_size_v<range_rhs_t>;
+            range_impls_size_c<range_lhs_t> && range_impls_size_c<range_rhs_t>;
 
         if constexpr (both_ranges_have_known_size) {
             if (ok::size(lhs) != ok::size(rhs)) {
@@ -58,7 +26,7 @@ struct ranges_equal_fn_t
         }
 
         if constexpr (both_ranges_have_known_size ||
-                      range_marked_infinite_v<range_rhs_t>) {
+                      range_marked_infinite_c<range_rhs_t>) {
             // case where we only check if the lhs is in bounds
             auto rhs_cursor = ok::begin(rhs);
             for (auto lhs_cursor = ok::begin(lhs);
@@ -76,7 +44,7 @@ struct ranges_equal_fn_t
                 ok::increment(rhs, rhs_cursor);
             }
             return true;
-        } else if constexpr (range_marked_infinite_v<range_lhs_t>) {
+        } else if constexpr (range_marked_infinite_c<range_lhs_t>) {
             // case where we only check if the rhs is in bounds
             auto lhs_cursor = ok::begin(lhs);
             for (auto cursor = ok::begin(rhs); ok::is_inbounds(rhs, cursor);
@@ -99,10 +67,10 @@ struct ranges_equal_fn_t
 
             // only do this if we have some combination of sized and finite
             // ranges, (either infinite) or (both sized) dont make sense
-            static_assert((range_marked_finite_v<range_lhs_t> ||
-                           range_marked_finite_v<range_rhs_t>) &&
-                              (!range_marked_infinite_v<range_lhs_t> &&
-                               !range_marked_infinite_v<range_rhs_t>),
+            static_assert((range_marked_finite_c<range_lhs_t> ||
+                           range_marked_finite_c<range_rhs_t>) &&
+                              (!range_marked_infinite_c<range_lhs_t> &&
+                               !range_marked_infinite_c<range_rhs_t>),
                           "Internal static_assert failed, broken template "
                           "logic in okaylib");
             auto lhs_cursor = ok::begin(lhs);
@@ -164,22 +132,22 @@ template <bool allow_small_destination = false> struct ranges_copy_fn_t
         dest_range_t& dest = dest_wrapper.value();
         const source_range_t& source = source_wrapper.value();
 
-        static_assert(detail::is_consuming_range_v<dest_range_t>,
+        static_assert(detail::consuming_range_c<dest_range_t>,
                       "Range given as `dest` is not an output range.");
-        static_assert(detail::is_producing_range_v<source_range_t>,
+        static_assert(detail::producing_range_c<source_range_t>,
                       "Range given as `source` is not an input range.");
-        static_assert(std::is_convertible_v<value_type_for<source_range_t>,
-                                            value_type_for<dest_range_t>>,
+        static_assert(is_convertible_to_c<value_type_for<source_range_t>,
+                                          value_type_for<dest_range_t>>,
                       "The values inside the given ranges are not convertible, "
                       "cannot copy from source to dest.");
         static_assert(
-            !detail::range_marked_infinite_v<dest_range_t> ||
-                !detail::range_marked_infinite_v<source_range_t>,
+            !detail::range_marked_infinite_c<dest_range_t> ||
+                !detail::range_marked_infinite_c<source_range_t>,
             "Attempt to copy an infinite range into an infinite range, "
             "this will just loop forever.");
         constexpr bool both_ranges_have_known_size =
-            range_impls_size_v<dest_range_t> &&
-            range_impls_size_v<source_range_t>;
+            range_impls_size_c<dest_range_t> &&
+            range_impls_size_c<source_range_t>;
 
         if constexpr (both_ranges_have_known_size) {
 
@@ -223,11 +191,11 @@ template <bool allow_small_destination = false> struct ranges_copy_fn_t
 
                 // optimizations: we only need to check the bounds for
                 // non-infinite ranges
-                if constexpr (range_marked_infinite_v<source_range_t>) {
+                if constexpr (range_marked_infinite_c<source_range_t>) {
                     if (!ok::is_inbounds(dest, dest_cursor)) {
                         return;
                     }
-                } else if constexpr (range_marked_infinite_v<dest_range_t>) {
+                } else if constexpr (range_marked_infinite_c<dest_range_t>) {
                     if (!ok::is_inbounds(source, source_cursor)) {
                         return;
                     }

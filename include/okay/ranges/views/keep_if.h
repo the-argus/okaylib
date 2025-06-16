@@ -32,7 +32,7 @@ struct keep_if_fn_t
                predicate_t&& filter_predicate) const OKAYLIB_NOEXCEPT
     {
         using T = std::remove_reference_t<range_t>;
-        static_assert(is_range_v<T>,
+        static_assert(range_c<T>,
                       "Cannot keep_if given type- it is not a range.");
         constexpr bool can_call_with_get_ref_const =
             std::is_invocable_v<predicate_t, const value_type_for<T>&> &&

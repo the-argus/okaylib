@@ -85,7 +85,7 @@ struct range_adaptor_closure_t : range_adaptor_t<callable_t>
     template <typename range_t>
     constexpr auto
     operator()(range_t&& range) const OKAYLIB_NOEXCEPT->std::enable_if_t<
-        is_range_v<range_t>,
+        range_c<range_t>,
         decltype(this->callable(std::forward<range_t>(range)))>
     {
         return this->callable(std::forward<range_t>(range));
@@ -95,7 +95,7 @@ struct range_adaptor_closure_t : range_adaptor_t<callable_t>
     template <typename range_t>
     friend constexpr decltype(auto)
     operator|(range_t&& range,
-              std::enable_if_t<is_range_v<range_t> &&
+              std::enable_if_t<range_c<range_t> &&
                                    std::is_invocable_v<callable_t, range_t>,
                                const range_adaptor_closure_t&>
                   closure) OKAYLIB_NOEXCEPT

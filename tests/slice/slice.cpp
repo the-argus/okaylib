@@ -29,7 +29,7 @@ static_assert(std::is_same_v<slice<const uint8_t>::viewed_type, const uint8_t>,
               "slice::value_type doesnt work as expected");
 
 // undefined memory should not be iterable
-static_assert(!ok::is_range_v<ok::undefined_memory_t<int>>);
+static_assert(!ok::range_c<ok::undefined_memory_t<int>>);
 
 TEST_SUITE("slice")
 {
@@ -290,8 +290,8 @@ TEST_SUITE("slice")
     {
         static_assert(!std::is_default_constructible_v<bit_slice_t>);
         static_assert(!std::is_default_constructible_v<const_bit_slice_t>);
-        static_assert(std::is_convertible_v<bit_slice_t, const_bit_slice_t>);
-        static_assert(std::is_convertible_v<bit_slice_t&, const_bit_slice_t&>);
+        static_assert(is_convertible_to_c<bit_slice_t, const_bit_slice_t>);
+        static_assert(is_convertible_to_c<bit_slice_t&, const_bit_slice_t&>);
 
         SUBCASE("size() of bit slice is correct")
         {
@@ -445,4 +445,37 @@ TEST_SUITE("slice")
             REQUIRE(bytes[1] == 0);
         }
     }
+
+#ifdef OKAYLIB_USE_FMT
+    TEST_CASE("formattable")
+    {
+        SUBCASE("basic slice is formattable")
+        {
+            std::array myints = {0, 1, 2};
+            slice<int> intslice = myints;
+            slice<const int> intslice_c = myints;
+            const slice<const int> double_intslice_c = myints;
+            fmt::println("int slice: {}", intslice);
+            fmt::println("int slice: {}", intslice_c);
+            fmt::println("int slice: {}", double_intslice_c);
+        }
+
+        SUBCASE("slice with formattable contents is formattable")
+        {
+            std::array bits = {bit::on(), bit::off()};
+            slice<ok::bit> my_bit_slice = bits;
+            slice<const ok::bit> my_bit_slice_c = bits;
+
+            fmt::println("bit slice: {}", my_bit_slice);
+            fmt::println("const bit slice: {}", my_bit_slice_c);
+        }
+
+        SUBCASE("slice of const char can be formatted as a string")
+        {
+            const char mystr[] = "Hello, World";
+            slice<const char> chars = mystr;
+            fmt::println("whole string: {}, subslice normally: {}, subslice as string: {:s}", mystr, chars, chars);
+        }
+    }
+#endif
 }

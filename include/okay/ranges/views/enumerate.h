@@ -20,7 +20,7 @@ struct enumerate_fn_t
     template <typename range_t>
     constexpr decltype(auto) operator()(range_t&& range) const OKAYLIB_NOEXCEPT
     {
-        static_assert(is_range_v<range_t>,
+        static_assert(range_c<range_t>,
                       "Cannot enumerate given type- it is not a range.");
         return enumerated_view_t<decltype(range)>{std::forward<range_t>(range)};
     }
@@ -98,7 +98,7 @@ class ok::orderable_definition<detail::enumerated_cursor_t<parent_range_t>>
 // other templates
 template <typename input_range_t>
 struct range_definition<detail::enumerated_view_t<input_range_t>,
-                        std::enable_if_t<!detail::range_is_arraylike_v<
+                        std::enable_if_t<!detail::arraylike_range_c<
                             detail::remove_cvref_t<input_range_t>>>>
     : public detail::propagate_sizedness_t<
           detail::enumerated_view_t<input_range_t>,
@@ -157,7 +157,7 @@ struct range_definition<detail::enumerated_view_t<input_range_t>,
         // nonconst reference to a range
         auto& casted_parent_ref = const_cast<std::conditional_t<
             detail::is_view_v<range_t> ||
-                !std::is_const_v<std::remove_reference_t<input_range_t>>,
+                !is_const_c<std::remove_reference_t<input_range_t>>,
             range_t&, const range_t&>>(parent_ref);
 
         using pair_left =
@@ -191,7 +191,7 @@ struct range_definition<detail::enumerated_view_t<input_range_t>,
 
         auto& casted_parent_ref = const_cast<std::conditional_t<
             detail::is_view_v<range_t> ||
-                !std::is_const_v<std::remove_reference_t<input_range_t>>,
+                !is_const_c<std::remove_reference_t<input_range_t>>,
             range_t&, const range_t&>>(parent_ref);
 
         using pair_left =

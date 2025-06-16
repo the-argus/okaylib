@@ -3,9 +3,8 @@
 
 #include "okay/detail/in_place.h"
 #include "okay/detail/noexcept.h"
-#include "okay/detail/template_util/call_first_type_with_others.h"
 #include "okay/detail/template_util/empty.h"
-#include "okay/detail/traits/special_member_traits.h"
+#include "okay/detail/traits/constructor_traits.h"
 #include <type_traits>
 #include <utility>
 
@@ -32,7 +31,7 @@ template <typename inner_input_contained_t> union uninitialized_storage_t
     constexpr uninitialized_storage_t() OKAYLIB_NOEXCEPT : empty() {}
 
     template <typename... args_t>
-        requires is_std_constructible_v<inner_input_contained_t, args_t...>
+        requires is_std_constructible_c<inner_input_contained_t, args_t...>
     constexpr uninitialized_storage_t(ok::in_place_t,
                                       args_t&&... args) OKAYLIB_NOEXCEPT
         : value(std::forward<args_t>(args)...)
@@ -41,9 +40,9 @@ template <typename inner_input_contained_t> union uninitialized_storage_t
 
     template <typename... args_t>
         requires(
-            is_infallible_constructible_v<inner_input_contained_t, args_t...> &&
-            !is_std_constructible_v<inner_input_contained_t, args_t...> &&
-            is_move_constructible_v<inner_input_contained_t>)
+            is_infallible_constructible_c<inner_input_contained_t, args_t...> &&
+            !is_std_constructible_c<inner_input_contained_t, args_t...> &&
+            is_move_constructible_c<inner_input_contained_t>)
     constexpr uninitialized_storage_t(ok::in_place_t,
                                       args_t&&... args) OKAYLIB_NOEXCEPT
         : value(call_first_type_with_others(args...))

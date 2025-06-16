@@ -23,9 +23,9 @@ struct join_fn_t
     operator()(input_range_t&& range) const OKAYLIB_NOEXCEPT
     {
         using range_t = std::remove_reference_t<input_range_t>;
-        static_assert(is_range_v<range_t>,
+        static_assert(range_c<range_t>,
                       "Cannot join given type- it is not a range.");
-        static_assert(is_range_v<value_type_for<range_t>>,
+        static_assert(range_c<value_type_for<range_t>>,
                       "Cannot join given type- it's a range, but it does not "
                       "view other ranges.");
         static_assert(range_can_get_ref_const_v<range_t> ||
@@ -55,7 +55,7 @@ struct joined_cursor_t
     using outer_range_t = detail::remove_cvref_t<input_outer_range_t>;
     using inner_range_t = value_type_for<outer_range_t>;
     static_assert(!std::is_reference_v<outer_range_t> &&
-                  !std::is_const_v<std::remove_reference_t<outer_range_t>>);
+                  !is_const_c<std::remove_reference_t<outer_range_t>>);
     static_assert(std::is_same_v<detail::remove_cvref_t<input_inner_range_t>,
                                  inner_range_t>,
                   "something broken with join view implementation");

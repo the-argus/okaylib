@@ -34,19 +34,19 @@ static_assert(
 static_assert(!std::is_trivially_copyable_v<res<destroyed, StatusCodeB>>);
 // convertible if internal types are
 static_assert(
-    std::is_convertible_v<res<int, StatusCodeB>, res<float, StatusCodeB>>);
+    is_convertible_to_c<res<int, StatusCodeB>, res<float, StatusCodeB>>);
 // first make sure status types are actually implicitly convertible as expected
-static_assert(std::is_convertible_v<StatusCodeB, status<StatusCodeB>>);
-static_assert(std::is_convertible_v<status<StatusCodeB>, StatusCodeB>);
+static_assert(is_convertible_to_c<StatusCodeB, status<StatusCodeB>>);
+static_assert(is_convertible_to_c<status<StatusCodeB>, StatusCodeB>);
 // make sure that propagates to a res
-static_assert(std::is_convertible_v<res<int, StatusCodeB>,
-                                    res<int, status<StatusCodeB>>>);
-static_assert(std::is_convertible_v<res<float, StatusCodeB>,
-                                    res<int, status<StatusCodeB>>>);
-static_assert(std::is_convertible_v<res<int, status<StatusCodeB>>,
-                                    res<int, StatusCodeB>>);
-static_assert(std::is_convertible_v<res<float, status<StatusCodeB>>,
-                                    res<int, StatusCodeB>>);
+static_assert(
+    is_convertible_to_c<res<int, StatusCodeB>, res<int, status<StatusCodeB>>>);
+static_assert(is_convertible_to_c<res<float, StatusCodeB>,
+                                  res<int, status<StatusCodeB>>>);
+static_assert(
+    is_convertible_to_c<res<int, status<StatusCodeB>>, res<int, StatusCodeB>>);
+static_assert(is_convertible_to_c<res<float, status<StatusCodeB>>,
+                                  res<int, StatusCodeB>>);
 
 TEST_SUITE("res")
 {
@@ -453,9 +453,9 @@ TEST_SUITE("res")
 
             REQUIRE(test.unwrap().size() == 3);
             REQUIRE(test2.unwrap().size() == 2);
-            static_assert(std::is_convertible_v<std::vector<int>&, slice<int>>);
+            static_assert(is_convertible_to_c<std::vector<int>&, slice<int>>);
             static_assert(
-                is_std_constructible_v<slice<int>, std::vector<int>&>);
+                is_std_constructible_c<slice<int>, std::vector<int>&>);
             res<slice<int>, StatusCodeA> sliceres(test);
         }
     }
@@ -464,7 +464,7 @@ TEST_SUITE("res")
     {
         static std::array<int, 8> mem{};
         using slice_int_result = res<slice<int>, StatusCodeA>;
-        static_assert(std::is_convertible_v<decltype(mem)&, slice<int>>);
+        static_assert(is_convertible_to_c<decltype(mem)&, slice<int>>);
         auto get_slice = []() -> slice_int_result { return mem; };
 
         SUBCASE("slice unwrap and conversion")
@@ -512,7 +512,7 @@ TEST_SUITE("res")
 
         // this would mean slice is default constructible
         static_assert(
-            !is_std_constructible_v<slice_int_result, ok::in_place_t>);
+            !is_std_constructible_c<slice_int_result, ok::in_place_t>);
 
         SUBCASE("slice res to opt")
         {

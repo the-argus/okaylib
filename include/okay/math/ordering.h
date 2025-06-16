@@ -4,7 +4,8 @@
 #include "okay/detail/abort.h"
 #include "okay/detail/noexcept.h"
 #include "okay/detail/ok_assert.h"
-#include "okay/detail/traits/is_complete.h"
+#include "okay/detail/traits/special_member_traits.h"
+#include "okay/detail/traits/type_compare.h"
 #include <cstdint>
 
 #ifdef OKAYLIB_USE_FMT
@@ -382,19 +383,19 @@ constexpr bool is_strong_partially_orderable_v =
 
 template <typename T>
 constexpr bool is_orderable_v =
-    detail::is_complete_v<detail::orderable_definition_inner<T>>;
+    detail::is_complete_c<detail::orderable_definition_inner<T>>;
 
 template <typename T>
 constexpr bool is_partially_orderable_v =
-    detail::is_complete_v<detail::partially_orderable_definition_inner<T>>;
+    detail::is_complete_c<detail::partially_orderable_definition_inner<T>>;
 
 template <typename T>
 constexpr bool is_equateable_v =
-    detail::is_complete_v<detail::equal_definition_inner<T>>;
+    detail::is_complete_c<detail::equal_definition_inner<T>>;
 
 template <typename T>
 constexpr bool is_partially_equateable_v =
-    detail::is_complete_v<detail::partially_equal_definition_inner<T>>;
+    detail::is_complete_c<detail::partially_equal_definition_inner<T>>;
 
 namespace detail {
 
@@ -508,7 +509,7 @@ struct is_partially_equal_definition_valid<
 
 template <typename T> struct orderable_asserts_t
 {
-    static_assert(is_complete_v<orderable_definition_inner<T>>,
+    static_assert(is_complete_c<orderable_definition_inner<T>>,
                   "Cannot call an orderable function (cmp, min, max, clamp) on "
                   "type which is not strictly orderable. If using a float or "
                   "other not strictly comparable type, try the partial variant "
@@ -561,7 +562,7 @@ template <typename T, bool checking_partial> struct minmaxclamp_asserts_t
     template <typename LHS, typename RHS>                       \
     constexpr auto operator()(const LHS& lhs,                   \
                               RHS&& rhs) const OKAYLIB_NOEXCEPT \
-        ->std::enable_if_t<std::is_convertible_v<decltype(rhs), LHS>, rettype>
+        ->std::enable_if_t<is_convertible_to_c<decltype(rhs), LHS>, rettype>
 
 struct compare_fn_t
 {
@@ -635,7 +636,7 @@ struct min_fn_t
 {
     template <typename LHS, typename RHS>
     constexpr auto operator()(const LHS& lhs, RHS&& rhs) const OKAYLIB_NOEXCEPT
-        ->std::enable_if_t<std::is_convertible_v<decltype(rhs), LHS> &&
+        ->std::enable_if_t<is_convertible_to_c<decltype(rhs), LHS> &&
                                std::is_copy_constructible_v<LHS>,
                            LHS>
     {
@@ -658,7 +659,7 @@ struct unchecked_min_fn_t
 {
     template <typename LHS, typename RHS>
     constexpr auto operator()(const LHS& lhs, RHS&& rhs) const OKAYLIB_NOEXCEPT
-        ->std::enable_if_t<std::is_convertible_v<decltype(rhs), LHS> &&
+        ->std::enable_if_t<is_convertible_to_c<decltype(rhs), LHS> &&
                                std::is_copy_constructible_v<LHS>,
                            LHS>
     {
@@ -683,7 +684,7 @@ struct partial_min_fn_t
 {
     template <typename LHS, typename RHS>
     constexpr auto operator()(const LHS& lhs, RHS&& rhs) const OKAYLIB_NOEXCEPT
-        ->std::enable_if_t<std::is_convertible_v<decltype(rhs), LHS> &&
+        ->std::enable_if_t<is_convertible_to_c<decltype(rhs), LHS> &&
                                std::is_copy_constructible_v<LHS>,
                            LHS>
     {
@@ -710,7 +711,7 @@ struct max_fn_t
 {
     template <typename LHS, typename RHS>
     constexpr auto operator()(const LHS& lhs, RHS&& rhs) const OKAYLIB_NOEXCEPT
-        ->std::enable_if_t<std::is_convertible_v<decltype(rhs), LHS> &&
+        ->std::enable_if_t<is_convertible_to_c<decltype(rhs), LHS> &&
                                std::is_copy_constructible_v<LHS>,
                            LHS>
     {
@@ -733,7 +734,7 @@ struct partial_max_fn_t
 {
     template <typename LHS, typename RHS>
     constexpr auto operator()(const LHS& lhs, RHS&& rhs) const OKAYLIB_NOEXCEPT
-        ->std::enable_if_t<std::is_convertible_v<decltype(rhs), LHS> &&
+        ->std::enable_if_t<is_convertible_to_c<decltype(rhs), LHS> &&
                                std::is_copy_constructible_v<LHS>,
                            LHS>
     {
@@ -761,7 +762,7 @@ struct unchecked_max_fn_t
 {
     template <typename LHS, typename RHS>
     constexpr auto operator()(const LHS& lhs, RHS&& rhs) const OKAYLIB_NOEXCEPT
-        ->std::enable_if_t<std::is_convertible_v<decltype(rhs), LHS> &&
+        ->std::enable_if_t<is_convertible_to_c<decltype(rhs), LHS> &&
                                std::is_copy_constructible_v<LHS>,
                            LHS>
     {
@@ -787,7 +788,7 @@ struct clamp_fn_t
     template <typename LHS, typename arg_t>
     constexpr auto operator()(const LHS& lhs, arg_t&& min,
                               arg_t&& max) const OKAYLIB_NOEXCEPT
-        ->std::enable_if_t<std::is_convertible_v<decltype(min), LHS> &&
+        ->std::enable_if_t<is_convertible_to_c<decltype(min), LHS> &&
                                std::is_copy_constructible_v<LHS>,
                            LHS>
     {
@@ -814,7 +815,7 @@ struct partial_clamp_fn_t
     template <typename LHS, typename arg_t>
     constexpr auto operator()(const LHS& lhs, arg_t&& min,
                               arg_t&& max) const OKAYLIB_NOEXCEPT
-        ->std::enable_if_t<std::is_convertible_v<decltype(min), LHS> &&
+        ->std::enable_if_t<is_convertible_to_c<decltype(min), LHS> &&
                                std::is_copy_constructible_v<LHS>,
                            LHS>
     {
@@ -858,7 +859,7 @@ struct unchecked_clamp_fn_t
     template <typename LHS, typename arg_t>
     constexpr auto operator()(const LHS& lhs, arg_t&& min,
                               arg_t&& max) const OKAYLIB_NOEXCEPT
-        ->std::enable_if_t<std::is_convertible_v<decltype(min), LHS> &&
+        ->std::enable_if_t<is_convertible_to_c<decltype(min), LHS> &&
                                std::is_copy_constructible_v<LHS>,
                            LHS>
     {

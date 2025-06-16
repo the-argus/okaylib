@@ -67,7 +67,7 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
     // allow upcasting to ok::allocator_t if you explicitly construct with
     // upcast_tag
     template <typename other_allocator_t,
-              std::enable_if_t<std::is_convertible_v<other_allocator_t*,
+              std::enable_if_t<is_convertible_to_c<other_allocator_t*,
                                                      backing_allocator_t*>,
                                bool> = true>
     constexpr bit_arraylist_t(const bit_arraylist::upcast_tag&,
@@ -88,7 +88,7 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
     template <typename other_allocator_t>
     constexpr auto operator=(bit_arraylist_t<other_allocator_t>&& other)
         -> std::enable_if_t<
-            std::is_convertible_v<other_allocator_t*, backing_allocator_t*>,
+            is_convertible_to_c<other_allocator_t*, backing_allocator_t*>,
             bit_arraylist_t&>
     {
         destroy();

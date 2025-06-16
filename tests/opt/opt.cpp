@@ -35,10 +35,10 @@ static_assert(std::is_move_constructible_v<opt<std::vector<int>>>);
 static_assert(std::is_copy_constructible_v<opt<std::vector<int>>>);
 static_assert(sizeof(opt<int&>) == sizeof(int*),
               "Optional reference types are a different size than pointers");
-static_assert(std::is_convertible_v<opt<int>, opt<float>>);
-static_assert(std::is_convertible_v<opt<float>, opt<int>>);
+static_assert(is_convertible_to_c<opt<int>, opt<float>>);
+static_assert(is_convertible_to_c<opt<float>, opt<int>>);
 // make sure conversion isn't just allowing anything to convert
-static_assert(!std::is_convertible_v<opt<big>, opt<float>>);
+static_assert(!is_convertible_to_c<opt<big>, opt<float>>);
 
 opt<int> test()
 {
@@ -261,9 +261,9 @@ TEST_SUITE("opt")
         SUBCASE("constness of optional reference follows const correctness")
         {
             // cannot go from const to nonconst
-            static_assert(!std::is_convertible_v<opt<const int&>, opt<int&>>);
+            static_assert(!is_convertible_to_c<opt<const int&>, opt<int&>>);
             // can go from nonconst to const
-            static_assert(std::is_convertible_v<opt<int&>, opt<const int&>>);
+            static_assert(is_convertible_to_c<opt<int&>, opt<const int&>>);
             int i = 10;
             opt<int&> mut_iref = i;
             opt<const int&> iref = i;
@@ -293,10 +293,10 @@ TEST_SUITE("opt")
             REQUIRE(tref.is_alias_for(td));
 
             static_assert(
-                std::is_convertible_v<opt<test_derived&>, opt<test_base&>>);
+                is_convertible_to_c<opt<test_derived&>, opt<test_base&>>);
             // cannot go from base to derived
             static_assert(
-                !std::is_convertible_v<opt<test_base&>, opt<test_derived&>>);
+                !is_convertible_to_c<opt<test_base&>, opt<test_derived&>>);
         }
 
         SUBCASE("optional reference types")
@@ -311,7 +311,7 @@ TEST_SUITE("opt")
             REQUIRE(testref.is_alias_for(test));
             static_assert(
                 std::is_same_v<opt<const int&>::pointer_t, const int>);
-            static_assert(!std::is_convertible_v<opt<int&>, const int>);
+            static_assert(!is_convertible_to_c<opt<int&>, const int>);
             REQUIRE(!testref.is_alias_for(testref2));
 
             int test2 = 10;
@@ -561,6 +561,11 @@ TEST_SUITE("opt")
             opt<slice<uint8_t>> maybe_bytes;
             maybe_bytes.emplace(bytes);
             fmt::println("optional slice: {}", maybe_bytes);
+
+            opt<std::array<uint8_t, 128>&> maybe_array_0;
+            opt<std::array<uint8_t, 128>&> maybe_array_1 = bytes;
+            fmt::println("optional pointer: {}", maybe_array_1);
+            fmt::println("optional pointer (null): {}", maybe_array_0);
         }
 #endif
     }

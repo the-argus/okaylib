@@ -32,7 +32,7 @@ struct transform_fn_t
     operator()(range_t&& range, callable_t&& callable) const OKAYLIB_NOEXCEPT
     {
         using T = detail::remove_cvref_t<range_t>;
-        static_assert(is_range_v<T>,
+        static_assert(range_c<T>,
                       "Cannot transform given type- it is not a range.");
         constexpr bool can_call_with_get_ref_const =
             std::is_invocable_v<callable_t, const value_type_for<T>&> &&

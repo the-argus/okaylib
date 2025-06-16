@@ -18,16 +18,16 @@ template <size_t bits> void print_bit_array(const bit_array_t<bits>& bs)
 
 // cant take a slice of rvalue
 static_assert(
-    !std::is_convertible_v<bit_arraylist_t<c_allocator_t>&&, bit_slice_t>);
-static_assert(!std::is_convertible_v<bit_arraylist_t<c_allocator_t>&&,
+    !is_convertible_to_c<bit_arraylist_t<c_allocator_t>&&, bit_slice_t>);
+static_assert(!is_convertible_to_c<bit_arraylist_t<c_allocator_t>&&,
                                      const_bit_slice_t>);
 // cant convert const to nonconst
 static_assert(
-    !std::is_convertible_v<const bit_arraylist_t<c_allocator_t>&, bit_slice_t>);
-static_assert(!std::is_convertible_v<bit_array_t<1>&&, bit_slice_t>);
-static_assert(!std::is_convertible_v<bit_array_t<1>&&, const_bit_slice_t>);
+    !is_convertible_to_c<const bit_arraylist_t<c_allocator_t>&, bit_slice_t>);
+static_assert(!is_convertible_to_c<bit_array_t<1>&&, bit_slice_t>);
+static_assert(!is_convertible_to_c<bit_array_t<1>&&, const_bit_slice_t>);
 // cant convert const to nonconst
-static_assert(!std::is_convertible_v<const bit_array_t<1>&, bit_slice_t>);
+static_assert(!is_convertible_to_c<const bit_array_t<1>&, bit_slice_t>);
 
 TEST_SUITE("bit_array containers")
 {

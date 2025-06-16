@@ -26,7 +26,7 @@ template <typename T, typename backing_allocator_t> class segmented_list_t
     static_assert(!std::is_reference_v<T>,
                   "Cannot create a segmented list of references.");
     static_assert(
-        !std::is_const_v<T>,
+        !is_const_c<T>,
         "Attempt to create a segmented list with const objects, "
         "which is not possible. Remove the const, and pass a const reference "
         "to the segmented list of mutable objects instead.");

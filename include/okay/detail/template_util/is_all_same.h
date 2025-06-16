@@ -3,11 +3,11 @@
 #include <type_traits>
 
 namespace ok::detail {
-
 // checks if all items in a parameter pack are the same type
 template <typename T, typename... U>
-constexpr bool is_all_same_v =
-    std::integral_constant<bool, (... && std::is_same_v<T, U>)>::value;
+concept is_all_same_c = requires {
+    requires std::integral_constant<bool, (... && std::is_same_v<T, U>)>::value;
+};
 } // namespace ok::detail
 
 #endif

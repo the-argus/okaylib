@@ -56,7 +56,7 @@ TEST_SUITE("take_at_most")
             static_assert(detail::is_bidirectional_range_v<decltype(bidir)>);
             auto half_view = bidir | take_at_most(25);
             range_def_for<decltype(half_view)> test;
-            static_assert(is_range_v<decltype(half_view)>);
+            static_assert(range_c<decltype(half_view)>);
             static_assert(
                 detail::is_bidirectional_range_v<decltype(half_view)>);
 

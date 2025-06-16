@@ -150,8 +150,8 @@ template <typename viewed_t> class slice
 
     template <detail::std_arraylike_container_of<viewed_t> U>
     constexpr slice(U& other) OKAYLIB_NOEXCEPT
-        requires(!std::is_const_v<viewed_t> &&
-                 !detail::is_instance_v<U, slice> && !std::is_const_v<U>)
+        requires(!is_const_c<viewed_t> && !detail::is_instance_c<U, slice> &&
+                 !is_const_c<U>)
         : m_elements(other.size()), m_data(other.data())
     {
     }
@@ -164,7 +164,7 @@ template <typename viewed_t> class slice
         std::remove_const_t<viewed_t>>
                   U>
     constexpr slice(U& other) OKAYLIB_NOEXCEPT
-        requires(std::is_const_v<viewed_t> && !detail::is_instance_v<U, slice>)
+        requires(is_const_c<viewed_t> && !detail::is_instance_c<U, slice>)
         : m_elements(other.size()), m_data(other.data())
     {
     }
@@ -176,14 +176,14 @@ template <typename viewed_t> class slice
         std::remove_const_t<viewed_t>>
                   U>
     constexpr slice(const U&& other)
-        requires(!detail::is_instance_v<U, ok::slice>)
+        requires(!detail::is_instance_c<U, ok::slice>)
     = delete;
 
     template <detail::std_arraylike_container_of_nonconst_or_const<
         std::remove_const_t<viewed_t>>
                   U>
     constexpr slice(U&& other)
-        requires(!detail::is_instance_v<U, ok::slice>)
+        requires(!detail::is_instance_c<U, ok::slice>)
     = delete;
 
     // c array converting constructors
@@ -199,7 +199,7 @@ template <typename viewed_t> class slice
     // int i[] = {1, 2, 3 4};
     // slice<const int> s(i);
     template <typename nonconst_viewed_type, size_t size>
-        requires(std::is_const_v<viewed_type> &&
+        requires(is_const_c<viewed_type> &&
                  std::is_same_v<const nonconst_viewed_type, viewed_type>)
     constexpr slice(nonconst_viewed_type (&array)[size]) OKAYLIB_NOEXCEPT
         : m_data(array),
@@ -215,7 +215,7 @@ template <typename viewed_t> class slice
 
     [[nodiscard]] constexpr bool
     is_alias_for(const slice<const viewed_type>& other) OKAYLIB_NOEXCEPT
-        requires(!std::is_const_v<viewed_type>)
+        requires(!is_const_c<viewed_type>)
     {
         return m_elements == other.m_elements && m_data == other.m_data;
     };
@@ -295,12 +295,11 @@ using conditionally_const_t = std::conditional_t<is_const, const T, T>;
 }
 
 template <typename T>
-slice(T)
-    -> slice<std::enable_if_t<
-        detail::std_arraylike_container<detail::remove_cvref_t<T>>,
-        detail::conditionally_const_t<
-            detail::remove_cvref_t<decltype(*std::declval<T>().data())>,
-            std::is_const_v<typename detail::remove_cvref_t<T>::value_type>>>>;
+slice(T) -> slice<std::enable_if_t<
+             detail::std_arraylike_container<detail::remove_cvref_t<T>>,
+             detail::conditionally_const_t<
+                 detail::remove_cvref_t<decltype(*std::declval<T>().data())>,
+                 is_const_c<typename detail::remove_cvref_t<T>::value_type>>>>;
 
 using bytes_t = slice<uint8_t>;
 
@@ -580,7 +579,7 @@ template <typename viewed_t> struct undefined_memory_t
 
     static_assert(!std::is_reference_v<viewed_t>,
                   "Cannot create an undefined_memory slice of references.");
-    static_assert(!std::is_const_v<viewed_t>,
+    static_assert(!is_const_c<viewed_t>,
                   "Useless undefined_memory slice of a const type- what're you "
                   "gonna do, read from it?");
 
@@ -703,9 +702,9 @@ template <typename T>
     return raw_slice(item, 1);
 }
 
-template <typename range_t, typename enable> struct range_definition;
+template <typename range_t> struct range_definition;
 
-template <typename viewed_t> struct range_definition<slice<viewed_t>, void>
+template <typename viewed_t> struct range_definition<slice<viewed_t>>
 {
     static constexpr bool is_ref_wrapper = true;
     static constexpr bool is_arraylike = true;
@@ -725,7 +724,7 @@ template <typename viewed_t> struct range_definition<slice<viewed_t>, void>
     }
 };
 
-template <> struct range_definition<const_bit_slice_t, void>
+template <> struct range_definition<const_bit_slice_t>
 {
     static constexpr size_t begin(const const_bit_slice_t&) OKAYLIB_NOEXCEPT
     {
@@ -749,7 +748,7 @@ template <> struct range_definition<const_bit_slice_t, void>
     }
 };
 
-template <> struct range_definition<bit_slice_t, void>
+template <> struct range_definition<bit_slice_t>
 {
     static constexpr size_t begin(const bit_slice_t&) OKAYLIB_NOEXCEPT
     {
@@ -819,10 +818,49 @@ template <typename viewed_t> struct fmt::formatter<ok::slice<viewed_t>>
                 format_context& ctx) const -> format_context::iterator
     {
         // TODO: use CTTI here to get nice typename before pointer
-        return fmt::format_to(ctx.out(), "[{:p} -> {}]",
-                              reinterpret_cast<void*>(slice.m_data),
-                              slice.m_elements);
+        return fmt::format_to(
+            ctx.out(), "slice<{:p} -> {}>",
+            const_cast<void*>(static_cast<const void*>(slice.m_data)),
+            slice.m_elements);
     }
+};
+
+template <> struct fmt::formatter<ok::slice<const char>>
+{
+    constexpr auto
+    parse(format_parse_context& ctx) -> format_parse_context::iterator
+    {
+        // uber procedural parsing algorithm to check for either a {} format
+        // specifier or a {s} format specifier.
+        auto it = ctx.begin();
+        if (it != ctx.end() && *it == 's') {
+            ++it;
+            m_is_string = true;
+        }
+        return it;
+    }
+
+    auto format(const ok::slice<const char>& slice,
+                format_context& ctx) const -> format_context::iterator
+    {
+        if (!m_is_string) {
+            return fmt::format_to(
+                ctx.out(), "slice<{:p} -> {}>",
+                const_cast<void*>(static_cast<const void*>(slice.m_data)),
+                slice.m_elements);
+        } else {
+            // TODO: there must be a better (memcpy) way to print a string here,
+            // maybe inherit from string view, see
+            // https://fmt.dev/latest/api/#formatting-user-defined-types
+            auto iter = ctx.out();
+            for (size_t i = 0; i < slice.size(); ++i) {
+                iter = fmt::format_to(iter, "{}", slice.unchecked_access(i));
+            }
+            return iter;
+        }
+    }
+
+    bool m_is_string = false;
 };
 
 template <> struct fmt::formatter<ok::const_bit_slice_t>

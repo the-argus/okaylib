@@ -12,6 +12,7 @@
 #include "okay/construct.h"
 #include "okay/detail/template_util/c_array_length.h"
 #include "okay/detail/template_util/c_array_value_type.h"
+#include "okay/detail/traits/is_derived_from.h"
 #include "okay/math/ordering.h"
 // for reinterpret_as_bytes
 #include "okay/stdmem.h"
@@ -23,7 +24,7 @@ class allocator_t;
 namespace alloc {
 enum class error : uint8_t
 {
-    okay,
+    success,
     no_value,
     // NOTE: oom has semantic meaning which is "the given request does not work
     // on me, but may work on another allocator with more memory." OOM will
@@ -397,7 +398,7 @@ class allocator_t
             "or you may just need to specify the returned type when "
             "calling: `allocator.make_non_owning<MyType>(...)`.");
 
-        static_assert(is_infallible_constructible_v<actual_t, args_t...>,
+        static_assert(is_infallible_constructible_c<actual_t, args_t...>,
                       "Cannot call make_non_owning with the given arguments, "
                       "there is no matching infallible constructor.");
 
@@ -410,11 +411,11 @@ class allocator_t
             .alignment = alignof(actual_t),
             .flags = alloc::flags::leave_nonzeroed,
         });
-        if (!allocation_result.okay()) [[unlikely]] {
-            return return_type(allocation_result.err());
+        if (!allocation_result.is_success()) [[unlikely]] {
+            return return_type(allocation_result.status());
         }
         uint8_t* object_start =
-            allocation_result.release_ref().unchecked_address_of_first_item();
+            allocation_result.unwrap().unchecked_address_of_first_item();
 
         __ok_assert(uintptr_t(object_start) % alignof(actual_t) == 0,
                     "Misaligned memory produced by allocator");
@@ -462,7 +463,7 @@ reallocate_in_place_orelse_keep_old_nocopy(
     allocator_impl_t& allocator,
     const alloc::reallocate_extended_request_t& options)
 {
-    static_assert(detail::is_derived_from_v<allocator_impl_t, allocator_t>,
+    static_assert(detail::is_derived_from_c<allocator_impl_t, allocator_t>,
                   "Cannot call reallocate on the given type- it is not derived "
                   "from ok::allocator_t.");
 
@@ -473,8 +474,8 @@ reallocate_in_place_orelse_keep_old_nocopy(
     // try to do it in place if possible
     result_t<reallocation_extended_t> reallocation_res =
         allocator.reallocate_extended(options);
-    if (reallocation_res.okay()) {
-        auto& reallocation = reallocation_res.release_ref();
+    if (reallocation_res.is_success()) {
+        auto& reallocation = reallocation_res.unwrap();
         return potentially_in_place_reallocation_t{
             .memory = reallocation.memory,
             .bytes_offset_front = reallocation.bytes_offset_front,
@@ -497,11 +498,11 @@ reallocate_in_place_orelse_keep_old_nocopy(
         .flags = flags(leave_nonzeroed_bit),
     });
 
-    if (!res.okay()) [[unlikely]]
-        return res.err();
+    if (!res.is_success()) [[unlikely]]
+        return res.status();
 
     return potentially_in_place_reallocation_t{
-        .memory = res.release_ref(),
+        .memory = res.unwrap(),
         .was_in_place = false,
     };
 }
@@ -511,14 +512,14 @@ template <typename T, typename allocator_impl_t>
 constexpr void free(allocator_impl_t& ally, T& object) OKAYLIB_NOEXCEPT
 {
     static_assert(
-        detail::is_derived_from_v<allocator_impl_t, allocator_t>,
+        detail::is_derived_from_c<allocator_impl_t, allocator_t>,
         "Type given in first argument does not inherit from ok::allocator_t.");
-    static_assert(is_std_destructible_v<T>,
+    static_assert(is_std_destructible_c<T>,
                   "The destructor you're trying to call with ok::free is "
                   "not " __ok_msg_nothrow "destructible");
     static_assert(
         !std::is_array_v<T> ||
-            is_std_destructible_v<std::remove_reference_t<decltype(object[0])>>,
+            is_std_destructible_c<std::remove_reference_t<decltype(object[0])>>,
         "The destructor of items within the given array are "
         "not " __ok_msg_nothrow " destructible.");
     static_assert(
@@ -573,10 +574,10 @@ ok::allocator_t::make(args_t&&... args) OKAYLIB_NOEXCEPT
             std::declval<actual_t&>(), std::forward<args_t>(args)...));
     constexpr bool returns_status = !std::is_void_v<initialization_return_type>;
 
-    if (!allocation_result.okay()) [[unlikely]] {
+    if (!allocation_result.is_success()) [[unlikely]] {
         if constexpr (returns_status) {
             static_assert(
-                std::is_convertible_v<
+                is_convertible_to_c<
                     alloc::error,
                     typename initialization_return_type::enum_type>,
                 "Cannot call potentially failing constructor from "
@@ -584,15 +585,15 @@ ok::allocator_t::make(args_t&&... args) OKAYLIB_NOEXCEPT
                 "constructor does not define a conversion from alloc::error.");
             return res<alloc::owned<actual_t>,
                        typename initialization_return_type::enum_type>(
-                allocation_result.err());
+                allocation_result.status());
         } else {
             return alloc::result_t<alloc::owned<actual_t>>(
-                allocation_result.err());
+                allocation_result.status());
         }
     }
 
     uint8_t* object_start =
-        allocation_result.release_ref().unchecked_address_of_first_item();
+        allocation_result.unwrap().unchecked_address_of_first_item();
 
     __ok_assert(uintptr_t(object_start) % alignof(actual_t) == 0,
                 "Misaligned memory produced by allocator");
@@ -602,7 +603,7 @@ ok::allocator_t::make(args_t&&... args) OKAYLIB_NOEXCEPT
     if constexpr (returns_status) {
         auto result = make_into_uninitialized<actual_t>(
             *made, std::forward<args_t>(args)...);
-        static_assert(detail::is_instance_v<decltype(result), status>);
+        static_assert(detail::is_instance_c<decltype(result), status>);
         return res<alloc::owned<actual_t>,
                    typename decltype(result)::enum_type>(
             alloc::owned<actual_t>(*made, *this));
@@ -631,8 +632,8 @@ template <> struct fmt::formatter<ok::alloc::error>
                                     format_context& ctx) const
     {
         switch (err) {
-        case error_t::okay:
-            return fmt::format_to(ctx.out(), "alloc::error::okay");
+        case error_t::success:
+            return fmt::format_to(ctx.out(), "alloc::error::success");
         case error_t::unsupported:
             return fmt::format_to(ctx.out(), "alloc::error::unsupported");
         case error_t::oom:

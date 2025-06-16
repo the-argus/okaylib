@@ -13,7 +13,7 @@ struct is_instance<U<Y...>, U> : public std::true_type
 {};
 
 template <typename T, template <typename...> typename temp>
-constexpr bool is_instance_v = is_instance<std::remove_cv_t<T>, temp>::value;
+concept is_instance_c = is_instance<std::remove_cv_t<T>, temp>::value;
 
 } // namespace ok::detail
 

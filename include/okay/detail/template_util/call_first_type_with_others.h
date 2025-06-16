@@ -9,7 +9,7 @@ namespace ok::detail {
 
 template <typename T, typename... args_t>
 inline constexpr bool is_function_and_arguments_v =
-    is_std_invocable_v<T, args_t...>;
+    is_std_invocable_c<T, args_t...>;
 
 template <typename... args_t>
     requires is_function_and_arguments_v<args_t...>

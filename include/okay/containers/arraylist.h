@@ -62,7 +62,7 @@ class arraylist_t
             is_std_constructible_v<T, T&&>,
         "Type given to arraylist_t must be either trivially copyable or move "
         "constructible, otherwise it cannot move the items when reallocating.");
-    static_assert(!std::is_const_v<T>,
+    static_assert(!is_const_c<T>,
                   "Attempt to create an arraylist with const objects, which is "
                   "not possible. Remove the const, and consider passing a "
                   "const reference to the arraylist instead.");
@@ -205,7 +205,7 @@ class arraylist_t
         if constexpr (!std::is_void_v<make_result_type>) {
             using enum_t = typename make_result_type::enum_type;
             static_assert(
-                std::is_convertible_v<alloc::error, enum_t>,
+                is_convertible_to_c<alloc::error, enum_t>,
                 "In order to use a potentially failing constructor with "
                 "arraylist_t::append(), the constructor's enum type must "
                 "define a conversion from alloc::error.");

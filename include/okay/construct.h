@@ -29,10 +29,10 @@ template <typename T> struct make_into_uninitialized_fn_t
         [[nodiscard]] (T& uninitialized,
                        args_t&&... args) const OKAYLIB_NOEXCEPT
     {
-        static_assert(is_constructible_v<T, args_t...>,
+        static_assert(is_constructible_c<T, args_t...>,
                       "No matching constructor for make_into_uninitialized.");
 
-        if constexpr (is_std_constructible_v<T, args_t...>) {
+        if constexpr (is_std_constructible_c<T, args_t...>) {
             new (ok::addressof(uninitialized)) T(std::forward<args_t>(args)...);
             return;
         } else {
@@ -95,7 +95,7 @@ template <typename T = detail::deduced_t, typename... args_t>
         std::is_same_v<T, detail::deduced_t>;
 
     if constexpr (!is_constructed_type_deduced &&
-                  is_std_constructible_v<T, args_t...>) {
+                  is_std_constructible_c<T, args_t...>) {
         return T(std::forward<args_t>(args)...);
     } else {
         using analysis = decltype(detail::analyze_construction<args_t...>());

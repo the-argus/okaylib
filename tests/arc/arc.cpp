@@ -63,7 +63,7 @@ TEST_SUITE("arc smart pointers")
             REQUIRE(int_arc_2.deref() == 2);
             REQUIRE(int_arc_3.deref() == 1);
             static_assert(
-                std::is_const_v<
+                is_const_c<
                     std::remove_reference_t<decltype(int_arc_2.deref())>>);
         }
 
@@ -77,7 +77,7 @@ TEST_SUITE("arc smart pointers")
             REQUIRE(int_arc_2.deref() == 2);
             REQUIRE(int_arc_3.deref() == 1);
             static_assert(
-                !std::is_const_v<
+                !is_const_c<
                     std::remove_reference_t<decltype(int_arc_2.deref())>>);
         }
 

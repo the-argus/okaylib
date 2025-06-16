@@ -15,7 +15,7 @@ struct for_each_fn_t
     operator()(range_t&& range, callable_t&& callable) const OKAYLIB_NOEXCEPT
     {
         using T = remove_cvref_t<range_t>;
-        static_assert(is_range_v<T>,
+        static_assert(range_c<T>,
                       "Cannot for_each given type- it is not a range.");
         static_assert(is_producing_range_v<T>,
                       "Cannot for_each given type- it is not an input range.");

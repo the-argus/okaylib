@@ -20,7 +20,7 @@ struct zip_fn_t
 {
     template <typename... ranges_t>
     constexpr auto operator()(ranges_t&&... ranges) const
-        OKAYLIB_NOEXCEPT->std::enable_if_t<(... && is_range_v<ranges_t>) &&
+        OKAYLIB_NOEXCEPT->std::enable_if_t<(... && range_c<ranges_t>) &&
                                                sizeof...(ranges_t) >= 2,
                                            zipped_view_t<ranges_t...>>
     {
@@ -57,7 +57,7 @@ template <typename... ranges_t> struct zipped_view_t
         using desired_t = remove_cvref_t<desired_reference_t>;
         static_assert(is_derived_from_v<derived_t, zipped_view_t>);
         static_assert(is_convertible_to_v<derived_t&, zipped_view_t&>);
-        static_assert(std::is_convertible_v<derived_t&, desired_t&>);
+        static_assert(is_convertible_to_c<derived_t&, desired_t&>);
         return *static_cast<derived_t*>(this);
     }
     template <typename derived_t, typename desired_reference_t>
@@ -69,7 +69,7 @@ template <typename... ranges_t> struct zipped_view_t
         static_assert(
             is_convertible_to_v<const derived_t&, const zipped_view_t&>);
         static_assert(
-            std::is_convertible_v<const derived_t&, const desired_t&>);
+            is_convertible_to_c<const derived_t&, const desired_t&>);
         return *static_cast<const derived_t*>(this);
     }
 
@@ -78,7 +78,7 @@ template <typename... ranges_t> struct zipped_view_t
     static_assert(num_ranges >= 2, "Cannot zip less than two ranges.");
 
     using first_range_t = first_type_in_pack_t<ranges_t...>;
-    static_assert(is_range_v<first_range_t>);
+    static_assert(range_c<first_range_t>);
 
     static constexpr size_t num_sized_ranges =
         (... + size_t(range_can_size_v<ranges_t>));
@@ -308,7 +308,7 @@ struct range_definition<
         (
             [&] {
                 static_assert(
-                    is_range_v<decltype(std::get<indices>(range.m_views))>);
+                    range_c<decltype(std::get<indices>(range.m_views))>);
             }(),
             ...);
         return std::make_tuple(
@@ -405,7 +405,7 @@ struct range_definition<
         (
             [&] {
                 static_assert(
-                    is_range_v<decltype(std::get<indices>(range.m_views))>);
+                    range_c<decltype(std::get<indices>(range.m_views))>);
             }(),
             ...);
         return std::make_tuple(

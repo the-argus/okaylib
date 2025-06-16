@@ -204,17 +204,17 @@ template <typename slice_viewed_t, typename... constructor_args_t>
 constexpr void ok::memfill(ok::slice<slice_viewed_t> slice,
                            constructor_args_t&&... args) OKAYLIB_NOEXCEPT
 {
-    static_assert(!std::is_const_v<slice_viewed_t>,
+    static_assert(!is_const_c<slice_viewed_t>,
                   "Cannot memfill a slice of const memory.");
     if constexpr (std::is_same_v<slice_viewed_t, uint8_t>) {
         static_assert(
-            is_std_constructible_v<uint8_t, constructor_args_t...>,
+            is_std_constructible_c<uint8_t, constructor_args_t...>,
             "No matching conversion from given arguments to a uint8_t.");
         std::memset(slice.unchecked_address_of_first_item(),
                     uint8_t(std::forward<constructor_args_t>(args)...),
                     slice.size());
     } else {
-        static_assert(is_infallible_constructible_v<slice_viewed_t,
+        static_assert(is_infallible_constructible_c<slice_viewed_t,
                                                     constructor_args_t...> &&
                           std::is_nothrow_destructible_v<slice_viewed_t>,
                       "Refusing to call memfill if type is not able to (in a "
