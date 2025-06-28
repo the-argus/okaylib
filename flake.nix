@@ -15,6 +15,7 @@
       inherit (flake-utils.lib) system;
     in [
       system.aarch64-linux
+      system.aarch64-darwin
       system.x86_64-linux
     ];
   in
@@ -26,15 +27,16 @@
         {
           packages =
             (with pkgs; [
-              gdb
-              valgrind
               zig_0_13
               cmake
 
               # backtraces
               libbfd
               libunwind
-            ]);
+            ]) ++ pkgs.lib.optionals (system != flake-utils.lib.system.aarch64-darwin) (with pkgs; [
+              gdb
+              valgrind
+	    ]);
         };
 
       formatter = pkgs.alejandra;
