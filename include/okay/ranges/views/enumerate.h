@@ -97,9 +97,8 @@ class ok::orderable_definition<detail::enumerated_cursor_t<parent_range_t>>
 // reference or const but thats not really being removed before sending it to
 // other templates
 template <typename input_range_t>
-struct range_definition<detail::enumerated_view_t<input_range_t>,
-                        std::enable_if_t<!detail::arraylike_range_c<
-                            detail::remove_cvref_t<input_range_t>>>>
+    requires(!detail::arraylike_range_c<detail::remove_cvref_t<input_range_t>>)
+struct range_definition<detail::enumerated_view_t<input_range_t>>
     : public detail::propagate_sizedness_t<
           detail::enumerated_view_t<input_range_t>,
           detail::remove_cvref_t<input_range_t>>,
@@ -119,26 +118,27 @@ struct range_definition<detail::enumerated_view_t<input_range_t>,
     using range_t = std::remove_reference_t<input_range_t>;
 
     using pair_first_type = std::conditional_t<
-        detail::range_can_get_ref_v<range_t>,
-        std::conditional_t<detail::is_consuming_range_v<range_t>,
+        detail::range_can_get_ref_c<range_t>,
+        std::conditional_t<detail::consuming_range_c<range_t>,
                            value_type_for<range_t>&,
                            const value_type_for<range_t&>>,
         value_type_for<range_t>>;
 
     using value_type = std::pair<pair_first_type, const size_t>;
 
-    __ok_enable_if_static(range_t, detail::range_impls_increment_v<T>, void)
-        increment(const enumerated_t& range, cursor_t& c) OKAYLIB_NOEXCEPT
+    void increment(const enumerated_t& range, cursor_t& c) OKAYLIB_NOEXCEPT
+        requires detail::range_impls_increment_c<range_t>
     {
         // perform parent's increment function
-        ok::increment(range.template get_view_reference<enumerated_t, T>(),
-                      c.inner());
+        ok::increment(
+            range.template get_view_reference<enumerated_t, range_t>(),
+            c.inner());
         // also do our bit
         c.increment();
     }
 
-    __ok_enable_if_static(range_t, detail::range_impls_decrement_v<T>, void)
-        decrement(const enumerated_t& range, cursor_t& c) OKAYLIB_NOEXCEPT
+    void decrement(const enumerated_t& range, cursor_t& c) OKAYLIB_NOEXCEPT
+        requires detail::range_impls_decrement_c<range_t>
     {
         ok::decrement(
             range.template get_view_reference<enumerated_t, range_t>(),
@@ -149,7 +149,7 @@ struct range_definition<detail::enumerated_view_t<input_range_t>,
     constexpr static auto get(const enumerated_t& range,
                               const cursor_t& c) OKAYLIB_NOEXCEPT
     {
-        using inner_def = detail::range_definition_inner<range_t>;
+        using inner_def = detail::range_definition_inner_t<range_t>;
 
         const range_t& parent_ref =
             range.template get_view_reference<enumerated_t, range_t>();
@@ -170,9 +170,8 @@ struct range_definition<detail::enumerated_view_t<input_range_t>,
 // in the case that the child is arraylike, we can just use the cursor as the
 // index
 template <typename input_range_t>
-struct range_definition<detail::enumerated_view_t<input_range_t>,
-                        std::enable_if_t<detail::range_is_arraylike_v<
-                            detail::remove_cvref_t<input_range_t>>>>
+    requires detail::arraylike_range_c<detail::remove_cvref_t<input_range_t>>
+struct range_definition<detail::enumerated_view_t<input_range_t>>
     : public detail::propagate_sizedness_t<
           detail::enumerated_view_t<input_range_t>,
           detail::remove_cvref_t<input_range_t>>

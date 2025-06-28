@@ -1,5 +1,6 @@
 #include "test_header.h"
 // test header must be first
+#include "okay/detail/traits/type_compare.h"
 #include "okay/macros/foreach.h"
 #include "okay/ranges/ranges.h"
 #include "okay/ranges/views/enumerate.h"
@@ -23,7 +24,7 @@ static_assert(ok::detail::producing_range_c<ok::slice<const int>>);
 static_assert(ok::detail::consuming_range_c<ok::slice<int>>);
 static_assert(!ok::detail::range_impls_construction_set_c<ok::slice<const int>,
                                                           const int&>);
-static_assert(is_const_c<ok::slice<const int>::viewed_type>);
+static_assert(ok::is_const_c<ok::slice<const int>::viewed_type>);
 static_assert(ok::detail::range_can_get_ref_const_c<ok::slice<const int>>);
 static_assert(
     std::is_same_v<ok::value_type_for<ok::slice<const int>>, const int>);
@@ -39,13 +40,11 @@ static_assert(range_marked_finite_c<example_range_bidirectional>);
 static_assert(range_has_baseline_functions_c<example_range_bidirectional>);
 static_assert(ok::detail::consuming_range_c<example_range_bidirectional>);
 static_assert(ok::detail::producing_range_c<example_range_bidirectional>);
-static_assert(
-    ok::detail::bidirectional_range_c<example_range_bidirectional>);
-static_assert(
-    !ok::detail::random_access_range_c<example_range_bidirectional>);
+static_assert(ok::detail::bidirectional_range_c<example_range_bidirectional>);
+static_assert(!ok::detail::random_access_range_c<example_range_bidirectional>);
 static_assert(ok::detail::consuming_range_c<example_range_cstyle_child>);
 static_assert(ok::detail::random_access_range_c<example_range_cstyle>);
-static_assert(ok::detail::is_valid_cursor_c<size_t>);
+static_assert(ok::detail::is_valid_cursor_v<size_t>);
 static_assert(ok::range_c<example_range_cstyle>);
 static_assert(ok::detail::range_can_get_ref_c<example_range_cstyle>);
 static_assert(ok::detail::range_can_get_ref_const_c<example_range_cstyle>);
@@ -53,8 +52,8 @@ static_assert(ok::detail::range_can_get_ref_const_c<example_range_cstyle>);
 static_assert(ok::detail::range_has_baseline_functions_c<std::vector<int>>);
 static_assert(ok::detail::random_access_range_c<std::vector<int>>);
 static_assert(
-    same_as_c<std::vector<int>::value_type,
-                   ok::range_definition<std::vector<int>>::value_type>);
+    ok::same_as_c<std::vector<int>::value_type,
+                  ok::range_definition<std::vector<int>>::value_type>);
 
 using namespace ok;
 
@@ -68,7 +67,7 @@ TEST_SUITE("range traits")
             for (size_t i = 0; i < ints.size(); ++i) {
                 REQUIRE(ok::iter_get_ref(ints, i) == i);
                 static_assert(
-                    std::is_same_v<decltype(ok::iter_get_ref(ints, i)), int&>);
+                    ok::same_as_c<decltype(ok::iter_get_ref(ints, i)), int&>);
                 ok::iter_get_ref(ints, i) = 0;
                 REQUIRE(ints.at(i) == 0);
             }
@@ -196,7 +195,7 @@ TEST_SUITE("range traits")
                 const int& tref = ok::iter_get_temporary_ref(ints, i);
                 REQUIRE(tref == i);
                 static_assert(
-                    detail::range_can_get_ref_const_v<std::vector<int>>);
+                    detail::range_can_get_ref_const_c<std::vector<int>>);
                 static_assert(std::is_same_v<
                                   decltype(ok::iter_get_temporary_ref(ints, i)),
                                   const int&>,

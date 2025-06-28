@@ -485,26 +485,26 @@ template <typename payload_t, typename> class opt
         }
     }
 
-    constexpr try_clone_status_t<payload_t>
-    try_clone_into(opt& dest) const& OKAYLIB_NOEXCEPT
+    constexpr auto try_clone_into(opt& dest) const& OKAYLIB_NOEXCEPT
         requires try_cloneable_c<payload_t>
     {
+        using ret = try_clone_status_t<payload_t>;
         if (this->has_value()) {
             if (dest.has_value()) {
-                return ok::try_clone_into(this->ref_unchecked(),
-                                          dest.ref_unchecked());
+                return ret(ok::try_clone_into(this->ref_unchecked(),
+                                              dest.ref_unchecked()));
             } else {
                 if (auto res = ok::try_clone(this->ref_unchecked());
                     res.is_success()) {
                     dest.emplace_nodestroy(std::move(res.unwrap()));
-                    return res.status();
+                    return ret(res.status());
                 } else {
-                    return res.status();
+                    return ret(res.status());
                 }
             }
         } else {
             dest.reset();
-            return ok::make_success<try_clone_status_t<payload_t>>();
+            return ok::make_success<ret>();
         }
     }
 
@@ -631,8 +631,7 @@ class opt<payload_t, std::enable_if_t<std::is_reference_v<payload_t>>>
 
 template <typename range_t> struct range_definition;
 
-template <typename payload_t>
-struct ok::range_definition<ok::opt<payload_t>>
+template <typename payload_t> struct ok::range_definition<ok::opt<payload_t>>
 {
     struct cursor_t
     {

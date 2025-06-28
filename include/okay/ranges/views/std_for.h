@@ -20,7 +20,7 @@ class std_for_view : public detail::underlying_view_type<T>::type
 {
   public:
     static_assert(range_c<T>, "Cannot wrap given type for a standard for "
-                                 "loop- it is not a valid range.");
+                              "loop- it is not a valid range.");
     using cursor_t = detail::cursor_type_unchecked_for_t<T>;
     using parent_t = typename detail::underlying_view_type<T>::type;
 
@@ -200,9 +200,8 @@ class std_for_view : public detail::underlying_view_type<T>::type
         };
     };
 
-    using correct_iterator_t =
-        std::conditional_t<detail::is_consuming_range_v<T>, iterator,
-                           const_iterator>;
+    using correct_iterator_t = std::conditional_t<detail::consuming_range_c<T>,
+                                                  iterator, const_iterator>;
 
     constexpr correct_iterator_t begin() OKAYLIB_NOEXCEPT
     {

@@ -11,7 +11,7 @@
 namespace ok {
 template <typename T>
 concept enable_view_c =
-    requires { requires detail::range_definition_inner<T>::is_view; };
+    requires { requires detail::range_definition_inner_t<T>::is_view; };
 
 namespace detail {
 
@@ -27,7 +27,7 @@ template <typename range_t, typename parent_range_t> struct sized_range_t
 {
     static constexpr size_t size(const range_t& i) OKAYLIB_NOEXCEPT
     {
-        return detail::range_definition_inner<parent_range_t>::size(
+        return detail::range_definition_inner_t<parent_range_t>::size(
             i.template get_view_reference<range_t, parent_range_t>());
     }
 };
@@ -63,9 +63,9 @@ struct increment_decrement_range_t
 
 template <typename derived_range_t, typename parent_range_t, typename cursor_t>
 using propagate_increment_decrement_t = std::conditional_t<
-    detail::range_impls_increment_v<parent_range_t>,
+    detail::range_impls_increment_c<parent_range_t>,
     std::conditional_t<
-        detail::range_impls_decrement_v<parent_range_t>,
+        detail::range_impls_decrement_c<parent_range_t>,
         increment_decrement_range_t<derived_range_t, parent_range_t, cursor_t>,
         increment_only_range_t<derived_range_t, parent_range_t, cursor_t>>,
     detail::empty_t>;
@@ -76,9 +76,9 @@ using propagate_increment_decrement_t = std::conditional_t<
 // range definition of argument 1
 template <typename derived_range_t, typename parent_range_t>
 using propagate_sizedness_t = std::conditional_t<
-    range_can_size_v<parent_range_t>,
+    range_can_size_c<parent_range_t>,
     sized_range_t<derived_range_t, parent_range_t>,
-    infinite_static_def_t<range_marked_infinite_v<parent_range_t>>>;
+    infinite_static_def_t<range_marked_infinite_c<parent_range_t>>>;
 
 // requires that cursor_t can be constructed from the
 // cursor_type_for<parent_range_t>
@@ -88,7 +88,7 @@ struct propagate_begin_t
 {
     [[nodiscard]] constexpr static cursor_t begin(const derived_range_t& i)
         requires(!propagate_arraylike ||
-                 !detail::range_is_arraylike_v<parent_range_t>)
+                 !detail::arraylike_range_c<parent_range_t>)
     {
         return cursor_t(ok::begin(
             i.template get_view_reference<derived_range_t, parent_range_t>()));
@@ -100,9 +100,9 @@ struct propagate_offset_t
 {
     [[nodiscard]] static constexpr cursor_t offset(const derived_range_t& range,
                                                    cursor_t& cursor)
-        requires(detail::range_impls_offset_v<parent_range_t>)
+        requires(detail::range_impls_offset_c<parent_range_t>)
     {
-        detail::range_definition_inner<parent_range_t>::offset(range, cursor);
+        detail::range_definition_inner_t<parent_range_t>::offset(range, cursor);
     }
 };
 
@@ -112,9 +112,9 @@ struct propagate_compare_t_t
     [[nodiscard]] static constexpr ok::ordering
     offset(const derived_range_t& range, const cursor_t& cursor_a,
            const cursor_t& cursor_b)
-        requires(detail::range_impls_compare_v<parent_range_t>)
+        requires(detail::range_impls_compare_c<parent_range_t>)
     {
-        return detail::range_definition_inner<parent_range_t>::compare(
+        return detail::range_definition_inner_t<parent_range_t>::compare(
             range, cursor_a, cursor_b);
     }
 };
@@ -124,12 +124,12 @@ struct propagate_get_set_t
 {
     constexpr static auto get(const derived_range_t& range,
                               const cursor_t& cursor)
-        requires(range_definition_inner<parent_range_t>::get(
+        requires(range_definition_inner_t<parent_range_t>::get(
             range
                 .template get_view_reference<derived_range_t, parent_range_t>(),
             cursor))
     {
-        return range_definition_inner<parent_range_t>::get(
+        return range_definition_inner_t<parent_range_t>::get(
             range
                 .template get_view_reference<derived_range_t, parent_range_t>(),
             cursor);
@@ -140,14 +140,14 @@ struct propagate_get_set_t
                               constructor_args_t&&... args)
         requires(
             std::is_same_v<T, parent_range_t> &&
-            range_impls_construction_set_v<T, constructor_args_t...> &&
+            range_impls_construction_set_c<T, constructor_args_t...> &&
             requires {
-                range_definition_inner<T>::set(
+                range_definition_inner_t<T>::set(
                     range.template get_view_reference<derived_range_t, T>(),
                     cursor, std::forward<constructor_args_t>(args)...);
             })
     {
-        return range_definition_inner<T>::get(
+        return range_definition_inner_t<T>::get(
             range.template get_view_reference<derived_range_t, T>(), cursor,
             std::forward<constructor_args_t>(args)...);
     }
@@ -156,14 +156,14 @@ struct propagate_get_set_t
     constexpr static auto get_ref(derived_range_t& range,
                                   const cursor_t& cursor)
         requires(
-            std::is_same_v<T, parent_range_t> && range_can_get_ref_v<T> &&
-            !range_is_ref_wrapper_v<T> && requires {
-                range_definition_inner<T>::get_ref(
+            std::is_same_v<T, parent_range_t> && range_can_get_ref_c<T> &&
+            !ref_wrapper_range_c<T> && requires {
+                range_definition_inner_t<T>::get_ref(
                     range.template get_view_reference<derived_range_t, T>(),
                     cursor);
             })
     {
-        return range_definition_inner<T>::get_ref(
+        return range_definition_inner_t<T>::get_ref(
             range.template get_view_reference<derived_range_t, T>(), cursor);
     }
 
@@ -171,14 +171,14 @@ struct propagate_get_set_t
     constexpr static auto get_ref(const derived_range_t& range,
                                   const cursor_t& cursor)
         requires(
-            std::is_same_v<T, parent_range_t> && range_can_get_ref_const_v<T> &&
+            std::is_same_v<T, parent_range_t> && range_can_get_ref_const_c<T> &&
             requires {
-                range_definition_inner<T>::get_ref(
+                range_definition_inner_t<T>::get_ref(
                     range.template get_view_reference<derived_range_t, T>(),
                     cursor);
             })
     {
-        return range_definition_inner<T>::get_ref(
+        return range_definition_inner_t<T>::get_ref(
             range.template get_view_reference<derived_range_t, T>(), cursor);
     }
 };
@@ -190,8 +190,8 @@ struct propagate_boundscheck_t
     [[nodiscard]] static constexpr bool is_inbounds(const derived_range_t& i,
                                                     const cursor_t& c)
         requires((!propagate_arraylike ||
-                  !detail::range_is_arraylike_v<parent_range_t>) &&
-                 detail::range_can_is_inbounds_v<parent_range_t>)
+                  !detail::arraylike_range_c<parent_range_t>) &&
+                 detail::range_can_is_inbounds_c<parent_range_t>)
     {
         return ok::is_inbounds(
             i.template get_view_reference<derived_range_t, parent_range_t>(),
@@ -220,8 +220,8 @@ template <typename range_t, typename = void> class owning_view;
 template <typename range_t, typename = void> class ref_view;
 
 template <typename range_t>
-class owning_view<
-    range_t, std::enable_if_t<is_moveable_c<range_t> && range_c<range_t>>>
+class owning_view<range_t,
+                  std::enable_if_t<is_moveable_c<range_t> && range_c<range_t>>>
 {
   private:
     range_t m_range;
@@ -345,7 +345,7 @@ template <typename range_t>
 struct ok::range_definition<detail::ref_view<range_t>>
     : detail::propagate_all_range_traits_t<detail::ref_view<range_t>, range_t>
 {
-    static constexpr bool is_ref_wrapper = !detail::range_impls_get_v<range_t>;
+    static constexpr bool is_ref_wrapper = !detail::range_impls_get_c<range_t>;
     using value_type = detail::range_deduced_value_type_t<range_t>;
 };
 
@@ -355,8 +355,7 @@ template <typename range_t> ref_view(range_t&) -> ref_view<range_t>;
 template <typename range_t> owning_view(range_t&&) -> owning_view<range_t>;
 
 template <typename T>
-constexpr bool is_view_v =
-    range_c<T> && enable_view_c<T> && is_moveable_c<T>;
+constexpr bool is_view_v = range_c<T> && enable_view_c<T> && is_moveable_c<T>;
 
 template <typename T> struct underlying_view_type
 {
@@ -539,7 +538,7 @@ template <typename derived_t, typename parent_range_t> struct cursor_wrapper_t
     }
 
     constexpr derived_t& operator+=(const size_t rhs) OKAYLIB_NOEXCEPT
-        requires detail::is_random_access_range_v<parent_range_t>
+        requires detail::random_access_range_c<parent_range_t>
     {
         m_inner += rhs;
         derived()->plus_eql(rhs);
@@ -547,7 +546,7 @@ template <typename derived_t, typename parent_range_t> struct cursor_wrapper_t
     }
 
     constexpr derived_t& operator-=(const size_t rhs) OKAYLIB_NOEXCEPT
-        requires detail::is_random_access_range_v<parent_range_t>
+        requires detail::random_access_range_c<parent_range_t>
     {
         m_inner -= rhs;
         derived()->minus_eql(rhs);
@@ -555,7 +554,7 @@ template <typename derived_t, typename parent_range_t> struct cursor_wrapper_t
     }
 
     constexpr derived_t& operator+(size_t rhs) const OKAYLIB_NOEXCEPT
-        requires detail::is_random_access_range_v<parent_range_t>
+        requires detail::random_access_range_c<parent_range_t>
     {
         derived_t out(*derived());
         out.inner() += rhs;
@@ -564,7 +563,7 @@ template <typename derived_t, typename parent_range_t> struct cursor_wrapper_t
     }
 
     constexpr derived_t& operator-(size_t rhs) const OKAYLIB_NOEXCEPT
-        requires detail::is_random_access_range_v<parent_range_t>
+        requires detail::random_access_range_c<parent_range_t>
     {
         derived_t out(*derived());
         out.inner() -= rhs;

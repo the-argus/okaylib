@@ -460,7 +460,7 @@ template <typename T> struct cursor_or_void
 };
 
 template <typename T>
-    requires is_void_c<cursor_type_unchecked_for_t<T>>
+    requires requires { typename cursor_type_unchecked_for_t<T>; }
 struct cursor_or_void<T>
 {
     using type = cursor_type_unchecked_for_t<T>;
@@ -879,7 +879,7 @@ struct iter_get_ref_fn_t
 {
     template <range_c range_t>
         requires range_impls_get_ref_c<range_t>
-    constexpr auto operator()
+    constexpr decltype(auto) operator()
         [[nodiscard]] (range_t& range, const cursor_type_for<range_t>& cursor)
         const OKAYLIB_NOEXCEPT
     {
@@ -888,7 +888,7 @@ struct iter_get_ref_fn_t
 
     template <range_c range_t>
         requires range_impls_get_ref_const_c<range_t>
-    constexpr auto operator() [[nodiscard]] (
+    constexpr decltype(auto) operator() [[nodiscard]] (
         const range_t& range,
         const cursor_type_for<range_t>& cursor) const OKAYLIB_NOEXCEPT
     {

@@ -8,12 +8,12 @@ namespace ok::detail {
 
 template <typename T>
 concept has_pre_decrement_c = requires(T& t) {
-    { --t } -> is_void_c;
+    { --t } -> same_as_c<T&>;
 };
 
 template <typename T>
 concept has_pre_increment_c = requires(T& t) {
-    { ++t } -> is_void_c;
+    { ++t } -> same_as_c<T&>;
 };
 
 template <typename T>
