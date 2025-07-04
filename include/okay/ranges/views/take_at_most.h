@@ -5,7 +5,7 @@
 #include "okay/ranges/adaptors.h"
 #include "okay/ranges/ranges.h"
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
 #include <fmt/core.h>
 #endif
 
@@ -94,7 +94,7 @@ struct take_at_most_view_t : public underlying_view_type<range_t>::type
                                   size_t amount) OKAYLIB_NOEXCEPT
         : underlying_view_type<range_t>::type(std::forward<range_t>(range))
     {
-        if constexpr (detail::range_can_size_v<range_t>) {
+        if constexpr (detail::range_can_size_c<range_t>) {
             auto& parent_range =
                 this->template get_view_reference<take_at_most_view_t,
                                                   range_t>();
@@ -118,8 +118,8 @@ template <typename input_range_t> struct sized_take_at_most_range_t
 // to track number of items consumed
 template <typename input_range_t>
 using take_at_most_cursor_optimized_t = std::conditional_t<
-    detail::is_random_access_range_v<detail::remove_cvref_t<input_range_t>> &&
-        !detail::range_marked_finite_v<detail::remove_cvref_t<input_range_t>>,
+    detail::random_access_range_c<detail::remove_cvref_t<input_range_t>> &&
+        !detail::range_marked_finite_c<detail::remove_cvref_t<input_range_t>>,
     cursor_type_for<detail::remove_cvref_t<input_range_t>>,
     take_at_most_cursor_t<input_range_t>>;
 
@@ -144,9 +144,8 @@ class ok::orderable_definition<
 };
 
 template <typename input_range_t>
-struct range_definition<detail::take_at_most_view_t<input_range_t>,
-                        std::enable_if_t<!detail::range_is_arraylike_v<
-                            detail::remove_cvref_t<input_range_t>>>>
+    requires(!detail::arraylike_range_c<detail::remove_cvref_t<input_range_t>>)
+struct range_definition<detail::take_at_most_view_t<input_range_t>>
     : public detail::propagate_begin_t<
           detail::take_at_most_view_t<input_range_t>,
           detail::remove_cvref_t<input_range_t>,
@@ -156,7 +155,7 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>,
           detail::remove_cvref_t<input_range_t>,
           detail::take_at_most_cursor_optimized_t<input_range_t>>,
       public std::conditional_t<
-          detail::range_marked_finite_v<detail::remove_cvref_t<input_range_t>>,
+          detail::range_marked_finite_c<detail::remove_cvref_t<input_range_t>>,
           detail::infinite_static_def_t<false>,
           detail::sized_take_at_most_range_t<input_range_t>>
 {
@@ -167,21 +166,22 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>,
     using cursor_t = detail::take_at_most_cursor_optimized_t<input_range_t>;
 
     static constexpr bool is_ref_wrapper =
-        !detail::range_impls_get_v<range_t> &&
+        !detail::range_impls_get_c<range_t> &&
         std::is_lvalue_reference_v<input_range_t>;
 
     using value_type = value_type_for<range_t>;
 
-    __ok_enable_if_static(range_t, detail::range_can_is_inbounds_v<T>, bool)
-        is_inbounds(const take_at_most_t& i, const cursor_t& c) OKAYLIB_NOEXCEPT
+    static constexpr bool is_inbounds(const take_at_most_t& i,
+                                      const cursor_t& c) OKAYLIB_NOEXCEPT
+        requires detail::range_can_is_inbounds_c<range_t>
     {
-        using parent_def = detail::range_definition_inner<T>;
+        using parent_def = detail::range_definition_inner_t<range_t>;
         const range_t& parent_ref =
-            i.template get_view_reference<take_at_most_t, T>();
+            i.template get_view_reference<take_at_most_t, range_t>();
 
-        if constexpr (detail::is_random_access_range_v<T> &&
-                      !detail::range_marked_finite_v<T>) {
-            static_assert(std::is_same_v<cursor_t, cursor_type_for<T>>,
+        if constexpr (detail::random_access_range_c<range_t> &&
+                      !detail::range_marked_finite_c<range_t>) {
+            static_assert(std::is_same_v<cursor_t, cursor_type_for<range_t>>,
                           "Cursor type has extra unneeded stuff in take() even "
                           "though it doesnt need it.");
             auto parent_begin = ok::begin(parent_ref);
@@ -195,7 +195,7 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>,
             // known, so when instantiating this view we already capped our
             // size
             return c < advanced;
-        } else if constexpr (!detail::range_marked_finite_v<T>) {
+        } else if constexpr (!detail::range_marked_finite_c<range_t>) {
             return c.num_consumed() < i.amount();
         } else {
             return c.num_consumed() < i.amount() &&
@@ -203,28 +203,30 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>,
         }
     }
 
-    __ok_enable_if_static(range_t, detail::range_impls_increment_v<T>, void)
-        increment(const take_at_most_t& i, cursor_t& c) OKAYLIB_NOEXCEPT
+    static constexpr void increment(const take_at_most_t& i,
+                                    cursor_t& c) OKAYLIB_NOEXCEPT
+        requires detail::range_impls_increment_c<range_t>
     {
         // if its random access, the cursor type might just be the parent cursor
         // type
-        static_assert(!detail::is_random_access_range_v<T>,
+        static_assert(!detail::random_access_range_c<range_t>,
                       "this code relies on all range definitions which have "
                       "increment() defined also being not random access");
         const auto& parent_ref =
-            i.template get_view_reference<take_at_most_t, T>();
+            i.template get_view_reference<take_at_most_t, range_t>();
         ok::increment(parent_ref, c.inner());
         c.increment();
     }
 
-    __ok_enable_if_static(range_t, detail::range_impls_decrement_v<T>, void)
-        decrement(const take_at_most_t& i, cursor_t& c) OKAYLIB_NOEXCEPT
+    static constexpr void decrement(const take_at_most_t& i,
+                                    cursor_t& c) OKAYLIB_NOEXCEPT
+        requires detail::range_impls_decrement_c<range_t>
     {
-        static_assert(!detail::is_random_access_range_v<T>,
+        static_assert(!detail::random_access_range_c<range_t>,
                       "this code relies on all range definitions which have "
                       "decrement() defined also being not random access");
         const auto& parent_ref =
-            i.template get_view_reference<take_at_most_t, T>();
+            i.template get_view_reference<take_at_most_t, range_t>();
         ok::decrement(parent_ref, c.inner());
         c.decrement();
     }
@@ -232,9 +234,8 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>,
 
 // different definition if range is arraylike: just change what size() returns
 template <typename input_range_t>
-struct range_definition<detail::take_at_most_view_t<input_range_t>,
-                        std::enable_if_t<detail::range_is_arraylike_v<
-                            detail::remove_cvref_t<input_range_t>>>>
+    requires detail::arraylike_range_c<detail::remove_cvref_t<input_range_t>>
+struct range_definition<detail::take_at_most_view_t<input_range_t>>
     : public detail::propagate_get_set_t<
           detail::take_at_most_view_t<input_range_t>,
           detail::remove_cvref_t<input_range_t>,
@@ -247,7 +248,7 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>,
     using take_at_most_t = detail::take_at_most_view_t<input_range_t>;
 
     static constexpr bool is_ref_wrapper =
-        !detail::range_impls_get_v<range_t> &&
+        !detail::range_impls_get_c<range_t> &&
         std::is_lvalue_reference_v<input_range_t>;
 
     using value_type = value_type_for<range_t>;
@@ -262,7 +263,7 @@ constexpr detail::range_adaptor_t<detail::take_at_most_fn_t> take_at_most;
 
 } // namespace ok
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
 template <typename range_t>
 struct fmt::formatter<ok::detail::take_at_most_view_t<range_t>>
 {

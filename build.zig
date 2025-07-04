@@ -27,7 +27,7 @@ const testing_flags = &[_][]const u8{
     "-DOKAYLIB_NOEXCEPT=", // allow exceptions in testing mode
 
     "-DOKAYLIB_TESTING",
-    "-DOKAYLIB_USE_FMT",
+    // "-DOKAYLIB_USE_FMT",
     "-DFMT_HEADER_ONLY",
 };
 
@@ -89,6 +89,7 @@ const okaylib_headers = &[_][]const u8{
     "detail/ok_assert.h",
     "detail/ok_unreachable.h",
     "detail/view_common.h",
+    "detail/memory.h",
 
     "macros/foreach.h",
     "macros/try.h",

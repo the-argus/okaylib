@@ -21,16 +21,24 @@ TEST_SUITE("join")
 
             slice<int> arrays[] = {a, b, c};
 
-            static_assert(detail::is_random_access_range_v<decltype(a)>);
-            static_assert(detail::is_random_access_range_v<decltype(arrays)>);
+            static_assert(detail::random_access_range_c<decltype(a)>);
+            static_assert(detail::random_access_range_c<decltype(arrays)>);
             // i wish... maybe if the sizes of all the arrays were statically
             // known
             static_assert(
-                !detail::is_random_access_range_v<decltype(arrays | join)>);
+                !detail::random_access_range_c<decltype(arrays | join)>);
 
             size_t counter = 0;
             auto&& rng = arrays | join;
-            ok_foreach(int i, arrays | join)
+            using T = decltype(arrays | join);
+            using namespace detail;
+            using U = int&;
+            static_assert(range_has_definition_c<T>);
+            static_assert(is_valid_value_type_v<detail::range_deduced_value_type_t<T>>);
+            static_assert(range_can_get_ref_const_c<T>);
+            static_assert(range_c<T>);
+            auto t = ok::begin(rng);
+            ok_foreach(int i, rng)
             {
                 switch (i) {
                 case 1:

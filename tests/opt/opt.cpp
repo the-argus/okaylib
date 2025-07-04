@@ -542,7 +542,7 @@ TEST_SUITE("opt")
             slice<uint8_t> bytes_slice = other_maybe_bytes.ref_or_panic();
         }
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
         SUBCASE("formattable")
         {
             opt<std::string_view> str;

@@ -632,7 +632,7 @@ inline constexpr detail::bit_string_t bit_string;
 
 } // namespace ok
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
 template <typename backing_allocator_t>
 struct fmt::formatter<ok::bit_arraylist_t<backing_allocator_t>>
 {

@@ -7,7 +7,7 @@
 #include "okay/slice.h"
 #include <cstdint>
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
 #include <fmt/core.h>
 #endif
 
@@ -286,7 +286,7 @@ inline constexpr detail::bit_string_t bit_string;
 } // namespace bit_array
 } // namespace ok
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
 template <size_t N> struct fmt::formatter<ok::bit_array_t<N>>
 {
     using formatted_type_t = ok::bit_array_t<N>;

@@ -3,7 +3,7 @@
 
 #include "okay/detail/abort.h"
 #include "okay/detail/addressof.h"
-#include "okay/detail/construct_at.h"
+#include "okay/detail/memory.h"
 #include "okay/detail/noexcept.h"
 #include "okay/detail/template_util/uninitialized_storage.h"
 #include "okay/detail/traits/cloneable.h"
@@ -12,7 +12,7 @@
 
 #include <type_traits>
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
 #include "okay/ctti/ctti.h"
 #include <fmt/core.h>
 #endif
@@ -48,7 +48,7 @@ template <status_enum enum_t> class status
     // must explicitly initialize status with enum value
     status() = delete;
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
     friend struct fmt::formatter<status>;
 #endif
 };
@@ -99,8 +99,8 @@ __OK_RES_REQUIRES_CLAUSE class res<
     template <typename... args_t>
     constexpr void emplace_nodestroy(args_t&&... args) OKAYLIB_NOEXCEPT
     {
-        ok::construct_at(ok::addressof(m_success.value),
-                         std::forward<args_t>(args)...);
+        ok::stdc::construct_at(ok::addressof(m_success.value),
+                               std::forward<args_t>(args)...);
     }
 
   public:
@@ -317,8 +317,8 @@ __OK_RES_REQUIRES_CLAUSE class res<
             } else {
                 // emulate move assignment with destruction and construction
                 dest.m_status.~status_t();
-                ok::construct_at(ok::addressof(dest.m_status),
-                                 std::move(ok::clone(this->status())));
+                ok::stdc::construct_at(ok::addressof(dest.m_status),
+                                       std::move(ok::clone(this->status())));
             }
         };
 
@@ -358,8 +358,8 @@ __OK_RES_REQUIRES_CLAUSE class res<
                 ok::clone_into(this->unwrap_unchecked(),
                                dest.unwrap_unchecked());
             } else {
-                ok::construct_at(ok::addressof(dest.m_success),
-                                 ok::clone(this->unwrap_unchecked()));
+                ok::stdc::construct_at(ok::addressof(dest.m_success),
+                                       ok::clone(this->unwrap_unchecked()));
             }
         } else {
             if (dest.is_success()) {
@@ -373,8 +373,8 @@ __OK_RES_REQUIRES_CLAUSE class res<
         } else {
             // emulate move assignment with destruction and construction
             dest.m_status.~status_t();
-            ok::construct_at(ok::addressof(dest.m_status),
-                             std::move(ok::clone(this->status())));
+            ok::stdc::construct_at(ok::addressof(dest.m_status),
+                                   std::move(ok::clone(this->status())));
         }
     }
 
@@ -594,7 +594,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
         }
     }
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
     friend struct fmt::formatter<res>;
 #endif
 };
@@ -685,14 +685,14 @@ __OK_RES_REQUIRES_CLAUSE class res<
         }
     }
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
     friend struct fmt::formatter<res>;
 #endif
 };
 
 } // namespace ok
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
 template <ok::status_enum enum_t> struct fmt::formatter<ok::status<enum_t>>
 {
     using status_template_t = ok::status<enum_t>;

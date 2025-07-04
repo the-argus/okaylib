@@ -9,7 +9,7 @@
 using namespace ok;
 
 int dummy[500];
-static_assert(detail::is_random_access_range_v<decltype(dummy | drop(10))>);
+static_assert(detail::random_access_range_c<decltype(dummy | drop(10))>);
 static_assert(detail::range_is_arraylike_v<decltype(dummy)>);
 // TODO: make this keep arraylike property
 // static_assert(detail::range_is_arraylike_v<decltype(dummy | drop(10))>);
@@ -21,10 +21,10 @@ TEST_SUITE("drop")
         SUBCASE("get second half of array of constant size")
         {
             std::array<int, 50> array;
-            static_assert(detail::is_random_access_range_v<decltype(array)>);
+            static_assert(detail::random_access_range_c<decltype(array)>);
             auto half_view = array | drop(25);
             static_assert(
-                detail::is_random_access_range_v<decltype(half_view)>);
+                detail::random_access_range_c<decltype(half_view)>);
             REQUIRE(half_view.amount() == 25);
             REQUIRE(ok::size(half_view) == 25);
         }

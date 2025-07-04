@@ -17,18 +17,18 @@ struct for_each_fn_t
         using T = remove_cvref_t<range_t>;
         static_assert(range_c<T>,
                       "Cannot for_each given type- it is not a range.");
-        static_assert(is_producing_range_v<T>,
+        static_assert(producing_range_c<T>,
                       "Cannot for_each given type- it is not an input range.");
 
         // default to using get_ref, only don't do this if the type isnt
         // copyable or something and only iter_copyout can handle it
         constexpr bool use_get_ref =
-            (range_can_get_ref_const_v<range_t> ||
-             range_can_get_ref_v<range_t>) &&
-            is_std_invocable_r_v<callable_t, void, value_type_for<T>&>;
+            (range_can_get_ref_const_c<range_t> ||
+             range_can_get_ref_c<range_t>) &&
+            is_std_invocable_r_c<callable_t, void, value_type_for<T>&>;
         constexpr bool use_copyout =
             !use_get_ref &&
-            is_std_invocable_r_v<callable_t, void, value_type_for<T>>;
+            is_std_invocable_r_c<callable_t, void, value_type_for<T>>;
 
         static_assert(use_get_ref || use_copyout,
                       "Given for_each function and given range do not match "

@@ -8,7 +8,7 @@
 #include "okay/detail/traits/type_compare.h"
 #include <cstdint>
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
 #include <fmt/core.h>
 #endif
 
@@ -919,7 +919,7 @@ inline constexpr detail::unchecked_clamp_fn_t unchecked_clamp;
 
 } // namespace ok
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
 template <> struct fmt::formatter<ok::ordering>
 {
     constexpr format_parse_context::iterator parse(format_parse_context& ctx)

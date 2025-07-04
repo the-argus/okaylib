@@ -6,7 +6,7 @@
 #include "okay/detail/noexcept.h"
 #include <cstdint>
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
 #include <fmt/core.h>
 #endif
 
@@ -230,7 +230,7 @@ class anystatus_t
 
     constexpr ~anystatus_t() noexcept { this->destroy(); }
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
     friend struct fmt::formatter<anystatus_t>;
 #endif
 };
@@ -239,7 +239,7 @@ static_assert(status_object<anystatus_t>);
 
 } // namespace ok
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
 template <> struct fmt::formatter<ok::anystatus_t::variant>
 {
     constexpr format_parse_context::iterator parse(format_parse_context& ctx)

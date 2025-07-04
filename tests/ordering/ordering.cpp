@@ -255,7 +255,7 @@ TEST_SUITE("ordering")
         }
     }
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
     TEST_CASE("formatting")
     {
         SUBCASE("print ordering")

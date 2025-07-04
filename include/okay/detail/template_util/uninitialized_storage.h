@@ -5,8 +5,8 @@
 #include "okay/detail/noexcept.h"
 #include "okay/detail/template_util/empty.h"
 #include "okay/detail/traits/constructor_traits.h"
+#include "okay/detail/utility.h"
 #include <type_traits>
-#include <utility>
 
 /*
  * uninitialized_storage_t<T> is a template over a union. The type will inherit
@@ -34,7 +34,7 @@ template <typename inner_input_contained_t> union uninitialized_storage_t
         requires is_std_constructible_c<inner_input_contained_t, args_t...>
     constexpr uninitialized_storage_t(ok::in_place_t,
                                       args_t&&... args) OKAYLIB_NOEXCEPT
-        : value(std::forward<args_t>(args)...)
+        : value(stdc::forward<args_t>(args)...)
     {
     }
 
@@ -55,11 +55,11 @@ template <typename inner_input_contained_t> union uninitialized_storage_t
     }
 
     constexpr ~uninitialized_storage_t()
-        requires(std::is_trivially_destructible_v<inner_input_contained_t>)
+        requires(stdc::is_trivially_destructible_v<inner_input_contained_t>)
     = default;
 };
 
-static_assert(std::is_trivially_destructible_v<uninitialized_storage_t<int>>);
+static_assert(stdc::is_trivially_destructible_v<uninitialized_storage_t<int>>);
 } // namespace ok::detail
 
 #endif

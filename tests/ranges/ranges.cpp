@@ -8,7 +8,53 @@
 #include "okay/slice.h"
 #include "testing_types.h"
 #include <array>
+#include <functional>
 #include <vector>
+
+struct MemberPointerTester
+{
+    int i;
+    float f;
+
+    void one();
+    float two();
+};
+
+// tests to make sure ok::invoke matches std::invoke
+static_assert(std::is_same_v<
+              decltype(std::invoke(ok::detail::iter_get_ref_fn_t{},
+                                   std::declval<int (&)[500]>(), size_t{})),
+              decltype(ok::invoke(ok::detail::iter_get_ref_fn_t{},
+                                  std::declval<int (&)[500]>(), size_t{}))>);
+static_assert(
+    std::is_same_v<
+        decltype(std::invoke(ok::detail::iter_get_ref_fn_t{},
+                             std::declval<const int (&)[500]>(), size_t{})),
+        decltype(ok::invoke(ok::detail::iter_get_ref_fn_t{},
+                            std::declval<const int (&)[500]>(), size_t{}))>);
+static_assert(std::is_same_v<
+              decltype(std::invoke(&MemberPointerTester::one,
+                                   std::declval<MemberPointerTester&>())),
+              decltype(std::invoke(&MemberPointerTester::one,
+                                   std::declval<MemberPointerTester&>()))>);
+
+static_assert(std::is_same_v<
+              decltype(std::invoke(&MemberPointerTester::two,
+                                   std::declval<MemberPointerTester&>())),
+              decltype(std::invoke(&MemberPointerTester::two,
+                                   std::declval<MemberPointerTester&>()))>);
+
+static_assert(std::is_same_v<
+              decltype(std::invoke(&MemberPointerTester::i,
+                                   std::declval<MemberPointerTester&>())),
+              decltype(std::invoke(&MemberPointerTester::i,
+                                   std::declval<MemberPointerTester&>()))>);
+
+static_assert(std::is_same_v<
+              decltype(std::invoke(&MemberPointerTester::f,
+                                   std::declval<MemberPointerTester&>())),
+              decltype(std::invoke(&MemberPointerTester::f,
+                                   std::declval<MemberPointerTester&>()))>);
 
 using namespace ok::detail;
 

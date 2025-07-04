@@ -16,10 +16,10 @@ TEST_SUITE("take_at_most")
         SUBCASE("get first half of array of constant size")
         {
             std::array<int, 50> array;
-            static_assert(detail::is_random_access_range_v<decltype(array)>);
+            static_assert(detail::random_access_range_c<decltype(array)>);
             auto half_view = array | take_at_most(25);
             static_assert(
-                detail::is_random_access_range_v<decltype(half_view)>);
+                detail::random_access_range_c<decltype(half_view)>);
             REQUIRE(ok::size(half_view) == 25);
         }
 

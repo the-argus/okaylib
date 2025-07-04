@@ -7,7 +7,7 @@
 #include "okay/ranges/adaptors.h"
 #include "okay/ranges/ranges.h"
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
 #include <fmt/core.h>
 #endif
 
@@ -78,10 +78,10 @@ class ok::orderable_definition<detail::enumerated_cursor_t<parent_range_t>>
     using self_t = detail::enumerated_cursor_t<parent_range_t>;
 
   public:
-    static constexpr bool is_strong_orderable =
+    constexpr static bool is_strong_orderable =
         is_strong_fully_orderable_v<cursor_type_for<parent_range_t>>;
 
-    static constexpr ordering cmp(const self_t& lhs,
+    constexpr static ordering cmp(const self_t& lhs,
                                   const self_t& rhs) OKAYLIB_NOEXCEPT
     {
         const auto ordering = ok::cmp(lhs.inner(), rhs.inner());
@@ -126,7 +126,8 @@ struct range_definition<detail::enumerated_view_t<input_range_t>>
 
     using value_type = std::pair<pair_first_type, const size_t>;
 
-    void increment(const enumerated_t& range, cursor_t& c) OKAYLIB_NOEXCEPT
+    constexpr static void increment(const enumerated_t& range,
+                                    cursor_t& c) OKAYLIB_NOEXCEPT
         requires detail::range_impls_increment_c<range_t>
     {
         // perform parent's increment function
@@ -137,7 +138,8 @@ struct range_definition<detail::enumerated_view_t<input_range_t>>
         c.increment();
     }
 
-    void decrement(const enumerated_t& range, cursor_t& c) OKAYLIB_NOEXCEPT
+    constexpr static void decrement(const enumerated_t& range,
+                                    cursor_t& c) OKAYLIB_NOEXCEPT
         requires detail::range_impls_decrement_c<range_t>
     {
         ok::decrement(
@@ -204,7 +206,7 @@ constexpr detail::range_adaptor_closure_t<detail::enumerate_fn_t> enumerate;
 
 } // namespace ok
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
 template <typename range_t>
 struct fmt::formatter<ok::detail::enumerated_view_t<range_t>>
 {

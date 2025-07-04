@@ -12,22 +12,10 @@ template <typename range_t, typename predicate_t> struct all_closure_t;
 // function which creates an all_closure_t
 struct all_fn_t
 {
-    template <typename range_t, typename predicate_t>
+    template <producing_range_c range_t, predicate_for_c<range_t> predicate_t>
     constexpr decltype(auto)
     operator()(range_t&& range, predicate_t&& pred) const OKAYLIB_NOEXCEPT
     {
-        static_assert(detail::is_producing_range_v<range_t>,
-                      "Input to ok::all is not a valid input range (a range "
-                      "which can be iterated over to get values.)");
-        static_assert(
-            is_std_invocable_r_v<predicate_t,
-                                 // returns bool
-                                 bool,
-                                 // has one argument: const ref to value type of
-                                 // the range
-                                 const value_type_for<range_t>&>,
-            "Function given to ok::all() must accept a const reference to the "
-            "value type of the range, and return a bool.");
         return all_closure_t<decltype(range), decltype(pred)>(
             std::forward<range_t>(range), std::forward<predicate_t>(pred));
     }

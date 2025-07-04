@@ -122,12 +122,9 @@ struct propagate_compare_t_t
 template <typename derived_range_t, typename parent_range_t, typename cursor_t>
 struct propagate_get_set_t
 {
-    constexpr static auto get(const derived_range_t& range,
-                              const cursor_t& cursor)
-        requires(range_definition_inner_t<parent_range_t>::get(
-            range
-                .template get_view_reference<derived_range_t, parent_range_t>(),
-            cursor))
+    constexpr static decltype(auto) get(const derived_range_t& range,
+                                        const cursor_t& cursor)
+        requires range_impls_get_c<parent_range_t>
     {
         return range_definition_inner_t<parent_range_t>::get(
             range
@@ -135,51 +132,37 @@ struct propagate_get_set_t
             cursor);
     }
 
-    template <typename T = parent_range_t, typename... constructor_args_t>
-    constexpr static auto set(derived_range_t& range, const cursor_t& cursor,
+    template <typename... constructor_args_t>
+    constexpr static void set(derived_range_t& range, const cursor_t& cursor,
                               constructor_args_t&&... args)
-        requires(
-            std::is_same_v<T, parent_range_t> &&
-            range_impls_construction_set_c<T, constructor_args_t...> &&
-            requires {
-                range_definition_inner_t<T>::set(
-                    range.template get_view_reference<derived_range_t, T>(),
-                    cursor, std::forward<constructor_args_t>(args)...);
-            })
+        requires range_impls_construction_set_c<parent_range_t,
+                                                constructor_args_t...>
     {
-        return range_definition_inner_t<T>::get(
-            range.template get_view_reference<derived_range_t, T>(), cursor,
-            std::forward<constructor_args_t>(args)...);
+        range_definition_inner_t<parent_range_t>::set(
+            range
+                .template get_view_reference<derived_range_t, parent_range_t>(),
+            cursor, std::forward<constructor_args_t>(args)...);
     }
 
-    template <typename T = parent_range_t>
-    constexpr static auto get_ref(derived_range_t& range,
-                                  const cursor_t& cursor)
-        requires(
-            std::is_same_v<T, parent_range_t> && range_can_get_ref_c<T> &&
-            !ref_wrapper_range_c<T> && requires {
-                range_definition_inner_t<T>::get_ref(
-                    range.template get_view_reference<derived_range_t, T>(),
-                    cursor);
-            })
+    constexpr static decltype(auto) get_ref(derived_range_t& range,
+                                            const cursor_t& cursor)
+        requires(range_can_get_ref_c<parent_range_t> &&
+                 !ref_wrapper_range_c<parent_range_t>)
     {
-        return range_definition_inner_t<T>::get_ref(
-            range.template get_view_reference<derived_range_t, T>(), cursor);
+        return range_definition_inner_t<parent_range_t>::get_ref(
+            range
+                .template get_view_reference<derived_range_t, parent_range_t>(),
+            cursor);
     }
 
-    template <typename T = parent_range_t>
-    constexpr static auto get_ref(const derived_range_t& range,
-                                  const cursor_t& cursor)
-        requires(
-            std::is_same_v<T, parent_range_t> && range_can_get_ref_const_c<T> &&
-            requires {
-                range_definition_inner_t<T>::get_ref(
-                    range.template get_view_reference<derived_range_t, T>(),
-                    cursor);
-            })
+    constexpr static decltype(auto) get_ref(const derived_range_t& range,
+                                            const cursor_t& cursor)
+        requires range_can_get_ref_const_c<parent_range_t>
     {
-        return range_definition_inner_t<T>::get_ref(
-            range.template get_view_reference<derived_range_t, T>(), cursor);
+        return range_definition_inner_t<parent_range_t>::get_ref(
+            range
+                .template get_view_reference<derived_range_t, parent_range_t>(),
+            cursor);
     }
 };
 
@@ -216,12 +199,14 @@ struct propagate_all_range_traits_t
                                            cursor_type_for<parent_range_t>>
 {};
 
-template <typename range_t, typename = void> class owning_view;
-template <typename range_t, typename = void> class ref_view;
+template <typename range_t> class owning_view;
+/// If getting undefined template errors, maybe the type passed in is not a
+/// range, or it is a reference to a range?
+template <typename range_t> class ref_view;
 
 template <typename range_t>
-class owning_view<range_t,
-                  std::enable_if_t<is_moveable_c<range_t> && range_c<range_t>>>
+    requires(is_moveable_c<range_t> && range_c<range_t>)
+class owning_view<range_t>
 {
   private:
     range_t m_range;
@@ -278,8 +263,8 @@ struct ok::range_definition<detail::owning_view<range_t>>
 namespace detail {
 
 template <typename range_t>
-class ref_view<range_t, std::enable_if_t<!std::is_reference_v<range_t> &&
-                                         range_c<range_t>>>
+    requires(!std::is_reference_v<range_t> && range_c<range_t>)
+class ref_view<range_t>
 {
   private:
     range_t* m_range;
@@ -301,12 +286,10 @@ class ref_view<range_t, std::enable_if_t<!std::is_reference_v<range_t> &&
 
   public:
     template <typename T>
-    constexpr ref_view(
-        T&& t,
-        std::enable_if_t<!std::is_same_v<ref_view, T> &&
-                             is_convertible_to_c<decltype(t), range_t&> &&
-                             is_referenceable<decltype(t)>::value,
-                         empty_t> = {}) OKAYLIB_NOEXCEPT
+    constexpr ref_view(T&& t) OKAYLIB_NOEXCEPT
+        requires(!ok::same_as_c<ref_view, T> &&
+                 is_convertible_to_c<decltype(t), range_t&> &&
+                 is_referenceable<decltype(t)>::value)
         : m_range(ok::addressof(static_cast<range_t&>(std::forward<T>(t))))
     {
     }
@@ -574,6 +557,10 @@ template <typename derived_t, typename parent_range_t> struct cursor_wrapper_t
   private:
     parent_cursor_t m_inner;
 };
+
+template <typename T, typename range_t>
+concept predicate_for_c =
+    is_std_invocable_r_c<bool, const value_type_for<range_t>&>;
 
 } // namespace detail
 } // namespace ok

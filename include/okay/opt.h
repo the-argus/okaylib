@@ -3,7 +3,7 @@
 
 #include "okay/detail/abort.h"
 #include "okay/detail/addressof.h"
-#include "okay/detail/construct_at.h"
+#include "okay/detail/memory.h"
 #include "okay/detail/noexcept.h"
 #include "okay/detail/ok_assert.h"
 #include "okay/detail/template_util/uninitialized_storage.h"
@@ -12,7 +12,7 @@
 #include "okay/detail/traits/special_member_traits.h"
 #include <cstring> // memcpy
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
 #include "okay/ctti/ctti.h"
 #include <fmt/core.h>
 #endif
@@ -89,10 +89,11 @@ template <typename payload_t, typename> class opt
     // emplace a value into the optional assuming nothing is initialized. will
     // not call the destructor of any live objects
     template <typename... args_t>
-    constexpr void emplace_nodestroy(args_t&&... args) OKAYLIB_NOEXCEPT
+    __ok_constructing_constexpr void
+    emplace_nodestroy(args_t&&... args) OKAYLIB_NOEXCEPT
     {
-        ok::construct_at(ok::addressof(this->m_payload), ok::in_place,
-                         std::forward<args_t>(args)...);
+        ok::stdc::construct_at(ok::addressof(this->m_payload), ok::in_place,
+                               std::forward<args_t>(args)...);
     }
 
   public:
@@ -527,7 +528,7 @@ template <typename payload_t, typename> class opt
         requires(std::is_trivially_destructible_v<payload_t>)
     = default;
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
     friend struct fmt::formatter<opt>;
 #endif
 };
@@ -624,7 +625,7 @@ class opt<payload_t, std::enable_if_t<std::is_reference_v<payload_t>>>
         return m_pointer;
     }
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
     friend struct fmt::formatter<opt>;
 #endif
 };
@@ -691,7 +692,7 @@ template <typename payload_t> struct ok::range_definition<ok::opt<payload_t>>
 
 } // namespace ok
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
 template <typename payload_t> struct fmt::formatter<ok::opt<payload_t>>
 {
     using formatted_type_t = ok::opt<payload_t>;

@@ -5,7 +5,7 @@
 #include "okay/ranges/adaptors.h"
 #include "okay/ranges/ranges.h"
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
 #include <fmt/core.h>
 #endif
 
@@ -36,11 +36,11 @@ struct keep_if_fn_t
                       "Cannot keep_if given type- it is not a range.");
         constexpr bool can_call_with_get_ref_const =
             std::is_invocable_v<predicate_t, const value_type_for<T>&> &&
-            detail::range_can_get_ref_const_v<T>;
+            detail::range_can_get_ref_const_c<T>;
         constexpr bool can_call_with_copied_value =
             std::is_invocable_v<predicate_t, value_type_for<T>> &&
-            (detail::range_impls_get_v<T> ||
-             detail::range_can_get_ref_const_v<T>);
+            (detail::range_impls_get_c<T> ||
+             detail::range_can_get_ref_const_c<T>);
         static_assert(
             can_call_with_get_ref_const || can_call_with_copied_value,
             "Given keep_if predicate and given range do not match up: "
@@ -48,12 +48,12 @@ struct keep_if_fn_t
             "the range. This may also be caused by a lambda being "
             "marked \"mutable\".");
         constexpr bool const_ref_call_returns_bool =
-            (detail::range_can_get_ref_const_v<T> &&
+            (detail::range_can_get_ref_const_c<T> &&
              returns_boolean<predicate_t, const value_type_for<T>&>::value);
         // TODO: check copied value is convertible?
         constexpr bool copied_value_call_returns_bool =
-            ((detail::range_impls_get_v<T> ||
-              detail::range_can_get_ref_const_v<T>) &&
+            ((detail::range_impls_get_c<T> ||
+              detail::range_can_get_ref_const_c<T>) &&
              returns_boolean<predicate_t, value_type_for<T>>::value);
         static_assert(const_ref_call_returns_bool ||
                           copied_value_call_returns_bool,
@@ -106,8 +106,8 @@ struct range_definition<detail::keep_if_view_t<input_range_t, predicate_t>>
           // finite if the range has size or if it is not marked infinite. never
           // propagate size() function because we cant know it until we traverse
           // the view
-          !(detail::range_can_size_v<detail::remove_cvref_t<input_range_t>> ||
-            !detail::range_marked_finite_v<
+          !(detail::range_can_size_c<detail::remove_cvref_t<input_range_t>> ||
+            !detail::range_marked_finite_c<
                 detail::remove_cvref_t<input_range_t>>)>
 // lose boundscheck optimization marker
 {
@@ -123,11 +123,11 @@ struct range_definition<detail::keep_if_view_t<input_range_t, predicate_t>>
     using cursor_t = cursor_type_for<range_t>;
 
     static constexpr bool is_ref_wrapper =
-        !detail::range_impls_get_v<range_t> &&
+        !detail::range_impls_get_c<range_t> &&
         std::is_lvalue_reference_v<input_range_t>;
 
-    static_assert(detail::range_can_get_ref_const_v<range_t> ||
-                      detail::range_impls_get_v<range_t>,
+    static_assert(detail::range_can_get_ref_const_c<range_t> ||
+                      detail::range_impls_get_c<range_t>,
                   "Cannot keep_if a range which does not provide const "
                   "get_ref() or get().");
 
@@ -146,8 +146,9 @@ struct range_definition<detail::keep_if_view_t<input_range_t, predicate_t>>
 
     // even if parent is random access range, convert to bidirectional range
     // by defining increment() and decrement() in range definition
-    __ok_enable_if_static(range_t, detail::range_can_increment_v<T>, void)
-        increment(const keep_if_t& i, cursor_t& c) OKAYLIB_NOEXCEPT
+    constexpr static void increment(const keep_if_t& i,
+                                    cursor_t& c) OKAYLIB_NOEXCEPT
+        requires detail::range_can_increment_c<range_t>
     {
         const auto& parent =
             i.template get_view_reference<keep_if_t, range_t>();
@@ -157,8 +158,9 @@ struct range_definition<detail::keep_if_view_t<input_range_t, predicate_t>>
                  !i.filter_predicate()(ok::iter_get_temporary_ref(parent, c)));
     }
 
-    __ok_enable_if_static(range_t, detail::range_can_decrement_v<T>, void)
-        decrement(const keep_if_t& i, cursor_t& c) OKAYLIB_NOEXCEPT
+    constexpr static void decrement(const keep_if_t& i,
+                                    cursor_t& c) OKAYLIB_NOEXCEPT
+        requires detail::range_can_decrement_c<range_t>
     {
         const auto& parent =
             i.template get_view_reference<keep_if_t, range_t>();
@@ -173,7 +175,7 @@ constexpr detail::range_adaptor_t<detail::keep_if_fn_t> keep_if;
 
 } // namespace ok
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
 template <typename range_t, typename callable_t>
 struct fmt::formatter<ok::detail::keep_if_view_t<range_t, callable_t>>
 {

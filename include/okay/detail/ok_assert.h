@@ -3,8 +3,9 @@
 
 #include "okay/detail/abort.h"
 #include "okay/version.h"
-#include <cassert>
-#include <cstdio>
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 #ifndef __ok_assert
 
@@ -36,7 +37,7 @@
     }
 #endif
 
-/// an assert which calls std::abort() in all modes including testing
+/// an assert which calls ::abort() in all modes including testing
 #define __ok_untestable_assert(expr, msg)                                  \
     {                                                                      \
         if (!(expr)) {                                                     \
@@ -44,7 +45,7 @@
                 stderr,                                                    \
                 "Untestable assert \"%s\" triggered at %s:%d in %s: %s\n", \
                 #expr, __FILE__, __LINE__, __FUNCTION__, msg);             \
-            std::abort();                                                  \
+            ::abort();                                                     \
         }                                                                  \
     }
 
@@ -59,7 +60,7 @@
                 " implementor assert %s triggered at %s:%d in function %s, " \
                 "file an issue at https://github.com/the-argus/okaylib\n",   \
                 #expr, __FILE__, __LINE__, __FUNCTION__);                    \
-            std::abort();                                                    \
+            ::abort();                                                       \
         }                                                                    \
     }
 

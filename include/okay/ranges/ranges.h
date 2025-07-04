@@ -2,7 +2,7 @@
 #define __OKAYLIB_RANGES_RANGES_H__
 
 #include "okay/detail/addressof.h"
-#include "okay/detail/construct_at.h"
+#include "okay/detail/memory.h"
 #include "okay/detail/template_util/c_array_length.h"
 #include "okay/detail/template_util/c_array_value_type.h"
 #include "okay/detail/template_util/first_type_in_pack.h"
@@ -172,15 +172,9 @@ template <typename T>
 concept arraylike_range_c =
     requires { requires range_definition_inner_t<T>::is_arraylike; };
 
-template <typename T, typename = void>
-struct has_value_type : public std::false_type
-{};
-
 template <typename T>
-struct has_value_type<T, std::void_t<typename T::value_type>>
-    : public std::true_type
-{
-    using type = typename T::value_type;
+concept has_value_type_c = requires {
+    requires !is_void_c<typename T::value_type>;
 };
 
 template <typename T, typename = void>
@@ -190,7 +184,7 @@ struct range_is_ref_wrapper : std::false_type
 template <typename T>
 concept ref_wrapper_range_c = requires {
     requires range_definition_inner_t<T>::is_ref_wrapper;
-    requires has_value_type<range_definition_inner_t<T>>::value;
+    requires has_value_type_c<range_definition_inner_t<T>>;
 };
 
 template <typename T>
@@ -302,131 +296,18 @@ concept range_marked_deleted_c =
 template <typename T>
 concept range_has_definition_c = !range_marked_deleted_c<T>;
 
-/// range_impls_get_c except it doesn't check that the return type is the value
-/// type
-template <typename range_t>
-concept range_impls_get_unchecked_rettype_c = requires(
-    const range_t& range, const cursor_type_unchecked_for_t<range_t>& cursor) {
-    range_definition_inner_t<range_t>::get(range, cursor);
-};
-
-template <typename getting_range_t> struct range_get_return_type_meta_t
-{
-    using type = void;
-};
-
-template <typename getting_range_t>
-    requires range_impls_get_unchecked_rettype_c<getting_range_t>
-struct range_get_return_type_meta_t<getting_range_t>
-{
-    using type = decltype(range_definition_inner_t<getting_range_t>::get(
-        std::declval<const getting_range_t&>(),
-        std::declval<const cursor_type_unchecked_for_t<getting_range_t>&>()));
-};
-
-template <typename getting_range_t>
-using range_get_return_type_t =
-    typename range_get_return_type_meta_t<getting_range_t>::type;
-
-template <typename range_t>
-concept range_impls_get_ref_unchecked_rettype_c = requires(
-    range_t& range, const cursor_type_unchecked_for_t<range_t>& cursor) {
-    range_definition_inner_t<range_t>::get_ref(range, cursor);
-};
-
-template <typename getting_range_t> struct range_get_ref_return_type_meta_t
-{
-    using type = void;
-    using deduced_nonrefwrap_value_type = void;
-};
-
-template <typename getting_range_t>
-    requires range_impls_get_ref_unchecked_rettype_c<getting_range_t>
-struct range_get_ref_return_type_meta_t<getting_range_t>
-{
-    using type = decltype(range_definition_inner_t<getting_range_t>::get_ref(
-        std::declval<getting_range_t&>(),
-        std::declval<const cursor_type_unchecked_for_t<getting_range_t>&>()));
-    using deduced_nonrefwrap_value_type = remove_cvref_t<type>;
-};
-
-template <typename getting_range_t>
-using range_get_ref_return_type_t =
-    typename range_get_ref_return_type_meta_t<getting_range_t>::type;
-
-template <range_impls_get_ref_unchecked_rettype_c getting_range_t>
-using range_get_ref_deduced_nonrefwrap_value_type_t =
-    typename range_get_ref_return_type_meta_t<
-        getting_range_t>::deduced_nonrefwrap_value_type;
-
-template <typename range_t>
-concept range_impls_get_ref_const_unchecked_rettype_c = requires(
-    const range_t& range, const cursor_type_unchecked_for_t<range_t>& cursor) {
-    range_definition_inner_t<range_t>::get_ref(range, cursor);
-};
-
-template <typename getting_range_t>
-struct range_get_ref_const_return_type_meta_t
-{
-    using type = void;
-};
-
-template <typename getting_range_t>
-    requires range_impls_get_ref_const_unchecked_rettype_c<getting_range_t>
-struct range_get_ref_const_return_type_meta_t<getting_range_t>
-{
-    using type = decltype(range_definition_inner_t<getting_range_t>::get_ref(
-        std::declval<const getting_range_t&>(),
-        std::declval<const cursor_type_unchecked_for_t<getting_range_t>&>()));
-};
-
-template <typename getting_range_t>
-using range_get_ref_const_return_type_t =
-    typename range_get_ref_const_return_type_meta_t<getting_range_t>::type;
-
-template <range_impls_get_ref_const_unchecked_rettype_c getting_range_t>
-using range_get_ref_const_deduced_nonrefwrap_value_type_t =
-    remove_cvref_t<range_get_ref_const_return_type_t<getting_range_t>>;
-
-/// Either range_t::value_type or, if that's not defined, the return type of
-/// range_t::get()
-template <typename range_t> struct range_deduced_value_type
-{
-  private:
-    static constexpr bool impls_get =
-        range_impls_get_unchecked_rettype_c<range_t>;
-    static constexpr bool impls_get_ref =
-        range_impls_get_ref_unchecked_rettype_c<range_t>;
-    static constexpr bool impls_get_ref_const =
-        range_impls_get_ref_const_unchecked_rettype_c<range_t>;
-
-    using deduced_from_get_ref =
-        range_get_ref_deduced_nonrefwrap_value_type_t<range_t>;
-    using deduced_from_get_ref_const =
-        range_get_ref_const_deduced_nonrefwrap_value_type_t<range_t>;
-
-  public:
-    using type = std::conditional_t<
-        impls_get | impls_get_ref | impls_get_ref_const,
-        std::conditional_t<
-            impls_get_ref_const && !ref_wrapper_range_c<range_t>,
-            std::conditional_t<impls_get_ref, deduced_from_get_ref,
-                               deduced_from_get_ref_const>,
-            range_get_return_type_t<range_t>>,
-        void>;
-};
-
-template <typename range_t>
-    requires(
-        requires { typename range_definition_inner_t<range_t>::value_type; })
-struct range_deduced_value_type<range_t>
-{
-    using type = typename range_definition_inner_t<range_t>::value_type;
-};
-
 template <typename T>
-using range_deduced_value_type_t = typename range_deduced_value_type<T>::type;
+concept validly_defined_range_c = requires {
+    requires range_has_definition_c<T>;
+    requires has_value_type_c<range_definition_inner_t<T>>;
+    requires range_can_begin_c<T>;
+};
+}
 
+template <detail::validly_defined_range_c T>
+using value_type_for = typename detail::range_definition_inner_t<T>::value_type;
+
+namespace detail {
 template <typename T>
 concept range_impls_get_c =
     range_impls_get_unchecked_rettype_c<T> &&
@@ -939,15 +820,16 @@ struct iter_set_fn_t
                 } else {
                     // duplicated code with outer else case here
                     ref.~value_type_for<range_t>();
-                    ok::construct_at(
+                    ok::stdc::construct_at(
                         ok::addressof(ref),
                         std::forward<construction_args_t>(args)...);
                 }
             } else {
                 ref.~value_type_for<range_t>();
 
-                ok::construct_at(ok::addressof(ref),
-                                 std::forward<construction_args_t>(args)...);
+                ok::stdc::construct_at(
+                    ok::addressof(ref),
+                    std::forward<construction_args_t>(args)...);
             }
         } else {
             range_definition_inner_t<range_t>::set(

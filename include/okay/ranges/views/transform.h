@@ -5,7 +5,7 @@
 #include "okay/ranges/adaptors.h"
 #include "okay/ranges/ranges.h"
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
 #include <fmt/core.h>
 #endif
 
@@ -36,11 +36,11 @@ struct transform_fn_t
                       "Cannot transform given type- it is not a range.");
         constexpr bool can_call_with_get_ref_const =
             std::is_invocable_v<callable_t, const value_type_for<T>&> &&
-            detail::range_can_get_ref_const_v<range_t>;
+            detail::range_can_get_ref_const_c<range_t>;
         constexpr bool can_call_with_copyout =
             std::is_invocable_v<callable_t, value_type_for<T>> &&
-            (detail::range_impls_get_v<T> ||
-             detail::range_can_get_ref_const_v<T>);
+            (detail::range_impls_get_c<T> ||
+             detail::range_can_get_ref_const_c<T>);
         static_assert(
             can_call_with_get_ref_const || can_call_with_copyout,
             "Given transformation function and given range do not match up: "
@@ -48,12 +48,12 @@ struct transform_fn_t
             "nor `func(ok::iter_copyout(const range))`. This may also be "
             "caused by a lambda being marked \"mutable\".");
         constexpr bool const_ref_call_doesnt_return_void =
-            (detail::range_can_get_ref_const_v<T> &&
+            (detail::range_can_get_ref_const_c<T> &&
              returns_transformed_type<callable_t,
                                       const value_type_for<T>&>::value);
         constexpr bool copied_value_call_doesnt_return_void =
-            ((detail::range_impls_get_v<T> ||
-              detail::range_can_get_ref_const_v<T>) &&
+            ((detail::range_impls_get_c<T> ||
+              detail::range_can_get_ref_const_c<T>) &&
              returns_transformed_type<callable_t, value_type_for<T>>::value);
         static_assert(const_ref_call_doesnt_return_void ||
                           copied_value_call_doesnt_return_void,
@@ -115,20 +115,20 @@ struct range_definition<detail::transformed_view_t<input_range_t, callable_t>>
     using transformed_t = detail::transformed_view_t<input_range_t, callable_t>;
     using cursor_t = cursor_type_for<range_t>;
 
-    static_assert(detail::is_producing_range_v<range_t>,
+    static_assert(detail::producing_range_c<range_t>,
                   "Cannot transform something which is not an input range.");
 
     template <typename T>
     static constexpr decltype(auto)
     get_and_transform(T& t, const cursor_t& cursor) OKAYLIB_NOEXCEPT
     {
-        using inner_def = detail::range_definition_inner<range_t>;
-        if constexpr (detail::range_can_get_ref_v<range_t> ||
-                      detail::range_can_get_ref_const_v<range_t>) {
+        using inner_def = detail::range_definition_inner_t<range_t>;
+        if constexpr (detail::range_can_get_ref_c<range_t> ||
+                      detail::range_can_get_ref_const_c<range_t>) {
             return t.transformer_callable()(inner_def::get_ref(
                 t.template get_view_reference<T, range_t>(), cursor));
         } else {
-            static_assert(detail::range_impls_get_v<range_t>);
+            static_assert(detail::range_impls_get_c<range_t>);
             return t.transformer_callable()(inner_def::get(
                 t.template get_view_reference<T, range_t>(), cursor));
         }
@@ -136,7 +136,7 @@ struct range_definition<detail::transformed_view_t<input_range_t, callable_t>>
     using transforming_callable_rettype = decltype(get_and_transform(
         std::declval<transformed_t&>(), std::declval<const cursor_t&>()));
 
-    static constexpr bool is_arraylike = detail::range_is_arraylike_v<range_t>;
+    static constexpr bool is_arraylike = detail::arraylike_range_c<range_t>;
 
     template <typename T = transforming_callable_rettype>
     constexpr static auto get(const transformed_t& i,
@@ -179,7 +179,7 @@ constexpr detail::range_adaptor_t<detail::transform_fn_t> transform;
 
 } // namespace ok
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
 template <typename range_t, typename callable_t>
 struct fmt::formatter<ok::detail::transformed_view_t<range_t, callable_t>>
 {

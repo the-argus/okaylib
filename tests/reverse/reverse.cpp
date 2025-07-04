@@ -19,9 +19,9 @@ TEST_SUITE("reverse")
         {
             int forward[3] = {1, 2, 3};
 
-            static_assert(detail::is_random_access_range_v<decltype(forward)>);
+            static_assert(detail::random_access_range_c<decltype(forward)>);
             static_assert(
-                detail::is_random_access_range_v<decltype(forward | reverse)>);
+                detail::random_access_range_c<decltype(forward | reverse)>);
             static_assert(detail::range_is_arraylike_v<decltype(forward)>);
             static_assert(
                 detail::range_is_arraylike_v<decltype(forward | reverse)>);
@@ -92,7 +92,7 @@ TEST_SUITE("reverse")
             auto count_backwards_from_ten =
                 indices | take_at_most(10) | reverse;
 
-            static_assert(detail::is_random_access_range_v<
+            static_assert(detail::random_access_range_c<
                           decltype(count_backwards_from_ten)>);
 
             ok_foreach(ok_pair(item, index),

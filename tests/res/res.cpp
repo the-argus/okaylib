@@ -99,7 +99,7 @@ TEST_SUITE("res")
 
     TEST_CASE("Functionality")
     {
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
         SUBCASE("formattable")
         {
             using result_t = res<int, StatusCodeB>;

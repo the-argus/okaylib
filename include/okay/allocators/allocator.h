@@ -14,6 +14,7 @@
 #include "okay/detail/template_util/c_array_value_type.h"
 #include "okay/detail/traits/is_derived_from.h"
 #include "okay/math/ordering.h"
+#include "okay/tuple.h"
 // for reinterpret_as_bytes
 #include "okay/stdmem.h"
 
@@ -213,13 +214,13 @@ struct reallocate_extended_request_t
     /// 0: bytes_offset_back. how many bytes will be added/removed from back
     /// 1: bytes_offset_front. how many bytes will be added/removed from front
     /// 2: new_size. the new total size of the allocation
-    [[nodiscard]] constexpr std::tuple<size_t, size_t, size_t>
+    [[nodiscard]] constexpr ok::tuple<size_t, size_t, size_t>
     calculate_new_preferred_size() const OKAYLIB_NOEXCEPT
     {
-        std::tuple<size_t, size_t, size_t> out;
-        auto& amount_changed_back = std::get<0>(out);
-        auto& amount_changed_front = std::get<1>(out);
-        auto& new_size = std::get<2>(out);
+        ok::tuple<size_t, size_t, size_t> out;
+        auto& amount_changed_back = ok::get<0>(out);
+        auto& amount_changed_front = ok::get<1>(out);
+        auto& new_size = ok::get<2>(out);
         amount_changed_back =
             ok::max(required_bytes_back, preferred_bytes_back);
         amount_changed_front =
@@ -615,7 +616,7 @@ ok::allocator_t::make(args_t&&... args) OKAYLIB_NOEXCEPT
 }
 } // namespace ok
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
 template <> struct fmt::formatter<ok::alloc::error>
 {
     using error_t = ok::alloc::error;

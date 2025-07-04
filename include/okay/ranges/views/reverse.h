@@ -5,7 +5,7 @@
 #include "okay/ranges/adaptors.h"
 #include "okay/ranges/ranges.h"
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
 #include <fmt/core.h>
 #endif
 
@@ -20,8 +20,8 @@ struct reverse_fn_t
     {
         static_assert(range_c<range_t>,
                       "Cannot reverse given type- it is not a range.");
-        static_assert(is_random_access_range_v<range_t> &&
-                          range_can_size_v<range_t>,
+        static_assert(random_access_range_c<range_t> &&
+                          range_can_size_c<range_t>,
                       "Cannot reverse given type- it is either not random "
                       "access, or its size is not finite or cannot be known in "
                       "constant time.");
@@ -120,9 +120,8 @@ class ok::orderable_definition<detail::reversed_cursor_t<input_parent_range_t>>
 };
 
 template <typename input_range_t>
-struct range_definition<detail::reversed_view_t<input_range_t>,
-                        std::enable_if_t<!detail::range_is_arraylike_v<
-                            detail::remove_cvref_t<input_range_t>>>>
+    requires(!detail::arraylike_range_c<detail::remove_cvref_t<input_range_t>>)
+struct range_definition<detail::reversed_view_t<input_range_t>>
     : public detail::propagate_get_set_t<
           detail::reversed_view_t<input_range_t>,
           detail::remove_cvref_t<input_range_t>,
@@ -139,8 +138,8 @@ struct range_definition<detail::reversed_view_t<input_range_t>,
     using cursor_t = detail::reversed_cursor_t<input_range_t>;
 
     static_assert(
-        detail::is_random_access_range_v<range_t> &&
-            detail::range_can_size_v<range_t>,
+        detail::random_access_range_c<range_t> &&
+            detail::range_can_size_c<range_t>,
         "Cannot reverse a range which is not both random access and sized.");
 
     constexpr static cursor_t begin(const reverse_t& i) OKAYLIB_NOEXCEPT
@@ -152,20 +151,20 @@ struct range_definition<detail::reversed_view_t<input_range_t>,
         return cursor_t(parent_cursor + (size == 0 ? 0 : size - 1));
     }
 
-    __ok_enable_if_static(range_t, detail::range_can_is_inbounds_v<T>, bool)
-        is_inbounds(const reverse_t& i, const cursor_t& c)
+    constexpr static bool is_inbounds(const reverse_t& i, const cursor_t& c)
+        requires detail::range_can_is_inbounds_c<range_t>
     {
-        return ok::is_inbounds(i.template get_view_reference<reverse_t, T>(),
-                               cursor_type_for<T>(c));
+        return ok::is_inbounds(
+            i.template get_view_reference<reverse_t, range_t>(),
+            cursor_type_for<range_t>(c));
     }
 };
 
 // in the case that something is arraylike, just subtract size when doing gets
 // and sets
 template <typename input_range_t>
-struct range_definition<detail::reversed_view_t<input_range_t>,
-                        std::enable_if_t<detail::range_is_arraylike_v<
-                            detail::remove_cvref_t<input_range_t>>>>
+    requires detail::arraylike_range_c<detail::remove_cvref_t<input_range_t>>
+struct range_definition<detail::reversed_view_t<input_range_t>>
     : public detail::propagate_sizedness_t<
           detail::reversed_view_t<input_range_t>,
           detail::remove_cvref_t<input_range_t>>
@@ -176,9 +175,9 @@ struct range_definition<detail::reversed_view_t<input_range_t>,
     static constexpr bool is_view = true;
     static constexpr bool is_arraylike = true;
 
-    __ok_enable_if_static(range_t, detail::range_impls_get_v<T>,
-                          value_type_for<range_t>)
-        get(const reversed_t& range, size_t cursor) OKAYLIB_NOEXCEPT
+    constexpr static value_type_for<range_t> get(const reversed_t& range,
+                                                 size_t cursor) OKAYLIB_NOEXCEPT
+        requires detail::range_impls_get_c<range_t>
     {
         const auto& parent_ref =
             range.template get_view_reference<reversed_t, range_t>();
@@ -189,9 +188,9 @@ struct range_definition<detail::reversed_view_t<input_range_t>,
         return ok::iter_copyout(parent_ref, size - (cursor + 1));
     }
 
-    __ok_enable_if_static(range_t, detail::range_can_get_ref_v<T>,
-                          value_type_for<range_t>&)
-        get_ref(reversed_t& range, size_t cursor) OKAYLIB_NOEXCEPT
+    constexpr static value_type_for<range_t>&
+    get_ref(reversed_t& range, size_t cursor) OKAYLIB_NOEXCEPT
+        requires detail::range_can_get_ref_c<range_t>
     {
         auto& parent_ref =
             range.template get_view_reference<reversed_t, range_t>();
@@ -202,9 +201,9 @@ struct range_definition<detail::reversed_view_t<input_range_t>,
         return ok::iter_get_ref(parent_ref, size - (cursor + 1));
     }
 
-    __ok_enable_if_static(range_t, detail::range_can_get_ref_const_v<T>,
-                          const value_type_for<range_t>&)
-        get_ref(const reversed_t& range, size_t cursor) OKAYLIB_NOEXCEPT
+    constexpr static const value_type_for<range_t>&
+    get_ref(const reversed_t& range, size_t cursor) OKAYLIB_NOEXCEPT
+        requires detail::range_can_get_ref_const_c<range_t>
     {
         const auto& parent_ref =
             range.template get_view_reference<reversed_t, range_t>();
@@ -216,10 +215,10 @@ struct range_definition<detail::reversed_view_t<input_range_t>,
     }
 
     template <typename... construction_args_t>
-    static constexpr std::enable_if_t<
-        detail::range_impls_construction_set_v<range_t, construction_args_t...>>
-    set(const reversed_t& range, size_t cursor,
-        construction_args_t&&... args) OKAYLIB_NOEXCEPT
+        requires detail::range_impls_construction_set_c<range_t,
+                                                        construction_args_t...>
+    static constexpr void set(const reversed_t& range, size_t cursor,
+                              construction_args_t&&... args) OKAYLIB_NOEXCEPT
     {
         const auto& parent_ref =
             range.template get_view_reference<reversed_t, range_t>();
@@ -236,7 +235,7 @@ constexpr detail::range_adaptor_closure_t<detail::reverse_fn_t> reverse;
 
 } // namespace ok
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
 template <typename range_t>
 struct fmt::formatter<ok::detail::reversed_view_t<range_t>>
 {

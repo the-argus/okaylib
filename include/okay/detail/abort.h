@@ -1,7 +1,12 @@
 #ifndef __OK_ABORT_MACRO_H__
 #define __OK_ABORT_MACRO_H__
 
-#ifdef OKAYLIB_TESTING
+// NOTE: testing doesnt really work without COMPAT_STRATEGY_STD, because theres
+// no <exception>
+#if defined(OKAYLIB_TESTING)
+// #if !defined(OKAYLIB_COMPAT_STRATEGY_STD)
+// #error "Attempt to compile in testing mode, but the compat strategy does not allow inclusion of <exception>"
+// #endif
 #include <cstdio>
 #include <exception>
 namespace detail_testing {
@@ -48,7 +53,7 @@ class _abort_exception : std::exception
 #include <cstdlib>
 #define __ok_abort(msg) \
     {                   \
-        std::abort();   \
+        ::abort();   \
     }
 #endif
 

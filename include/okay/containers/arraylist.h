@@ -6,7 +6,7 @@
 #include "okay/ranges/ranges.h"
 #include "okay/status.h"
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
 #include <fmt/core.h>
 #endif
 
@@ -50,7 +50,7 @@ class arraylist_t
     friend class arraylist::detail::spots_preallocated_t<T>;
     friend class arraylist::detail::copy_items_from_range_t;
     friend class arraylist::detail::empty_t<T>;
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
     friend struct fmt::formatter<arraylist_t>;
 #endif
 
@@ -888,7 +888,7 @@ struct range_definition<ok::arraylist_t<T, backing_allocator_t>>
 
 } // namespace ok
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
 template <typename T, typename backing_allocator_t>
 struct fmt::formatter<ok::arraylist_t<T, backing_allocator_t>>
 {

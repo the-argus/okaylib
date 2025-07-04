@@ -6,8 +6,9 @@
 #include "okay/math/math.h"
 #include "okay/ranges/ranges.h"
 #include "okay/status.h"
+#include "okay/tuple.h"
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
 #include <fmt/core.h>
 #endif
 
@@ -557,13 +558,13 @@ template <typename T, typename backing_allocator_t> class segmented_list_t
         return get_num_spots_for_blocks(num_blocks, m.initial_size_exponent);
     }
 
-    [[nodiscard]] static constexpr std::tuple<size_t, size_t>
+    [[nodiscard]] static constexpr ok::tuple<size_t, size_t>
     get_block_index_and_offset_impl(const size_t idx,
                                     const size_t initial_size_exponent) noexcept
     {
         const size_t blocks_needed =
             num_blocks_needed_for_spots_impl(idx + 1, initial_size_exponent);
-        return std::make_tuple(blocks_needed,
+        return ok::make_tuple(blocks_needed,
                                get_num_spots_for_blocks_impl(
                                    blocks_needed, initial_size_exponent) -
                                    idx);
@@ -572,11 +573,11 @@ template <typename T, typename backing_allocator_t> class segmented_list_t
     /// Returns a tuple of the index of the block this item belongs to in the
     /// blocklist, and the sub-index of that item within the block (ie. its
     /// offset within the block)
-    [[nodiscard]] constexpr std::tuple<size_t, size_t>
+    [[nodiscard]] constexpr ok::tuple<size_t, size_t>
     get_block_index_and_offset(const size_t idx) const noexcept
     {
         const size_t blocks_needed = this->num_blocks_needed_for_spots(idx + 1);
-        return std::make_tuple(
+        return ok::make_tuple(
             blocks_needed, this->get_num_spots_for_blocks(blocks_needed) - idx);
     }
 
@@ -798,7 +799,7 @@ struct range_definition<ok::segmented_list_t<T, backing_allocator_t>>
 
 } // namespace ok
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
 template <typename T, typename backing_allocator_t>
 struct fmt::formatter<ok::segmented_list_t<T, backing_allocator_t>>
 {

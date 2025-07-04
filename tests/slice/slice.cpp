@@ -446,7 +446,7 @@ TEST_SUITE("slice")
         }
     }
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
     TEST_CASE("formattable")
     {
         SUBCASE("basic slice is formattable")

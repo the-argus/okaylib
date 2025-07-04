@@ -9,7 +9,7 @@
 #include <cstddef>
 #include <cstring>
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
 #include <fmt/core.h>
 #endif
 
@@ -144,7 +144,7 @@ inline constexpr auto undefined = detail::undefined_t<T, num_items>{};
 
 } // namespace ok
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
 template <typename T, size_t num_items>
 struct fmt::formatter<ok::array_t<T, num_items>>
 {

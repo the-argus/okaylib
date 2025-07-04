@@ -1,13 +1,11 @@
 #ifndef __OKAYLIB_DETAIL_OK_ADDRESSOF_H__
 #define __OKAYLIB_DETAIL_OK_ADDRESSOF_H__
 
-#include <memory>
-
 namespace ok {
-template <typename... args_t>
-constexpr decltype(auto) addressof(args_t&&... args)
+template <class T> constexpr T* addressof(T& arg) noexcept
 {
-    return std::addressof(std::forward<args_t>(args)...);
+    return reinterpret_cast<T*>(
+        &const_cast<char&>(reinterpret_cast<char const volatile&>(arg)));
 }
 } // namespace ok
 

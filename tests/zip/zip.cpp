@@ -1,4 +1,3 @@
-#include "okay/stdmem.h"
 #include "test_header.h"
 // test header must be first
 #include "okay/macros/foreach.h"
@@ -7,11 +6,16 @@
 #include "okay/ranges/views/keep_if.h"
 #include "okay/ranges/views/take_at_most.h"
 #include "okay/ranges/views/zip.h"
+#include "okay/stdmem.h"
 #include "testing_types.h"
+#include <array>
 
 using namespace ok;
-
-static_assert(detail::range_marked_infinite_v<decltype(zip(indices, indices))>);
+// zipped view should inherit random accessibility from zipped ranges
+static_assert(detail::random_access_range_c<example_range_cstyle&>);
+static_assert(detail::random_access_range_c<ok::detail::zipped_view_t<
+                  example_range_cstyle&, example_range_cstyle&>>);
+static_assert(detail::range_marked_infinite_c<decltype(zip(indices, indices))>);
 
 TEST_SUITE("zip")
 {
@@ -25,6 +29,8 @@ TEST_SUITE("zip")
         static_assert(
             std::is_same_v<cursor_type_for<decltype(zip(a1, a2, a3))>, size_t>);
 
+        auto [a, b, c] = ok::make_tuple(0, 1, 2);
+
         ok_foreach(ok_decompose(i1, i2, i3), zip(a1, a2, a3))
         {
             REQUIRE(i1 == i2);
@@ -37,8 +43,8 @@ TEST_SUITE("zip")
         int a1[] = {1};
         int a2[] = {1, 2};
 
-        static_assert(detail::range_is_arraylike_v<decltype(a1)>);
-        static_assert(detail::range_is_arraylike_v<decltype(zip(a1, a2))>);
+        static_assert(detail::arraylike_range_c<decltype(a1)>);
+        static_assert(detail::arraylike_range_c<decltype(zip(a1, a2))>);
 
         REQUIRE(ok::size(zip(a1, a2)) == ok::size(a1));
 
@@ -47,10 +53,10 @@ TEST_SUITE("zip")
         example_range_cstyle example;
 
         // random-access-ness is propagated
-        static_assert(detail::is_random_access_range_v<example_range_cstyle>);
-        static_assert(detail::is_random_access_range_v<decltype(a2)>);
+        static_assert(detail::random_access_range_c<example_range_cstyle>);
+        static_assert(detail::random_access_range_c<decltype(a2)>);
         static_assert(
-            detail::is_random_access_range_v<decltype(zip(a2, example))>);
+            detail::random_access_range_c<decltype(zip(a2, example))>);
 
         REQUIRE(ok::size(zip(a2, example)) == ok::size(a2));
 
@@ -71,15 +77,15 @@ TEST_SUITE("zip")
         memfill(slice(arr), 0);
 
         static_assert(
-            detail::is_bidirectional_range_v<example_range_bidirectional>);
-        static_assert(detail::is_bidirectional_range_v<decltype(arr)>);
+            detail::bidirectional_range_c<example_range_bidirectional>);
+        static_assert(detail::bidirectional_range_c<decltype(arr)>);
         static_assert(
-            !detail::is_random_access_range_v<example_range_bidirectional>);
+            !detail::random_access_range_c<example_range_bidirectional>);
 
         using Z = decltype(zip(arr, bidir));
 
-        static_assert(detail::is_bidirectional_range_v<Z>);
-        static_assert(!detail::is_random_access_range_v<Z>);
+        static_assert(detail::bidirectional_range_c<Z>);
+        static_assert(!detail::random_access_range_c<Z>);
     }
 
     TEST_CASE("zip with zero sized range makes empty range")
@@ -128,7 +134,7 @@ TEST_SUITE("zip")
 
         ok_foreach(ok_pair(tuple, index), zip(a1, a2) | enumerate)
         {
-            REQUIRE(std::get<0>(tuple) % 3 == index);
+            REQUIRE(ok::get<0>(tuple) % 3 == index);
         }
     }
 

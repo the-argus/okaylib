@@ -5,8 +5,7 @@
 #include "okay/detail/no_unique_addr.h"
 #include "okay/detail/noexcept.h"
 #include "okay/ranges/ranges.h"
-#include <tuple>
-#include <utility>
+#include "okay/tuple.h"
 
 namespace ok::detail {
 
@@ -15,7 +14,7 @@ template <typename callable_t> struct range_adaptor_closure_t;
 template <typename callable_t, typename... args_t> struct partial_called_t
 {
     callable_t& callable;
-    std::tuple<args_t...> args;
+    ok::tuple<args_t...> args;
 
     // for CTAD- construct tuple here instead of passing it into brace
     // initializer
@@ -30,7 +29,7 @@ template <typename callable_t, typename... args_t> struct partial_called_t
         auto forwarder = [this, &range](const args_t&... args) {
             return callable(std::forward<range_t>(range), args...);
         };
-        return std::apply(forwarder, args);
+        return ok::apply(forwarder, args);
     }
 
     template <typename range_t> constexpr auto operator()(range_t&& range) &&
@@ -38,7 +37,7 @@ template <typename callable_t, typename... args_t> struct partial_called_t
         auto forwarder = [this, &range](args_t&... args) {
             return callable(std::forward<range_t>(range), std::move(args)...);
         };
-        return std::apply(forwarder, args);
+        return ok::apply(forwarder, args);
     }
 
     template <typename range_t>
@@ -60,7 +59,7 @@ template <typename callable_t> struct range_adaptor_t
     template <typename... args_t>
     constexpr auto operator()(args_t&&... args) const
     {
-        if constexpr (std::is_invocable_v<callable_t, args_t...>) {
+        if constexpr (is_std_invocable_c<callable_t, args_t...>) {
             // adaptor(range, args...)
             return ok::invoke(callable, std::forward<args_t>(args)...);
         } else {
@@ -82,23 +81,18 @@ struct range_adaptor_closure_t : range_adaptor_t<callable_t>
     range_adaptor_closure_t() = default;
 
     // support for C(R)
-    template <typename range_t>
-    constexpr auto
-    operator()(range_t&& range) const OKAYLIB_NOEXCEPT->std::enable_if_t<
-        range_c<range_t>,
-        decltype(this->callable(std::forward<range_t>(range)))>
+    template <range_c range_t>
+    constexpr decltype(auto) operator()(range_t&& range) const OKAYLIB_NOEXCEPT
     {
         return this->callable(std::forward<range_t>(range));
     }
 
     // support for R | C to evaluate as C(R)
-    template <typename range_t>
+    template <range_c range_t>
+        requires is_std_invocable_c<callable_t, range_t>
     friend constexpr decltype(auto)
     operator|(range_t&& range,
-              std::enable_if_t<range_c<range_t> &&
-                                   std::is_invocable_v<callable_t, range_t>,
-                               const range_adaptor_closure_t&>
-                  closure) OKAYLIB_NOEXCEPT
+              const range_adaptor_closure_t& closure) OKAYLIB_NOEXCEPT
     {
         return closure.callable(std::forward<range_t>(range));
     }

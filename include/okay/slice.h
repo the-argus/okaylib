@@ -9,9 +9,11 @@
 #include "okay/detail/traits/is_instance.h"
 #include "okay/detail/traits/is_std_container.h"
 #include "okay/math/rounding.h"
-#include <cassert>
+#include <assert.h>
+#include <stdint.h>
+#include <string.h>
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
 #include <fmt/core.h>
 #endif
 
@@ -281,7 +283,7 @@ template <typename viewed_t> class slice
     friend slice<T> ok::raw_slice(T& data, size_t size) OKAYLIB_NOEXCEPT;
     template <typename T> friend slice<T> make_null_slice() OKAYLIB_NOEXCEPT;
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
     friend struct fmt::formatter<slice>;
 #endif
 };
@@ -397,7 +399,7 @@ class const_bit_slice_t
     } m;
 
   public:
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
     friend struct fmt::formatter<const_bit_slice_t>;
 #endif
 
@@ -468,7 +470,7 @@ class bit_slice_t : public const_bit_slice_t
     }
 
   public:
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
     friend struct fmt::formatter<bit_slice_t>;
 #endif
 
@@ -641,7 +643,7 @@ template <typename viewed_t> struct undefined_memory_t
     [[nodiscard]] constexpr slice<viewed_t> zero() const OKAYLIB_NOEXCEPT
         requires(std::is_trivially_constructible_v<viewed_t>)
     {
-        std::memset((void*)m_data, 0, m_elements);
+        ::memset((void*)m_data, 0, m_elements);
         return raw_slice(*m_data, m_elements);
     }
 
@@ -779,7 +781,7 @@ template <> struct range_definition<bit_slice_t>
 
 } // namespace ok
 
-#ifdef OKAYLIB_USE_FMT
+#if defined(OKAYLIB_USE_FMT)
 template <> struct fmt::formatter<ok::bit>
 {
     constexpr auto
