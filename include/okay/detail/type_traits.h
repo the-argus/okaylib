@@ -23,8 +23,7 @@ namespace ok::detail::intrinsic {
 template <typename T> using is_empty = std::is_empty<T>;
 template <typename T> using is_final = std::is_final<T>;
 template <typename T> using is_enum = std::is_enum<T>;
-#define __ok_has_trivial_destructor(type) \
-    std::is_trivially_destructible_v<type>
+#define __ok_has_trivial_destructor(type) std::is_trivially_destructible_v<type>
 } // namespace ok::detail::intrinsic
 
 #elif defined(OKAYLIB_COMPAT_STRATEGY_NO_STD)
@@ -500,6 +499,11 @@ struct is_scalar
                     is_member_pointer<T>{} || is_null_pointer<T>{}>
 {};
 
+template <typename> struct is_const : std::false_type
+{};
+template <typename T> struct is_const<const T> : std::true_type
+{};
+
 template <typename> struct is_reference : public false_type
 {};
 template <typename T> struct is_reference<T&> : public true_type
@@ -562,8 +566,8 @@ struct is_destructible_impl : public is_destructible_overloaded_function_impl
 
 template <typename T,
           bool = (ok::stdc::is_void<T>{} ||
-                 ok::stdc::detail::is_array_unknown_bounds<T>{} ||
-                 ok::stdc::is_function<T>{}),
+                  ok::stdc::detail::is_array_unknown_bounds<T>{} ||
+                  ok::stdc::is_function<T>{}),
           bool = (ok::stdc::is_reference<T>{} || ok::stdc::is_scalar<T>{})>
 struct is_destructible_safe;
 
@@ -608,7 +612,19 @@ template <typename T>
 inline constexpr bool is_trivially_destructible_v =
     is_trivially_destructible<T>{};
 
-template <typename T> inline constexpr bool is_reference_v = is_reference<T>{};
+template <typename T>
+concept is_reference_c = is_reference<T>::value;
+
+template <typename T>
+concept is_const_c = is_reference<T>::value;
+
+template <typename T>
+concept is_const_reference_c =
+    is_reference<T>::value && is_const_c<remove_reference_t<T>>;
+
+template <typename T>
+concept is_nonconst_reference_c =
+    is_reference<T>::value && !is_const_c<remove_reference_t<T>>;
 
 template <typename T> inline constexpr bool is_scalar_v = is_scalar<T>{};
 

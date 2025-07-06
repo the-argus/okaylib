@@ -535,7 +535,7 @@ template <typename payload_t, typename> class opt
 
 // template specialization for lvalue references
 template <typename payload_t>
-class opt<payload_t, std::enable_if_t<std::is_reference_v<payload_t>>>
+class opt<payload_t, std::enable_if_t<stdc::is_reference_c<payload_t>>>
 {
   public:
     using pointer_t = std::remove_reference_t<payload_t>;

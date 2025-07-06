@@ -56,7 +56,7 @@ template <typename viewed_t> slice<viewed_t> make_null_slice() OKAYLIB_NOEXCEPT;
 /// provides no guarantees and that is also true of a slice of the type.
 template <typename viewed_t> class slice
 {
-    static_assert(!std::is_reference_v<viewed_t>,
+    static_assert(!stdc::is_reference_c<viewed_t>,
                   "Cannot create a slice of references.");
 
   private:
@@ -579,7 +579,7 @@ template <typename viewed_t> struct undefined_memory_t
     undefined_memory_t& operator=(undefined_memory_t&&) = default;
     ~undefined_memory_t() = default;
 
-    static_assert(!std::is_reference_v<viewed_t>,
+    static_assert(!stdc::is_reference_c<viewed_t>,
                   "Cannot create an undefined_memory slice of references.");
     static_assert(!is_const_c<viewed_t>,
                   "Useless undefined_memory slice of a const type- what're you "

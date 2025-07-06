@@ -1,11 +1,9 @@
 #ifndef __OKAYLIB_RANGES_RANGES_H__
 #define __OKAYLIB_RANGES_RANGES_H__
 
-#include "okay/detail/addressof.h"
-#include "okay/detail/memory.h"
+#include "okay/construct.h"
 #include "okay/detail/template_util/c_array_length.h"
 #include "okay/detail/template_util/c_array_value_type.h"
-#include "okay/detail/template_util/first_type_in_pack.h"
 #include "okay/detail/template_util/remove_cvref.h"
 #include "okay/detail/traits/is_derived_from.h"
 #include "okay/detail/traits/is_instance.h"
@@ -22,16 +20,56 @@
  * `value_type_for<T>`
  * `cursor_type_for<T>`
  * `range_def_for<T>` (checked access to range_definition<T>)
- * `value_type iter_copyout(const range_t&, const cursor_t&)`
- * `const value_type& iter_get_temporary_ref(const range_t&, const
- * cursor_t&)`
- * `[const] value_type& iter_get_ref([const] range_t&, const cursor_t&)`
- * `void iter_set(range_t&, const cursor_t&, ...)`
  * `begin()`
  * `is_inbounds()`
  */
 
 namespace ok {
+
+enum class range_flags
+{
+    producing,
+    consuming,
+    infinite,
+    finite,
+    sized,
+    arraylike,
+    implements_set,
+    ref_wrapper,
+};
+
+/// more strict flags which, when present in the range definition, are used to
+/// limit what implementations are detected/ignored. For example, if
+/// can_increment and implements_increment are not defined, then the increment()
+/// implementation in the range definition will be ignored.
+enum class strict_flags
+{
+    can_increment,
+    implements_increment,
+    can_decrement,
+    implements_decrement,
+    can_offset,
+    implements_offset,
+    can_get,
+    can_set,
+    implements_begin, // can only be false if regular flags specify arraylike
+    implements_size, // can only be false if arraylike or finite or infinite
+    // must always implement is_inbounds()
+};
+
+constexpr range_flags operator|(range_flags a, range_flags b)
+{
+    using flags = range_flags;
+    return static_cast<flags>(static_cast<std::underlying_type_t<flags>>(a) |
+                              static_cast<std::underlying_type_t<flags>>(b));
+}
+
+constexpr bool operator&(range_flags a, range_flags b)
+{
+    using flags = range_flags;
+    return static_cast<std::underlying_type_t<flags>>(a) &
+           static_cast<std::underlying_type_t<flags>>(b);
+}
 
 template <typename range_t> struct range_definition
 {
@@ -41,20 +79,19 @@ template <typename range_t> struct range_definition
 };
 
 template <typename T, typename = void>
-struct has_inherited_range_type : public std::false_type
+struct inherited_range_type : public std::false_type
 {
     using type = void;
 };
 template <typename T>
-struct has_inherited_range_type<T,
-                                std::void_t<typename T::inherited_range_type>>
+struct inherited_range_type<T, std::void_t<typename T::inherited_range_type>>
     : public std::true_type
 {
     using type = typename T::inherited_range_type;
 };
 
 template <typename T>
-constexpr bool has_inherited_range_type_v = has_inherited_range_type<T>::value;
+constexpr bool has_inherited_range_type_v = inherited_range_type<T>::value;
 
 // specialization for c-style arrays
 template <typename input_range_t>
@@ -65,11 +102,15 @@ struct range_definition<input_range_t>
     using range_t = detail::remove_cvref_t<input_range_t>;
 
   public:
+    // a c array can never have a const value type
     using value_type = detail::c_array_value_type<range_t>;
+    static_assert(!is_const_c<value_type>);
 
-    static constexpr bool is_arraylike = true;
+    static constexpr range_flags flags =
+        range_flags::arraylike | range_flags::sized | range_flags::consuming |
+        range_flags::producing;
 
-    static constexpr value_type& get_ref(range_t& i, size_t c) OKAYLIB_NOEXCEPT
+    static constexpr value_type& get(range_t& i, size_t c) OKAYLIB_NOEXCEPT
     {
         if (c >= size(i)) [[unlikely]] {
             __ok_abort("out of bounds access into c-style array");
@@ -77,8 +118,8 @@ struct range_definition<input_range_t>
         return i[c];
     }
 
-    static constexpr const value_type& get_ref(const range_t& i,
-                                               size_t c) OKAYLIB_NOEXCEPT
+    static constexpr const value_type& get(const range_t& i,
+                                           size_t c) OKAYLIB_NOEXCEPT
     {
         if (c >= size(i)) [[unlikely]] {
             __ok_abort("out of bounds access into c-style array");
@@ -103,7 +144,6 @@ template <typename input_range_t>
         !has_inherited_range_type_v<detail::remove_cvref_t<input_range_t>> &&
         // provides size_t .size() method and pointer data() method
         detail::std_arraylike_container<input_range_t> &&
-        // iterator_t()[size_t{}] -> iterator_t::value_type&
         std::is_same_v<
             typename detail::remove_cvref_t<input_range_t>::value_type&,
             decltype(std::declval<detail::remove_cvref_t<input_range_t>&>()
@@ -112,18 +152,23 @@ struct range_definition<input_range_t>
 {
   private:
     using range_t = detail::remove_cvref_t<input_range_t>;
+    static constexpr range_flags universal_flags =
+        range_flags::arraylike | range_flags::sized | range_flags::producing;
 
   public:
     static_assert(!detail::is_instance_c<range_t, slice>);
-    // value type for ranges is different than value type for vector or array.
-    // a range over `const int` has a value_type of `int`, and jut only provides
-    // `const int& get_ref(const range_t&)`
-    using value_type = detail::remove_cvref_t<typename range_t::value_type>;
-    static constexpr bool is_arraylike = true;
+
+    // std::array may have a const value type
+    using value_type = typename range_t::value_type;
+
+    static constexpr range_flags flags =
+        is_const_c<typename range_t::value_type>
+            ? universal_flags
+            : universal_flags | range_flags::consuming;
 
     // dont enable mutable get_ref unless the index operator actually returns a
     // mutable reference (this applies for array<const T>)
-    static constexpr value_type& get_ref(range_t& i, size_t c) OKAYLIB_NOEXCEPT
+    static constexpr value_type& get(range_t& i, size_t c) OKAYLIB_NOEXCEPT
         requires std::is_same_v<
             value_type&,
             decltype(std::declval<range_t&>()[std::declval<size_t>()])>
@@ -134,8 +179,8 @@ struct range_definition<input_range_t>
         return i[c];
     }
 
-    static constexpr const value_type& get_ref(const range_t& i,
-                                               size_t c) OKAYLIB_NOEXCEPT
+    static constexpr const value_type& get(const range_t& i,
+                                           size_t c) OKAYLIB_NOEXCEPT
     {
         if (c >= i.size()) [[unlikely]] {
             __ok_abort("Out of bounds access into arraylike container.");
@@ -154,7 +199,7 @@ namespace detail {
 template <typename T> struct range_definition_inner_meta_t
 {
     static_assert(std::is_same_v<T, remove_cvref_t<T>>);
-    using inherited_id = typename has_inherited_range_type<T>::type;
+    using inherited_id = typename inherited_range_type<T>::type;
     using type =
         std::conditional_t<has_inherited_range_type_v<T>,
                            range_definition<inherited_id>, range_definition<T>>;
@@ -169,31 +214,60 @@ using range_definition_inner_t =
     typename range_definition_inner_meta_t<remove_cvref_t<T>>::type;
 
 template <typename T>
-concept arraylike_range_c =
-    requires { requires range_definition_inner_t<T>::is_arraylike; };
-
-template <typename T>
-concept has_value_type_c = requires {
-    requires !is_void_c<typename T::value_type>;
-};
-
-template <typename T, typename = void>
-struct range_is_ref_wrapper : std::false_type
-{};
-
-template <typename T>
-concept ref_wrapper_range_c = requires {
-    requires range_definition_inner_t<T>::is_ref_wrapper;
-    requires has_value_type_c<range_definition_inner_t<T>>;
+concept range_marked_arraylike_c = requires {
+    requires range_definition_inner_t<T>::flags& range_flags::arraylike;
 };
 
 template <typename T>
-constexpr bool is_valid_cursor_v =
-    // NOTE: update static_assert in range_def_for if this changes
-    std::is_object_v<T>;
+concept range_marked_consuming_c = requires {
+    requires range_definition_inner_t<T>::flags& range_flags::consuming;
+};
 
 template <typename T>
-constexpr bool is_valid_value_type_v = std::is_object_v<T>;
+concept range_marked_as_implementing_set = requires {
+    requires range_definition_inner_t<T>::flags& range_flags::implements_set;
+};
+
+template <typename T>
+concept range_marked_producing_c = requires {
+    requires range_definition_inner_t<T>::flags& range_flags::producing;
+};
+
+template <typename T>
+concept has_value_type_c =
+    requires { requires !is_void_c<typename T::value_type>; };
+
+template <typename T>
+concept range_marked_ref_wrapper_c = requires {
+    requires range_definition_inner_t<T>::flags& range_flags::ref_wrapper;
+};
+
+template <typename T>
+concept range_marked_infinite_c = requires() {
+    requires range_definition_inner_t<T>::flags& range_flags::infinite;
+};
+
+template <typename T>
+concept range_marked_finite_c = requires() {
+    requires !range_definition_inner_t<T>::flags & range_flags::finite;
+};
+
+template <typename T>
+concept range_marked_sized_c = requires() {
+    requires !range_definition_inner_t<T>::flags & range_flags::sized;
+};
+
+template <typename T>
+concept range_disallows_cursor_member_offset_c = requires() {
+    requires range_definition_inner_t<T>::flags&
+        range_flags::disallows_cursor_member_offset;
+};
+
+template <typename T>
+concept valid_range_cursor_c = std::is_object_v<T>;
+
+template <typename T>
+concept valid_range_value_type_c = std::is_object_v<T>;
 
 template <typename T, typename = void> struct range_begin_rettype_or_void
 {
@@ -210,7 +284,7 @@ struct range_begin_rettype_or_void<
 
 template <typename T>
 using cursor_type_unchecked_for_t =
-    std::conditional_t<arraylike_range_c<T>, size_t,
+    std::conditional_t<range_marked_arraylike_c<T>, size_t,
                        typename range_begin_rettype_or_void<T>::type>;
 
 template <typename T>
@@ -258,31 +332,100 @@ concept range_impls_compare_c =
         } -> same_as_c<ok::ordering>;
     };
 
+template <typename T, typename other_t>
+concept same_as_without_cvref_c =
+    same_as_c<remove_cvref_t<T>, remove_cvref_t<other_t>>;
+
+template <typename T>
+concept range_impls_const_get_c = requires(
+    const remove_cvref_t<T>& range, const cursor_type_unchecked_for_t<T>& c) {
+    requires range_marked_producing_c<T>; // must be enabled
+    {
+        range_definition_inner_t<T>::get(range, c)
+    } -> same_as_without_cvref_c<typename remove_cvref_t<T>::value_type>;
+};
+
+/// Since nonconst to const demotion can occur, this concept really is only
+/// checking if *any* form of get is implemented since it attempts to pass
+/// a nonconst
+template <typename T>
+concept range_impls_const_or_nonconst_get_c = requires(
+    remove_cvref_t<T>& range, const cursor_type_unchecked_for_t<T>& c) {
+    requires range_marked_producing_c<T>; // must be enabled
+    {
+        range_definition_inner_t<T>::get(range, c)
+    } -> same_as_without_cvref_c<typename remove_cvref_t<T>::value_type>;
+};
+
+/// Checks whether both const and nonconst get can be called AND (they both
+/// return a reference OR they both return a value)
+template <typename T>
+concept range_impls_const_or_nonconst_get_and_returntype_refness_matches_c =
+    requires(remove_cvref_t<T>& range, const remove_cvref_t<T>& const_range,
+             const cursor_type_unchecked_for_t<T>& c) {
+        requires range_impls_const_or_nonconst_get_c<T>;
+        requires stdc::is_reference_c<decltype(range_definition_inner_t<T>::get(
+                     range, c))> ==
+                     stdc::is_reference_c<decltype(range_definition_inner_t<
+                                                   T>::get(const_range, c))>;
+    };
+
+// "get" can return any of `const value_type&`, `value_type&`, or `value_type`.
+template <typename T>
+concept range_impls_get_c = requires {
+    requires range_marked_producing_c<T>; // must be enabled
+    requires range_impls_const_or_nonconst_get_c<T>;
+
+    // get must return a reference for both the const and nonconst overloads,
+    // or return a value for both. no mixture of reference / value. it is also
+    // okay if only one of the overloads is implemented
+    requires range_impls_const_or_nonconst_get_and_returntype_refness_matches_c<
+                 T> ||
+                 !range_impls_const_get_c<T>;
+};
+
+template <typename range_t, typename... args_t>
+concept range_impls_construction_set_c = requires {
+    // must be enabled
+    requires range_marked_consuming_c<range_t>;
+    requires range_marked_as_implementing_set<range_t>;
+    // either the value type in infallible constructible with the given
+    // arguments and set() returns void
+    requires requires(range_t& r, const cursor_type_unchecked_for_t<range_t>& c,
+                      args_t... args) {
+        requires is_infallible_constructible_c<
+            typename range_definition_inner_t<range_t>::value_type, args_t...>;
+        { range_definition_inner_t<range_t>::set(r, c, args...) } -> is_void_c;
+    } ||
+                 // OR the type is fallible constructible with these args, and
+                 // set returns a status of some kind (and is hopefully marked
+                 // [[nodiscard]])
+                 requires(range_t& r,
+                          const cursor_type_unchecked_for_t<range_t>& c,
+                          args_t... args) {
+                     requires is_fallible_constructible_c<
+                         typename range_definition_inner_t<range_t>::value_type,
+                         args_t...>;
+                     {
+                         range_definition_inner_t<range_t>::set(r, c, args...)
+                     } -> status_type;
+                 };
+};
+
 template <typename T>
 concept range_impls_size_c = requires(const remove_cvref_t<T>& range) {
+    requires range_marked_sized_c<T>;
     { range_definition_inner_t<T>::size(range) } -> same_as_c<size_t>;
 };
 
 template <typename T>
-concept range_marked_infinite_c =
-    requires() { requires range_definition_inner_t<T>::is_infinite; };
-
-template <typename T>
-concept range_marked_finite_c =
-    requires() { requires !range_definition_inner_t<T>::is_infinite; };
-
-template <typename T>
-concept range_disallows_cursor_member_offset_c = requires() {
-    requires range_definition_inner_t<T>::disallow_cursor_member_offset;
+concept range_can_begin_c = requires {
+    requires range_impls_begin_c<T> || range_marked_arraylike_c<T>;
 };
 
 template <typename T>
-concept range_can_begin_c =
-    requires { requires(range_impls_begin_c<T> || arraylike_range_c<T>); };
-
-template <typename T>
 concept range_can_is_inbounds_c = requires {
-    requires(range_impls_is_inbounds_c<T> || arraylike_range_c<T>);
+    requires range_impls_is_inbounds_c<T> || range_marked_arraylike_c<T>;
 };
 
 // alias in case indirection is added later and (having size def) != (is sized)
@@ -296,45 +439,32 @@ concept range_marked_deleted_c =
 template <typename T>
 concept range_has_definition_c = !range_marked_deleted_c<T>;
 
+/// The parts of the range which describe what functions should be in the range
+/// are present, and all the functions that are universal (is_inbounds, begin)
+/// are present, and size() is present if and only if the range is marked sized.
 template <typename T>
-concept validly_defined_range_c = requires {
+concept well_declared_range_c = requires {
     requires range_has_definition_c<T>;
     requires has_value_type_c<range_definition_inner_t<T>>;
     requires range_can_begin_c<T>;
+    requires range_can_is_inbounds_c<T>;
+    { range_definition_inner_t<T>::flags } -> same_as_c<range_flags>;
+    requires !(range_marked_as_implementing_set<T> &&
+               !range_marked_consuming_c<T>);
+    requires range_marked_producing_c<T> || range_marked_consuming_c<T>;
+    requires(int(range_marked_infinite_c<T>) + int(range_marked_finite_c<T>) +
+                 int(range_marked_sized_c<T>) ==
+             1);
+    requires range_impls_size_c<T> == range_marked_sized_c<T>;
+    requires range_impls_size_c<T> != range_marked_finite_c<T>;
+    requires range_impls_size_c<T> != range_marked_infinite_c<T>;
 };
-}
+} // namespace detail
 
-template <detail::validly_defined_range_c T>
+template <detail::well_declared_range_c T>
 using value_type_for = typename detail::range_definition_inner_t<T>::value_type;
 
 namespace detail {
-template <typename T>
-concept range_impls_get_c =
-    range_impls_get_unchecked_rettype_c<T> &&
-    std::is_same_v<range_get_return_type_t<T>, range_deduced_value_type_t<T>>;
-
-template <typename range_t, typename... args_t>
-concept range_impls_construction_set_c = requires(
-    range_t& r, const cursor_type_unchecked_for_t<range_t>& c, args_t... args) {
-    { range_definition_inner_t<range_t>::set(r, c, args...) } -> is_void_c;
-};
-
-template <typename T>
-concept range_impls_move_construction_set_c = requires {
-    requires range_impls_construction_set_c<T, range_deduced_value_type_t<T>&&>;
-};
-
-template <typename T>
-concept range_impls_get_ref_c = range_impls_get_ref_unchecked_rettype_c<T> &&
-                                std::is_same_v<range_get_ref_return_type_t<T>,
-                                               range_deduced_value_type_t<T>&>;
-
-template <typename T>
-concept range_impls_get_ref_const_c =
-    range_impls_get_ref_const_unchecked_rettype_c<T> &&
-    std::is_same_v<range_get_ref_const_return_type_t<T>,
-                   const range_deduced_value_type_t<T>&>;
-
 template <typename T> struct cursor_or_void
 {
     using type = void;
@@ -348,74 +478,6 @@ struct cursor_or_void<T>
 };
 
 template <typename T> using cursor_or_void_t = typename cursor_or_void<T>::type;
-
-// ref_or_void: avoid forming a const reference to void
-template <typename T> struct ref_or_void
-{
-    using type = void;
-};
-template <typename T>
-    requires requires { std::declval<T&>(); }
-struct ref_or_void<T>
-{
-    using type = T&;
-};
-template <typename T> struct const_ref_or_void
-{
-    using type = void;
-};
-template <typename T>
-    requires requires { std::declval<const T&>(); }
-struct const_ref_or_void<T>
-{
-    using type = const T&;
-};
-
-template <typename T>
-concept range_nonrefwrap_impls_get_ref_const_c =
-    !ref_wrapper_range_c<T> &&
-    range_impls_get_ref_const_unchecked_rettype_c<T> &&
-    same_as_c<typename const_ref_or_void<range_deduced_value_type_t<T>>::type,
-              range_get_ref_const_return_type_t<T>>;
-
-template <typename T>
-concept range_nonrefwrap_impls_get_ref_c =
-    !ref_wrapper_range_c<T> && range_impls_get_ref_unchecked_rettype_c<T> &&
-    std::is_same_v<typename ref_or_void<range_deduced_value_type_t<T>>::type,
-                   range_get_ref_return_type_t<T>>;
-
-template <typename T>
-concept range_refwrap_impls_get_ref_c =
-    ref_wrapper_range_c<T> &&
-    range_impls_get_ref_const_unchecked_rettype_c<T> &&
-    !is_const_c<range_deduced_value_type_t<T>> &&
-    same_as_c<typename ref_or_void<range_deduced_value_type_t<T>>::type,
-              range_get_ref_const_return_type_t<T>>;
-
-template <typename T>
-concept range_refwrap_impls_get_ref_const_c =
-    ref_wrapper_range_c<T> &&
-    range_impls_get_ref_const_unchecked_rettype_c<T> &&
-    (std::is_same_v<typename ref_or_void<range_deduced_value_type_t<T>>::type,
-                    range_get_ref_const_return_type_t<T>> ||
-     std::is_same_v<
-         typename const_ref_or_void<range_deduced_value_type_t<T>>::type,
-         range_get_ref_const_return_type_t<T>>);
-
-template <typename T>
-concept range_can_get_ref_c =
-    range_refwrap_impls_get_ref_c<T> || range_nonrefwrap_impls_get_ref_c<T>;
-
-template <typename T>
-concept range_can_get_ref_const_c =
-    range_refwrap_impls_get_ref_const_c<T> ||
-    range_nonrefwrap_impls_get_ref_const_c<T> || range_can_get_ref_c<T>;
-
-template <typename T>
-concept range_has_baseline_functions_c =
-    (range_marked_finite_c<T> || range_marked_infinite_c<T> ||
-     range_can_size_c<T>) &&
-    range_can_is_inbounds_c<T> && range_can_begin_c<T>;
 
 template <typename T>
 concept range_can_offset_c =
@@ -437,219 +499,79 @@ concept range_can_decrement_c =
     range_impls_decrement_c<T> || has_pre_decrement_c<cursor_or_void_t<T>> ||
     range_can_offset_c<T>;
 
-// NOTE: a type might provide some other set() functions for different args,
-// so this might not pick up that its a consuming range in that case.
-// TODO: probably add some static constexpr bool impls_set = true; requirement
 template <typename T>
-concept consuming_range_c =
-    range_has_baseline_functions_c<T> && range_can_increment_c<T> &&
-    (range_impls_move_construction_set_c<T> || range_can_get_ref_c<T>);
+concept common_range_requirements_c = requires {
+    requires is_complete_c<remove_cvref_t<T>>;
+    requires well_declared_range_c<T>;
+    requires detail::valid_range_value_type_c<value_type_for<T>>;
+    requires detail::valid_range_cursor_c<
+        detail::cursor_type_unchecked_for_t<T>>;
+};
 
 template <typename T>
-concept producing_range_c =
-    range_has_baseline_functions_c<T> && range_can_increment_c<T> &&
-    (range_impls_get_c<T> || range_can_get_ref_const_c<T> ||
-     range_can_get_ref_c<T>);
+concept consuming_range_c = requires {
+    requires common_range_requirements_c<T>;
+    requires range_can_increment_c<T>;
+    requires range_definition_inner_t<T>::flags& range_flags::consuming;
+};
 
 template <typename T>
-concept producing_or_consuming_range_c =
-    producing_range_c<T> || consuming_range_c<T>;
+concept producing_range_c = requires {
+    requires common_range_requirements_c<T>;
+    requires range_can_increment_c<T>;
+    requires range_definition_inner_t<T>::flags& range_flags::producing;
+    // we can check this, for set we don't find out until we instantiate it
+    requires range_impls_get_c<T>;
+};
+} // namespace detail
 
-// single pass ranges are by definition the minimum range- so any valid
-// input or output range is also a single pass range.
-template <typename maybe_range_t>
-concept single_pass_range_c = producing_range_c<maybe_range_t>;
+template <typename T>
+concept range_c = requires {
+    // fail earlier by re-including this requirement which is also present in
+    // the other requirements
+    requires detail::common_range_requirements_c<T>;
+    requires detail::producing_range_c<T> || detail::consuming_range_c<T>;
+};
 
 // a multi pass range has a copyable cursor- enabling consumers to pause and
 // come back to cursors at previous positions.
-template <typename maybe_range_t>
-concept multi_pass_range_c =
-    single_pass_range_c<maybe_range_t> &&
-    is_copy_constructible_c<cursor_or_void_t<maybe_range_t>> &&
-    is_copy_assignable_c<cursor_or_void_t<maybe_range_t>>;
+template <typename T>
+concept multi_pass_range_c = requires {
+    // fail earlier by re-including this requirement which is also present in
+    // the single_pass_range_c requirement
+    requires detail::common_range_requirements_c<T>;
+    requires range_c<T>;
+    requires detail::is_copy_constructible_c<detail::cursor_or_void_t<T>>;
+    requires detail::is_copy_assignable_c<detail::cursor_or_void_t<T>>;
+};
 
-template <typename maybe_range_t>
-concept bidirectional_range_c = multi_pass_range_c<maybe_range_t> &&
-                                // can also be decremented
-                                range_can_decrement_c<maybe_range_t>;
+template <typename T>
+concept bidirectional_range_c = requires {
+    // fail earlier by re-including this requirement which is also present in
+    // the multi_pass_range_c requirement
+    requires detail::common_range_requirements_c<T>;
+    requires multi_pass_range_c<T>;
+    // can also be decremented
+    requires detail::range_can_decrement_c<T>;
+};
 
-template <typename maybe_range_t>
-concept random_access_range_c =
-    bidirectional_range_c<maybe_range_t> &&
+template <typename T>
+concept random_access_range_c = requires {
+    // fail earlier by re-including this requirement which is also present in
+    // the bidirectional_range_c requirement
+    requires detail::common_range_requirements_c<T>;
+    requires bidirectional_range_c<T>;
     // must be able to offset cursor by arbitrary i64
-    range_can_offset_c<maybe_range_t> &&
+    requires detail::range_can_offset_c<T>;
     // must be able to compare two cursors
-    range_can_compare_c<maybe_range_t>;
-} // namespace detail
-
-/// range_def_for is a way of accessing the range definition for a type, with
-/// some additional verification that the definition being accessed is actually
-/// valid.
-template <typename input_range_t>
-class range_def_for : public detail::range_definition_inner_t<input_range_t>
-{
-  public:
-    using value_type =
-        typename detail::range_deduced_value_type<input_range_t>::type;
-
-    static_assert(
-        !std::is_reference_v<value_type> &&
-            (!is_const_c<value_type> ||
-             detail::ref_wrapper_range_c<input_range_t>),
-        "A range's value_type (which is either defined explicitly or deduced "
-        "as the output of range_definition::get() or get_ref()) cannot be a "
-        "reference, and it can only be const if the range is also a reference "
-        "wrapper.");
-
-  private:
-    using T = detail::remove_cvref_t<input_range_t>;
-    static constexpr bool complete = detail::is_complete_c<T>;
-
-    static_assert(complete,
-                  "Refusing to access range definition for incomplete type.");
-
-    static_assert(detail::range_has_definition_c<T>,
-                  "Attempt to access range information for a type whose "
-                  "range definition is marked deleted.");
-
-    static_assert(detail::range_can_begin_c<T>,
-                  "Range definition invalid- provide a begin(const range_t&) "
-                  "function which returns a cursor type.");
-
-    static_assert(detail::range_can_is_inbounds_c<T>,
-                  "Range definition invalid- `is_inbounds()` not provided.");
-
-    static constexpr bool has_size = detail::range_can_size_c<T>;
-    static constexpr bool marked_infinite = detail::range_marked_infinite_c<T>;
-    static constexpr bool marked_finite = detail::range_marked_finite_c<T>;
-    static_assert(
-        has_size || marked_infinite || marked_finite,
-        "Range definition invalid- provide a size_t size(const range_t&) "
-        "method, or add a `static constexpr bool is_infinite = ...` which "
-        "should be true if the range is intended to be infinite, and false if "
-        "the range is intended to have some finite size that cannot be "
-        "calculated in constant time.");
-    static_assert(int(has_size) + int(marked_finite) + int(marked_infinite) ==
-                      1,
-                  "Range definition invalid: specify only one of `static "
-                  "bool infinite = ...` or `size()` method.");
-
-    static_assert(
-        !std::is_void_v<value_type>,
-        "Range definition invalid- value_type is void. You may need "
-        "to explicitly declare it in the range definition, or "
-        "provide valid `get()`, `get_ref()`, or `get_ref() const` "
-        "functions so that the value type can be deduced. Note: "
-        "deduction only works if the range is not a reference wrapper.");
-
-    static_assert(detail::is_valid_value_type_v<value_type>,
-                  "Range definition invalid- value_type is not an object.");
-
-    static_assert(
-        !detail::ref_wrapper_range_c<T> || !detail::range_impls_get_c<T>,
-        "Range is a reference wrapper, but it implements get(). Reference "
-        "wrappers should only implement get_ref(const&). If you are returning "
-        "a reference wrapper type, then your type is not a reference wrapper "
-        "itself (its not responsibile for resolving the possibility that it "
-        "may be const but the returned reference may not be).");
-
-    static_assert(
-        !detail::ref_wrapper_range_c<T> ||
-            detail::range_impls_get_ref_const_unchecked_rettype_c<T>,
-        "Range is marked as a reference wrapper, but it does not implement "
-        "get_ref(const&), which is required of all reference wrappers.");
-
-    // either it doesnt have the function at all, OR the function is totally
-    // valid
-    static_assert(!detail::range_impls_get_unchecked_rettype_c<T> ||
-                      detail::range_impls_get_c<T>,
-                  "Range definition invalid- `get()` function does not return "
-                  "value_type.");
-
-    static constexpr bool nonrefwrap_get_ref_const_function_returns_value_type =
-        !detail::range_impls_get_ref_const_unchecked_rettype_c<T> ||
-        detail::range_nonrefwrap_impls_get_ref_const_c<T>;
-
-    static_assert(detail::ref_wrapper_range_c<T> ||
-                      nonrefwrap_get_ref_const_function_returns_value_type,
-                  "Range definition invalid- `get_ref(const&)` function does "
-                  "not return `const value_type&`");
-
-    static constexpr bool nonrefwrap_get_ref_function_returns_value_type =
-        !detail::range_impls_get_ref_unchecked_rettype_c<T> ||
-        detail::range_nonrefwrap_impls_get_ref_c<T>;
-
-    static_assert(detail::ref_wrapper_range_c<T> ||
-                      nonrefwrap_get_ref_function_returns_value_type,
-                  "Range definition invalid- `get_ref()` function does not "
-                  "return `value_type&`");
-
-    static_assert(
-        detail::is_valid_cursor_v<detail::cursor_type_unchecked_for_t<T>>,
-        "Range definition invalid- the return value from begin() (the "
-        "cursor type) is not an object.");
-
-    static_assert(
-        detail::has_pre_increment_c<detail::cursor_type_unchecked_for_t<T>> ||
-            detail::range_impls_increment_c<T>,
-        "Range definition invalid- given cursor type (the return type of "
-        "begin()) is not able to be pre-incremented, nor is an increment(const "
-        "range&, cursor&) function defined in the range definition.");
-
-    static_assert(
-        detail::producing_or_consuming_range_c<T>,
-        "Range definition invalid- it does not define any operations that "
-        "can be done with the range like get(range, cursor), set(range, "
-        "cursor, value_type&&), or get_ref(range, cursor)");
-
-    static constexpr bool ref_or_get_are_mutually_exclusive =
-        (detail::range_impls_get_c<T> !=
-         (detail::range_can_get_ref_c<T> ||
-          detail::range_can_get_ref_const_c<T>)) ||
-        // its also valid for the range to only define set()
-        (!detail::range_impls_get_c<T> && !detail::range_can_get_ref_c<T> &&
-         !detail::range_can_get_ref_const_c<T>);
-    static_assert(
-        ref_or_get_are_mutually_exclusive,
-        "Range definition invalid- both get() and a get_ref() functions are "
-        "defined. There is currently no protocol in okaylib to choose between "
-        "these implementations, so remove one of them and use the copy "
-        "constructor of value_type if both copyout and get_ref are needed.");
+    requires detail::range_can_compare_c<T>;
 };
 
-namespace detail {
-template <typename T, typename value_type>
-concept range_with_value_type_c = requires {
-    requires is_complete_c<T>;
-    requires range_has_definition_c<T>;
-    // NOTE: not checking if has value type before doing this: if it
-    // doesnt have it, it will be void, which is not a valid value type
-    requires is_valid_value_type_v<value_type>;
-    requires range_can_begin_c<T>;
-    requires is_valid_cursor_v<cursor_type_unchecked_for_t<T>>;
-    requires range_can_is_inbounds_c<T>;
-    requires range_can_size_c<T> || range_marked_infinite_c<T> ||
-                 range_marked_finite_c<T>;
-    requires(int(range_can_size_c<T>) + int(range_marked_infinite_c<T>) +
-             int(range_marked_finite_c<T>)) == 1;
-    requires producing_or_consuming_range_c<T>;
-    requires(range_impls_get_c<T> !=
-             (range_can_get_ref_c<T> || range_can_get_ref_const_c<T>));
-};
-} // namespace detail
+template <range_c T> using range_def_for = detail::range_definition_inner_t<T>;
 
-/// Check if a type has an range_definition which is valid, enabling a form
-/// of either input or output iteration.
-template <typename T>
-concept range_c =
-    detail::range_with_value_type_c<detail::remove_cvref_t<T>,
-                                    detail::range_deduced_value_type_t<T>>;
-
-template <typename T>
-using value_type_for = typename range_def_for<T>::value_type;
-template <typename T>
+template <range_c T>
 using cursor_type_for =
-    std::conditional_t<ok::detail::arraylike_range_c<T>, size_t,
+    std::conditional_t<ok::detail::range_marked_arraylike_c<T>, size_t,
                        typename detail::range_begin_rettype_or_void<T>::type>;
 
 namespace detail {
@@ -685,169 +607,155 @@ template <typename callable_t, typename... args_t> struct partial_called_t;
                       "Incorrect cursor type passed as second argument.");    \
     }
 
-struct iter_copyout_fn_t
+struct range_get_fn_t
 {
     template <range_c range_t>
-        requires range_impls_get_c<range_t> ||
-                 range_can_get_ref_const_c<range_t>
-    constexpr auto operator() [[nodiscard]] (
-        const range_t& range,
-        const cursor_type_for<range_t>& cursor) const OKAYLIB_NOEXCEPT
-    {
-        using namespace detail;
-        using def = range_definition_inner_t<range_t>;
-        if constexpr (range_impls_get_c<range_t>) {
-            return def::get(range, cursor);
-        } else {
-            return def::get_ref(range, cursor);
-        }
-    }
-};
-
-template <typename range_t> struct iter_get_temporary_ref_meta_t
-{
-    using type = void;
-    static constexpr void call(...) OKAYLIB_NOEXCEPT
-    {
-        // trigger static asserts in range_def_for
-        constexpr bool checks = std::is_void_v<range_def_for<range_t>>;
-    }
-};
-
-template <range_c range_t>
-    requires(!range_can_get_ref_const_c<range_t>)
-struct iter_get_temporary_ref_meta_t<range_t>
-{
-    using type = value_type_for<range_t>;
-    static constexpr type
-    call(const range_t& range,
-         const cursor_type_for<range_t>& cursor) OKAYLIB_NOEXCEPT
-    {
-        constexpr auto copyout = iter_copyout_fn_t{};
-        return copyout(range, cursor);
-    }
-};
-
-template <range_c range_t>
-    requires(range_can_get_ref_const_c<range_t>)
-struct iter_get_temporary_ref_meta_t<range_t>
-{
-    using type = const value_type_for<range_t>&;
-    static constexpr type
-    call(const range_t& range,
-         const cursor_type_for<range_t>& cursor) OKAYLIB_NOEXCEPT
-    {
-        return range_definition_inner_t<range_t>::get_ref(range, cursor);
-    }
-};
-
-struct iter_get_temporary_ref_fn_t
-{
-    template <range_c range_t>
+        requires range_impls_const_get_c<range_t>
     constexpr decltype(auto) operator() [[nodiscard]] (
         const range_t& range,
         const cursor_type_for<range_t>& cursor) const OKAYLIB_NOEXCEPT
     {
-        return iter_get_temporary_ref_meta_t<range_t>::call(range, cursor);
+        return range_def_for<range_t>::get(range, cursor);
     }
-
-    __ok_range_function_assert_not_partially_called_member(
-        iter_get_temporary_ref)
-        __ok_range_function_assert_correct_cursor_type_member
 };
 
-struct iter_get_ref_fn_t
+struct range_get_nonconst_ref_fn_t
 {
     template <range_c range_t>
-        requires range_impls_get_ref_c<range_t>
     constexpr decltype(auto) operator()
         [[nodiscard]] (range_t& range, const cursor_type_for<range_t>& cursor)
         const OKAYLIB_NOEXCEPT
+        // this function is specifically for getting a mutable reference, if
+        // the range doesn't return a mutable reference then use regular
+        // get()
+        requires range_impls_get_c<range_t> && requires {
+            {
+                range_def_for<range_t>::get(range, cursor)
+            } -> stdc::is_nonconst_reference_c;
+        }
     {
-        return range_definition_inner_t<range_t>::get_ref(range, cursor);
+        return range_def_for<range_t>::get(range, cursor);
     }
 
     template <range_c range_t>
-        requires range_impls_get_ref_const_c<range_t>
     constexpr decltype(auto) operator() [[nodiscard]] (
         const range_t& range,
         const cursor_type_for<range_t>& cursor) const OKAYLIB_NOEXCEPT
+        // this function is specifically for getting a mutable reference, if
+        // the range doesn't return a mutable reference then use regular
+        // get()
+        requires range_impls_get_c<range_t> && requires {
+            {
+                range_def_for<range_t>::get(range, cursor)
+            } -> stdc::is_nonconst_reference_c;
+        }
     {
-        return range_definition_inner_t<range_t>::get_ref(range, cursor);
+        return range_def_for<range_t>::get(range, cursor);
+    }
+};
+
+struct range_get_ref_fn_t
+{
+    template <range_c range_t>
+    constexpr decltype(auto) operator()
+        [[nodiscard]] (range_t& range, const cursor_type_for<range_t>& cursor)
+        const OKAYLIB_NOEXCEPT
+        requires range_impls_get_c<range_t> && requires {
+            {
+                range_def_for<range_t>::get(range, cursor)
+            } -> stdc::is_reference_c;
+        }
+    {
+        return range_def_for<range_t>::get(range, cursor);
     }
 
-    __ok_range_function_assert_not_partially_called_member(iter_get_ref)
+    template <range_c range_t>
+    constexpr decltype(auto) operator() [[nodiscard]] (
+        const range_t& range,
+        const cursor_type_for<range_t>& cursor) const OKAYLIB_NOEXCEPT
+        requires range_impls_get_c<range_t> && requires {
+            {
+                range_def_for<range_t>::get(range, cursor)
+            } -> stdc::is_reference_c;
+        }
+    {
+        return range_def_for<range_t>::get(range, cursor);
+    }
+
+    __ok_range_function_assert_not_partially_called_member(range_get_ref)
         __ok_range_function_assert_correct_cursor_type_member
 };
 
-struct iter_set_fn_t
+struct range_set_fn_t
 {
-    template <range_c range_t, typename... construction_args_t>
+    /// May return a status if set() call fails
+    template <consuming_range_c range_t, typename... construction_args_t>
+    [[nodiscard]] constexpr decltype(auto)
+    operator()(range_t& range, const cursor_type_for<range_t>& cursor,
+               construction_args_t&&... args) const OKAYLIB_NOEXCEPT
         requires(
             // can just call set, normally
             range_impls_construction_set_c<range_t, construction_args_t...> ||
             // the construction arguments are a single thing which can be
             // assigned into the existing items
-            (sizeof...(construction_args_t) == 1 &&
+            (((sizeof...(construction_args_t) == 1 &&
+               requires {
+                   // must be in requires block in case sizeof construction
+                   // args is zero
+                   stdc::is_assignable_v<value_type_for<range_t>,
+                                         construction_args_t...>;
+               }) ||
+              // if not assignable, we can try stdstyle construction and
+              // destruction
+              is_infallible_constructible_c<value_type_for<range_t>,
+                                            construction_args_t...> &&
+                  is_std_destructible_c<value_type_for<range_t>>) &&
              requires {
-                 std::is_assignable_v<value_type_for<range_t>,
-                                      construction_args_t...>;
-             }) ||
-            // can call get ref, and we can emulate assignment by destroying
-            // the object that is already present and then constructing over
-            // it
-            (range_can_get_ref_c<range_t> &&
-             is_std_constructible_c<value_type_for<range_t>,
-                                    construction_args_t...>))
-    constexpr void
-    operator()(range_t& range, const cursor_type_for<range_t>& cursor,
-               construction_args_t&&... args) const OKAYLIB_NOEXCEPT
+                 {
+                     range_def_for<range_t>::get(range, cursor)
+                 } -> stdc::is_nonconst_reference_c;
+             }))
     {
-        if constexpr (range_can_get_ref_c<range_t>) {
-            auto& ref =
-                range_definition_inner_t<range_t>::get_ref(range, cursor);
+        if constexpr (range_impls_construction_set_c<range_t,
+                                                     construction_args_t...>) {
+            return range_def_for<range_t>::set(
+                range, cursor, std::forward<construction_args_t>(args)...);
+        } else {
+            constexpr bool use_assignment =
+                (sizeof...(construction_args_t) == 1 && requires {
+                    stdc::is_assignable_v<value_type_for<range_t>,
+                                          construction_args_t...>;
+                });
 
-            // if you supplied only one arg, and it is assignable, and the range
-            // uses get_ref, then set performs assignment. otherwise, it
-            // manually calls destruction and then constructs in place
-            if constexpr (sizeof...(construction_args_t) == 1) {
-                using first_type = first_type_in_pack_t<construction_args_t...>;
-                if constexpr (std::is_assignable_v<decltype(ref), first_type>) {
-                    const auto applyer = [&ref](auto&& a) {
-                        ref = std::forward<first_type>(a);
-                    };
-                    applyer(std::forward<construction_args_t>(args)...);
-                } else {
-                    // duplicated code with outer else case here
-                    ref.~value_type_for<range_t>();
-                    ok::stdc::construct_at(
-                        ok::addressof(ref),
-                        std::forward<construction_args_t>(args)...);
-                }
+            auto& ref = range_def_for<range_t>::get(range, cursor);
+
+            if constexpr (use_assignment) {
+                const auto applyer = [&ref](auto&& a) {
+                    ref = stdc::forward<detail::remove_cvref_t<decltype(a)>>(a);
+                };
+                applyer(stdc::forward<construction_args_t>(args)...);
             } else {
                 ref.~value_type_for<range_t>();
-
-                ok::stdc::construct_at(
-                    ok::addressof(ref),
-                    std::forward<construction_args_t>(args)...);
+                ok::make_into_uninitialized<value_type_for<range_t>>(
+                    ref, stdc::forward<construction_args_t>(args)...);
             }
-        } else {
-            range_definition_inner_t<range_t>::set(
-                range, cursor, std::forward<construction_args_t>(args)...);
         }
     }
 
-    __ok_range_function_assert_not_partially_called_member(iter_set)
+    __ok_range_function_assert_not_partially_called_member(range_set)
         __ok_range_function_assert_correct_cursor_type_member
 };
 
 struct begin_fn_t
 {
     template <range_c range_t>
-    constexpr cursor_type_unchecked_for_t<range_t> operator()
+    constexpr cursor_type_for<range_t> operator()
         [[nodiscard]] (const range_t& range) const OKAYLIB_NOEXCEPT
     {
-        if constexpr (arraylike_range_c<range_t>) {
+        if constexpr (range_marked_arraylike_c<range_t>) {
+            static_assert(!range_impls_begin_c<range_t>,
+                          "range which is marked arraylike implements begin. "
+                          "The implementation will be ignored.");
             return size_t(0);
         } else {
             return range_def_for<range_t>::begin(range);
@@ -886,13 +794,13 @@ struct decrement_fn_t
     operator()(const range_t& range,
                cursor_type_for<range_t>& cursor) const OKAYLIB_NOEXCEPT
     {
-        if constexpr (range_impls_increment_c<range_t>) {
+        if constexpr (range_impls_decrement_c<range_t>) {
             range_def_for<range_t>::decrement(range, cursor);
         } else if constexpr (range_impls_offset_c<range_t>) {
             range_def_for<range_t>::offset(range, cursor, int64_t(-1));
         } else {
             static_assert(
-                has_pre_increment_c<cursor_type_unchecked_for_t<range_t>>);
+                has_pre_decrement_c<cursor_type_unchecked_for_t<range_t>>);
             --cursor;
         }
     }
@@ -901,7 +809,7 @@ struct decrement_fn_t
         __ok_range_function_assert_correct_cursor_type_member
 };
 
-struct iter_compare_fn_t
+struct range_compare_fn_t
 {
     template <range_c range_t>
         requires range_can_compare_c<range_t>
@@ -917,27 +825,27 @@ struct iter_compare_fn_t
         }
     }
 
-    __ok_range_function_assert_not_partially_called_member(iter_compare)
+    __ok_range_function_assert_not_partially_called_member(range_compare)
         __ok_range_function_assert_correct_cursor_type_member
 };
 
-struct iter_offset_fn_t
+struct range_offset_fn_t
 {
     template <range_c range_t>
         requires range_can_offset_c<range_t>
-    constexpr ordering operator()(const range_t& range,
-                                  cursor_type_for<range_t>& cursor,
-                                  int64_t offset) const OKAYLIB_NOEXCEPT
+    constexpr void operator()(const range_t& range,
+                              cursor_type_for<range_t>& cursor,
+                              int64_t offset) const OKAYLIB_NOEXCEPT
     {
         if constexpr (range_impls_offset_c<range_t>) {
-            return range_def_for<range_t>::offset(range, cursor, offset);
+            range_def_for<range_t>::offset(range, cursor, offset);
         } else {
             static_assert(has_inplace_addition_with_i64_c<range_t>);
             cursor += offset;
         }
     }
 
-    __ok_range_function_assert_not_partially_called_member(iter_offset)
+    __ok_range_function_assert_not_partially_called_member(range_offset)
         __ok_range_function_assert_correct_cursor_type_member
 };
 
@@ -964,8 +872,7 @@ struct is_inbounds_fn_t
 struct size_fn_t
 {
     template <range_c range_t>
-        requires(!range_marked_finite_c<range_t> &&
-                 !range_marked_infinite_c<range_t>)
+        requires range_marked_sized_c<range_t>
     constexpr size_t operator()
         [[nodiscard]] (const range_t& range) const OKAYLIB_NOEXCEPT
     {
@@ -996,29 +903,23 @@ struct size_fn_t
 };
 } // namespace detail
 
-/// Get a copy of the data pointed at by an iterator. Works on ranges
-/// implementing `iter_get()`, or `iter_deref() [const]` if value_type is copy
-/// constructible.
-/// Returns range_t::value_type.
-inline constexpr detail::iter_copyout_fn_t iter_copyout{};
+/// Call the range's get() function with a const reference to the range.
+/// Returns value_type or const value_type&.
+inline constexpr detail::range_get_fn_t range_get{};
 
-/// Get a temporary const reference to an item. More optimizable than iter_get
-/// (its possible for any copying to be elided) but the reference is only valid
-/// until the end of the execution of the calling function. Supported by all
-/// types which implement at least one of `iter_get()`, `iter_deref() const`, or
-/// `iter_deref()`.
-/// Returns either a range_t::value_type, or a const range_t::value_type&.
-/// If the return value is a reference, then it is the same as calling
-/// iter_get_ref. It is always valid to store the return value in a `const
-/// value_type&`
-inline constexpr detail::iter_get_temporary_ref_fn_t iter_get_temporary_ref{};
+/// Call the range's get() function, attempting to get a `value_type&`. If it's
+/// not possible to get a mutable reference from the given object there will
+/// be no matching function call.
+inline constexpr detail::range_get_nonconst_ref_fn_t range_get_nonconst_ref{};
 
-/// Returns an lvalue reference to the internel representation of the data
-/// pointed at by the iterator. This reference is invalidated based on
-/// container-specific behavior.
-inline constexpr detail::iter_get_ref_fn_t iter_get_ref{};
+/// Call the range's get() function (either const or nonconst variant depending
+/// on the inputs) and only compile if the call returns a reference.
+inline constexpr detail::range_get_ref_fn_t range_get_ref{};
 
-inline constexpr detail::iter_set_fn_t iter_set{};
+/// Either call the range's set() function or, if not possible, try to
+/// get_nonconst_ref() and assign into the existing item OR destroy the existing
+/// item and then construct over it.
+inline constexpr detail::range_set_fn_t range_set{};
 
 inline constexpr detail::begin_fn_t begin{};
 
@@ -1030,11 +931,11 @@ inline constexpr detail::increment_fn_t increment{};
 
 inline constexpr detail::decrement_fn_t decrement{};
 
-// functions for random access ranges ---------------------
+/// Compare two cursors of a given range (range, cursor_a, cursor_b)
+inline constexpr detail::range_compare_fn_t range_compare{};
 
-inline constexpr detail::iter_compare_fn_t iter_compare{};
-
-inline constexpr detail::iter_offset_fn_t iter_offset{};
+/// Offset a cursor by an i64 (range, cursor, i64 offset)
+inline constexpr detail::range_offset_fn_t range_offset{};
 
 } // namespace ok
 

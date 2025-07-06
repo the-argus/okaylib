@@ -55,15 +55,15 @@ concept status_enum = requires(T t) {
 };
 
 template <typename T>
-concept status_type = requires { requires status_enum<T> || status_object<T>; };
+concept status_type = status_enum<T> || status_object<T>;
 
 #define __OK_RES_REQUIRES_CLAUSE                                      \
     requires(!std::is_same_v<ok::detail::remove_cvref_t<success_t>,   \
                              ok::detail::remove_cvref_t<status_t>> && \
              !std::is_constructible_v<success_t, status_t> &&         \
              !std::is_constructible_v<status_t, success_t> &&         \
-             !is_convertible_to_c<success_t, status_t> &&           \
-             !is_convertible_to_c<status_t, success_t> &&           \
+             !is_convertible_to_c<success_t, status_t> &&             \
+             !is_convertible_to_c<status_t, success_t> &&             \
              !std::is_rvalue_reference_v<success_t> &&                \
              !std::is_array_v<success_t> &&                           \
              ok::detail::is_nonthrowing_c<success_t>)

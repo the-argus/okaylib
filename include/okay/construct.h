@@ -33,7 +33,8 @@ template <typename T> struct make_into_uninitialized_fn_t
                       "No matching constructor for make_into_uninitialized.");
 
         if constexpr (is_std_constructible_c<T, args_t...>) {
-            new (ok::addressof(uninitialized)) T(std::forward<args_t>(args)...);
+            stdc::construct_at(ok::addressof(uninitialized),
+                               std::forward<args_t>(args)...);
             return;
         } else {
             using analysis = decltype(analyze_construction<args_t...>());

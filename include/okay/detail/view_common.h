@@ -10,15 +10,12 @@
 
 namespace ok {
 template <typename T>
-concept enable_view_c =
-    requires { requires detail::range_definition_inner_t<T>::is_view; };
+concept enable_view_c = requires {
+    requires range_c<T>;
+    requires detail::range_definition_inner_t<T>::is_view;
+};
 
 namespace detail {
-
-template <bool infinite> struct infinite_static_def_t
-{
-    static constexpr bool is_infinite = infinite;
-};
 
 /// Conditionally inherit range_definition from this to mark as sized.
 /// range_t: the range which is being defined. must inherit from

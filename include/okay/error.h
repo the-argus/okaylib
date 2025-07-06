@@ -89,7 +89,7 @@ concept transform_callable_noargs = requires(callable_t c) {
 
 template <typename success_t, status_type status_t>
 __OK_RES_REQUIRES_CLAUSE class res<
-    success_t, status_t, std::enable_if_t<!std::is_reference_v<success_t>>>
+    success_t, status_t, std::enable_if_t<!stdc::is_reference_c<success_t>>>
 {
     static_assert(!std::is_void_v<success_t> && !std::is_void_v<status_t>,
                   "Res does not support void as template arguments.");
@@ -601,7 +601,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
 
 template <typename success_t, status_type status_t>
 __OK_RES_REQUIRES_CLAUSE class res<
-    success_t, status_t, std::enable_if_t<std::is_reference_v<success_t>>>
+    success_t, status_t, std::enable_if_t<stdc::is_reference_c<success_t>>>
 {
     static_assert(!std::is_void_v<status_t>,
                   "Res does not support void as template arguments.");
@@ -724,7 +724,7 @@ template <ok::status_enum enum_t> struct fmt::formatter<ok::status<enum_t>>
 };
 
 template <typename success_t, typename status_t>
-    requires(std::is_reference_v<success_t> ||
+    requires(stdc::is_reference_c<success_t> ||
              fmt::is_formattable<success_t>::value)
 struct fmt::formatter<ok::res<success_t, status_t>>
 {
@@ -742,7 +742,7 @@ struct fmt::formatter<ok::res<success_t, status_t>>
                                     format_context& ctx) const
     {
         if (result.is_success()) {
-            if constexpr (std::is_reference_v<success_t>) {
+            if constexpr (stdc::is_reference_c<success_t>) {
                 if constexpr (fmt::is_formattable<
                                   std::remove_reference_t<success_t>>::value) {
                     return fmt::format_to(ctx.out(), "res<{} &>",

@@ -54,7 +54,7 @@ struct joined_cursor_t
   private:
     using outer_range_t = detail::remove_cvref_t<input_outer_range_t>;
     using inner_range_t = value_type_for<outer_range_t>;
-    static_assert(!std::is_reference_v<outer_range_t> &&
+    static_assert(!stdc::is_reference_c<outer_range_t> &&
                   !is_const_c<std::remove_reference_t<outer_range_t>>);
     static_assert(std::is_same_v<detail::remove_cvref_t<input_inner_range_t>,
                                  inner_range_t>,
@@ -121,7 +121,7 @@ struct joined_cursor_t
               inner_view(std::forward<T>(range)),
               inner(ok::begin(inner_view))
         {
-            static_assert(std::is_reference_v<decltype(range)>);
+            static_assert(stdc::is_reference_c<decltype(range)>);
         }
     };
 
@@ -133,7 +133,7 @@ struct joined_cursor_t
 template <typename input_range_t>
 struct range_definition<detail::joined_view_t<input_range_t>>
 {
-    public:
+  public:
     using outer_range_t = detail::remove_cvref_t<input_range_t>;
     using inner_range_t = value_type_for<outer_range_t>;
 
