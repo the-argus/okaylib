@@ -3,7 +3,6 @@
 
 #include "okay/detail/addressof.h"
 #include "okay/detail/noexcept.h"
-#include "okay/detail/template_util/empty.h"
 #include "okay/detail/template_util/uninitialized_storage.h"
 #include "okay/detail/traits/special_member_traits.h"
 #include "okay/ranges/ranges.h"
@@ -16,162 +15,90 @@ concept enable_view_c = requires {
 };
 
 namespace detail {
-
-/// Conditionally inherit range_definition from this to mark as sized.
-/// range_t: the range which is being defined. must inherit from
-/// owning_view or ref_view, and therefore have a get_view_reference() function.
-template <typename range_t, typename parent_range_t> struct sized_range_t
-{
-    static constexpr size_t size(const range_t& i) OKAYLIB_NOEXCEPT
-    {
-        return detail::range_definition_inner_t<parent_range_t>::size(
-            i.template get_view_reference<range_t, parent_range_t>());
-    }
-};
-
+/// If the given cursor_t defines a conversion from itself to its parent's range
+/// cursor type, then it can be used also to operate on the parent range being
+/// viewed by derived_range_t via these functions
 template <typename derived_range_t, typename parent_range_t, typename cursor_t>
-struct increment_only_range_t
+struct propagate_all_range_definition_functions_with_conversion_t
 {
     constexpr static void increment(const derived_range_t& i, cursor_t& c)
+        requires range_can_increment_c<parent_range_t>
     {
-        static_assert(std::is_same_v<cursor_t, cursor_type_for<parent_range_t>>,
-                      "Cannot increment cursor if it requires a conversion of "
-                      "any kind, even upcasting.");
         ok::increment(
             i.template get_view_reference<derived_range_t, parent_range_t>(),
-            c);
+            cursor_type_for<parent_range_t>(c));
     }
-};
 
-template <typename derived_range_t, typename parent_range_t, typename cursor_t>
-struct increment_decrement_range_t
-    : public increment_only_range_t<derived_range_t, parent_range_t, cursor_t>
-{
     constexpr static void decrement(const derived_range_t& i, cursor_t& c)
+        requires range_can_decrement_c<parent_range_t>
     {
-        static_assert(std::is_same_v<cursor_t, cursor_type_for<parent_range_t>>,
-                      "Cannot decrement cursor if it requires a conversion of "
-                      "any kind, even upcasting.");
         ok::decrement(
             i.template get_view_reference<derived_range_t, parent_range_t>(),
-            c);
+            cursor_type_for<parent_range_t>(c));
     }
-};
 
-template <typename derived_range_t, typename parent_range_t, typename cursor_t>
-using propagate_increment_decrement_t = std::conditional_t<
-    detail::range_impls_increment_c<parent_range_t>,
-    std::conditional_t<
-        detail::range_impls_decrement_c<parent_range_t>,
-        increment_decrement_range_t<derived_range_t, parent_range_t, cursor_t>,
-        increment_only_range_t<derived_range_t, parent_range_t, cursor_t>>,
-    detail::empty_t>;
-
-// derived_range_t: the range who is being implemented, and whose
-// definition should be inheriting from this type. CRTP.
-// parent_range_t: the range whos sizedness you want to propagate to the
-// range definition of argument 1
-template <typename derived_range_t, typename parent_range_t>
-using propagate_sizedness_t = std::conditional_t<
-    range_can_size_c<parent_range_t>,
-    sized_range_t<derived_range_t, parent_range_t>,
-    infinite_static_def_t<range_marked_infinite_c<parent_range_t>>>;
-
-// requires that cursor_t can be constructed from the
-// cursor_type_for<parent_range_t>
-template <typename derived_range_t, typename parent_range_t, typename cursor_t,
-          bool propagate_arraylike = false>
-struct propagate_begin_t
-{
-    [[nodiscard]] constexpr static cursor_t begin(const derived_range_t& i)
-        requires(!propagate_arraylike ||
-                 !detail::arraylike_range_c<parent_range_t>)
+    constexpr static decltype(auto) begin(const derived_range_t& i)
+        requires range_can_begin_c<parent_range_t>
     {
-        return cursor_t(ok::begin(
-            i.template get_view_reference<derived_range_t, parent_range_t>()));
+        return ok::begin(
+            i.template get_view_reference<derived_range_t, parent_range_t>());
     }
-};
 
-template <typename derived_range_t, typename parent_range_t, typename cursor_t>
-struct propagate_offset_t
-{
-    [[nodiscard]] static constexpr cursor_t offset(const derived_range_t& range,
-                                                   cursor_t& cursor)
-        requires(detail::range_impls_offset_c<parent_range_t>)
+    constexpr static size_t size(const derived_range_t& i)
+        requires range_can_size_c<parent_range_t>
     {
-        detail::range_definition_inner_t<parent_range_t>::offset(range, cursor);
+        return ok::size(
+            i.template get_view_reference<derived_range_t, parent_range_t>());
     }
-};
 
-template <typename derived_range_t, typename parent_range_t, typename cursor_t>
-struct propagate_compare_t_t
-{
-    [[nodiscard]] static constexpr ok::ordering
-    offset(const derived_range_t& range, const cursor_t& cursor_a,
-           const cursor_t& cursor_b)
-        requires(detail::range_impls_compare_c<parent_range_t>)
-    {
-        return detail::range_definition_inner_t<parent_range_t>::compare(
-            range, cursor_a, cursor_b);
-    }
-};
-
-template <typename derived_range_t, typename parent_range_t, typename cursor_t>
-struct propagate_get_set_t
-{
-    constexpr static decltype(auto) get(const derived_range_t& range,
-                                        const cursor_t& cursor)
+    constexpr static decltype(auto) get(const derived_range_t& i,
+                                        const cursor_t& c)
         requires range_impls_get_c<parent_range_t>
     {
-        return range_definition_inner_t<parent_range_t>::get(
-            range
-                .template get_view_reference<derived_range_t, parent_range_t>(),
-            cursor);
+        return ok::range_get_best(
+            i.template get_view_reference<derived_range_t, parent_range_t>(),
+            cursor_type_for<parent_range_t>(c));
     }
 
-    template <typename... constructor_args_t>
-    constexpr static void set(derived_range_t& range, const cursor_t& cursor,
-                              constructor_args_t&&... args)
-        requires range_impls_construction_set_c<parent_range_t,
-                                                constructor_args_t...>
+    constexpr static decltype(auto) get(derived_range_t& i, const cursor_t& c)
+        requires range_impls_get_c<parent_range_t>
     {
-        range_definition_inner_t<parent_range_t>::set(
-            range
-                .template get_view_reference<derived_range_t, parent_range_t>(),
-            cursor, std::forward<constructor_args_t>(args)...);
+        return ok::range_get_best(
+            i.template get_view_reference<derived_range_t, parent_range_t>(),
+            cursor_type_for<parent_range_t>(c));
     }
 
-    constexpr static decltype(auto) get_ref(derived_range_t& range,
-                                            const cursor_t& cursor)
-        requires(range_can_get_ref_c<parent_range_t> &&
-                 !ref_wrapper_range_c<parent_range_t>)
+    template <typename... args_t>
+    constexpr static decltype(auto) set(derived_range_t& i, const cursor_t& c,
+                                        args_t&&... args)
+        requires range_impls_construction_set_c<parent_range_t, args_t...>
     {
-        return range_definition_inner_t<parent_range_t>::get_ref(
-            range
-                .template get_view_reference<derived_range_t, parent_range_t>(),
-            cursor);
+        return range_def_for<parent_range_t>::set(
+            i.template get_view_reference<derived_range_t, parent_range_t>(),
+            cursor_type_for<parent_range_t>(c), stdc::forward<args_t>(args)...);
     }
 
-    constexpr static decltype(auto) get_ref(const derived_range_t& range,
-                                            const cursor_t& cursor)
-        requires range_can_get_ref_const_c<parent_range_t>
+    constexpr static void offset(const derived_range_t& i, cursor_t& c,
+                                 int64_t offset)
+        requires range_can_offset_c<parent_range_t>
     {
-        return range_definition_inner_t<parent_range_t>::get_ref(
-            range
-                .template get_view_reference<derived_range_t, parent_range_t>(),
-            cursor);
+        ok::range_offset(
+            i.template get_view_reference<derived_range_t, parent_range_t>(),
+            cursor_type_for<parent_range_t>(c), offset);
     }
-};
 
-template <typename derived_range_t, typename parent_range_t, typename cursor_t,
-          bool propagate_arraylike = false>
-struct propagate_boundscheck_t
-{
-    [[nodiscard]] static constexpr bool is_inbounds(const derived_range_t& i,
-                                                    const cursor_t& c)
-        requires((!propagate_arraylike ||
-                  !detail::arraylike_range_c<parent_range_t>) &&
-                 detail::range_can_is_inbounds_c<parent_range_t>)
+    constexpr static ok::ordering compare(const derived_range_t& i,
+                                          const cursor_t& a, const cursor_t& b)
+        requires range_can_compare_c<parent_range_t>
+    {
+        return ok::range_compare(
+            i.template get_view_reference<derived_range_t, parent_range_t>(),
+            cursor_type_for<parent_range_t>(a),
+            cursor_type_for<parent_range_t>(b));
+    }
+
+    constexpr static bool is_inbounds(const derived_range_t& i,
+                                      const cursor_t& c)
     {
         return ok::is_inbounds(
             i.template get_view_reference<derived_range_t, parent_range_t>(),
@@ -179,30 +106,13 @@ struct propagate_boundscheck_t
     }
 };
 
-template <typename derived_range_t, typename parent_range_t>
-struct propagate_all_range_traits_t
-    : public detail::propagate_sizedness_t<derived_range_t, parent_range_t>,
-      public detail::propagate_begin_t<derived_range_t, parent_range_t,
-                                       cursor_type_for<parent_range_t>>,
-      public detail::propagate_get_set_t<derived_range_t, parent_range_t,
-                                         cursor_type_for<parent_range_t>>,
-      public detail::propagate_boundscheck_t<derived_range_t, parent_range_t,
-                                             cursor_type_for<parent_range_t>>,
-      public detail::propagate_increment_decrement_t<
-          derived_range_t, parent_range_t, cursor_type_for<parent_range_t>>,
-      public detail::propagate_offset_t<derived_range_t, parent_range_t,
-                                        cursor_type_for<parent_range_t>>,
-      public detail::propagate_compare_t_t<derived_range_t, parent_range_t,
-                                           cursor_type_for<parent_range_t>>
-{};
-
 template <typename range_t> class owning_view;
 /// If getting undefined template errors, maybe the type passed in is not a
 /// range, or it is a reference to a range?
 template <typename range_t> class ref_view;
 
-template <typename range_t>
-    requires(is_moveable_c<range_t> && range_c<range_t>)
+template <range_c range_t>
+    requires is_moveable_c<range_t>
 class owning_view<range_t>
 {
   private:
@@ -249,21 +159,35 @@ class owning_view<range_t>
     }
 };
 
+template <typename T> struct propagate_strict_flags
+{};
+
+template <typename T>
+    requires range_with_strict_flags_c<T>
+struct propagate_strict_flags<T>
+{
+    constexpr static range_strict_flags strict_flags =
+        range_def_for<T>::strict_flags;
+};
+
 } // namespace detail
 
 template <typename range_t>
 struct ok::range_definition<detail::owning_view<range_t>>
-    : detail::propagate_all_range_traits_t<detail::owning_view<range_t>,
-                                           range_t>
-{};
+    : public detail::propagate_all_range_definition_functions_with_conversion_t<
+          detail::owning_view<range_t>, range_t, cursor_type_for<range_t>>,
+      public detail::propagate_strict_flags<range_t>
+{
+    constexpr static range_flags flags = range_def_for<range_t>::flags;
+    using value_type = value_type_for<range_t>;
+};
 
 namespace detail {
 
-template <typename range_t>
-    requires(!std::is_reference_v<range_t> && range_c<range_t>)
-class ref_view<range_t>
+template <range_c input_range_t> class ref_view<input_range_t>
 {
   private:
+    using range_t = remove_cvref_t<input_range_t>;
     range_t* m_range;
 
     // not defined
@@ -323,10 +247,16 @@ class ref_view<range_t>
 
 template <typename range_t>
 struct ok::range_definition<detail::ref_view<range_t>>
-    : detail::propagate_all_range_traits_t<detail::ref_view<range_t>, range_t>
+    : public detail::propagate_all_range_definition_functions_with_conversion_t<
+          detail::ref_view<range_t>, range_t, cursor_type_for<range_t>>,
+      public detail::propagate_strict_flags<range_t>
 {
-    static constexpr bool is_ref_wrapper = !detail::range_impls_get_c<range_t>;
-    using value_type = detail::range_deduced_value_type_t<range_t>;
+    constexpr static range_flags flags =
+        !detail::range_impls_get_c<range_t>
+            ? range_def_for<range_t>::flags | range_flags::ref_wrapper
+            : range_def_for<range_t>::flags;
+
+    using value_type = value_type_for<range_t>;
 };
 
 namespace detail {
@@ -351,9 +281,9 @@ template <typename T> struct underlying_view_type
         if constexpr (is_view_v<range_t>)
             return std::forward<range_t>(view);
         else if constexpr (std::is_lvalue_reference_v<decltype(view)>)
-            return ref_view{std::forward<range_t>(view)};
+            return ref_view<range_t>{std::forward<range_t>(view)};
         else if constexpr (std::is_rvalue_reference_v<decltype(view)>)
-            return owning_view{std::forward<range_t>(view)};
+            return owning_view<range_t>{std::forward<range_t>(view)};
     }
 
   public:
@@ -374,6 +304,7 @@ struct uninitialized_storage_default_constructible_t
     {
     }
 
+  protected:
     uninitialized_storage_t<payload_t> m_value;
 };
 template <typename payload_t>
@@ -388,6 +319,7 @@ struct uninitialized_storage_deleted_default_constructor_t
     {
     }
 
+  protected:
     uninitialized_storage_t<payload_t> m_value;
 };
 
@@ -443,7 +375,7 @@ struct assignment_op_wrapper_t
         if (this != ok::addressof(other)) {
             auto* ptr = ok::addressof(value());
             ptr->~payload_t();
-            ::new (ptr) payload_t(other.value());
+            stdc::construct_at(ptr, other.value());
         }
         return *this;
     }
@@ -454,7 +386,7 @@ struct assignment_op_wrapper_t
         if (this != ok::addressof(other)) {
             auto* ptr = ok::addressof(value());
             ptr->~payload_t();
-            ::new (ptr) payload_t(std::move(other).value());
+            stdc::construct_at(ptr, std::move(other).value());
         }
         return *this;
     }
@@ -518,7 +450,7 @@ template <typename derived_t, typename parent_range_t> struct cursor_wrapper_t
     }
 
     constexpr derived_t& operator+=(const size_t rhs) OKAYLIB_NOEXCEPT
-        requires detail::random_access_range_c<parent_range_t>
+        requires random_access_range_c<parent_range_t>
     {
         m_inner += rhs;
         derived()->plus_eql(rhs);
@@ -526,7 +458,7 @@ template <typename derived_t, typename parent_range_t> struct cursor_wrapper_t
     }
 
     constexpr derived_t& operator-=(const size_t rhs) OKAYLIB_NOEXCEPT
-        requires detail::random_access_range_c<parent_range_t>
+        requires random_access_range_c<parent_range_t>
     {
         m_inner -= rhs;
         derived()->minus_eql(rhs);
@@ -534,7 +466,7 @@ template <typename derived_t, typename parent_range_t> struct cursor_wrapper_t
     }
 
     constexpr derived_t& operator+(size_t rhs) const OKAYLIB_NOEXCEPT
-        requires detail::random_access_range_c<parent_range_t>
+        requires random_access_range_c<parent_range_t>
     {
         derived_t out(*derived());
         out.inner() += rhs;
@@ -543,7 +475,7 @@ template <typename derived_t, typename parent_range_t> struct cursor_wrapper_t
     }
 
     constexpr derived_t& operator-(size_t rhs) const OKAYLIB_NOEXCEPT
-        requires detail::random_access_range_c<parent_range_t>
+        requires random_access_range_c<parent_range_t>
     {
         derived_t out(*derived());
         out.inner() -= rhs;

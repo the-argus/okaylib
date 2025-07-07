@@ -1,7 +1,6 @@
 #ifndef __OKAYLIB_RANGES_VIEWS_ENUMERATE_H__
 #define __OKAYLIB_RANGES_VIEWS_ENUMERATE_H__
 
-#include "okay/detail/get_best.h"
 #include "okay/detail/ok_assert.h"
 #include "okay/detail/view_common.h"
 #include "okay/ranges/adaptors.h"
@@ -17,11 +16,9 @@ template <typename range_t> struct enumerated_view_t;
 
 struct enumerate_fn_t
 {
-    template <typename range_t>
+    template <range_c range_t>
     constexpr decltype(auto) operator()(range_t&& range) const OKAYLIB_NOEXCEPT
     {
-        static_assert(range_c<range_t>,
-                      "Cannot enumerate given type- it is not a range.");
         return enumerated_view_t<decltype(range)>{std::forward<range_t>(range)};
     }
 };
@@ -93,38 +90,51 @@ class ok::orderable_definition<detail::enumerated_cursor_t<parent_range_t>>
     }
 };
 
-// TODO: review const / ref correctness here, range_t input is allowed to be a
-// reference or const but thats not really being removed before sending it to
-// other templates
 template <typename input_range_t>
-    requires(!detail::arraylike_range_c<detail::remove_cvref_t<input_range_t>>)
+    requires(!detail::range_marked_arraylike_c<input_range_t>)
 struct range_definition<detail::enumerated_view_t<input_range_t>>
-    : public detail::propagate_sizedness_t<
-          detail::enumerated_view_t<input_range_t>,
-          detail::remove_cvref_t<input_range_t>>,
-      public detail::propagate_begin_t<
-          detail::enumerated_view_t<input_range_t>,
-          detail::remove_cvref_t<input_range_t>,
-          detail::enumerated_cursor_t<input_range_t>>,
-      public detail::propagate_boundscheck_t<
+    : public detail::propagate_all_range_definition_functions_with_conversion_t<
           detail::enumerated_view_t<input_range_t>,
           detail::remove_cvref_t<input_range_t>,
           detail::enumerated_cursor_t<input_range_t>>
 {
+  private:
+    static constexpr range_flags determine_flags() noexcept
+    {
+        using flags = range_flags;
+        flags f = flags::producing;
+
+        constexpr flags parent_flags = range_def_for<input_range_t>::flags;
+        if (parent_flags & flags::infinite)
+            f = f | flags::infinite;
+        if (parent_flags & flags::finite)
+            f = f | flags::finite;
+        if (parent_flags & flags::sized)
+            f = f | flags::sized;
+
+        return f;
+    };
+
+  public:
     static constexpr bool is_view = true;
+
+    static constexpr range_flags flags = determine_flags();
+    static constexpr range_strict_flags strict_flags =
+        range_strict_flags::can_get | range_strict_flags::implements_size |
+        range_strict_flags::implements_begin |
+        range_strict_flags::use_def_decrement |
+        range_strict_flags::use_def_compare |
+        range_strict_flags::use_def_offset;
 
     using enumerated_t = detail::enumerated_view_t<input_range_t>;
     using cursor_t = detail::enumerated_cursor_t<input_range_t>;
     using range_t = std::remove_reference_t<input_range_t>;
 
-    using pair_first_type = std::conditional_t<
-        detail::range_can_get_ref_c<range_t>,
-        std::conditional_t<detail::consuming_range_c<range_t>,
-                           value_type_for<range_t>&,
-                           const value_type_for<range_t&>>,
-        value_type_for<range_t>>;
+    using parent_get_return_type = decltype(ok::range_get_best(
+        stdc::declval<input_range_t>(),
+        stdc::declval<const cursor_type_for<input_range_t>&>()));
 
-    using value_type = std::pair<pair_first_type, const size_t>;
+    using value_type = ok::tuple<parent_get_return_type, const size_t>;
 
     constexpr static void increment(const enumerated_t& range,
                                     cursor_t& c) OKAYLIB_NOEXCEPT
@@ -148,8 +158,8 @@ struct range_definition<detail::enumerated_view_t<input_range_t>>
         c.decrement();
     }
 
-    constexpr static auto get(const enumerated_t& range,
-                              const cursor_t& c) OKAYLIB_NOEXCEPT
+    constexpr static value_type get(const enumerated_t& range,
+                                    const cursor_t& c) OKAYLIB_NOEXCEPT
     {
         using inner_def = detail::range_definition_inner_t<range_t>;
 
@@ -162,30 +172,42 @@ struct range_definition<detail::enumerated_view_t<input_range_t>>
                 !is_const_c<std::remove_reference_t<input_range_t>>,
             range_t&, const range_t&>>(parent_ref);
 
-        using pair_left =
-            decltype(ok::detail::get_best(casted_parent_ref, c.inner()));
-        return std::pair<pair_left, const size_t>{
-            ok::detail::get_best(casted_parent_ref, c.inner()), c.index()};
+        return value_type{ok::range_get_best(casted_parent_ref, c.inner()),
+                          c.index()};
     }
 };
 
 // in the case that the child is arraylike, we can just use the cursor as the
 // index
 template <typename input_range_t>
-    requires detail::arraylike_range_c<detail::remove_cvref_t<input_range_t>>
+    requires detail::range_marked_arraylike_c<input_range_t>
 struct range_definition<detail::enumerated_view_t<input_range_t>>
-    : public detail::propagate_sizedness_t<
+    : public detail::propagate_all_range_definition_functions_with_conversion_t<
           detail::enumerated_view_t<input_range_t>,
-          detail::remove_cvref_t<input_range_t>>
+          detail::remove_cvref_t<input_range_t>,
+          detail::enumerated_cursor_t<input_range_t>>
 {
     constexpr static bool is_view = true;
-    constexpr static bool is_arraylike = true;
+
+    constexpr static range_flags flags =
+        range_flags::producing | range_flags::arraylike | range_flags::sized;
+    constexpr static range_strict_flags strict_flags =
+        range_strict_flags::can_get | range_strict_flags::implements_size |
+        range_strict_flags::use_cursor_compare |
+        range_strict_flags::use_cursor_decrement |
+        range_strict_flags::use_cursor_offset |
+        range_strict_flags::use_cursor_increment;
 
     using range_t = std::remove_reference_t<input_range_t>;
     using enumerated_t = detail::enumerated_view_t<input_range_t>;
+    using parent_get_return_type = decltype(ok::range_get_best(
+        stdc::declval<input_range_t>(),
+        stdc::declval<const cursor_type_for<input_range_t>&>()));
 
-    constexpr static auto get(const enumerated_t& range,
-                              size_t cursor) OKAYLIB_NOEXCEPT
+    using value_type = ok::tuple<parent_get_return_type, const size_t>;
+
+    constexpr static value_type get(const enumerated_t& range,
+                                    size_t cursor) OKAYLIB_NOEXCEPT
     {
         const range_t& parent_ref =
             range.template get_view_reference<enumerated_t, range_t>();
@@ -195,10 +217,8 @@ struct range_definition<detail::enumerated_view_t<input_range_t>>
                 !is_const_c<std::remove_reference_t<input_range_t>>,
             range_t&, const range_t&>>(parent_ref);
 
-        using pair_left =
-            decltype(ok::detail::get_best(casted_parent_ref, cursor));
-        return std::pair<pair_left, const size_t>{
-            ok::detail::get_best(casted_parent_ref, cursor), cursor};
+        return value_type{ok::range_get_best(casted_parent_ref, cursor),
+                          cursor};
     }
 };
 

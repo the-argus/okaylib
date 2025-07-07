@@ -1,7 +1,6 @@
 #ifndef __OKAYLIB_RANGES_VIEW_ZIP_H__
 #define __OKAYLIB_RANGES_VIEW_ZIP_H__
 
-#include "okay/detail/get_best.h"
 #include "okay/detail/limits.h"
 #include "okay/detail/template_util/first_type_in_pack.h"
 #include "okay/detail/traits/is_derived_from.h"
@@ -32,7 +31,7 @@ struct zip_fn_t
                       "Cannot zip given types- they are not all input ranges");
 
         auto out =
-            zipped_view_t<ranges_t...>(std::forward<ranges_t>(ranges)...);
+            zipped_view_t<ranges_t...>(stdc::forward<ranges_t>(ranges)...);
 
         return out;
     }
@@ -96,7 +95,7 @@ template <typename... ranges_t> struct zipped_view_t
                   num_ranges);
 
     static constexpr size_t num_arraylike_ranges =
-        (... + size_t(arraylike_range_c<ranges_t>));
+        (... + size_t(range_marked_arraylike_c<ranges_t>));
 
     static constexpr bool all_infinite = num_ranges == num_infinite_ranges;
     static constexpr bool all_bidirectional =
@@ -120,7 +119,7 @@ template <typename... ranges_t> struct zipped_view_t
 
     template <size_t... indices>
     constexpr bool
-    find_expected_size_impl(std::index_sequence<indices...>) OKAYLIB_NOEXCEPT
+    find_expected_size_impl(stdc::index_sequence<indices...>) OKAYLIB_NOEXCEPT
     {
         bool shorter_sized_range = false;
         int64_t size = -1;
@@ -155,11 +154,11 @@ template <typename... ranges_t> struct zipped_view_t
     // returns false if there is some kind of mismatch in sizes
     constexpr bool find_expected_size() OKAYLIB_NOEXCEPT
     {
-        return find_expected_size_impl(std::make_index_sequence<num_ranges>());
+        return find_expected_size_impl(stdc::make_index_sequence<num_ranges>());
     }
 
     constexpr zipped_view_t(ranges_t&&... ranges) OKAYLIB_NOEXCEPT
-        : m_views(std::forward<ranges_t>(ranges)...)
+        : m_views(stdc::forward<ranges_t>(ranges)...)
     {
         if constexpr (is_sized) {
             if (!find_expected_size()) [[unlikely]] {
@@ -185,7 +184,7 @@ template <typename... ranges_t> struct zipped_cursor_t
   private:
     constexpr zipped_cursor_t(cursor_type_for<ranges_t>&&... ranges)
         OKAYLIB_NOEXCEPT
-        : m_cursors(std::forward<cursor_type_for<ranges_t>>(ranges)...)
+        : m_cursors(stdc::forward<cursor_type_for<ranges_t>>(ranges)...)
     {
     }
 
@@ -193,25 +192,14 @@ template <typename... ranges_t> struct zipped_cursor_t
 };
 
 template <typename... ranges_t> struct sized_zip_definition_t
-{
-    static constexpr size_t
-    size(const zipped_view_t<ranges_t...>& view) OKAYLIB_NOEXCEPT
-    {
-        return view.expected_size;
-    }
-};
+{};
 
 } // namespace detail
 
 template <typename... ranges_t>
-    requires((... + size_t(detail::arraylike_range_c<ranges_t>)) !=
+    requires((... + size_t(detail::range_marked_arraylike_c<ranges_t>)) !=
              sizeof...(ranges_t))
 struct range_definition<detail::zipped_view_t<ranges_t...>>
-    : public std::conditional_t<
-          detail::zipped_view_t<ranges_t...>::is_sized,
-          detail::sized_zip_definition_t<ranges_t...>,
-          detail::infinite_static_def_t<
-              detail::zipped_view_t<ranges_t...>::all_infinite>>
 {
     static constexpr bool is_view = true;
 
@@ -219,10 +207,45 @@ struct range_definition<detail::zipped_view_t<ranges_t...>>
     using cursor_t = detail::zipped_cursor_t<ranges_t...>;
 
   private:
+    constexpr static range_strict_flags determine_strict_flags() noexcept
+    {
+        using flags = range_strict_flags;
+        flags f = flags::implements_begin | flags::can_get;
+
+        if (zipped_t::is_sized)
+            f = f | flags::implements_size;
+
+        if (zipped_t::all_bidirectional) {
+            f = f | flags::use_def_decrement;
+
+            if (zipped_t::all_random_access) {
+                f = f | flags::use_def_compare;
+                f = f | flags::use_def_offset;
+            }
+        }
+
+        return f;
+    }
+
+    constexpr static range_flags determine_flags() noexcept
+    {
+        using flags = range_flags;
+        flags f = flags::producing;
+
+        if (zipped_t::is_sized)
+            f = f | flags::sized;
+        else if (zipped_t::all_infinite)
+            f = f | flags::infinite;
+        else
+            f = f | flags::finite;
+
+        return f;
+    }
+
     template <size_t... indices>
     static constexpr decltype(auto)
     begin_impl(const zipped_t& range,
-               std::index_sequence<indices...>) OKAYLIB_NOEXCEPT
+               stdc::index_sequence<indices...>) OKAYLIB_NOEXCEPT
     {
         return cursor_t(ok::begin(ok::get<indices>(range.m_views))...);
     }
@@ -230,7 +253,7 @@ struct range_definition<detail::zipped_view_t<ranges_t...>>
     template <size_t... indices>
     static constexpr bool
     is_inbounds_impl(const zipped_t& range, const cursor_t& cursor,
-                     std::index_sequence<0UL, indices...>) OKAYLIB_NOEXCEPT
+                     stdc::index_sequence<0UL, indices...>) OKAYLIB_NOEXCEPT
     {
         const bool first_inbounds = ok::is_inbounds(
             ok::get<0>(range.m_views), ok::get<0>(cursor.m_cursors));
@@ -264,7 +287,7 @@ struct range_definition<detail::zipped_view_t<ranges_t...>>
     template <size_t... indices>
     static constexpr void
     increment_impl(const zipped_t& range, cursor_t& cursor,
-                   std::index_sequence<indices...>) OKAYLIB_NOEXCEPT
+                   stdc::index_sequence<indices...>) OKAYLIB_NOEXCEPT
     {
         (
             [&] {
@@ -277,7 +300,7 @@ struct range_definition<detail::zipped_view_t<ranges_t...>>
     template <size_t... indices>
     static constexpr void
     decrement_impl(const zipped_t& range, cursor_t& cursor,
-                   std::index_sequence<indices...>) OKAYLIB_NOEXCEPT
+                   stdc::index_sequence<indices...>) OKAYLIB_NOEXCEPT
     {
         (
             [&] {
@@ -290,12 +313,12 @@ struct range_definition<detail::zipped_view_t<ranges_t...>>
     template <size_t... indices>
     static constexpr void
     offset_impl(const zipped_t& range, cursor_t& cursor, const int64_t& offset,
-                std::index_sequence<indices...>) OKAYLIB_NOEXCEPT
+                stdc::index_sequence<indices...>) OKAYLIB_NOEXCEPT
     {
         (
             [&] {
-                ok::iter_offset(ok::get<indices>(range.m_views),
-                                ok::get<indices>(cursor.m_cursors), offset);
+                ok::range_offset(ok::get<indices>(range.m_views),
+                                 ok::get<indices>(cursor.m_cursors), offset);
             }(),
             ...);
     }
@@ -303,7 +326,7 @@ struct range_definition<detail::zipped_view_t<ranges_t...>>
     template <size_t... indices>
     static constexpr decltype(auto)
     get_impl(const zipped_t& range, const cursor_t& cursor,
-             std::index_sequence<indices...>) OKAYLIB_NOEXCEPT
+             stdc::index_sequence<indices...>) OKAYLIB_NOEXCEPT
     {
         (
             [&] {
@@ -312,37 +335,49 @@ struct range_definition<detail::zipped_view_t<ranges_t...>>
             }(),
             ...);
         return ok::make_tuple(
-            ok::detail::get_best(ok::get<indices>(range.m_views),
-                                 ok::get<indices>(cursor.m_cursors))...);
+            ok::range_get_best(ok::get<indices>(range.m_views),
+                               ok::get<indices>(cursor.m_cursors))...);
     }
 
   public:
+    static constexpr range_flags flags = determine_flags();
+    static constexpr range_strict_flags strict_flags = determine_strict_flags();
+
+    using value_type = decltype(get_impl(
+        stdc::declval<const zipped_t&>(), stdc::declval<const cursor_t&>(),
+        stdc::make_index_sequence<zipped_t::num_ranges>()));
+
+    static constexpr size_t size(const zipped_t& view) OKAYLIB_NOEXCEPT
+    {
+        return view.expected_size;
+    }
+
     static constexpr cursor_t begin(const zipped_t& range) OKAYLIB_NOEXCEPT
     {
         return begin_impl(range,
-                          std::make_index_sequence<zipped_t::num_ranges>());
+                          stdc::make_index_sequence<zipped_t::num_ranges>());
     }
 
     static constexpr bool is_inbounds(const zipped_t& range,
                                       const cursor_t& cursor) OKAYLIB_NOEXCEPT
     {
         return is_inbounds_impl(
-            range, cursor, std::make_index_sequence<zipped_t::num_ranges>());
+            range, cursor, stdc::make_index_sequence<zipped_t::num_ranges>());
     }
 
     static constexpr void increment(const zipped_t& range,
                                     cursor_t& cursor) OKAYLIB_NOEXCEPT
     {
-        return increment_impl(range, cursor,
-                              std::make_index_sequence<zipped_t::num_ranges>());
+        return increment_impl(
+            range, cursor, stdc::make_index_sequence<zipped_t::num_ranges>());
     }
 
     static void decrement(const zipped_t& range,
                           cursor_t& cursor) OKAYLIB_NOEXCEPT
         requires zipped_t::all_bidirectional
     {
-        return decrement_impl(range, cursor,
-                              std::make_index_sequence<zipped_t::num_ranges>());
+        return decrement_impl(
+            range, cursor, stdc::make_index_sequence<zipped_t::num_ranges>());
     }
 
     static void offset(const zipped_t& range, cursor_t& cursor,
@@ -350,7 +385,7 @@ struct range_definition<detail::zipped_view_t<ranges_t...>>
         requires zipped_t::all_random_access
     {
         return offset_impl(range, cursor, offset,
-                           std::make_index_sequence<zipped_t::num_ranges>());
+                           stdc::make_index_sequence<zipped_t::num_ranges>());
     }
 
     // comparison just compares the first cursor
@@ -358,30 +393,57 @@ struct range_definition<detail::zipped_view_t<ranges_t...>>
                                 const cursor_t& cursor_b) OKAYLIB_NOEXCEPT
         requires zipped_t::all_random_access
     {
-        return ok::iter_compare(ok::get<0>(range.m_views),
-                                ok::get<0>(cursor_a.m_cursors),
-                                ok::get<0>(cursor_b.m_cursors));
+        return ok::range_compare(ok::get<0>(range.m_views),
+                                 ok::get<0>(cursor_a.m_cursors),
+                                 ok::get<0>(cursor_b.m_cursors));
     }
 
-    constexpr static auto get(const zipped_t& range,
-                              const cursor_t& c) OKAYLIB_NOEXCEPT
+    constexpr static value_type get(const zipped_t& range,
+                                    const cursor_t& c) OKAYLIB_NOEXCEPT
     {
         return get_impl(range, c,
-                        std::make_index_sequence<zipped_t::num_ranges>());
+                        stdc::make_index_sequence<zipped_t::num_ranges>());
     }
 };
 
 // in the case that all zipped items are arraylike, just use a single size_t to
 // index all of the views
 template <typename... ranges_t>
-    requires((... + size_t(detail::arraylike_range_c<ranges_t>)) ==
+    requires((... + size_t(detail::range_marked_arraylike_c<ranges_t>)) ==
              sizeof...(ranges_t))
 struct range_definition<detail::zipped_view_t<ranges_t...>>
 {
     using zipped_t = detail::zipped_view_t<ranges_t...>;
 
+  private:
+    template <size_t... indices>
+    static constexpr decltype(auto)
+    get_impl(const zipped_t& range, const size_t& cursor,
+             stdc::index_sequence<indices...>) OKAYLIB_NOEXCEPT
+    {
+        (
+            [&] {
+                static_assert(
+                    range_c<decltype(ok::get<indices>(range.m_views))>);
+            }(),
+            ...);
+        return ok::make_tuple(
+            ok::range_get_best(ok::get<indices>(range.m_views), cursor)...);
+    }
+
+  public:
     static constexpr bool is_view = true;
-    static constexpr bool is_arraylike = true;
+
+    // TODO: allow arraylike ranges to be infinite or maybe even finite?
+    static constexpr range_flags flags =
+        range_flags::producing | range_flags::arraylike | range_flags::sized;
+
+    static constexpr range_strict_flags strict_flags =
+        range_strict_flags::can_get | range_strict_flags::implements_size |
+        range_strict_flags::use_cursor_increment |
+        range_strict_flags::use_cursor_offset |
+        range_strict_flags::use_cursor_decrement |
+        range_strict_flags::use_cursor_compare;
 
     static constexpr size_t size(const zipped_t& range) OKAYLIB_NOEXCEPT
     {
@@ -392,23 +454,7 @@ struct range_definition<detail::zipped_view_t<ranges_t...>>
                                         const size_t& cursor) OKAYLIB_NOEXCEPT
     {
         return get_impl(range, cursor,
-                        std::make_index_sequence<zipped_t::num_ranges>());
-    }
-
-  private:
-    template <size_t... indices>
-    static constexpr decltype(auto)
-    get_impl(const zipped_t& range, const size_t& cursor,
-             std::index_sequence<indices...>) OKAYLIB_NOEXCEPT
-    {
-        (
-            [&] {
-                static_assert(
-                    range_c<decltype(ok::get<indices>(range.m_views))>);
-            }(),
-            ...);
-        return ok::make_tuple(
-            ok::detail::get_best(ok::get<indices>(range.m_views), cursor)...);
+                        stdc::make_index_sequence<zipped_t::num_ranges>());
     }
 };
 
@@ -438,7 +484,7 @@ struct fmt::formatter<
     {
         fmt::format_to(ctx.out(), "zipped_view_t< ");
 
-        format_views_folded<std::make_index_sequence<sizeof...(ranges_t)>>(
+        format_views_folded<stdc::make_index_sequence<sizeof...(ranges_t)>>(
             zipped_view, ctx);
 
         return fmt::format_to(ctx.out(), ">");
@@ -448,7 +494,7 @@ struct fmt::formatter<
     template <size_t... indices>
     static constexpr void
     format_views_folded(const formatted_type_t& zip, format_context& ctx,
-                        std::index_sequence<indices...>) OKAYLIB_NOEXCEPT
+                        stdc::index_sequence<indices...>) OKAYLIB_NOEXCEPT
     {
         (
             [&] {

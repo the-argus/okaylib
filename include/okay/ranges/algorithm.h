@@ -34,8 +34,8 @@ struct ranges_equal_fn_t
                  ok::increment(lhs, lhs_cursor)) {
                 __ok_internal_assert(ok::is_inbounds(rhs, rhs_cursor));
 
-                auto&& r = ok::iter_get_temporary_ref(rhs, rhs_cursor);
-                auto&& l = ok::iter_get_temporary_ref(lhs, lhs_cursor);
+                auto&& r = ok::range_get_best(rhs, rhs_cursor);
+                auto&& l = ok::range_get_best(lhs, lhs_cursor);
 
                 if (r != l) {
                     return false;
@@ -51,8 +51,8 @@ struct ranges_equal_fn_t
                  ok::increment(rhs, cursor)) {
                 __ok_internal_assert(ok::is_inbounds(lhs, lhs_cursor));
 
-                auto&& r = ok::iter_get_temporary_ref(rhs, cursor);
-                auto&& l = ok::iter_get_temporary_ref(lhs, lhs_cursor);
+                auto&& r = ok::range_get_best(rhs, cursor);
+                auto&& l = ok::range_get_best(lhs, lhs_cursor);
 
                 if (r != l) {
                     return false;
@@ -86,8 +86,8 @@ struct ranges_equal_fn_t
                     return left_good == right_good;
                 }
 
-                auto&& r = ok::iter_get_temporary_ref(rhs, rhs_cursor);
-                auto&& l = ok::iter_get_temporary_ref(lhs, lhs_cursor);
+                auto&& r = ok::range_get_best(rhs, rhs_cursor);
+                auto&& l = ok::range_get_best(lhs, lhs_cursor);
 
                 if (r != l) {
                     return false;
@@ -161,9 +161,9 @@ template <bool allow_small_destination = false> struct ranges_copy_fn_t
                     auto dest_cursor = ok::begin(dest);
                     auto source_cursor = ok::begin(source);
                     while (ok::is_inbounds(dest, dest_cursor)) {
-                        ok::iter_set(
+                        ok::range_set(
                             dest, dest_cursor,
-                            ok::iter_get_temporary_ref(source, source_cursor));
+                            ok::range_get_best(source, source_cursor));
 
                         ok::increment(dest, dest_cursor);
                         ok::increment(source, source_cursor);
@@ -175,9 +175,8 @@ template <bool allow_small_destination = false> struct ranges_copy_fn_t
                 auto dest_cursor = ok::begin(dest);
                 auto source_cursor = ok::begin(source);
                 while (ok::is_inbounds(source, source_cursor)) {
-                    ok::iter_set(
-                        dest, dest_cursor,
-                        ok::iter_get_temporary_ref(source, source_cursor));
+                    ok::range_set(dest, dest_cursor,
+                                  ok::range_get_best(source, source_cursor));
 
                     ok::increment(dest, dest_cursor);
                     ok::increment(source, source_cursor);
@@ -221,8 +220,8 @@ template <bool allow_small_destination = false> struct ranges_copy_fn_t
                     }
                 }
 
-                ok::iter_set(dest, dest_cursor,
-                             ok::iter_get_temporary_ref(source, source_cursor));
+                ok::range_set(dest, dest_cursor,
+                              ok::range_get_best(source, source_cursor));
 
                 ok::increment(dest, dest_cursor);
                 ok::increment(source, source_cursor);

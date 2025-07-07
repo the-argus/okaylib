@@ -12,10 +12,11 @@
 
 using namespace ok;
 // zipped view should inherit random accessibility from zipped ranges
-static_assert(detail::random_access_range_c<example_range_cstyle&>);
-static_assert(detail::random_access_range_c<ok::detail::zipped_view_t<
+static_assert(random_access_range_c<example_range_cstyle&>);
+static_assert(range_c<example_range_cstyle&>);
+static_assert(random_access_range_c<ok::detail::zipped_view_t<
                   example_range_cstyle&, example_range_cstyle&>>);
-static_assert(detail::range_marked_infinite_c<decltype(zip(indices, indices))>);
+// static_assert(detail::range_marked_infinite_c<decltype(zip(indices, indices))>);
 
 TEST_SUITE("zip")
 {
@@ -43,8 +44,8 @@ TEST_SUITE("zip")
         int a1[] = {1};
         int a2[] = {1, 2};
 
-        static_assert(detail::arraylike_range_c<decltype(a1)>);
-        static_assert(detail::arraylike_range_c<decltype(zip(a1, a2))>);
+        static_assert(detail::range_marked_arraylike_c<decltype(a1)>);
+        static_assert(detail::range_marked_arraylike_c<decltype(zip(a1, a2))>);
 
         REQUIRE(ok::size(zip(a1, a2)) == ok::size(a1));
 

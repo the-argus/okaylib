@@ -81,7 +81,6 @@ const okaylib_headers = &[_][]const u8{
 
     "detail/abort.h",
     "detail/addressof.h",
-    "detail/get_best.h",
     "detail/invoke.h",
     "detail/is_lvalue.h",
     "detail/no_unique_addr.h",

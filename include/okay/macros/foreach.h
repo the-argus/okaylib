@@ -5,8 +5,6 @@
 // https://stackoverflow.com/questions/16504062/how-to-make-the-for-each-loop-function-in-c-work-with-a-custom-class
 // in turn taken from https://www.chiark.greenend.org.uk/~sgtatham/mp/
 
-#include "okay/detail/get_best.h"
-
 #define __OK_LN(l, x) x##l // creates unique labels
 #define __OK_L(x, y) __OK_LN(x, y)
 #define ok_foreach(decl, _range)                                              \
@@ -34,7 +32,7 @@
                                                 terminated by break */        \
                     } else                                                    \
                         __OK_L(__LINE__, body)                                \
-                            : for (decl = ok::detail::get_best(               \
+                            : for (decl = ok::range_get_best(                 \
                                        __OK_L(__LINE__, range), cursor);      \
                                    _run; _run = false) /* block following the \
                                                           expanded macro */

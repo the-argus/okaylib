@@ -26,36 +26,44 @@
 
 namespace ok {
 
+// clang-format off
 enum class range_flags
 {
-    producing,
-    consuming,
-    infinite,
-    finite,
-    sized,
-    arraylike,
-    implements_set,
-    ref_wrapper,
+    producing           = 0b00000001,
+    consuming           = 0b00000010,
+    infinite            = 0b00000100,
+    finite              = 0b00001000,
+    sized               = 0b00010000,
+    arraylike           = 0b00100000,
+    implements_set      = 0b01000000,
+    ref_wrapper         = 0b10000000,
 };
 
 /// more strict flags which, when present in the range definition, are used to
 /// limit what implementations are detected/ignored. For example, if
 /// can_increment and implements_increment are not defined, then the increment()
 /// implementation in the range definition will be ignored.
-enum class strict_flags
+enum class range_strict_flags
 {
-    can_increment,
-    implements_increment,
-    can_decrement,
-    implements_decrement,
-    can_offset,
-    implements_offset,
-    can_get,
-    can_set,
-    implements_begin, // can only be false if regular flags specify arraylike
-    implements_size, // can only be false if arraylike or finite or infinite
+    none                        = 0b000000000000,
+    // if use_cursor_increment is not present, then the range must define an
+    // increment() function which will be used instead.
+    use_cursor_increment        = 0b000000000010,
+    use_def_decrement           = 0b000000000100,
+    use_cursor_decrement        = 0b000000001000,
+    use_def_offset              = 0b000000010000,
+    use_cursor_offset           = 0b000000100000,
+    use_def_compare             = 0b000001000000,
+    use_cursor_compare          = 0b000010000000,
+    can_get                     = 0b000100000000,
+    can_set                     = 0b001000000000,
+    // can only be absent if regular flags specify arraylike
+    implements_begin            = 0b010000000000,
+    // can only be absent if arraylike or finite or infinite
+    implements_size             = 0b100000000000,
     // must always implement is_inbounds()
 };
+// clang-format on
 
 constexpr range_flags operator|(range_flags a, range_flags b)
 {
@@ -69,6 +77,70 @@ constexpr bool operator&(range_flags a, range_flags b)
     using flags = range_flags;
     return static_cast<std::underlying_type_t<flags>>(a) &
            static_cast<std::underlying_type_t<flags>>(b);
+}
+
+constexpr range_strict_flags operator|(range_strict_flags a,
+                                       range_strict_flags b)
+{
+    using flags = range_strict_flags;
+    return static_cast<flags>(static_cast<std::underlying_type_t<flags>>(a) |
+                              static_cast<std::underlying_type_t<flags>>(b));
+}
+
+constexpr bool operator&(range_strict_flags a, range_strict_flags b)
+{
+    using flags = range_strict_flags;
+    return static_cast<std::underlying_type_t<flags>>(a) &
+           static_cast<std::underlying_type_t<flags>>(b);
+}
+
+constexpr bool range_strict_flags_validate(range_flags rflags,
+                                           range_strict_flags sflags)
+{
+    using sflags_e = range_strict_flags;
+    using rflags_e = range_flags;
+
+    // a range is only allowed to not implement begin if it is arraylike
+    if (!(sflags & sflags_e::implements_begin) &&
+        !(rflags & rflags_e::arraylike))
+        return false;
+
+    // cases where you can avoid implementing size(): arraylike, infinite,
+    // or finite
+    if (!(sflags & sflags_e::implements_size) &&
+        !(rflags & rflags_e::arraylike || rflags & rflags_e::finite ||
+          rflags & rflags_e::infinite))
+        return false;
+
+    // do not try to use two implementations of decrement, offset, or compare
+    if (sflags & sflags_e::use_cursor_decrement &&
+        sflags & sflags_e::use_def_decrement)
+        return false;
+    if (sflags & sflags_e::use_cursor_offset &&
+        sflags & sflags_e::use_def_offset)
+        return false;
+    if (sflags & sflags_e::use_cursor_compare &&
+        sflags & sflags_e::use_def_compare)
+        return false;
+
+    const bool can_get = sflags & sflags_e::can_get;
+    const bool can_set = sflags & sflags_e::can_set;
+    const bool producing = rflags & rflags_e::producing;
+    const bool consuming = rflags & rflags_e::consuming;
+
+    // never have both can_set and can_get off
+    if (!can_get && !can_set)
+        return false;
+
+    // if range can set(), then it is consuming
+    if (can_set && !consuming)
+        return false;
+
+    // if range can get(), then it is producing
+    if (can_get && !producing)
+        return false;
+
+    return true;
 }
 
 template <typename range_t> struct range_definition
@@ -93,107 +165,6 @@ struct inherited_range_type<T, std::void_t<typename T::inherited_range_type>>
 template <typename T>
 constexpr bool has_inherited_range_type_v = inherited_range_type<T>::value;
 
-// specialization for c-style arrays
-template <typename input_range_t>
-    requires std::is_array_v<detail::remove_cvref_t<input_range_t>>
-struct range_definition<input_range_t>
-{
-  private:
-    using range_t = detail::remove_cvref_t<input_range_t>;
-
-  public:
-    // a c array can never have a const value type
-    using value_type = detail::c_array_value_type<range_t>;
-    static_assert(!is_const_c<value_type>);
-
-    static constexpr range_flags flags =
-        range_flags::arraylike | range_flags::sized | range_flags::consuming |
-        range_flags::producing;
-
-    static constexpr value_type& get(range_t& i, size_t c) OKAYLIB_NOEXCEPT
-    {
-        if (c >= size(i)) [[unlikely]] {
-            __ok_abort("out of bounds access into c-style array");
-        }
-        return i[c];
-    }
-
-    static constexpr const value_type& get(const range_t& i,
-                                           size_t c) OKAYLIB_NOEXCEPT
-    {
-        if (c >= size(i)) [[unlikely]] {
-            __ok_abort("out of bounds access into c-style array");
-        }
-        return i[c];
-    }
-
-    static constexpr size_t size(const range_t& i) OKAYLIB_NOEXCEPT
-    {
-        return detail::c_array_length(i);
-    }
-};
-
-// specialization for things that can be indexed with size_t and have an
-// range_t::value_type member and a size() and data() function (stuff like
-// std::array, std::span, and std::vector)
-template <typename input_range_t>
-    requires(
-        // not array
-        !std::is_array_v<detail::remove_cvref_t<input_range_t>> &&
-        // not specified to inherit some other range definition
-        !has_inherited_range_type_v<detail::remove_cvref_t<input_range_t>> &&
-        // provides size_t .size() method and pointer data() method
-        detail::std_arraylike_container<input_range_t> &&
-        std::is_same_v<
-            typename detail::remove_cvref_t<input_range_t>::value_type&,
-            decltype(std::declval<detail::remove_cvref_t<input_range_t>&>()
-                         [std::declval<size_t>()])>)
-struct range_definition<input_range_t>
-{
-  private:
-    using range_t = detail::remove_cvref_t<input_range_t>;
-    static constexpr range_flags universal_flags =
-        range_flags::arraylike | range_flags::sized | range_flags::producing;
-
-  public:
-    static_assert(!detail::is_instance_c<range_t, slice>);
-
-    // std::array may have a const value type
-    using value_type = typename range_t::value_type;
-
-    static constexpr range_flags flags =
-        is_const_c<typename range_t::value_type>
-            ? universal_flags
-            : universal_flags | range_flags::consuming;
-
-    // dont enable mutable get_ref unless the index operator actually returns a
-    // mutable reference (this applies for array<const T>)
-    static constexpr value_type& get(range_t& i, size_t c) OKAYLIB_NOEXCEPT
-        requires std::is_same_v<
-            value_type&,
-            decltype(std::declval<range_t&>()[std::declval<size_t>()])>
-    {
-        if (c >= i.size()) [[unlikely]] {
-            __ok_abort("Out of bounds access into arraylike container.");
-        }
-        return i[c];
-    }
-
-    static constexpr const value_type& get(const range_t& i,
-                                           size_t c) OKAYLIB_NOEXCEPT
-    {
-        if (c >= i.size()) [[unlikely]] {
-            __ok_abort("Out of bounds access into arraylike container.");
-        }
-        return i[c];
-    }
-
-    static constexpr size_t size(const range_t& i) OKAYLIB_NOEXCEPT
-    {
-        return i.size();
-    }
-};
-
 namespace detail {
 
 template <typename T> struct range_definition_inner_meta_t
@@ -214,6 +185,119 @@ using range_definition_inner_t =
     typename range_definition_inner_meta_t<remove_cvref_t<T>>::type;
 
 template <typename T>
+concept range_with_strict_flags_c = requires {
+    {
+        range_definition_inner_t<T>::strict_flags
+    } -> same_as_c<const range_strict_flags&>;
+};
+
+/// Used by range declaration so it can be totally invalid if range has strict
+/// flags but not valid strict flags
+template <typename T>
+concept range_with_valid_strict_flags_c = requires {
+    requires range_strict_flags_validate(
+        range_definition_inner_t<T>::flags,
+        range_definition_inner_t<T>::strict_flags);
+};
+
+template <typename T>
+concept range_strictly_disallows_get_c = requires {
+    requires !(range_definition_inner_t<T>::strict_flags &
+               range_strict_flags::can_get);
+};
+// template <typename T>
+// concept range_strictly_must_implement_get_c = requires {
+//     requires range_definition_inner_t<T>::strict_flags&
+//         range_strict_flags::can_get;
+// };
+
+template <typename T>
+concept range_strictly_disallows_set_c = requires {
+    requires !(range_definition_inner_t<T>::strict_flags &
+               range_strict_flags::can_set);
+};
+// template <typename T>
+// concept range_strictly_must_implement_set_c = requires {
+//     requires range_definition_inner_t<T>::strict_flags&
+//         range_strict_flags::can_set;
+// };
+
+/// The range may define a begin() function, but it must not be used. only makes
+/// sense for arraylike generic views, which may inherit a begin() but want to
+/// opt out of using it.
+template <typename T>
+concept range_strictly_disallows_defined_begin_c = requires {
+    requires !(range_definition_inner_t<T>::strict_flags &
+               range_strict_flags::implements_begin);
+};
+// template <typename T>
+// concept range_strictly_must_implement_begin_c = requires {
+//     requires range_definition_inner_t<T>::strict_flags&
+//         range_strict_flags::implements_begin;
+// };
+
+/// the range may define an increment() function, but it should not be used,
+/// in favor of the cursor's operator++().
+template <typename T>
+concept range_strictly_must_use_cursor_member_increment_c = requires {
+    requires range_definition_inner_t<T>::strict_flags&
+        range_strict_flags::use_cursor_increment;
+};
+/// The range must implement an increment() function which will always be used
+/// over even the cursor's operator++().
+template <typename T>
+concept range_strictly_must_implement_increment_c = requires {
+    requires !(range_definition_inner_t<T>::strict_flags &
+               range_strict_flags::use_cursor_increment);
+};
+
+/// Range may define the size function, but it strictly refuses for it to be
+/// used. only really makes sense for stuff like arraylike or infinite ranges.
+template <typename T>
+concept range_strictly_disallows_defined_size_c = requires {
+    requires !(range_definition_inner_t<T>::strict_flags &
+               range_strict_flags::implements_size);
+};
+// template <typename T>
+// concept range_strictly_must_implement_size_c = requires {
+//     requires range_definition_inner_t<T>::strict_flags&
+//         range_strict_flags::implements_size;
+// };
+
+template <typename T>
+concept range_strictly_must_use_cursor_member_decrement_c = requires {
+    requires range_definition_inner_t<T>::strict_flags&
+        range_strict_flags::use_cursor_decrement;
+};
+template <typename T>
+concept range_strictly_must_implement_decrement_c = requires {
+    requires !(range_definition_inner_t<T>::strict_flags &
+               range_strict_flags::use_def_decrement);
+};
+
+template <typename T>
+concept range_strictly_must_use_cursor_member_offset_c = requires {
+    requires range_definition_inner_t<T>::strict_flags&
+        range_strict_flags::use_cursor_offset;
+};
+template <typename T>
+concept range_strictly_must_implement_offset_c = requires {
+    requires !(range_definition_inner_t<T>::strict_flags &
+               range_strict_flags::use_def_offset);
+};
+
+template <typename T>
+concept range_strictly_must_use_cursor_member_compare_c = requires {
+    requires range_definition_inner_t<T>::strict_flags&
+        range_strict_flags::use_cursor_compare;
+};
+template <typename T>
+concept range_strictly_must_implement_compare_c = requires {
+    requires !(range_definition_inner_t<T>::strict_flags &
+               range_strict_flags::use_def_compare);
+};
+
+template <typename T>
 concept range_marked_arraylike_c = requires {
     requires range_definition_inner_t<T>::flags& range_flags::arraylike;
 };
@@ -226,6 +310,7 @@ concept range_marked_consuming_c = requires {
 template <typename T>
 concept range_marked_as_implementing_set = requires {
     requires range_definition_inner_t<T>::flags& range_flags::implements_set;
+    requires !range_strictly_disallows_set_c<T>;
 };
 
 template <typename T>
@@ -254,13 +339,7 @@ concept range_marked_finite_c = requires() {
 
 template <typename T>
 concept range_marked_sized_c = requires() {
-    requires !range_definition_inner_t<T>::flags & range_flags::sized;
-};
-
-template <typename T>
-concept range_disallows_cursor_member_offset_c = requires() {
-    requires range_definition_inner_t<T>::flags&
-        range_flags::disallows_cursor_member_offset;
+    requires range_definition_inner_t<T>::flags& range_flags::sized;
 };
 
 template <typename T>
@@ -305,12 +384,14 @@ template <typename T>
 concept range_impls_increment_c = requires(
     const remove_cvref_t<T>& range, cursor_type_unchecked_for_t<T>& cursor) {
     { range_definition_inner_t<T>::increment(range, cursor) } -> is_void_c;
+    requires !range_strictly_must_use_cursor_member_increment_c<T>;
 };
 
 template <typename T>
 concept range_impls_decrement_c = requires(
     const remove_cvref_t<T>& range, cursor_type_unchecked_for_t<T>& cursor) {
     { range_definition_inner_t<T>::decrement(range, cursor) } -> is_void_c;
+    requires !range_strictly_must_use_cursor_member_decrement_c<T>;
 };
 
 template <typename T>
@@ -320,6 +401,7 @@ concept range_impls_offset_c =
         {
             range_definition_inner_t<T>::offset(range, cursor, offset)
         } -> is_void_c;
+        requires !range_strictly_must_use_cursor_member_offset_c<T>;
     };
 
 template <typename T>
@@ -330,6 +412,7 @@ concept range_impls_compare_c =
         {
             range_definition_inner_t<T>::compare(range, a, b)
         } -> same_as_c<ok::ordering>;
+        requires !range_strictly_must_use_cursor_member_compare_c<T>;
     };
 
 template <typename T, typename other_t>
@@ -340,6 +423,7 @@ template <typename T>
 concept range_impls_const_get_c = requires(
     const remove_cvref_t<T>& range, const cursor_type_unchecked_for_t<T>& c) {
     requires range_marked_producing_c<T>; // must be enabled
+    requires !range_strictly_disallows_get_c<T>;
     {
         range_definition_inner_t<T>::get(range, c)
     } -> same_as_without_cvref_c<typename remove_cvref_t<T>::value_type>;
@@ -352,9 +436,11 @@ template <typename T>
 concept range_impls_const_or_nonconst_get_c = requires(
     remove_cvref_t<T>& range, const cursor_type_unchecked_for_t<T>& c) {
     requires range_marked_producing_c<T>; // must be enabled
+    requires !range_strictly_disallows_get_c<T>;
     {
         range_definition_inner_t<T>::get(range, c)
-    } -> same_as_without_cvref_c<typename remove_cvref_t<T>::value_type>;
+    } -> same_as_without_cvref_c<
+          typename range_definition_inner_t<remove_cvref_t<T>>::value_type>;
 };
 
 /// Checks whether both const and nonconst get can be called AND (they both
@@ -375,6 +461,7 @@ template <typename T>
 concept range_impls_get_c = requires {
     requires range_marked_producing_c<T>; // must be enabled
     requires range_impls_const_or_nonconst_get_c<T>;
+    requires !range_strictly_disallows_get_c<T>;
 
     // get must return a reference for both the const and nonconst overloads,
     // or return a value for both. no mixture of reference / value. it is also
@@ -384,30 +471,30 @@ concept range_impls_get_c = requires {
                  !range_impls_const_get_c<T>;
 };
 
-template <typename range_t, typename... args_t>
+template <typename T, typename... args_t>
 concept range_impls_construction_set_c = requires {
     // must be enabled
-    requires range_marked_consuming_c<range_t>;
-    requires range_marked_as_implementing_set<range_t>;
+    requires range_marked_consuming_c<T>;
+    requires !range_strictly_disallows_set_c<T>;
+    requires range_marked_as_implementing_set<T>;
     // either the value type in infallible constructible with the given
     // arguments and set() returns void
-    requires requires(range_t& r, const cursor_type_unchecked_for_t<range_t>& c,
+    requires requires(T& r, const cursor_type_unchecked_for_t<T>& c,
                       args_t... args) {
         requires is_infallible_constructible_c<
-            typename range_definition_inner_t<range_t>::value_type, args_t...>;
-        { range_definition_inner_t<range_t>::set(r, c, args...) } -> is_void_c;
+            typename range_definition_inner_t<T>::value_type, args_t...>;
+        { range_definition_inner_t<T>::set(r, c, args...) } -> is_void_c;
     } ||
                  // OR the type is fallible constructible with these args, and
                  // set returns a status of some kind (and is hopefully marked
                  // [[nodiscard]])
-                 requires(range_t& r,
-                          const cursor_type_unchecked_for_t<range_t>& c,
+                 requires(T& r, const cursor_type_unchecked_for_t<T>& c,
                           args_t... args) {
                      requires is_fallible_constructible_c<
-                         typename range_definition_inner_t<range_t>::value_type,
+                         typename range_definition_inner_t<T>::value_type,
                          args_t...>;
                      {
-                         range_definition_inner_t<range_t>::set(r, c, args...)
+                         range_definition_inner_t<T>::set(r, c, args...)
                      } -> status_type;
                  };
 };
@@ -415,11 +502,13 @@ concept range_impls_construction_set_c = requires {
 template <typename T>
 concept range_impls_size_c = requires(const remove_cvref_t<T>& range) {
     requires range_marked_sized_c<T>;
+    requires !range_strictly_disallows_defined_size_c<T>;
     { range_definition_inner_t<T>::size(range) } -> same_as_c<size_t>;
 };
 
 template <typename T>
 concept range_can_begin_c = requires {
+    requires !range_strictly_disallows_defined_begin_c<T>;
     requires range_impls_begin_c<T> || range_marked_arraylike_c<T>;
 };
 
@@ -448,7 +537,7 @@ concept well_declared_range_c = requires {
     requires has_value_type_c<range_definition_inner_t<T>>;
     requires range_can_begin_c<T>;
     requires range_can_is_inbounds_c<T>;
-    { range_definition_inner_t<T>::flags } -> same_as_c<range_flags>;
+    { range_definition_inner_t<T>::flags } -> same_as_c<const range_flags&>;
     requires !(range_marked_as_implementing_set<T> &&
                !range_marked_consuming_c<T>);
     requires range_marked_producing_c<T> || range_marked_consuming_c<T>;
@@ -458,6 +547,8 @@ concept well_declared_range_c = requires {
     requires range_impls_size_c<T> == range_marked_sized_c<T>;
     requires range_impls_size_c<T> != range_marked_finite_c<T>;
     requires range_impls_size_c<T> != range_marked_infinite_c<T>;
+    // if strict_flags is defined, they must be valid
+    requires range_with_strict_flags_c<T> == range_with_valid_strict_flags_c<T>;
 };
 } // namespace detail
 
@@ -481,22 +572,32 @@ template <typename T> using cursor_or_void_t = typename cursor_or_void<T>::type;
 
 template <typename T>
 concept range_can_offset_c =
-    range_impls_offset_c<T> ||
-    (!range_disallows_cursor_member_offset_c<T> &&
+    (!range_strictly_must_use_cursor_member_offset_c<T> &&
+     range_impls_offset_c<T>) ||
+    (!range_strictly_must_implement_offset_c<T> &&
      has_inplace_addition_with_i64_c<cursor_or_void_t<T>>);
 
 template <typename T>
 concept range_can_compare_c =
-    range_impls_compare_c<T> || is_orderable_v<cursor_or_void_t<T>>;
+    (!range_strictly_must_use_cursor_member_compare_c<T> &&
+     range_impls_compare_c<T>) ||
+    (!range_strictly_must_implement_compare_c<T> &&
+     is_orderable_v<cursor_or_void_t<T>>);
 
 template <typename T>
 concept range_can_increment_c =
-    range_impls_increment_c<T> || has_pre_increment_c<cursor_or_void_t<T>> ||
+    (!range_strictly_must_use_cursor_member_increment_c<T> &&
+     range_impls_increment_c<T>) ||
+    (!range_strictly_must_implement_increment_c<T> &&
+     has_pre_increment_c<cursor_or_void_t<T>>) ||
     range_can_offset_c<T>;
 
 template <typename T>
 concept range_can_decrement_c =
-    range_impls_decrement_c<T> || has_pre_decrement_c<cursor_or_void_t<T>> ||
+    (!range_strictly_must_use_cursor_member_decrement_c<T> &&
+     range_impls_decrement_c<T>) ||
+    (!range_strictly_must_implement_decrement_c<T> &&
+     has_pre_decrement_c<cursor_or_void_t<T>>) ||
     range_can_offset_c<T>;
 
 template <typename T>
@@ -614,6 +715,18 @@ struct range_get_fn_t
     constexpr decltype(auto) operator() [[nodiscard]] (
         const range_t& range,
         const cursor_type_for<range_t>& cursor) const OKAYLIB_NOEXCEPT
+    {
+        return range_def_for<range_t>::get(range, cursor);
+    }
+};
+
+struct range_get_best_fn_t
+{
+    template <range_c range_t>
+    constexpr decltype(auto) operator()
+        [[nodiscard]] (range_t& range, const cursor_type_for<range_t>& cursor)
+        const OKAYLIB_NOEXCEPT
+        requires range_impls_get_c<range_t>
     {
         return range_def_for<range_t>::get(range, cursor);
     }
@@ -789,7 +902,7 @@ struct increment_fn_t
 
 struct decrement_fn_t
 {
-    template <range_c range_t>
+    template <bidirectional_range_c range_t>
     constexpr void
     operator()(const range_t& range,
                cursor_type_for<range_t>& cursor) const OKAYLIB_NOEXCEPT
@@ -836,6 +949,7 @@ struct range_offset_fn_t
     constexpr void operator()(const range_t& range,
                               cursor_type_for<range_t>& cursor,
                               int64_t offset) const OKAYLIB_NOEXCEPT
+        requires range_can_offset_c<range_t>
     {
         if constexpr (range_impls_offset_c<range_t>) {
             range_def_for<range_t>::offset(range, cursor, offset);
@@ -903,13 +1017,119 @@ struct size_fn_t
 };
 } // namespace detail
 
+// specialization for c-style arrays
+template <typename input_range_t>
+    requires std::is_array_v<detail::remove_cvref_t<input_range_t>>
+struct range_definition<input_range_t>
+{
+  private:
+    using range_t = detail::remove_cvref_t<input_range_t>;
+
+  public:
+    // a c array can never have a const value type
+    using value_type = detail::c_array_value_type<range_t>;
+    static_assert(!is_const_c<value_type>);
+
+    static constexpr range_flags flags =
+        range_flags::arraylike | range_flags::sized | range_flags::consuming |
+        range_flags::producing;
+
+    static constexpr value_type& get(range_t& i, size_t c) OKAYLIB_NOEXCEPT
+    {
+        if (c >= size(i)) [[unlikely]] {
+            __ok_abort("out of bounds access into c-style array");
+        }
+        return i[c];
+    }
+
+    static constexpr const value_type& get(const range_t& i,
+                                           size_t c) OKAYLIB_NOEXCEPT
+    {
+        if (c >= size(i)) [[unlikely]] {
+            __ok_abort("out of bounds access into c-style array");
+        }
+        return i[c];
+    }
+
+    static constexpr size_t size(const range_t& i) OKAYLIB_NOEXCEPT
+    {
+        return detail::c_array_length(i);
+    }
+};
+
+// specialization for things that can be indexed with size_t and have an
+// range_t::value_type member and a size() and data() function (stuff like
+// std::array, std::span, and std::vector)
+template <typename input_range_t>
+    requires(
+        // not array
+        !std::is_array_v<detail::remove_cvref_t<input_range_t>> &&
+        // not specified to inherit some other range definition
+        !has_inherited_range_type_v<detail::remove_cvref_t<input_range_t>> &&
+        // provides size_t .size() method and pointer data() method
+        detail::std_arraylike_container<input_range_t> &&
+        std::is_same_v<
+            typename detail::remove_cvref_t<input_range_t>::value_type&,
+            decltype(std::declval<detail::remove_cvref_t<input_range_t>&>()
+                         [std::declval<size_t>()])>)
+struct range_definition<input_range_t>
+{
+  private:
+    using range_t = detail::remove_cvref_t<input_range_t>;
+    static constexpr range_flags universal_flags =
+        range_flags::arraylike | range_flags::sized | range_flags::producing;
+
+  public:
+    static_assert(!detail::is_instance_c<range_t, slice>);
+
+    // std::array may have a const value type
+    using value_type = typename range_t::value_type;
+
+    static constexpr range_flags flags =
+        is_const_c<typename range_t::value_type>
+            ? universal_flags
+            : universal_flags | range_flags::consuming;
+
+    // dont enable mutable get_ref unless the index operator actually returns a
+    // mutable reference (this applies for array<const T>)
+    static constexpr value_type& get(range_t& i, size_t c) OKAYLIB_NOEXCEPT
+        requires std::is_same_v<
+            value_type&,
+            decltype(std::declval<range_t&>()[std::declval<size_t>()])>
+    {
+        if (c >= i.size()) [[unlikely]] {
+            __ok_abort("Out of bounds access into arraylike container.");
+        }
+        return i[c];
+    }
+
+    static constexpr const value_type& get(const range_t& i,
+                                           size_t c) OKAYLIB_NOEXCEPT
+    {
+        if (c >= i.size()) [[unlikely]] {
+            __ok_abort("Out of bounds access into arraylike container.");
+        }
+        return i[c];
+    }
+
+    static constexpr size_t size(const range_t& i) OKAYLIB_NOEXCEPT
+    {
+        return i.size();
+    }
+};
+
 /// Call the range's get() function with a const reference to the range.
 /// Returns value_type or const value_type&.
 inline constexpr detail::range_get_fn_t range_get{};
 
+/// Try to get a mutable reference, if not then try to get a const reference,
+/// if not then try to get a value type. Basically just calls the range's get()
+/// function with the given arguments.
+inline constexpr detail::range_get_best_fn_t range_get_best{};
+
 /// Call the range's get() function, attempting to get a `value_type&`. If it's
 /// not possible to get a mutable reference from the given object there will
-/// be no matching function call.
+/// be no matching function call (compile error).
 inline constexpr detail::range_get_nonconst_ref_fn_t range_get_nonconst_ref{};
 
 /// Call the range's get() function (either const or nonconst variant depending
