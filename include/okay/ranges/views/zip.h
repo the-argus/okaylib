@@ -445,6 +445,10 @@ struct range_definition<detail::zipped_view_t<ranges_t...>>
         range_strict_flags::use_cursor_decrement |
         range_strict_flags::use_cursor_compare;
 
+    using value_type = decltype(get_impl(
+        stdc::declval<const zipped_t&>(), stdc::declval<const size_t&>(),
+        stdc::make_index_sequence<zipped_t::num_ranges>()));
+
     static constexpr size_t size(const zipped_t& range) OKAYLIB_NOEXCEPT
     {
         return size_t(range.expected_size);
