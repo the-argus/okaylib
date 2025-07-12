@@ -508,8 +508,9 @@ concept range_impls_size_c = requires(const remove_cvref_t<T>& range) {
 
 template <typename T>
 concept range_can_begin_c = requires {
-    requires !range_strictly_disallows_defined_begin_c<T>;
-    requires range_impls_begin_c<T> || range_marked_arraylike_c<T>;
+    requires(!range_strictly_disallows_defined_begin_c<T> &&
+             range_impls_begin_c<T>) ||
+                range_marked_arraylike_c<T>;
 };
 
 template <typename T>
