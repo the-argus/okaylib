@@ -49,6 +49,15 @@ TEST_SUITE("zip")
 
         REQUIRE(ok::size(zip(a1, a2)) == ok::size(a1));
 
+        std::tuple<int> test;
+
+        static_assert(std::is_constructible_v<std::tuple<int, int>, int, int>);
+        static_assert(std::is_constructible_v<ok::tuple<int, int>, int, int>);
+        static_assert(!std::is_constructible_v<ok::tuple<int(&)[2], int>, float, float>);
+        static_assert(!std::is_constructible_v<std::tuple<int(&)[2], int>, float, float>);
+
+        using T = decltype(zip(a2, indices));
+
         REQUIRE(ok::size(zip(a2, indices)) == ok::size(a2));
 
         example_range_cstyle example;

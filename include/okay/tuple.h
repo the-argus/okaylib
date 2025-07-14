@@ -2,6 +2,8 @@
 #define __OKAYLIB_TUPLE_H__
 
 #include "okay/detail/invoke.h"
+#include "okay/detail/no_unique_addr.h"
+#include "okay/detail/template_util/remove_cvref.h"
 #include "okay/detail/type_traits.h"
 #include "okay/detail/utility.h"
 #include <cstddef>
@@ -18,371 +20,555 @@ template <size_t, typename> struct tuple_element;
 
 namespace ok {
 
-template <size_t N, typename head_t, typename... tail_t>
-struct tuple_element_impl
+template <typename... elements_t> class tuple;
+
+namespace detail {
+// c++20 no unique address is standard, so we can avoid EBO conditional
+// inheritance and etc and just mark the type as no unique address
+template <size_t index, typename payload_t> struct element_container_t
 {
-    using type = typename tuple_element_impl<N - 1, tail_t...>::type;
+    constexpr element_container_t() = default;
+    constexpr element_container_t(element_container_t&&) = default;
+    constexpr element_container_t(const element_container_t&) = default;
+    constexpr element_container_t& operator=(element_container_t&&) = default;
+    constexpr element_container_t&
+    operator=(const element_container_t&) = default;
+
+    constexpr element_container_t(const payload_t& h) : m_head(h) {}
+
+    // template <typename other_t>
+    // constexpr element_container_t(other_t&& other)
+    //     : m_head(stdc::forward<other_t>(other))
+    // {
+    // }
+
+    static constexpr payload_t& get_elem(element_container_t& base) noexcept
+    {
+        return base.m_head;
+    }
+    static constexpr const payload_t&
+    get_elem(const element_container_t& base) noexcept
+    {
+        return base.m_head;
+    }
+
+    OKAYLIB_NO_UNIQUE_ADDR payload_t m_head;
 };
 
-template <typename head_t, typename... tail_t>
-struct tuple_element_impl<0, head_t, tail_t...>
+template <size_t index, typename... elements_t> struct tuple_impl_t;
+
+template <size_t index, typename element_t, typename... tail_t>
+struct tuple_impl_t<index, element_t, tail_t...>
+    : public tuple_impl_t<index + 1, tail_t...>,
+      private element_container_t<index, element_t>
 {
-    using type = head_t;
-};
+    template <size_t, typename...> friend struct tuple_impl_t;
 
-template <typename... types_t> class tuple;
+    using parent_t = tuple_impl_t<index + 1, tail_t...>;
+    using container_t = element_container_t<index, element_t>;
 
-template <size_t N, typename T> struct tuple_element;
+    static constexpr element_t& get_head(tuple_impl_t& self)
+    {
+        return container_t::get_elem(self);
+    }
+    static constexpr const element_t& get_head(const tuple_impl_t& self)
+    {
+        return container_t::get_elem(self);
+    }
 
-template <size_t N, typename... types_t>
-struct tuple_element<N, tuple<types_t...>>
-{
-    static_assert(N < sizeof...(types_t), "tuple_element index out of bounds");
-    using type = typename tuple_element_impl<N, types_t...>::type;
-};
+    static constexpr parent_t& get_tail(tuple_impl_t& t) { return t; }
+    static constexpr const parent_t& get_tail(const tuple_impl_t& t)
+    {
+        return t;
+    }
 
-template <size_t N, typename T,
-          bool is_empty = stdc::is_empty<T>::value && !stdc::is_final<T>::value>
-struct tuple_leaf
-{
-    T value;
-    constexpr tuple_leaf() = default;
-    template <typename u_t>
-    constexpr tuple_leaf(u_t&& val) : value(stdc::forward<u_t>(val))
+    explicit constexpr tuple_impl_t(const container_t& elem,
+                                    const tail_t&... tail)
+        : parent_t(tail...), container_t(elem)
     {
     }
 
-    template <size_t N_get, typename... args_t_get>
-    friend constexpr typename tuple_element<N_get, tuple<args_t_get...>>::type&
-    get(tuple<args_t_get...>& t) noexcept;
-    template <size_t N_get, typename... args_t_get>
-    friend constexpr const typename tuple_element<N_get,
-                                                  tuple<args_t_get...>>::type&
-    get(const tuple<args_t_get...>& t) noexcept;
-    template <size_t N_get, typename... args_t_get>
-    friend constexpr typename tuple_element<N_get, tuple<args_t_get...>>::type&&
-    get(tuple<args_t_get...>&& t) noexcept;
-    template <typename T_get, typename... args_t_get>
-    friend constexpr T_get& get(tuple<args_t_get...>& t) noexcept;
-    template <typename T_get, typename... args_t_get>
-    friend constexpr const T_get& get(const tuple<args_t_get...>& t) noexcept;
-    template <typename T_get, typename... args_t_get>
-    friend constexpr T_get&& get(tuple<args_t_get...>&& t) noexcept;
-
-  private:
-    T& get_element_ref() noexcept { return value; }
-    const T& get_element_ref() const noexcept { return value; }
-    T&& get_element_rref() noexcept { return stdc::move(value); }
-};
-
-template <size_t N, typename T> struct tuple_leaf<N, T, true> : T
-{ // inherit from T for EBO
-    constexpr tuple_leaf() = default;
-    template <typename u_t>
-    constexpr tuple_leaf(u_t&& val) : T(stdc::forward<u_t>(val))
+    template <typename head_convertible_t, typename... tail_convertible_t>
+        requires(sizeof...(tail_convertible_t) == sizeof...(tail_t))
+    explicit constexpr tuple_impl_t(head_convertible_t&& head,
+                                    tail_convertible_t&&... tail)
+        : parent_t(stdc::forward<tail_convertible_t>(tail)...),
+          container_t(stdc::forward<head_convertible_t>(head))
     {
     }
 
-    template <size_t N_get, typename... args_t_get>
-    friend constexpr typename tuple_element<N_get, tuple<args_t_get...>>::type&
-    get(tuple<args_t_get...>& t) noexcept;
-    template <size_t N_get, typename... args_t_get>
-    friend constexpr const typename tuple_element<N_get,
-                                                  tuple<args_t_get...>>::type&
-    get(const tuple<args_t_get...>& t) noexcept;
-    template <size_t N_get, typename... args_t_get>
-    friend constexpr typename tuple_element<N_get, tuple<args_t_get...>>::type&&
-    get(tuple<args_t_get...>&& t) noexcept;
-    template <typename T_get, typename... args_t_get>
-    friend constexpr T_get& get(tuple<args_t_get...>& t) noexcept;
-    template <typename T_get, typename... args_t_get>
-    friend constexpr const T_get& get(const tuple<args_t_get...>& t) noexcept;
-    template <typename T_get, typename... args_t_get>
-    friend constexpr T_get&& get(tuple<args_t_get...>&& t) noexcept;
+    constexpr tuple_impl_t() = default;
+    constexpr tuple_impl_t(const tuple_impl_t&) = default;
+    constexpr tuple_impl_t& operator=(const tuple_impl_t&) = default;
+    constexpr tuple_impl_t(tuple_impl_t&&) = default;
+    constexpr tuple_impl_t& operator=(tuple_impl_t&&) = default;
 
-  private:
-    T& get_element_ref() noexcept { return *this; }
-    const T& get_element_ref() const noexcept { return *this; }
-    T&& get_element_rref() noexcept
+    // template <typename... other_elements_t>
+    // constexpr tuple_impl_t(
+    //     const tuple_impl_t<index, other_elements_t...>& other)
+    //     : parent_t(tuple_impl_t<index,
+    //     other_elements_t...>::get_tail(other)),
+    //       container_t(tuple_impl_t<index,
+    //       other_elements_t...>::get_head(other))
+    // {
+    // }
+
+    // template <typename other_head_t, typename... other_tail_t>
+    // constexpr tuple_impl_t(
+    //     tuple_impl_t<index, other_head_t, other_tail_t...>&& other)
+    //     : parent_t(stdc::move(
+    //           tuple_impl_t<index, other_head_t, other_tail_t...>::get_tail(
+    //               other))),
+    //       container_t(stdc::forward<other_head_t>(
+    //           tuple_impl_t<index, other_head_t, other_tail_t...>::get_head(
+    //               other)))
+    // {
+    // }
+
+    // template <typename... other_elements_t>
+    // constexpr void assign(const tuple_impl_t<index, other_elements_t...>&
+    // other)
+    // {
+    //     get_head(*this) =
+    //         tuple_impl_t<index, other_elements_t...>::get_head(other);
+    //     get_tail(*this).assign(
+    //         tuple_impl_t<index, other_elements_t...>::get_tail(other));
+    // }
+
+    // template <typename other_head_t, typename... other_tail_t>
+    // constexpr void
+    // assign(tuple_impl_t<index, other_head_t, other_tail_t...>&& other)
+    // {
+    //     get_head(*this) = stdc::forward<other_head_t>(
+    //         tuple_impl_t<index, other_head_t, other_tail_t...>::get_head(
+    //             other));
+    //     get_tail(*this).assign(stdc::move(
+    //         tuple_impl_t<index, other_head_t, other_tail_t...>::get_tail(
+    //             other)));
+    // }
+};
+
+template <size_t index, typename head_t>
+struct tuple_impl_t<index, head_t> : private element_container_t<index, head_t>
+{
+    template <size_t, typename...> friend struct tuple_impl_t;
+
+    using container_t = element_container_t<index, head_t>;
+
+    static constexpr head_t& get_head(tuple_impl_t& t) noexcept
     {
-        return stdc::move(*static_cast<T*>(this));
+        return container_t::get_elem(t);
     }
+    static constexpr const head_t& get_head(const tuple_impl_t& t) noexcept
+    {
+        return container_t::get_elem(t);
+    }
+
+    constexpr tuple_impl_t() = default;
+    constexpr tuple_impl_t(const tuple_impl_t&) = default;
+    constexpr tuple_impl_t& operator=(const tuple_impl_t&) = default;
+    constexpr tuple_impl_t(tuple_impl_t&&) = default;
+    constexpr tuple_impl_t& operator=(tuple_impl_t&&) = default;
+
+    // template <typename other_head_t>
+    // explicit constexpr tuple_impl_t(other_head_t&& other_head)
+    //     requires stdc::is_constructible_v<container_t, decltype(other_head)>
+    //     : container_t(stdc::forward<other_head_t>(other_head))
+    // {
+    // }
+
+    // template <typename other_head_t>
+    // constexpr void assign(const tuple_impl_t<index, other_head_t>& other)
+    // {
+    //     get_head(*this) = tuple_impl_t<index, other_head_t>::get_head(other);
+    // }
+
+    // template <typename other_head_t>
+    // constexpr void assign(tuple_impl_t<index, other_head_t>&& other)
+    // {
+    //     get_head(*this) = stdc::forward<other_head_t>(
+    //         tuple_impl_t<index, other_head_t>::get_head(other));
+    // }
 };
 
-template <typename indices, typename... types_t> struct tuple_base;
-
-// template recursion base case
-template <size_t... indices> struct tuple_base<stdc::index_sequence<indices...>>
+template <bool precondition, typename... types_t> struct tuple_constraints_t
 {
-    constexpr tuple_base() = default;
-    void swap(tuple_base&) noexcept {}
+    template <typename... other_types_t>
+    constexpr static bool constructible =
+        (stdc::is_constructible_v<types_t, other_types_t> && ...);
+    template <typename... other_types_t>
+    constexpr static bool convertible =
+        (stdc::is_convertible_v<types_t, other_types_t> && ...);
+
+    template <typename... other_types_t>
+    constexpr static bool is_implicitly_constructible =
+        constructible<other_types_t...> && convertible<other_types_t...>;
+    template <typename... other_types_t>
+    constexpr static bool is_explicitly_constructible =
+        constructible<other_types_t...> && (!convertible<other_types_t...>);
+
+    constexpr static bool is_implicitly_default_constructible =
+        (stdc::is_implicitly_default_constructible_v<types_t> && ...);
+
+    constexpr static bool is_explicitly_default_constructible =
+        (stdc::is_default_constructible_v<types_t> && ...) &&
+        !(stdc::is_implicitly_default_constructible_v<types_t> && ...);
 };
 
-// recursive case
-template <size_t index, size_t... remaining_indices, typename head_t,
-          typename... tail_t>
-struct tuple_base<stdc::index_sequence<index, remaining_indices...>, head_t,
-                  tail_t...>
-    : tuple_leaf<index, head_t>,
-      tuple_base<stdc::index_sequence<remaining_indices...>, tail_t...>
+template <typename... types_t> struct tuple_constraints_t<false, types_t...>
 {
-  private:
-    using current_leaf = tuple_leaf<index, head_t>;
-    using next_base =
-        tuple_base<stdc::index_sequence<remaining_indices...>, tail_t...>;
+    template <typename... other_types_t>
+    constexpr static bool constructible = false;
+    template <typename... other_types_t>
+    constexpr static bool convertible = false;
+
+    template <typename... other_types_t>
+    constexpr static bool is_implicitly_constructible = false;
+    template <typename... other_types_t>
+    constexpr static bool is_explicitly_constructible = false;
+
+    constexpr static bool is_implicitly_default_constructible = false;
+
+    constexpr static bool is_explicitly_default_constructible = false;
+};
+
+} // namespace detail
+
+template <typename... elements_t>
+class tuple : public detail::tuple_impl_t<0, elements_t...>
+{
+    using parent_t = detail::tuple_impl_t<0, elements_t...>;
+
+    // TODO: can we remove the precondition on constraints in favor of just
+    // doing precondition && constraint::thing<...>?
+    template <bool cond>
+    using constraints = detail::tuple_constraints_t<cond, elements_t...>;
+
+    // check if a single argument is valid constructor arguments
+    template <typename other_t> static constexpr bool valid_args()
+    {
+        return sizeof...(elements_t) == 1 &&
+               !stdc::is_same_v<tuple, ok::detail::remove_cvref_t<other_t>>;
+    }
+
+    // check if multiple arguments are valid constructor arguments
+    template <typename, typename, typename... tail_t>
+    static constexpr bool valid_args()
+    {
+        return (sizeof...(tail_t) + 2) == sizeof...(elements_t);
+    }
+
+    template <typename other_t>
+    constexpr static bool no_tuple_converting_constructor = requires {
+        requires sizeof...(elements_t) == 1;
+        requires stdc::is_convertible_v<tuple, elements_t...> ||
+                     stdc::is_constructible_v<elements_t..., tuple> ||
+                     stdc::is_same_v<elements_t..., other_t>;
+    };
+
+    template <typename... other_elements_t>
+    using tuple_converting_constraints = constraints<
+        (sizeof...(elements_t) == sizeof...(other_elements_t)) &&
+        !no_tuple_converting_constructor<const tuple<other_elements_t...>&>>;
 
   public:
-    constexpr tuple_base() = default;
+    constexpr tuple() OKAYLIB_NOEXCEPT
+        requires constraints<true>::is_implicitly_default_constructible
+    = default;
+    explicit constexpr tuple() OKAYLIB_NOEXCEPT
+        requires constraints<true>::is_explicitly_default_constructible
+    = default;
 
-    template <typename h1_t, typename... t1_t>
-        requires stdc::is_constructible<head_t, h1_t&&>::value
-    constexpr tuple_base(h1_t&& h, t1_t&&... t)
-        : current_leaf(stdc::forward<h1_t>(h)),
-          next_base(stdc::forward<t1_t>(t)...)
+    constexpr tuple(const elements_t&... elements) OKAYLIB_NOEXCEPT
+        requires constraints<sizeof...(elements_t) >= 1>::template
+    is_implicitly_constructible<const elements_t&...> : parent_t(elements...)
+    {
+    }
+    explicit constexpr tuple(const elements_t&... elements) OKAYLIB_NOEXCEPT
+        requires constraints<sizeof...(elements_t) >= 1>::template
+    is_explicitly_constructible<const elements_t&...> : parent_t(elements...)
     {
     }
 
-    constexpr tuple_base(const tuple_base& other) = default;
-    constexpr tuple_base(tuple_base&& other) = default;
-    tuple_base& operator=(const tuple_base& other) = default;
-    tuple_base& operator=(tuple_base&& other) = default;
-
-    template <typename h1_t, typename... t1_t>
-        requires stdc::is_constructible<head_t, const h1_t&>::value
-    constexpr tuple_base(
-        const tuple_base<stdc::index_sequence<index, remaining_indices...>,
-                         h1_t, t1_t...>& other)
-        : current_leaf(static_cast<const tuple_leaf<index, h1_t>&>(other)
-                           .get_element_ref()),
-          next_base(
-              static_cast<const tuple_base<
-                  stdc::index_sequence<remaining_indices...>, t1_t...>&>(other))
+    template <typename... element_constructor_args_t>
+    constexpr tuple(element_constructor_args_t&&... args) OKAYLIB_NOEXCEPT
+        requires constraints<
+            valid_args<element_constructor_args_t...>()>::template
+    is_implicitly_constructible<element_constructor_args_t...>
+        : parent_t(stdc::forward<element_constructor_args_t>(args)...)
     {
     }
 
-    template <typename h1_t, typename... t1_t>
-        requires stdc::is_constructible<head_t, h1_t&&>::value
-    constexpr tuple_base(
-        tuple_base<stdc::index_sequence<index, remaining_indices...>, h1_t,
-                   t1_t...>&& other)
-        : current_leaf(
-              static_cast<tuple_leaf<index, h1_t>&&>(other).get_element_rref()),
-          next_base(
-              static_cast<tuple_base<stdc::index_sequence<remaining_indices...>,
-                                     t1_t...>&&>(other))
+    template <typename... element_constructor_args_t>
+    explicit constexpr tuple(element_constructor_args_t&&... args)
+        OKAYLIB_NOEXCEPT
+        requires constraints<
+            valid_args<element_constructor_args_t...>()>::template
+    is_explicitly_constructible<element_constructor_args_t...>
+        : parent_t(stdc::forward<element_constructor_args_t>(args)...)
     {
     }
 
-    template <typename h1_t, typename... t1_t>
-        requires stdc::is_assignable<head_t&, const h1_t&>::value
-    tuple_base& operator=(
-        const tuple_base<stdc::index_sequence<index, remaining_indices...>,
-                         h1_t, t1_t...>& other)
+    constexpr tuple(const tuple&) = default;
+    constexpr tuple(tuple&&) = default;
+
+    template <typename... other_elements_t>
+        requires(tuple_converting_constraints<other_elements_t...>::
+                     template is_implicitly_constructible<
+                         const other_elements_t&...>)
+    constexpr tuple(const tuple<other_elements_t...>& other) OKAYLIB_NOEXCEPT
+        : parent_t(
+              static_cast<const detail::tuple_impl_t<0, other_elements_t...>&>(
+                  other))
     {
-        static_cast<current_leaf&>(*this).get_element_ref() =
-            static_cast<const tuple_leaf<index, h1_t>&>(other)
-                .get_element_rref();
-        static_cast<next_base&>(*this).operator=(
-            static_cast<const next_base&>(other));
-        return *this;
     }
 
-    template <typename h1_t, typename... t1_t>
-        requires stdc::is_assignable<head_t&, h1_t&&>::value
-    tuple_base&
-    operator=(tuple_base<stdc::index_sequence<index, remaining_indices...>,
-                         h1_t, t1_t...>&& other)
+    template <typename... other_elements_t>
+        requires(tuple_converting_constraints<other_elements_t...>::
+                     template is_explicitly_constructible<
+                         const other_elements_t&...>)
+    explicit constexpr tuple(const tuple<other_elements_t...>& other)
+        OKAYLIB_NOEXCEPT
+        : parent_t(
+              static_cast<const detail::tuple_impl_t<0, other_elements_t...>&>(
+                  other))
     {
-        static_cast<current_leaf&>(*this).get_element_ref() =
-            static_cast<tuple_leaf<index, h1_t>&&>(other).get_element_ref();
-        static_cast<next_base&>(*this).operator=(
-            static_cast<next_base&&>(other));
-        return *this;
     }
 
-    void swap(tuple_base& other) noexcept(
-        noexcept(stdc::swap(stdc::declval<head_t&>(),
-                            stdc::declval<head_t&>())) &&
-        noexcept(stdc::declval<next_base&>().swap(stdc::declval<next_base&>())))
+    template <typename... other_elements_t>
+        requires(
+            tuple_converting_constraints<other_elements_t...>::
+                template is_implicitly_constructible<other_elements_t && ...>)
+    constexpr tuple(tuple<other_elements_t...>&& other) OKAYLIB_NOEXCEPT
+        : parent_t(static_cast<detail::tuple_impl_t<0, other_elements_t...>&&>(
+              other))
     {
-        stdc::swap(static_cast<current_leaf&>(*this).get_element_ref(),
-                   static_cast<current_leaf&>(other).get_element_ref());
-        static_cast<next_base&>(*this).swap(static_cast<next_base&>(other));
     }
+
+    template <typename... other_elements_t>
+        requires(
+            tuple_converting_constraints<other_elements_t...>::
+                template is_explicitly_constructible<other_elements_t && ...>)
+    explicit constexpr tuple(tuple<other_elements_t...>&& other)
+        OKAYLIB_NOEXCEPT
+        : parent_t(static_cast<detail::tuple_impl_t<0, other_elements_t...>&&>(
+              other))
+    {
+    }
+
+    // constexpr const tuple& operator=(const tuple& other) const
+    //     requires(stdc::is_copy_assignable_v<const elements_t> && ...)
+    // {
+    //     this->assign(other);
+    //     return *this;
+    // }
+
+    // constexpr const tuple& operator=(tuple&& other) const
+    //     requires(stdc::is_assignable_v<const elements_t&, elements_t> && ...)
+    // {
+    //     this->assign(stdc::move(other));
+    //     return *this;
+    // }
+
+    // template <typename... other_elements_t>
+    // constexpr const tuple&
+    // operator=(const tuple<other_elements_t...>& other) const
+    //     requires(sizeof...(elements_t) == sizeof...(other_elements_t)) &&
+    //             (stdc::is_assignable_v<const elements_t&,
+    //                                    const other_elements_t&> &&
+    //              ...)
+    // {
+    //     this->assign(other);
+    //     return *this;
+    // }
+
+    // template <typename... other_elements_t>
+    // constexpr const tuple& operator=(tuple<other_elements_t...>&& other)
+    // const
+    //     requires(sizeof...(elements_t) == sizeof...(other_elements_t)) &&
+    //             (stdc::is_assignable_v<const elements_t&, other_elements_t>
+    //             &&
+    //              ...)
+    // {
+    //     this->assign(stdc::move(other));
+    //     return *this;
+    // }
 };
 
-template <typename... types_t>
-class tuple : public tuple_base<stdc::make_index_sequence<sizeof...(types_t)>,
-                                types_t...>
+#if __cpp_deduction_guides >= 201606
+template <typename... other_types_t>
+tuple(other_types_t...) -> tuple<other_types_t...>;
+#endif
+
+template <> class tuple<>
 {
-  private:
-    using base =
-        tuple_base<stdc::make_index_sequence<sizeof...(types_t)>, types_t...>;
-
-    template <size_t N_get, typename... args_t_get>
-    friend constexpr typename tuple_element<N_get, tuple<args_t_get...>>::type&
-    get(tuple<args_t_get...>& t) noexcept;
-
-    template <size_t N_get, typename... args_t_get>
-    friend constexpr const typename tuple_element<N_get,
-                                                  tuple<args_t_get...>>::type&
-    get(const tuple<args_t_get...>& t) noexcept;
-
-    template <size_t N_get, typename... args_t_get>
-    friend constexpr typename tuple_element<N_get, tuple<args_t_get...>>::type&&
-    get(tuple<args_t_get...>&& t) noexcept;
-
-    template <typename T_get, typename... args_t_get>
-    friend constexpr T_get& get(tuple<args_t_get...>& t) noexcept;
-
-    template <typename T_get, typename... args_t_get>
-    friend constexpr const T_get& get(const tuple<args_t_get...>& t) noexcept;
-
-    template <typename T_get, typename... args_t_get>
-    friend constexpr T_get&& get(tuple<args_t_get...>&& t) noexcept;
-
   public:
-    constexpr tuple() = default;
-    constexpr tuple(const tuple& other) = default;
-    constexpr tuple(tuple&& other) = default;
-    tuple& operator=(const tuple& other) = default;
-    tuple& operator=(tuple&& other) = default;
-
-    template <typename... args_t>
-        requires(sizeof...(args_t) == sizeof...(types_t) &&
-                 stdc::conjunction<
-                     stdc::is_constructible<types_t, args_t &&>...>::value)
-    constexpr tuple(args_t&&... args) : base(stdc::forward<args_t>(args)...)
-    {
-    }
-
-    // conversion copy constructor from another tuple with potentially different
-    // types
-    template <typename... other_types_t>
-        requires(sizeof...(other_types_t) == sizeof...(types_t) &&
-                 stdc::conjunction<stdc::is_constructible<
-                     types_t, const other_types_t&>...>::value)
-    constexpr tuple(const tuple<other_types_t...>& other) : base(other)
-    {
-    }
-
-    // conversion move constructor from another tuple with potentially different
-    // types
-    template <typename... other_types_t>
-        requires(
-            sizeof...(other_types_t) == sizeof...(types_t) &&
-            stdc::conjunction<
-                stdc::is_constructible<types_t, other_types_t &&>...>::value)
-    constexpr tuple(tuple<other_types_t...>&& other) : base(stdc::move(other))
-    {
-    }
-
-    template <typename... other_types_t>
-        requires(
-            sizeof...(other_types_t) == sizeof...(types_t) &&
-            stdc::conjunction<
-                stdc::is_assignable<types_t&, const other_types_t&>...>::value)
-    tuple& operator=(const tuple<other_types_t...>& other)
-    {
-        base::operator=(other);
-        return *this;
-    }
-
-    template <typename... other_types_t>
-        requires(sizeof...(other_types_t) == sizeof...(types_t) &&
-                 stdc::conjunction<
-                     stdc::is_assignable<types_t&, other_types_t &&>...>::value)
-    tuple& operator=(tuple<other_types_t...>&& other)
-    {
-        base::operator=(stdc::move(other));
-        return *this;
-    }
-
-    void swap(tuple& other) noexcept(
-        noexcept(stdc::declval<base&>().swap(stdc::declval<base&>())))
-    {
-        base::swap(other);
-    }
+    tuple() = default;
 };
 
-// TODO: ok::swap customization point
-// template<typename... types_t>
-// void swap(tuple<types_t...>& lhs, tuple<types_t...>& rhs)
-// noexcept(noexcept(lhs.swap(rhs))) {
-//     lhs.swap(rhs);
-// }
-
-template <typename T, typename... types_t> struct type_index_finder;
-
-template <typename T, typename head_t, typename... tail_t>
-struct type_index_finder<T, head_t, tail_t...>
+namespace detail {
+/// helper for getting the nth type out of a parameter pack
+template <size_t N, typename... types_t> struct nth_type
+{};
+template <typename T0, typename... tail_t> struct nth_type<0, T0, tail_t...>
 {
-    static constexpr size_t value = 1 + type_index_finder<T, tail_t...>::value;
+    using type = T0;
 };
-
-template <typename T, typename... tail_t>
-struct type_index_finder<T, T, tail_t...>
+template <typename T0, typename T1, typename... tail_t>
+struct nth_type<1, T0, T1, tail_t...>
 {
-    static constexpr size_t value = 0;
+    using type = T1;
+};
+template <typename T0, typename T1, typename T2, typename... tail_t>
+struct nth_type<2, T0, T1, T2, tail_t...>
+{
+    using type = T2;
+};
+template <size_t N, typename T0, typename T1, typename T2, typename... tail_t>
+    requires(N >= 3)
+struct nth_type<N, T0, T1, T2, tail_t...> : nth_type<N - 3, tail_t...>
+{};
+} // namespace detail
+
+template <size_t index, typename T> struct tuple_element;
+template <size_t index, typename T>
+using tuple_element_t = typename tuple_element<index, T>::type;
+template <size_t index, typename T> struct tuple_element<index, const T>
+{
+    using type = const tuple_element_t<index, T>;
+};
+template <size_t index, typename T> struct tuple_element<index, volatile T>
+{
+    using type = volatile tuple_element_t<index, T>;
+};
+template <size_t index, typename T>
+struct tuple_element<index, const volatile T>
+{
+    using type = const volatile tuple_element_t<index, T>;
+};
+template <size_t index, typename... types_t>
+struct tuple_element<index, tuple<types_t...>>
+{
+    static_assert(index < sizeof...(types_t), "tuple index must be in range");
+    using type = typename detail::nth_type<index, types_t...>::type;
 };
 
-template <typename T, typename tuple_type> struct count_type;
+namespace detail {
+template <size_t index, typename head_t, typename... tail_t>
+constexpr head_t&
+tuple_get_impl(tuple_impl_t<index, head_t, tail_t...>& t) noexcept
+{
+    return tuple_impl_t<index, head_t, tail_t...>::get_head(t);
+}
 
+template <size_t index, typename head_t, typename... tail_t>
+constexpr const head_t&
+tuple_get_impl(const tuple_impl_t<index, head_t, tail_t...>& t) noexcept
+{
+    return tuple_impl_t<index, head_t, tail_t...>::get_head(t);
+}
+template <size_t index, typename... types_t>
+void tuple_get_impl(const tuple<types_t...>&)
+    requires(index >= sizeof...(types_t))
+= delete;
+
+// Return the index of T in types_t, if it occurs exactly once.
+// Otherwise, return sizeof...(types_t).
+// GCC style implementation
 template <typename T, typename... types_t>
-struct count_type<T, tuple<types_t...>>
+constexpr size_t find_unique_type_in_pack()
 {
-    static constexpr size_t value =
-        (static_cast<size_t>(stdc::is_same<T, types_t>::value) + ... + 0);
-};
+    constexpr size_t size = sizeof...(types_t);
+    constexpr bool found[size] = {stdc::is_same_v<T, types_t>...};
+    size_t n = size;
+    for (size_t i = 0; i < size; ++i) {
+        if (found[i]) {
+            if (n < size) {
+                return size;
+            }
+            n = i;
+        }
+    }
+    return n;
+}
+} // namespace detail
 
+// lvalue get
 template <size_t N, typename... types_t>
-constexpr typename tuple_element<N, tuple<types_t...>>::type&
+constexpr tuple_element_t<N, tuple<types_t...>>&
 get(tuple<types_t...>& t) noexcept
 {
-    using element_type = typename tuple_element<N, tuple<types_t...>>::type;
-    return static_cast<tuple_leaf<N, element_type>&>(t).get_element_ref();
+    return detail::tuple_get_impl<N>(t);
 }
-
+// const lvalue get
 template <size_t N, typename... types_t>
-constexpr const typename tuple_element<N, tuple<types_t...>>::type&
+constexpr const tuple_element_t<N, tuple<types_t...>>&
 get(const tuple<types_t...>& t) noexcept
 {
-    using element_type = typename tuple_element<N, tuple<types_t...>>::type;
-    return static_cast<const tuple_leaf<N, element_type>&>(t).get_element_ref();
+    return detail::tuple_get_impl<N>(t);
 }
-
+// rvalue get
 template <size_t N, typename... types_t>
-constexpr typename tuple_element<N, tuple<types_t...>>::type&&
+constexpr tuple_element_t<N, tuple<types_t...>>&&
 get(tuple<types_t...>&& t) noexcept
 {
-    using element_type = typename tuple_element<N, tuple<types_t...>>::type;
-    return static_cast<element_type&&>(
-        static_cast<tuple_leaf<N, element_type>&&>(t).get_element_rref());
+    using element_type = tuple_element_t<N, tuple<types_t...>>;
+    return stdc::forward<element_type>(detail::tuple_get_impl<N>(t));
+}
+// const rvalue get, for completeness i guess
+template <size_t N, typename... types_t>
+constexpr const tuple_element_t<N, tuple<types_t...>>&&
+get(const tuple<types_t...>&& t) noexcept
+{
+    using element_type = tuple_element_t<N, tuple<types_t...>>;
+    return stdc::forward<const element_type>(detail::tuple_get_impl<N>(t));
 }
 
+// deleted overload for going out of bounds of tuple
+template <size_t index, typename... types_t>
+constexpr void get(const tuple<types_t...>&)
+    requires(index > sizeof...(types_t))
+= delete;
+
+// get item from tuple by type, provided it is unique
 template <typename T, typename... types_t>
-    requires(count_type<T, tuple<types_t...>>::value == 1)
 constexpr T& get(tuple<types_t...>& t) noexcept
 {
-    constexpr size_t N = type_index_finder<T, types_t...>::value;
-    return static_cast<tuple_leaf<N, T>&>(t).get_element_ref();
+    constexpr size_t index = detail::find_unique_type_in_pack<T, types_t...>();
+    static_assert(
+        index < sizeof...(types_t),
+        "the type T in std::get<T> must occur exactly once in the tuple");
+    return detail::tuple_get_impl<index>(t);
 }
 
 template <typename T, typename... types_t>
-    requires(count_type<T, tuple<types_t...>>::value == 1)
-constexpr const T& get(const tuple<types_t...>& t) noexcept
-{
-    constexpr size_t N = type_index_finder<T, types_t...>::value;
-    return static_cast<const tuple_leaf<N, T>&>(t).get_element_ref();
-}
-
-template <typename T, typename... types_t>
-    requires(count_type<T, tuple<types_t...>>::value == 1)
 constexpr T&& get(tuple<types_t...>&& t) noexcept
 {
-    constexpr size_t N = type_index_finder<T, types_t...>::value;
-    return static_cast<T&&>(
-        static_cast<tuple_leaf<N, T>&&>(t).get_element_rref());
+    constexpr size_t index = detail::find_unique_type_in_pack<T, types_t...>();
+    static_assert(
+        index < sizeof...(types_t),
+        "the type T in std::get<T> must occur exactly once in the tuple");
+    return stdc::forward<T>(detail::tuple_get_impl<index>(t));
+}
+
+template <typename T, typename... types_t>
+constexpr const T& get(const tuple<types_t...>& t) noexcept
+{
+    constexpr size_t index = detail::find_unique_type_in_pack<T, types_t...>();
+    static_assert(
+        index < sizeof...(types_t),
+        "the type T in std::get<T> must occur exactly once in the tuple");
+    return detail::tuple_get_impl<index>(t);
+}
+
+template <typename T, typename... types_t>
+constexpr const T&& get(const tuple<types_t...>&& t) noexcept
+{
+    constexpr size_t index = detail::find_unique_type_in_pack<T, types_t...>();
+    static_assert(
+        index < sizeof...(types_t),
+        "the type T in std::get<T> must occur exactly once in the tuple");
+    return stdc::forward<const T>(detail::tuple_get_impl<index>(t));
 }
 
 template <typename... args_t>

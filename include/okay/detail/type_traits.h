@@ -24,6 +24,10 @@ template <typename T> using is_empty = std::is_empty<T>;
 template <typename T> using is_final = std::is_final<T>;
 template <typename T> using is_enum = std::is_enum<T>;
 #define __ok_has_trivial_destructor(type) std::is_trivially_destructible_v<type>
+#define __ok_has_trivial_constructor(...) \
+    std::is_trivially_constructible_v<__VA_ARGS__>
+#define __ok_is_trivially_assignable(from, to) \
+    std::is_trivially_assignable_v<from, to>
 } // namespace ok::detail::intrinsic
 
 #elif defined(OKAYLIB_COMPAT_STRATEGY_NO_STD)
@@ -42,7 +46,14 @@ template <typename T>
 struct is_enum : public ok::stdc::integral_constant<bool, __is_enum(T)>
 {};
 
-#define __ok_has_trivial_destructor(type) __has_trivial_destructor(type)
+// #define __ok_has_trivial_destructor(type) __has_trivial_destructor(type)
+#define __ok_has_trivial_destructor(type) __is_trivially_destructible(type)
+
+#define __ok_has_trivial_constructor(...) \
+    __is_trivially_constructible(__VA_ARGS__)
+
+#define __ok_is_trivially_assignable(from, to) \
+    __is_trivially_assignable(from, to)
 } // namespace ok::detail::intrinsic
 
 #elif defined(OKAYLIB_COMPAT_STRATEGY_PURE_CPP)
@@ -60,6 +71,10 @@ template <typename T>
 struct is_enum : public ok::stdc::integral_constant<bool, false>
 {};
 #define __ok_has_trivial_destructor(type) false
+
+#define __ok_has_trivial_constructor(...) false
+
+#define __ok_is_trivially_assignable(from, to) false
 } // namespace ok::detail::intrinsic
 
 #endif
@@ -216,25 +231,26 @@ template <typename Ret, typename... args_t>
 struct is_function<Ret(args_t..., ...) const volatile&&> : public true_type
 {};
 
+template <typename> struct is_void : public false_type
+{};
+template <> struct is_void<void> : public true_type
+{};
+template <> struct is_void<const void> : public true_type
+{};
+template <> struct is_void<volatile void> : public true_type
+{};
+template <> struct is_void<const volatile void> : public true_type
+{};
+
 template <typename T> struct add_rvalue_reference
 {
     using type = T&&;
 };
-template <> struct add_rvalue_reference<void>
+template <typename T>
+    requires is_void<T>::value
+struct add_rvalue_reference<T>
 {
-    using type = void;
-};
-template <> struct add_rvalue_reference<const void>
-{
-    using type = const void;
-};
-template <> struct add_rvalue_reference<volatile void>
-{
-    using type = volatile void;
-};
-template <> struct add_rvalue_reference<const volatile void>
-{
-    using type = const volatile void;
+    using type = T;
 };
 template <typename T> struct add_rvalue_reference<T&>
 {
@@ -255,6 +271,33 @@ template <typename T>
 using add_rvalue_reference_t = typename add_rvalue_reference<T>::type;
 
 template <typename T> ok::stdc::add_rvalue_reference_t<T> declval() noexcept;
+
+template <typename...> using void_t = void;
+
+template <typename T, typename = void> struct add_lvalue_reference
+{
+    using type = T;
+};
+
+template <typename T> struct add_lvalue_reference<T, void_t<T&>>
+{
+    using type = T&;
+};
+
+template <typename T>
+using add_lvalue_reference_t = typename add_lvalue_reference<T>::type;
+
+template <typename> struct is_const : std::false_type
+{};
+template <typename T> struct is_const<const T> : std::true_type
+{};
+
+template <typename> struct is_reference : public false_type
+{};
+template <typename T> struct is_reference<T&> : public true_type
+{};
+template <typename T> struct is_reference<T&&> : public true_type
+{};
 
 template <typename T>
 struct is_nothrow_move_constructible
@@ -283,9 +326,17 @@ template <typename T, typename F> struct conditional<false, T, F>
 template <bool B, typename T, typename F>
 using conditional_t = typename conditional<B, T, F>::type;
 
-template <typename...> using void_t = void;
-
 namespace detail {
+template <typename> struct is_array_unknown_bounds : public false_type
+{};
+template <typename T> struct is_array_unknown_bounds<T[]> : public true_type
+{};
+
+template <typename T> struct type_identity
+{
+    using type = T;
+};
+
 template <typename T, typename... args_t> struct is_constructible_impl
 {
   private:
@@ -299,6 +350,64 @@ template <typename T, typename... args_t> struct is_constructible_impl
   public:
     using type = decltype(test<T, args_t...>(0));
 };
+
+template <typename T, size_t = sizeof(T)>
+constexpr true_type is_complete_or_unbounded(type_identity<T>)
+{
+    return {};
+}
+
+template <typename T, typename nested_t = typename T::type>
+constexpr stdc::integral_constant<
+    bool, is_reference<nested_t>{} || is_function<nested_t>{} ||
+              is_void<nested_t>{} || is_array_unknown_bounds<T>{}>
+is_complete_or_unbounded(T)
+{
+    return {};
+}
+
+template <typename from_t, typename to_t> struct is_convertible_impl
+{
+  private:
+    template <typename u_t, typename v_t>
+    static auto test_convert(u_t) -> stdc::true_type;
+
+    template <typename u_t, typename v_t>
+    static auto test_convert(...) -> stdc::false_type;
+
+    template <typename f_t, typename t_t>
+    static auto
+    test(int) -> decltype(test_convert<t_t, f_t>(stdc::declval<f_t>()));
+
+    template <typename f_t, typename t_t> static stdc::false_type test(...);
+
+  public:
+    using type = decltype(test<from_t, to_t>(0));
+};
+
+struct is_implicitly_default_constructible_nontemplated
+{
+    template <typename T> static void helper(const T&);
+
+    template <typename T>
+    static true_type test(const T&, decltype(helper<const T&>({}))* = 0);
+
+    static false_type test(...);
+};
+
+template <typename T>
+struct is_implicitly_default_constructible_impl
+    : public is_implicitly_default_constructible_nontemplated
+{
+    using type = decltype(test(declval<T>()));
+};
+
+// TODO: why is this bit of indirection here. what safety does this provde?
+// gcc does this, so i am doing it just in case
+template <typename T>
+struct is_implicitly_default_constructible_safe
+    : public is_implicitly_default_constructible_impl<T>::type
+{};
 
 template <typename T, typename U, typename = void>
 struct is_assignable_impl : public false_type
@@ -317,8 +426,98 @@ template <typename T, typename... args_t>
 struct is_constructible : detail::is_constructible_impl<T, args_t...>::type
 {};
 
+template <typename T, typename... args_t>
+struct is_trivially_constructible
+    : public std::integral_constant<bool,
+                                    __ok_has_trivial_constructor(T, args_t...)>
+{
+    static_assert(
+        stdc::detail::is_complete_or_unbounded(
+            stdc::detail::type_identity<T>{}),
+        "template argument must be a complete class or an unbounded array");
+};
+
+template <typename from_t, typename to_t>
+struct is_convertible : detail::is_convertible_impl<from_t, to_t>::type
+{};
+
+template <typename T>
+struct is_implicitly_default_constructible
+    : public stdc::integral_constant<
+          bool, (detail::is_constructible_impl<T>::type::value &&
+                 detail::is_implicitly_default_constructible_safe<T>::value)>
+{};
+
+template <typename T>
+struct is_trivially_copy_constructible
+    : public is_trivially_constructible<T, add_lvalue_reference_t<const T>>
+{
+    static_assert(
+        stdc::detail::is_complete_or_unbounded(detail::type_identity<T>{}),
+        "template argument must be a complete class or an unbounded array");
+};
+
+template <typename T>
+struct is_trivially_move_constructible
+    : public is_trivially_constructible<T, add_rvalue_reference_t<T>>
+{
+    static_assert(
+        stdc::detail::is_complete_or_unbounded(detail::type_identity<T>{}),
+        "template argument must be a complete class or an unbounded array");
+};
+
+template <typename from_t, typename to_t>
+struct is_trivially_assignable
+    : public stdc::integral_constant<bool,
+                                     __ok_is_trivially_assignable(from_t, to_t)>
+{
+    static_assert(
+        stdc::detail::is_complete_or_unbounded(detail::type_identity<from_t>{}),
+        "template argument must be a complete class or an unbounded array");
+};
+
+template <typename T>
+struct is_trivially_copy_assignable
+    : public stdc::integral_constant<bool, __ok_is_trivially_assignable(
+                                               add_lvalue_reference_t<T>,
+                                               add_lvalue_reference_t<const T>)>
+{
+    static_assert(
+        stdc::detail::is_complete_or_unbounded(detail::type_identity<T>{}),
+        "template argument must be a complete class or an unbounded array");
+};
+
+template <typename T>
+struct is_trivially_move_assignable
+    : public stdc::integral_constant<bool, __ok_is_trivially_assignable(
+                                               add_lvalue_reference_t<T>,
+                                               add_rvalue_reference_t<T>)>
+{
+    static_assert(
+        stdc::detail::is_complete_or_unbounded(detail::type_identity<T>{}),
+        "template argument must be a complete class or an unbounded array");
+};
+
+template <typename T>
+struct is_default_constructible : public is_constructible<T>
+{
+    static_assert(
+        stdc::detail::is_complete_or_unbounded(detail::type_identity<T>{}),
+        "template argument must be a complete class or an unbounded array");
+};
+
 template <typename T, typename U>
 struct is_assignable : detail::is_assignable_impl<T, U>
+{
+    static_assert(
+        stdc::detail::is_complete_or_unbounded(detail::type_identity<T>{}),
+        "template argument must be a complete class or an unbounded array");
+};
+
+template <typename T>
+struct is_copy_assignable
+    : public is_assignable<add_lvalue_reference_t<T>,
+                           add_lvalue_reference_t<const T>>
 {};
 
 template <typename T> struct is_array : public false_type
@@ -467,17 +666,6 @@ struct is_arithmetic
     : public integral_constant<bool, is_floating_point<T>{} || is_integral<T>{}>
 {};
 
-template <typename> struct is_void : public false_type
-{};
-template <> struct is_void<void> : public true_type
-{};
-template <> struct is_void<const void> : public true_type
-{};
-template <> struct is_void<volatile void> : public true_type
-{};
-template <> struct is_void<const volatile void> : public true_type
-{};
-
 using nullptr_t = decltype(nullptr);
 
 template <typename> struct is_null_pointer : public false_type
@@ -499,18 +687,6 @@ struct is_scalar
                     is_member_pointer<T>{} || is_null_pointer<T>{}>
 {};
 
-template <typename> struct is_const : std::false_type
-{};
-template <typename T> struct is_const<const T> : std::true_type
-{};
-
-template <typename> struct is_reference : public false_type
-{};
-template <typename T> struct is_reference<T&> : public true_type
-{};
-template <typename T> struct is_reference<T&&> : public true_type
-{};
-
 template <typename T> struct remove_all_extents
 {
     using type = T;
@@ -525,31 +701,6 @@ template <typename T> struct remove_all_extents<T[]>
 };
 
 namespace detail {
-template <typename> struct is_array_unknown_bounds : public false_type
-{};
-template <typename T> struct is_array_unknown_bounds<T[]> : public true_type
-{};
-
-template <typename T> struct type_identity
-{
-    using type = T;
-};
-
-template <typename T, size_t = sizeof(T)>
-constexpr true_type is_complete_or_unbounded(type_identity<T>)
-{
-    return {};
-}
-
-template <typename T, typename nested_t = typename T::type>
-constexpr stdc::integral_constant<
-    bool, is_reference<nested_t>{} || is_function<nested_t>{} ||
-              is_void<nested_t>{} || is_array_unknown_bounds<T>{}>
-is_complete_or_unbounded(T)
-{
-    return {};
-}
-
 struct is_destructible_overloaded_function_impl
 {
     template <typename T, typename = decltype(declval<T&>().~T())>
@@ -661,13 +812,51 @@ inline constexpr bool is_function_v = is_function<T>::value;
 template <typename T, typename U>
 inline constexpr bool is_assignable_v = is_assignable<T, U>::value;
 
+template <typename T>
+inline constexpr bool is_copy_assignable_v = is_copy_assignable<T>::value;
+
 template <typename T, typename... args_t>
 inline constexpr bool is_constructible_v =
     is_constructible<T, args_t...>::value;
 
+template <typename from_t, typename to_t>
+inline constexpr bool is_convertible_v = is_convertible<from_t, to_t>::value;
+
+template <typename T, typename... args_t>
+inline constexpr bool is_trivially_constructible_v =
+    is_trivially_constructible<T, args_t...>::value;
+
+template <typename T>
+inline constexpr bool is_implicitly_default_constructible_v =
+    is_implicitly_default_constructible<T>::value;
+
+template <typename T>
+inline constexpr bool is_trivially_copy_constructible_v =
+    is_trivially_copy_constructible<T>::value;
+
+template <typename T>
+inline constexpr bool is_trivially_move_constructible_v =
+    is_trivially_move_constructible<T>::value;
+
+template <typename T, typename... args_t>
+inline constexpr bool is_trivially_assignable_v =
+    is_trivially_assignable<T, args_t...>::value;
+
+template <typename T>
+inline constexpr bool is_trivially_copy_assignable_v =
+    is_trivially_copy_assignable<T>::value;
+
+template <typename T>
+inline constexpr bool is_trivially_move_assignable_v =
+    is_trivially_move_assignable<T>::value;
+
 template <typename T>
 inline constexpr bool is_nothrow_move_assignable_v =
     is_nothrow_move_assignable<T>::value;
+
+template <typename T>
+inline constexpr bool is_default_constructible_v =
+    is_default_constructible<T>::value;
 
 template <typename T>
 inline constexpr bool is_nothrow_move_constructible_v =
