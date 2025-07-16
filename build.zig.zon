@@ -1,5 +1,6 @@
 .{
-    .name = "okaylib",
+    .name = .okaylib,
+    .fingerprint = 0x668a4fdeb4831722,
     .version = "0.0.1",
     .paths = .{
         "include/",
@@ -12,12 +13,12 @@
     },
     .dependencies = .{
         .fmt = .{
-            .url = "https://github.com/the-argus/fmt/archive/d5ad6ce7ab711d601ffbf0706740279617b43325.tar.gz",
-            .hash = "1220727ae90b421da0d3e09aa9449a55eff672fdab47f62dd661dc1b5634ea78b56a",
+            .url = "https://github.com/the-argus/fmt/archive/7363aca75df62b19536f40696395db7f2befa8fc.tar.gz",
+            .hash = "N-V-__8AAKcCLgCQ3UO82-7m8XHNmXbrWjPLA3B0O-Hsf9AV",
         },
         .compile_commands = .{
-            .url = "https://github.com/the-argus/zig-compile-commands/archive/34ffa4290ca4fc060168e8eca9574ff11002fb0b.tar.gz",
-            .hash = "12209264387a67972ccebb9ff53a08b2ee8519f5f9b93b9d400a144d849528136ead",
+            .url = "https://github.com/the-argus/zig-compile-commands/archive/11cc2917816875aae4890e0a899f810e33570d70.tar.gz",
+            .hash = "N-V-__8AAFLOAACuuPPvb9E05PlcLiPoxsMOTRiP4K1hSaoB",
         },
     },
 }

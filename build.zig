@@ -242,5 +242,5 @@ pub fn build(b: *std.Build) !void {
         local_test_step.dependOn(&test_install.step);
     }
 
-    zcc.createStep(b, "cdb", try tests.toOwnedSlice());
+    _ = zcc.createStep(b, "cdb", try tests.toOwnedSlice());
 }
