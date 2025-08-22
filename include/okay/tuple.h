@@ -36,11 +36,11 @@ template <size_t index, typename payload_t> struct element_container_t
 
     constexpr element_container_t(const payload_t& h) : m_head(h) {}
 
-    // template <typename other_t>
-    // constexpr element_container_t(other_t&& other)
-    //     : m_head(stdc::forward<other_t>(other))
-    // {
-    // }
+    template <typename other_t>
+        requires(stdc::is_constructible_v<payload_t, other_t &&>)
+    constexpr element_container_t(other_t&& other) : m_head(stdc::move(other))
+    {
+    }
 
     static constexpr payload_t& get_elem(element_container_t& base) noexcept
     {
@@ -170,25 +170,26 @@ struct tuple_impl_t<index, head_t> : private element_container_t<index, head_t>
     constexpr tuple_impl_t(tuple_impl_t&&) = default;
     constexpr tuple_impl_t& operator=(tuple_impl_t&&) = default;
 
-    // template <typename other_head_t>
-    // explicit constexpr tuple_impl_t(other_head_t&& other_head)
-    //     requires stdc::is_constructible_v<container_t, decltype(other_head)>
-    //     : container_t(stdc::forward<other_head_t>(other_head))
-    // {
-    // }
+    // construct directly from the stored element
+    template <typename other_head_t>
+    explicit constexpr tuple_impl_t(other_head_t&& other_head)
+        requires stdc::is_constructible_v<container_t, decltype(other_head)>
+        : container_t(stdc::forward<other_head_t>(other_head))
+    {
+    }
 
-    // template <typename other_head_t>
-    // constexpr void assign(const tuple_impl_t<index, other_head_t>& other)
-    // {
-    //     get_head(*this) = tuple_impl_t<index, other_head_t>::get_head(other);
-    // }
+    template <typename other_head_t>
+    constexpr void assign(const tuple_impl_t<index, other_head_t>& other)
+    {
+        get_head(*this) = tuple_impl_t<index, other_head_t>::get_head(other);
+    }
 
-    // template <typename other_head_t>
-    // constexpr void assign(tuple_impl_t<index, other_head_t>&& other)
-    // {
-    //     get_head(*this) = stdc::forward<other_head_t>(
-    //         tuple_impl_t<index, other_head_t>::get_head(other));
-    // }
+    template <typename other_head_t>
+    constexpr void assign(tuple_impl_t<index, other_head_t>&& other)
+    {
+        get_head(*this) = stdc::forward<other_head_t>(
+            tuple_impl_t<index, other_head_t>::get_head(other));
+    }
 };
 
 template <bool precondition, typename... types_t> struct tuple_constraints_t
@@ -356,43 +357,53 @@ class tuple : public detail::tuple_impl_t<0, elements_t...>
     {
     }
 
-    // constexpr const tuple& operator=(const tuple& other) const
-    //     requires(stdc::is_copy_assignable_v<const elements_t> && ...)
-    // {
-    //     this->assign(other);
-    //     return *this;
-    // }
+    constexpr tuple& operator=(const tuple&) = default;
+    constexpr tuple& operator=(tuple&&) = default;
 
-    // constexpr const tuple& operator=(tuple&& other) const
-    //     requires(stdc::is_assignable_v<const elements_t&, elements_t> && ...)
-    // {
-    //     this->assign(stdc::move(other));
-    //     return *this;
-    // }
+    // copy assignment only enabled if all elements are copy assignable, and not
+    // all the elements are trivially copy assignable (in which case generated
+    // implementation is fine)
+    constexpr tuple& operator=(const tuple& other)
+        requires((stdc::is_copy_assignable_v<elements_t> && ...) &&
+                 !(stdc::is_trivially_copy_assignable_v<elements_t> && ...))
+    {
+        this->assign(other);
+        return *this;
+    }
 
-    // template <typename... other_elements_t>
-    // constexpr const tuple&
-    // operator=(const tuple<other_elements_t...>& other) const
-    //     requires(sizeof...(elements_t) == sizeof...(other_elements_t)) &&
-    //             (stdc::is_assignable_v<const elements_t&,
-    //                                    const other_elements_t&> &&
-    //              ...)
-    // {
-    //     this->assign(other);
-    //     return *this;
-    // }
+    constexpr tuple& operator=(tuple&& other)
+        requires((stdc::is_move_assignable_v<elements_t> && ...) &&
+                 !(stdc::is_trivially_move_assignable_v<elements_t> && ...))
+    {
+        this->assign(stdc::move(other));
+        return *this;
+    }
 
-    // template <typename... other_elements_t>
-    // constexpr const tuple& operator=(tuple<other_elements_t...>&& other)
-    // const
-    //     requires(sizeof...(elements_t) == sizeof...(other_elements_t)) &&
-    //             (stdc::is_assignable_v<const elements_t&, other_elements_t>
-    //             &&
-    //              ...)
-    // {
-    //     this->assign(stdc::move(other));
-    //     return *this;
-    // }
+    template <typename... other_elements_t>
+    constexpr tuple& operator=(const tuple<other_elements_t...>& other)
+        requires(sizeof...(elements_t) == sizeof...(other_elements_t)) &&
+                (stdc::is_assignable_v<elements_t&, const other_elements_t&> &&
+                 ...) &&
+                (!(stdc::is_trivially_assignable_v<elements_t&,
+                                                   const other_elements_t&> &&
+                   ...))
+    {
+        this->assign(other);
+        return *this;
+    }
+
+    template <typename... other_elements_t>
+    constexpr tuple& operator=(tuple<other_elements_t...>&& other)
+        requires(sizeof...(elements_t) == sizeof...(other_elements_t)) &&
+                (stdc::is_assignable_v<elements_t&, other_elements_t &&> &&
+                 ...) &&
+                (!(stdc::is_trivially_assignable_v<elements_t&,
+                                                   other_elements_t &&> &&
+                   ...))
+    {
+        this->assign(stdc::move(other));
+        return *this;
+    }
 };
 
 #if __cpp_deduction_guides >= 201606

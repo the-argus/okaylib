@@ -632,7 +632,7 @@ class opt<payload_t, std::enable_if_t<stdc::is_reference_c<payload_t>>>
 
 template <typename range_t> struct range_definition;
 
-template <typename payload_t> struct ok::range_definition<ok::opt<payload_t>>
+template <typename payload_t> struct range_definition<ok::opt<payload_t>>
 {
     struct cursor_t
     {

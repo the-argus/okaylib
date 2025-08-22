@@ -44,7 +44,6 @@ static_assert(std::is_trivially_destructible_v<ok::tuple<int, int, int>> ==
 static_assert(
     std::is_trivially_destructible_v<ok::tuple<noncopy_t, int, int>> ==
     std::is_trivially_destructible_v<std::tuple<noncopy_t, int, int>>);
-static_assert(std::is_trivially_copyable_v<ok::tuple<int, int, int>>);
 static_assert(std::is_trivially_destructible_v<ok::tuple<int, int, int>> ==
               std::is_trivially_destructible_v<std::tuple<int, int, int>>);
 static_assert(
@@ -55,7 +54,17 @@ static_assert(
     std::is_trivially_destructible_v<std::tuple<noncopy_t, int, int>>);
 
 /// std::tuple doesn't make this guarantee, but we do
-static_assert(std::is_trivially_copyable_v<ok::tuple<int, int, int>>);
+static_assert(std::is_trivially_move_constructible_v<ok::tuple<int, int, int>>);
+static_assert(std::is_trivially_move_assignable_v<ok::tuple<int, int, int>>);
+static_assert(std::is_trivially_copy_constructible_v<ok::tuple<int, int, int>>);
+static_assert(std::is_trivially_copy_assignable_v<ok::tuple<int, int, int>>);
+
+// noncopy_t is not trivially movable, so tuples containing it should not be
+// either
+static_assert(
+    !std::is_trivially_move_constructible_v<ok::tuple<noncopy_t, int, int>>);
+static_assert(
+    !std::is_trivially_move_assignable_v<ok::tuple<noncopy_t, int, int>>);
 
 TEST_SUITE("tuple")
 {
@@ -76,5 +85,29 @@ TEST_SUITE("tuple")
         auto [k, m] = std::tuple<int, int>{1, 2};
         REQUIRE(k == 1);
         REQUIRE(m == 2);
+    }
+
+    TEST_CASE("tuple of reference types")
+    {
+        using T = ok::tuple<int&, float&, bool&>;
+        int i{};
+        float f{};
+        bool b{};
+        T refs(i, f, b);
+
+        ok::get<int&>(refs) = 1;
+        ok::get<float&>(refs) = 2.0;
+        ok::get<bool&>(refs) = true;
+
+        REQUIRE(i == 1);
+        REQUIRE(f == 2.0);
+        REQUIRE(b == true);
+    }
+
+    TEST_CASE("tuple containing array")
+    {
+        using T = ok::tuple<int(&)[2], int>;
+
+        T mytuple(0.1, 0.2);
     }
 }

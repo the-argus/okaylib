@@ -520,6 +520,11 @@ struct is_copy_assignable
                            add_lvalue_reference_t<const T>>
 {};
 
+template <typename T>
+struct is_move_assignable
+    : public is_assignable<add_lvalue_reference_t<T>, add_rvalue_reference_t<T>>
+{};
+
 template <typename T> struct is_array : public false_type
 {};
 template <typename T, size_t N> struct is_array<T[N]> : public true_type
@@ -814,6 +819,9 @@ inline constexpr bool is_assignable_v = is_assignable<T, U>::value;
 
 template <typename T>
 inline constexpr bool is_copy_assignable_v = is_copy_assignable<T>::value;
+
+template <typename T>
+inline constexpr bool is_move_assignable_v = is_move_assignable<T>::value;
 
 template <typename T, typename... args_t>
 inline constexpr bool is_constructible_v =
