@@ -87,8 +87,8 @@ TEST_SUITE("zip")
         memfill(slice(arr), 0);
 
         static_assert(
-            detail::bidirectional_range_c<example_range_bidirectional>);
-        static_assert(detail::bidirectional_range_c<decltype(arr)>);
+            bidirectional_range_c<example_range_bidirectional>);
+        static_assert(bidirectional_range_c<decltype(arr)>);
         static_assert(
             !random_access_range_c<example_range_bidirectional>);
 

@@ -186,7 +186,7 @@ struct range_definition<detail::drop_view_t<input_range_t>>
                 ok::increment(parent_ref, c);
                 --counter;
             }
-            if constexpr (detail::bidirectional_range_c<range_t>) {
+            if constexpr (bidirectional_range_c<range_t>) {
                 return cursor_t(std::move(c), amount);
             } else {
                 return c;
@@ -215,7 +215,7 @@ struct range_definition<detail::drop_view_t<input_range_t>>
                 const cursor_t parent_end = parent_begin + ok::size(parent_ref);
                 return c < parent_end && begin_check;
             }
-        } else if constexpr (detail::bidirectional_range_c<range_t>) {
+        } else if constexpr (bidirectional_range_c<range_t>) {
             return c.num_consumed() >= i.amount() &&
                    ok::is_inbounds(parent_ref, c.inner());
         } else {
