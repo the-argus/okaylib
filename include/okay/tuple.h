@@ -103,49 +103,46 @@ struct tuple_impl_t<index, element_t, tail_t...>
     constexpr tuple_impl_t(tuple_impl_t&&) = default;
     constexpr tuple_impl_t& operator=(tuple_impl_t&&) = default;
 
-    // template <typename... other_elements_t>
-    // constexpr tuple_impl_t(
-    //     const tuple_impl_t<index, other_elements_t...>& other)
-    //     : parent_t(tuple_impl_t<index,
-    //     other_elements_t...>::get_tail(other)),
-    //       container_t(tuple_impl_t<index,
-    //       other_elements_t...>::get_head(other))
-    // {
-    // }
+    template <typename... other_elements_t>
+    constexpr tuple_impl_t(
+        const tuple_impl_t<index, other_elements_t...>& other)
+        : parent_t(tuple_impl_t<index, other_elements_t...>::get_tail(other)),
+          container_t(tuple_impl_t<index, other_elements_t...>::get_head(other))
+    {
+    }
 
-    // template <typename other_head_t, typename... other_tail_t>
-    // constexpr tuple_impl_t(
-    //     tuple_impl_t<index, other_head_t, other_tail_t...>&& other)
-    //     : parent_t(stdc::move(
-    //           tuple_impl_t<index, other_head_t, other_tail_t...>::get_tail(
-    //               other))),
-    //       container_t(stdc::forward<other_head_t>(
-    //           tuple_impl_t<index, other_head_t, other_tail_t...>::get_head(
-    //               other)))
-    // {
-    // }
+    template <typename other_head_t, typename... other_tail_t>
+    constexpr tuple_impl_t(
+        tuple_impl_t<index, other_head_t, other_tail_t...>&& other)
+        : parent_t(stdc::move(
+              tuple_impl_t<index, other_head_t, other_tail_t...>::get_tail(
+                  other))),
+          container_t(stdc::forward<other_head_t>(
+              tuple_impl_t<index, other_head_t, other_tail_t...>::get_head(
+                  other)))
+    {
+    }
 
-    // template <typename... other_elements_t>
-    // constexpr void assign(const tuple_impl_t<index, other_elements_t...>&
-    // other)
-    // {
-    //     get_head(*this) =
-    //         tuple_impl_t<index, other_elements_t...>::get_head(other);
-    //     get_tail(*this).assign(
-    //         tuple_impl_t<index, other_elements_t...>::get_tail(other));
-    // }
+    template <typename... other_elements_t>
+    constexpr void assign(const tuple_impl_t<index, other_elements_t...>& other)
+    {
+        get_head(*this) =
+            tuple_impl_t<index, other_elements_t...>::get_head(other);
+        get_tail(*this).assign(
+            tuple_impl_t<index, other_elements_t...>::get_tail(other));
+    }
 
-    // template <typename other_head_t, typename... other_tail_t>
-    // constexpr void
-    // assign(tuple_impl_t<index, other_head_t, other_tail_t...>&& other)
-    // {
-    //     get_head(*this) = stdc::forward<other_head_t>(
-    //         tuple_impl_t<index, other_head_t, other_tail_t...>::get_head(
-    //             other));
-    //     get_tail(*this).assign(stdc::move(
-    //         tuple_impl_t<index, other_head_t, other_tail_t...>::get_tail(
-    //             other)));
-    // }
+    template <typename other_head_t, typename... other_tail_t>
+    constexpr void
+    assign(tuple_impl_t<index, other_head_t, other_tail_t...>&& other)
+    {
+        get_head(*this) = stdc::forward<other_head_t>(
+            tuple_impl_t<index, other_head_t, other_tail_t...>::get_head(
+                other));
+        get_tail(*this).assign(stdc::move(
+            tuple_impl_t<index, other_head_t, other_tail_t...>::get_tail(
+                other)));
+    }
 };
 
 template <size_t index, typename head_t>
@@ -199,7 +196,7 @@ template <bool precondition, typename... types_t> struct tuple_constraints_t
         (stdc::is_constructible_v<types_t, other_types_t> && ...);
     template <typename... other_types_t>
     constexpr static bool convertible =
-        (stdc::is_convertible_v<types_t, other_types_t> && ...);
+        (stdc::is_convertible_v<other_types_t, types_t> && ...);
 
     template <typename... other_types_t>
     constexpr static bool is_implicitly_constructible =
@@ -238,6 +235,11 @@ template <typename... types_t> struct tuple_constraints_t<false, types_t...>
 template <typename... elements_t>
 class tuple : public detail::tuple_impl_t<0, elements_t...>
 {
+    static_assert(
+        !(stdc::is_array_v<elements_t> || ...),
+        "C style arrays cannot be tuple elements by value, if this behavior is "
+        "needed consider an ok::array_t or, if by value storage is not needed, "
+        "storing a const reference to the array.");
     using parent_t = detail::tuple_impl_t<0, elements_t...>;
 
     // TODO: can we remove the precondition on constraints in favor of just
@@ -580,6 +582,44 @@ constexpr const T&& get(const tuple<types_t...>&& t) noexcept
         index < sizeof...(types_t),
         "the type T in std::get<T> must occur exactly once in the tuple");
     return stdc::forward<const T>(detail::tuple_get_impl<index>(t));
+}
+
+namespace detail {
+/// Recursive template for comparing all the elements of a tuple from left to
+/// right
+template <typename lhs_tuple_t, typename rhs_tuple_t, size_t idx, size_t size>
+struct tuple_compare
+{
+    static constexpr bool eq(const lhs_tuple_t& lhs_tuple,
+                             const rhs_tuple_t& rhs_tuple)
+    {
+        return bool(ok::get<idx>(lhs_tuple) == ok::get<idx>(rhs_tuple)) &&
+               tuple_compare<lhs_tuple_t, rhs_tuple_t, idx + 1, size>::eq(
+                   lhs_tuple, rhs_tuple);
+    }
+};
+
+template <typename lhs_tuple_t, typename rhs_tuple_t, size_t size>
+struct tuple_compare<lhs_tuple_t, rhs_tuple_t, size, size>
+{
+    static constexpr bool eq(const lhs_tuple_t&, const rhs_tuple_t&)
+    {
+        return true;
+    }
+};
+} // namespace detail
+
+template <typename... lhs_elements_t, typename... rhs_elements_t>
+constexpr bool operator==(const tuple<lhs_elements_t...>& lhs_tuple,
+                          const tuple<rhs_elements_t...>& rhs_tuple)
+{
+    static_assert(
+        sizeof...(lhs_elements_t) == sizeof...(rhs_elements_t),
+        "tuple objects can only be compared if they have equal sizes.");
+    using compare = detail::tuple_compare<tuple<lhs_elements_t...>,
+                                          tuple<rhs_elements_t...>, 0,
+                                          sizeof...(lhs_elements_t)>;
+    return compare::eq(lhs_tuple, rhs_tuple);
 }
 
 template <typename... args_t>

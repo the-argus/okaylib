@@ -20,9 +20,11 @@ template <typename T, T v> struct integral_constant
 
 #include <type_traits>
 namespace ok::detail::intrinsic {
-template <typename T> using is_empty = std::is_empty<T>;
-template <typename T> using is_final = std::is_final<T>;
-template <typename T> using is_enum = std::is_enum<T>;
+template <typename T> inline constexpr bool is_empty = std::is_empty_v<T>;
+template <typename T> inline constexpr bool is_final = std::is_final_v<T>;
+template <typename T> inline constexpr bool is_enum = std::is_enum_v<T>;
+template <typename base_t, typename derived_t>
+inline constexpr bool is_base_of = std::is_base_of_v<base_t, derived_t>;
 #define __ok_has_trivial_destructor(type) std::is_trivially_destructible_v<type>
 #define __ok_has_trivial_constructor(...) \
     std::is_trivially_constructible_v<__VA_ARGS__>
@@ -45,6 +47,17 @@ struct is_final : public ok::stdc::integral_constant<bool, __is_final(T)>
 template <typename T>
 struct is_enum : public ok::stdc::integral_constant<bool, __is_enum(T)>
 {};
+
+template <typename base_t, typename derived_t>
+struct is_base_of
+    : public ok::stdc::integral_constant<bool, __is_base_of(base_t, derived_t)>
+{};
+
+template <typename T> inline constexpr bool is_empty = __is_empty(T);
+template <typename T> inline constexpr bool is_final = __is_final(T);
+template <typename T> inline constexpr bool is_enum = __is_enum(T);
+template <typename base_t, typename derived_t>
+inline constexpr bool is_base_of = __is_base_of(base_t, derived_t);
 
 // #define __ok_has_trivial_destructor(type) __has_trivial_destructor(type)
 #define __ok_has_trivial_destructor(type) __is_trivially_destructible(type)
@@ -69,6 +82,9 @@ struct is_final : public ok::stdc::integral_constant<bool, false>
 {};
 template <typename T>
 struct is_enum : public ok::stdc::integral_constant<bool, false>
+{};
+template <typename base_t, typename derived_t>
+struct is_base_of : public ok::stdc::integral_constant<bool, false>
 {};
 #define __ok_has_trivial_destructor(type) false
 
@@ -310,9 +326,12 @@ struct is_nothrow_move_assignable
                                            ok::stdc::declval<T&&>())>
 {};
 
-template <typename T> using is_empty = ok::detail::intrinsic::is_empty<T>;
-template <typename T> using is_final = ok::detail::intrinsic::is_final<T>;
-template <typename T> using is_enum = ok::detail::intrinsic::is_enum<T>;
+template <typename T>
+using is_empty = integral_constant<bool, ok::detail::intrinsic::is_empty<T>>;
+template <typename T>
+using is_final = integral_constant<bool, ok::detail::intrinsic::is_final<T>>;
+template <typename T>
+using is_enum = integral_constant<bool, ok::detail::intrinsic::is_enum<T>>;
 
 template <bool B, typename T, typename F> struct conditional
 {
@@ -325,6 +344,19 @@ template <typename T, typename F> struct conditional<false, T, F>
 
 template <bool B, typename T, typename F>
 using conditional_t = typename conditional<B, T, F>::type;
+
+template <bool b, typename T = void> struct enable_if
+{};
+
+template <typename T> struct enable_if<true, T>
+{
+    using type = T;
+};
+
+template <bool condition, typename T = void>
+using enable_if_t = typename enable_if<condition, T>::type;
+
+template <typename...> using void_t = void;
 
 namespace detail {
 template <typename> struct is_array_unknown_bounds : public false_type
@@ -340,15 +372,47 @@ template <typename T> struct type_identity
 template <typename T, typename... args_t> struct is_constructible_impl
 {
   private:
-    template <typename U, typename... vargs_t>
-    static auto test(int) -> decltype(U(stdc::declval<vargs_t>()...),
-                                      stdc::true_type{});
+    // basic implementation of is_constructible: if the constructor syntax
+    // works, then its constructible. there is an exception for references which
+    // is the other `struct inner` specialization below
+    template <typename U, typename = void> struct inner
+    {
+        static_assert(!is_reference<U>{}, "bad template specialization");
+        template <typename V, typename = void>
+        struct inner_again : public std::false_type
+        {};
+        template <typename V>
+        struct inner_again<V, void_t<decltype(V(stdc::declval<args_t>()...))>>
+            : public std::true_type
+        {};
 
-    template <typename U, typename... vargs_t>
-    static stdc::false_type test(...);
+        using type = inner_again<U>::type;
+    };
+
+    // implementation if the type is a reference is that its only going to be
+    // true if the construction argument is a single identical reference, or
+    // a reference to a derived class
+    template <typename U> struct inner<U, enable_if_t<is_reference<U>{}>>
+    {
+        template <typename... inner_args_t> struct inner_again
+        {
+            using type = stdc::false_type;
+        };
+
+        template <typename single_t> struct inner_again<single_t>
+        {
+            using type = stdc::integral_constant<
+                bool, (stdc::is_same<single_t, U>{} ||
+                       ::ok::detail::intrinsic::is_base_of<
+                           typename remove_reference<U>::type,
+                           typename remove_reference<single_t>::type>)>;
+        };
+
+        using type = inner_again<args_t...>::type;
+    };
 
   public:
-    using type = decltype(test<T, args_t...>(0));
+    using type = inner<T>::type;
 };
 
 template <typename T, size_t = sizeof(T)>
@@ -772,7 +836,7 @@ template <typename T>
 concept is_reference_c = is_reference<T>::value;
 
 template <typename T>
-concept is_const_c = is_reference<T>::value;
+concept is_const_c = is_const<T>::value;
 
 template <typename T>
 concept is_const_reference_c =
