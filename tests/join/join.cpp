@@ -21,12 +21,12 @@ TEST_SUITE("join")
 
             slice<int> arrays[] = {a, b, c};
 
-            static_assert(detail::random_access_range_c<decltype(a)>);
-            static_assert(detail::random_access_range_c<decltype(arrays)>);
+            static_assert(random_access_range_c<decltype(a)>);
+            static_assert(random_access_range_c<decltype(arrays)>);
             // i wish... maybe if the sizes of all the arrays were statically
             // known
             static_assert(
-                !detail::random_access_range_c<decltype(arrays | join)>);
+                !random_access_range_c<decltype(arrays | join)>);
 
             size_t counter = 0;
             auto&& rng = arrays | join;

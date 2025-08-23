@@ -138,7 +138,7 @@ struct range_definition<detail::reversed_view_t<input_range_t>>
     using cursor_t = detail::reversed_cursor_t<input_range_t>;
 
     static_assert(
-        detail::random_access_range_c<range_t> &&
+        random_access_range_c<range_t> &&
             detail::range_can_size_c<range_t>,
         "Cannot reverse a range which is not both random access and sized.");
 

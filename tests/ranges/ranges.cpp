@@ -63,7 +63,7 @@ static_assert(std::is_same_v<ok::value_type_for<const int[500]>, int>);
 static_assert(!ok::detail::range_can_get_ref_c<const int[500]>);
 static_assert(ok::detail::range_can_get_ref_const_c<const int[500]>);
 
-static_assert(ok::detail::random_access_range_c<ok::slice<int>>);
+static_assert(ok::random_access_range_c<ok::slice<int>>);
 static_assert(ok::detail::producing_range_c<ok::slice<int>>);
 
 static_assert(ok::detail::producing_range_c<ok::slice<const int>>);
@@ -86,17 +86,17 @@ static_assert(range_marked_finite_c<example_range_bidirectional>);
 static_assert(range_has_baseline_functions_c<example_range_bidirectional>);
 static_assert(ok::detail::consuming_range_c<example_range_bidirectional>);
 static_assert(ok::detail::producing_range_c<example_range_bidirectional>);
-static_assert(ok::detail::bidirectional_range_c<example_range_bidirectional>);
-static_assert(!ok::detail::random_access_range_c<example_range_bidirectional>);
+static_assert(ok::bidirectional_range_c<example_range_bidirectional>);
+static_assert(!ok::random_access_range_c<example_range_bidirectional>);
 static_assert(ok::detail::consuming_range_c<example_range_cstyle_child>);
-static_assert(ok::detail::random_access_range_c<example_range_cstyle>);
+static_assert(ok::random_access_range_c<example_range_cstyle>);
 static_assert(ok::detail::is_valid_cursor_v<size_t>);
 static_assert(ok::range_c<example_range_cstyle>);
 static_assert(ok::detail::range_can_get_ref_c<example_range_cstyle>);
 static_assert(ok::detail::range_can_get_ref_const_c<example_range_cstyle>);
 
 static_assert(ok::detail::range_has_baseline_functions_c<std::vector<int>>);
-static_assert(ok::detail::random_access_range_c<std::vector<int>>);
+static_assert(ok::random_access_range_c<std::vector<int>>);
 static_assert(
     ok::same_as_c<std::vector<int>::value_type,
                   ok::range_definition<std::vector<int>>::value_type>);

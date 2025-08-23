@@ -22,7 +22,7 @@ struct drop_fn_t
         // TODO: support these. it should be a simple extension of the
         // drop_cursor_bidir_t
         static_assert(
-            !(detail::random_access_range_c<range_t> &&
+            !(random_access_range_c<range_t> &&
               detail::range_marked_finite_c<range_t>),
             "Drop view does not support random access ranges of unknown size.");
         return drop_view_t<decltype(range)>{std::forward<range_t>(range),
@@ -78,8 +78,8 @@ struct drop_cursor_bidir_t
 
 template <typename input_range_t>
 using drop_cursor_t = std::conditional_t<
-    detail::bidirectional_range_c<detail::remove_cvref_t<input_range_t>> &&
-        !detail::random_access_range_c<detail::remove_cvref_t<input_range_t>>,
+    bidirectional_range_c<detail::remove_cvref_t<input_range_t>> &&
+        !random_access_range_c<detail::remove_cvref_t<input_range_t>>,
     drop_cursor_bidir_t<input_range_t>,
     cursor_type_for<detail::remove_cvref_t<input_range_t>>>;
 
@@ -166,7 +166,7 @@ struct range_definition<detail::drop_view_t<input_range_t>>
         std::is_lvalue_reference_v<input_range_t>;
 
     static_assert(
-        !(detail::random_access_range_c<range_t> &&
+        !(random_access_range_c<range_t> &&
           detail::range_marked_finite_c<range_t>),
         "Drop view does not support random access ranges of unknown size.");
 
@@ -174,7 +174,7 @@ struct range_definition<detail::drop_view_t<input_range_t>>
     {
         const auto& parent_ref =
             i.template get_view_reference<drop_t, range_t>();
-        if constexpr (detail::random_access_range_c<range_t>) {
+        if constexpr (random_access_range_c<range_t>) {
             return ok::begin(parent_ref) + i.amount();
         } else {
             auto c = ok::begin(parent_ref);
@@ -202,7 +202,7 @@ struct range_definition<detail::drop_view_t<input_range_t>>
         const range_t& parent_ref =
             i.template get_view_reference<drop_t, range_t>();
 
-        if constexpr (detail::random_access_range_c<range_t>) {
+        if constexpr (random_access_range_c<range_t>) {
             static_assert(!detail::range_marked_finite_c<range_t>);
             const cursor_t parent_begin = ok::begin(parent_ref);
             const cursor_t our_begin = parent_begin + i.amount();

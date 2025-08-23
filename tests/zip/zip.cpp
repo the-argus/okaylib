@@ -63,10 +63,10 @@ TEST_SUITE("zip")
         example_range_cstyle example;
 
         // random-access-ness is propagated
-        static_assert(detail::random_access_range_c<example_range_cstyle>);
-        static_assert(detail::random_access_range_c<decltype(a2)>);
+        static_assert(random_access_range_c<example_range_cstyle>);
+        static_assert(random_access_range_c<decltype(a2)>);
         static_assert(
-            detail::random_access_range_c<decltype(zip(a2, example))>);
+            random_access_range_c<decltype(zip(a2, example))>);
 
         REQUIRE(ok::size(zip(a2, example)) == ok::size(a2));
 
@@ -90,12 +90,12 @@ TEST_SUITE("zip")
             detail::bidirectional_range_c<example_range_bidirectional>);
         static_assert(detail::bidirectional_range_c<decltype(arr)>);
         static_assert(
-            !detail::random_access_range_c<example_range_bidirectional>);
+            !random_access_range_c<example_range_bidirectional>);
 
         using Z = decltype(zip(arr, bidir));
 
-        static_assert(detail::bidirectional_range_c<Z>);
-        static_assert(!detail::random_access_range_c<Z>);
+        static_assert(bidirectional_range_c<Z>);
+        static_assert(!random_access_range_c<Z>);
     }
 
     TEST_CASE("zip with zero sized range makes empty range")
