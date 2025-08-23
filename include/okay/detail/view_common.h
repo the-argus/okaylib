@@ -173,7 +173,7 @@ struct propagate_strict_flags<T>
 } // namespace detail
 
 template <typename range_t>
-struct ok::range_definition<detail::owning_view<range_t>>
+struct range_definition<detail::owning_view<range_t>>
     : public detail::propagate_all_range_definition_functions_with_conversion_t<
           detail::owning_view<range_t>, range_t, cursor_type_for<range_t>>,
       public detail::propagate_strict_flags<range_t>
@@ -246,7 +246,7 @@ template <range_c input_range_t> class ref_view<input_range_t>
 } // namespace detail
 
 template <typename range_t>
-struct ok::range_definition<detail::ref_view<range_t>>
+struct range_definition<detail::ref_view<range_t>>
     : public detail::propagate_all_range_definition_functions_with_conversion_t<
           detail::ref_view<range_t>, range_t, cursor_type_for<range_t>>,
       public detail::propagate_strict_flags<range_t>
