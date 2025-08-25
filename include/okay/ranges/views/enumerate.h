@@ -59,27 +59,14 @@ struct enumerated_cursor_t
     friend wrapper_t;
     friend class ok::range_definition<
         detail::enumerated_view_t<parent_range_t>>;
-    friend class ok::orderable_definition<enumerated_cursor_t>;
 
-    constexpr size_t index() const OKAYLIB_NOEXCEPT { return m_index; }
+    [[nodiscard]] constexpr size_t index() const OKAYLIB_NOEXCEPT
+    {
+        return m_index;
+    }
 
-  private:
-    size_t m_index;
-};
-
-} // namespace detail
-
-template <typename parent_range_t>
-class ok::orderable_definition<detail::enumerated_cursor_t<parent_range_t>>
-{
-    using self_t = detail::enumerated_cursor_t<parent_range_t>;
-
-  public:
-    constexpr static bool is_strong_orderable =
-        is_strong_fully_orderable_v<cursor_type_for<parent_range_t>>;
-
-    constexpr static ordering cmp(const self_t& lhs,
-                                  const self_t& rhs) OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr friend auto
+    operator<=>(const enumerated_cursor_t& lhs, const enumerated_cursor_t& rhs)
     {
         const auto ordering = ok::cmp(lhs.inner(), rhs.inner());
         __ok_assert(ordering == ok::cmp(lhs.m_index, rhs.m_index),
@@ -88,7 +75,12 @@ class ok::orderable_definition<detail::enumerated_cursor_t<parent_range_t>>
                     "range implementation.");
         return ordering;
     }
+
+  private:
+    size_t m_index;
 };
+
+} // namespace detail
 
 template <typename input_range_t>
     requires(!detail::range_marked_arraylike_c<input_range_t>)
