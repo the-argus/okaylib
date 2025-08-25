@@ -18,6 +18,7 @@ template <typename T, T v> struct integral_constant
 
 #if defined(OKAYLIB_COMPAT_STRATEGY_STD)
 
+#include <compare> // so later, ordering.h can use std::strong_ordering and co
 #include <type_traits>
 namespace ok::detail::intrinsic {
 template <typename T> inline constexpr bool is_empty = std::is_empty_v<T>;
@@ -33,7 +34,7 @@ inline constexpr bool is_base_of = std::is_base_of_v<base_t, derived_t>;
 } // namespace ok::detail::intrinsic
 
 #elif defined(OKAYLIB_COMPAT_STRATEGY_NO_STD)
-
+#include "okay/detail/compare.h"
 // mimic the things from <type_traits> that we need with compiler intrinsics
 namespace ok::detail::intrinsic {
 template <typename T>
@@ -570,6 +571,22 @@ struct is_default_constructible : public is_constructible<T>
         "template argument must be a complete class or an unbounded array");
 };
 
+template <typename T>
+struct is_copy_constructible : public is_constructible<T, const T&>
+{
+    static_assert(
+        stdc::detail::is_complete_or_unbounded(detail::type_identity<T>{}),
+        "template argument must be a complete class or an unbounded array");
+};
+
+template <typename T>
+struct is_move_constructible : public is_constructible<T, T&&>
+{
+    static_assert(
+        stdc::detail::is_complete_or_unbounded(detail::type_identity<T>{}),
+        "template argument must be a complete class or an unbounded array");
+};
+
 template <typename T, typename U>
 struct is_assignable : detail::is_assignable_impl<T, U>
 {
@@ -891,6 +908,12 @@ template <typename T, typename... args_t>
 inline constexpr bool is_constructible_v =
     is_constructible<T, args_t...>::value;
 
+template <typename T>
+inline constexpr bool is_copy_constructible_v = is_copy_constructible<T>::value;
+
+template <typename T>
+inline constexpr bool is_move_constructible_v = is_move_constructible<T>::value;
+
 template <typename from_t, typename to_t>
 inline constexpr bool is_convertible_v = is_convertible<from_t, to_t>::value;
 
@@ -941,5 +964,11 @@ template <typename T, typename U>
 inline constexpr bool is_same_v = is_same<T, U>::value;
 
 } // namespace ok::stdc
+
+// publicize some declarations
+namespace ok {
+using true_type = ok::stdc::true_type;
+using false_type = ok::stdc::false_type;
+} // namespace ok
 
 #endif

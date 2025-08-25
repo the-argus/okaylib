@@ -583,7 +583,7 @@ concept range_can_compare_c =
     (!range_strictly_must_use_cursor_member_compare_c<T> &&
      range_impls_compare_c<T>) ||
     (!range_strictly_must_implement_compare_c<T> &&
-     is_orderable_v<cursor_or_void_t<T>>);
+     orderable_c<cursor_or_void_t<T>>);
 
 template <typename T>
 concept range_can_increment_c =
@@ -934,7 +934,7 @@ struct range_compare_fn_t
         if constexpr (range_impls_compare_c<range_t>) {
             return range_def_for<range_t>::compare(range, cursor_a, cursor_b);
         } else {
-            static_assert(is_orderable_v<cursor_type_for<range_t>>);
+            static_assert(orderable_c<cursor_type_for<range_t>>);
             return ok::cmp(cursor_a, cursor_b);
         }
     }

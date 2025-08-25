@@ -431,7 +431,14 @@ template <typename payload_t, typename> class opt
         return this->has_value();
     }
 
-    [[nodiscard]] constexpr friend bool operator==(const opt& a, const opt& b)
+    // optional does not implement full spaceship... stdlib chooses to make
+    // null optionals be considered "less" than all possible values of the
+    // payload type. I think this is confusing and only equality really makes
+    // intuitive sense to someone who doesn know the ins and outs of the C++
+    // stl. Do I want a sorted vector of optionals to have all the nulls at the
+    // front? maybe, but why is that default
+    constexpr friend bool operator==(const opt& a,
+                                     const opt& b) OKAYLIB_NOEXCEPT
         requires(detail::is_equality_comparable_to_self_c<payload_t>)
     {
         if (a.has_value() != b.has_value())
@@ -440,15 +447,15 @@ template <typename payload_t, typename> class opt
         return !a.has_value() || a.ref_unchecked() == b.ref_unchecked();
     }
 
-    [[nodiscard]] constexpr friend bool operator==(const opt& a,
-                                                   const payload_t& b)
+    constexpr friend bool operator==(const opt& a,
+                                     const payload_t& b) OKAYLIB_NOEXCEPT
         requires(detail::is_equality_comparable_to_self_c<payload_t>)
     {
         return a.has_value() && a.ref_unchecked() == b;
     }
 
-    [[nodiscard]] constexpr friend bool operator==(const payload_t& b,
-                                                   const opt& a)
+    constexpr friend bool operator==(const payload_t& b,
+                                     const opt& a) OKAYLIB_NOEXCEPT
         requires(detail::is_equality_comparable_to_self_c<payload_t>)
     {
         return a.has_value() && a.ref_unchecked() == b;
