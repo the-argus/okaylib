@@ -22,15 +22,15 @@ struct MemberPointerTester
 
 // tests to make sure ok::invoke matches std::invoke
 static_assert(std::is_same_v<
-              decltype(std::invoke(ok::detail::iter_get_ref_fn_t{},
+              decltype(std::invoke(ok::detail::range_get_ref_fn_t{},
                                    std::declval<int (&)[500]>(), size_t{})),
-              decltype(ok::invoke(ok::detail::iter_get_ref_fn_t{},
+              decltype(ok::invoke(ok::detail::range_get_ref_fn_t{},
                                   std::declval<int (&)[500]>(), size_t{}))>);
 static_assert(
     std::is_same_v<
-        decltype(std::invoke(ok::detail::iter_get_ref_fn_t{},
+        decltype(std::invoke(ok::detail::range_get_ref_fn_t{},
                              std::declval<const int (&)[500]>(), size_t{})),
-        decltype(ok::invoke(ok::detail::iter_get_ref_fn_t{},
+        decltype(ok::invoke(ok::detail::range_get_ref_fn_t{},
                             std::declval<const int (&)[500]>(), size_t{}))>);
 static_assert(std::is_same_v<
               decltype(std::invoke(&MemberPointerTester::one,
@@ -60,8 +60,10 @@ using namespace ok::detail;
 
 ok::range_def_for<const int[500]> array_instantiation;
 static_assert(std::is_same_v<ok::value_type_for<const int[500]>, int>);
-static_assert(!ok::detail::range_can_get_ref_c<const int[500]>);
-static_assert(ok::detail::range_can_get_ref_const_c<const int[500]>);
+static_assert(
+    std::is_same_v<decltype(ok::range_get(std::declval<const int[500]>(), 0)),
+                   const int&>);
+static_assert(ok::detail::range_impls_const_get_c<const int[500]>);
 
 static_assert(ok::random_access_range_c<ok::slice<int>>);
 static_assert(ok::detail::producing_range_c<ok::slice<int>>);
@@ -71,7 +73,14 @@ static_assert(ok::detail::consuming_range_c<ok::slice<int>>);
 static_assert(!ok::detail::range_impls_construction_set_c<ok::slice<const int>,
                                                           const int&>);
 static_assert(ok::is_const_c<ok::slice<const int>::viewed_type>);
-static_assert(ok::detail::range_can_get_ref_const_c<ok::slice<const int>>);
+static_assert(
+    std::is_same_v<decltype(ok::range_get(
+                       ok::stdc::declval<const ok::slice<const int>&>(), 0)),
+                   const int&>);
+static_assert(
+    std::is_same_v<
+        decltype(ok::range_get(ok::stdc::declval<ok::slice<const int>&>(), 0)),
+        const int&>);
 static_assert(
     std::is_same_v<ok::value_type_for<ok::slice<const int>>, const int>);
 // get ref is explicitly for nonconst overload
