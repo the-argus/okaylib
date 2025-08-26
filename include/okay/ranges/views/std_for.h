@@ -1,7 +1,6 @@
 #ifndef __OKAYLIB_RANGES_VIEWS_STD_FOR_H__
 #define __OKAYLIB_RANGES_VIEWS_STD_FOR_H__
 
-#include "okay/detail/get_best.h"
 #include "okay/detail/view_common.h"
 #include "okay/opt.h"
 #include "okay/ranges/adaptors.h"
@@ -47,8 +46,8 @@ class std_for_view : public detail::underlying_view_type<T>::type
         using iterator_category = std::input_iterator_tag;
         using difference_type = std::ptrdiff_t;
         using value_type = value_type_for<T>;
-        using reference = decltype(ok::detail::get_best(
-            m.ref_or_panic().parent, m.ref_or_panic().cursor));
+        using reference = decltype(ok::range_get_best(m.ref_or_panic().parent,
+                                                      m.ref_or_panic().cursor));
         using pointer = value_type*;
 
         static_assert(
@@ -68,7 +67,7 @@ class std_for_view : public detail::underlying_view_type<T>::type
         constexpr reference operator*() const OKAYLIB_NOEXCEPT
         {
             auto& members = m.ref_or_panic();
-            return ok::detail::get_best(members.parent, members.cursor);
+            return ok::range_get_best(members.parent, members.cursor);
         }
 
         // Prefix increment
@@ -130,8 +129,8 @@ class std_for_view : public detail::underlying_view_type<T>::type
         using iterator_category = std::input_iterator_tag;
         using difference_type = std::ptrdiff_t;
         using value_type = const value_type_for<T>;
-        using reference = decltype(ok::detail::get_best(
-            m.ref_or_panic().parent, m.ref_or_panic().cursor));
+        using reference = decltype(ok::range_get_best(m.ref_or_panic().parent,
+                                                      m.ref_or_panic().cursor));
         using pointer = const value_type*;
 
         constexpr const_iterator() = default;
@@ -145,7 +144,7 @@ class std_for_view : public detail::underlying_view_type<T>::type
         constexpr reference operator*() const OKAYLIB_NOEXCEPT
         {
             const auto& members = m.ref_or_panic();
-            return ok::detail::get_best(members.parent, members.cursor);
+            return ok::range_get_best(members.parent, members.cursor);
         }
 
         // constexpr pointer operator->() OKAYLIB_NOEXCEPT

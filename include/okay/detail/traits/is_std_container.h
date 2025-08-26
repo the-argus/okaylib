@@ -43,9 +43,6 @@ concept std_arraylike_container = requires(const T& c, T& nc) {
     {
         nc.data()
     } -> pointer; // allowed to be const, too (std::array<const int>)
-    requires std::is_same_v<
-        std::remove_pointer_t<decltype(nc.data())>,
-        std::remove_cv_t<std::remove_pointer_t<decltype(c.data())>>>;
 
     { c.size() } -> std::same_as<size_t>;
     { nc.size() } -> std::same_as<size_t>;

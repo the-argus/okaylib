@@ -106,16 +106,17 @@ struct propagate_all_range_definition_functions_with_conversion_t
     }
 };
 
-template <typename range_t> class owning_view;
 /// If getting undefined template errors, maybe the type passed in is not a
 /// range, or it is a reference to a range?
 template <typename range_t> class ref_view;
 
-template <range_c range_t>
-    requires is_moveable_c<range_t>
-class owning_view<range_t>
+template <typename input_range_t>
+    requires is_moveable_c<remove_cvref_t<input_range_t>> &&
+             range_c<remove_cvref_t<input_range_t>>
+class owning_view
 {
   private:
+    using range_t = remove_cvref_t<input_range_t>;
     range_t m_range;
 
   public:
@@ -184,10 +185,12 @@ struct range_definition<detail::owning_view<range_t>>
 
 namespace detail {
 
-template <range_c input_range_t> class ref_view<input_range_t>
+template <typename input_range_t> class ref_view
 {
   private:
-    using range_t = remove_cvref_t<input_range_t>;
+    using range_t = stdc::remove_reference_t<input_range_t>;
+    static_assert(
+        !std::is_same_v<detail::remove_cvref_t<input_range_t>, ref_view>);
     range_t* m_range;
 
     // not defined
@@ -206,12 +209,7 @@ template <range_c input_range_t> class ref_view<input_range_t>
     {};
 
   public:
-    template <typename T>
-    constexpr ref_view(T&& t) OKAYLIB_NOEXCEPT
-        requires(!ok::same_as_c<ref_view, T> &&
-                 is_convertible_to_c<decltype(t), range_t&> &&
-                 is_referenceable<decltype(t)>::value)
-        : m_range(ok::addressof(static_cast<range_t&>(std::forward<T>(t))))
+    constexpr ref_view(range_t& t) OKAYLIB_NOEXCEPT : m_range(ok::addressof(t))
     {
     }
 
@@ -270,20 +268,19 @@ constexpr bool is_view_v = range_c<T> && enable_view_c<T> && is_moveable_c<T>;
 template <typename T> struct underlying_view_type
 {
   private:
-    template <typename range_t>
     [[nodiscard]] static constexpr auto
-    wrap_range_with_view(range_t&& view) OKAYLIB_NOEXCEPT
+    wrap_range_with_view(T view) OKAYLIB_NOEXCEPT
     {
         static_assert(
-            is_view_v<range_t> || std::is_lvalue_reference_v<decltype(view)> ||
-                std::is_rvalue_reference_v<decltype(view)>,
+            is_view_v<T> || std::is_lvalue_reference_v<T> ||
+                std::is_rvalue_reference_v<T>,
             "Attempt to wrap something like a value type which is not a view.");
-        if constexpr (is_view_v<range_t>)
-            return std::forward<range_t>(view);
-        else if constexpr (std::is_lvalue_reference_v<decltype(view)>)
-            return ref_view<range_t>{std::forward<range_t>(view)};
-        else if constexpr (std::is_rvalue_reference_v<decltype(view)>)
-            return owning_view<range_t>{std::forward<range_t>(view)};
+        if constexpr (is_view_v<T>)
+            return std::forward<T>(view);
+        else if constexpr (std::is_lvalue_reference_v<T>)
+            return ref_view<T>{view};
+        else if constexpr (std::is_rvalue_reference_v<T>)
+            return owning_view<T>{std::move(view)};
     }
 
   public:

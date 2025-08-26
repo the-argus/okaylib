@@ -9,6 +9,7 @@
 #include "okay/detail/traits/is_instance.h"
 #include "okay/detail/traits/is_std_container.h"
 #include "okay/math/rounding.h"
+#include "okay/ranges/ranges.h"
 #include <assert.h>
 #include <stdint.h>
 #include <string.h>
@@ -708,9 +709,12 @@ template <typename range_t> struct range_definition;
 
 template <typename viewed_t> struct range_definition<slice<viewed_t>>
 {
-    static constexpr bool is_ref_wrapper = true;
-    static constexpr bool is_arraylike = true;
-    static constexpr bool is_view = false;
+    static constexpr range_flags flags =
+        range_flags::sized | range_flags::arraylike |
+        (stdc::is_const_c<viewed_t>
+             ? range_flags::sized
+             : (range_flags::implements_set | range_flags::consuming)) |
+        range_flags::producing | range_flags::ref_wrapper;
 
     using value_type = viewed_t;
 
@@ -719,8 +723,8 @@ template <typename viewed_t> struct range_definition<slice<viewed_t>>
         return slice.size();
     }
 
-    static constexpr value_type& get_ref(const slice<viewed_t>& range,
-                                         size_t cursor) OKAYLIB_NOEXCEPT
+    static constexpr value_type& get(const slice<viewed_t>& range,
+                                     size_t cursor) OKAYLIB_NOEXCEPT
     {
         return range[cursor];
     }
@@ -728,16 +732,8 @@ template <typename viewed_t> struct range_definition<slice<viewed_t>>
 
 template <> struct range_definition<const_bit_slice_t>
 {
-    static constexpr size_t begin(const const_bit_slice_t&) OKAYLIB_NOEXCEPT
-    {
-        return 0;
-    }
-
-    static constexpr bool is_inbounds(const const_bit_slice_t& bs,
-                                      size_t cursor) OKAYLIB_NOEXCEPT
-    {
-        return cursor < bs.size();
-    }
+    static constexpr range_flags flags =
+        range_flags::arraylike | range_flags::sized | range_flags::producing;
 
     static constexpr size_t size(const const_bit_slice_t& bs) OKAYLIB_NOEXCEPT
     {
@@ -752,16 +748,9 @@ template <> struct range_definition<const_bit_slice_t>
 
 template <> struct range_definition<bit_slice_t>
 {
-    static constexpr size_t begin(const bit_slice_t&) OKAYLIB_NOEXCEPT
-    {
-        return 0;
-    }
-
-    static constexpr bool is_inbounds(const bit_slice_t& bs,
-                                      size_t cursor) OKAYLIB_NOEXCEPT
-    {
-        return cursor < bs.size();
-    }
+    static constexpr range_flags flags =
+        range_flags::arraylike | range_flags::sized | range_flags::producing |
+        range_flags::consuming | range_flags::implements_set;
 
     static constexpr size_t size(const bit_slice_t& bs) OKAYLIB_NOEXCEPT
     {

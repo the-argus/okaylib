@@ -21,44 +21,37 @@ using ecursor_inner_const =
 // const qualification doesnt matter for eview- it is a view of nonconst, so
 // it should enumerate nonconst.
 static_assert(
-    std::is_same_v<decltype(ok::iter_copyout(std::declval<const eview&>(),
-                                             std::declval<const ecursor&>())
-                                .first),
-                   decltype(ok::iter_copyout(std::declval<eview&>(),
-                                             std::declval<ecursor&>())
-                                .first)>);
-static_assert(
-    std::is_same_v<decltype(ok::iter_copyout(std::declval<const eview&>(),
-                                             std::declval<const ecursor&>())
-                                .first),
-                   int&>);
+    std::is_same_v<
+        decltype(ok::get<0>(ok::range_get(std::declval<const eview&>(),
+                                          std::declval<const ecursor&>()))),
+        decltype(ok::get<0>(ok::range_get(std::declval<eview&>(),
+                                          std::declval<ecursor&>())))>);
+static_assert(std::is_same_v<decltype(ok::get<0>(ok::range_get(
+                                 std::declval<const eview&>(),
+                                 std::declval<const ecursor&>()))),
+                             int&>);
 
 // if the inner type is const, then it is a view of const regardless of its
 // const qualification
-static_assert(std::is_same_v<
-              decltype(ok::iter_copyout(std::declval<const eview_const&>(),
-                                        std::declval<const ecursor_const&>())
-                           .first),
-              const int&>);
-static_assert(
-    std::is_same_v<decltype(ok::iter_copyout(std::declval<eview_const&>(),
-                                             std::declval<ecursor_const&>())
-                                .first),
-                   const int&>);
+static_assert(std::is_same_v<decltype(ok::get<0>(ok::range_get(
+                                 std::declval<const eview_const&>(),
+                                 std::declval<const ecursor_const&>()))),
+                             const int&>);
+static_assert(std::is_same_v<decltype(ok::get<0>(ok::range_get(
+                                 std::declval<eview_const&>(),
+                                 std::declval<ecursor_const&>()))),
+                             const int&>);
 
 // if the innermost type does not provide a get_ref() nonconst, then it should
 // be a view of const
-static_assert(
-    std::is_same_v<
-        decltype(ok::iter_copyout(std::declval<const eview_inner_const&>(),
-                                  std::declval<const ecursor_inner_const&>())
-                     .first),
-        const int&>);
-static_assert(std::is_same_v<
-              decltype(ok::iter_copyout(std::declval<eview_inner_const&>(),
-                                        std::declval<ecursor_inner_const&>())
-                           .first),
-              const int&>);
+static_assert(std::is_same_v<decltype(ok::get<0>(ok::range_get(
+                                 std::declval<const eview_inner_const&>(),
+                                 std::declval<const ecursor_inner_const&>()))),
+                             const int&>);
+static_assert(std::is_same_v<decltype(ok::get<0>(ok::range_get(
+                                 std::declval<eview_inner_const&>(),
+                                 std::declval<ecursor_inner_const&>()))),
+                             const int&>);
 
 TEST_SUITE("enumerate")
 {

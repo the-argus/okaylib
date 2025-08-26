@@ -10,7 +10,6 @@
 #include "okay/detail/traits/is_std_container.h"
 #include "okay/detail/traits/mathop_traits.h"
 #include "okay/math/ordering.h"
-#include "okay/slice.h"
 
 /*
  * This header defines customization points and traits for ranges- their
@@ -72,6 +71,22 @@ constexpr range_flags operator|(range_flags a, range_flags b)
                               static_cast<std::underlying_type_t<flags>>(b));
 }
 
+/// Removes all flags in b from a
+constexpr range_flags operator-(range_flags a, range_flags b)
+{
+    using flags = range_flags;
+    const auto added = static_cast<std::underlying_type_t<flags>>(a) ^
+                       static_cast<std::underlying_type_t<flags>>(b);
+    return static_cast<flags>(added ^
+                              static_cast<std::underlying_type_t<flags>>(b));
+}
+
+constexpr range_flags& operator-=(range_flags& a, range_flags b)
+{
+    a = a - b;
+    return a;
+}
+
 constexpr bool operator&(range_flags a, range_flags b)
 {
     using flags = range_flags;
@@ -85,6 +100,24 @@ constexpr range_strict_flags operator|(range_strict_flags a,
     using flags = range_strict_flags;
     return static_cast<flags>(static_cast<std::underlying_type_t<flags>>(a) |
                               static_cast<std::underlying_type_t<flags>>(b));
+}
+
+/// Removes all flags in b from a
+constexpr range_strict_flags operator-(range_strict_flags a,
+                                       range_strict_flags b)
+{
+    using flags = range_strict_flags;
+    const auto added = static_cast<std::underlying_type_t<flags>>(a) |
+                       static_cast<std::underlying_type_t<flags>>(b);
+    return static_cast<flags>(added ^
+                              static_cast<std::underlying_type_t<flags>>(b));
+}
+
+constexpr range_strict_flags& operator-=(range_strict_flags& a,
+                                         range_strict_flags b)
+{
+    a = a - b;
+    return a;
 }
 
 constexpr bool operator&(range_strict_flags a, range_strict_flags b)
@@ -426,7 +459,8 @@ concept range_impls_const_get_c = requires(
     requires !range_strictly_disallows_get_c<T>;
     {
         range_definition_inner_t<T>::get(range, c)
-    } -> same_as_without_cvref_c<typename remove_cvref_t<T>::value_type>;
+    } -> same_as_without_cvref_c<
+          typename range_definition_inner_t<T>::value_type>;
 };
 
 /// Since nonconst to const demotion can occur, this concept really is only
@@ -479,8 +513,8 @@ concept range_impls_construction_set_c = requires {
     requires range_marked_as_implementing_set<T>;
     // either the value type in infallible constructible with the given
     // arguments and set() returns void
-    requires requires(T& r, const cursor_type_unchecked_for_t<T>& c,
-                      args_t... args) {
+    requires requires(remove_cvref_t<T>& r,
+                      const cursor_type_unchecked_for_t<T>& c, args_t... args) {
         requires is_infallible_constructible_c<
             typename range_definition_inner_t<T>::value_type, args_t...>;
         { range_definition_inner_t<T>::set(r, c, args...) } -> is_void_c;
@@ -488,7 +522,8 @@ concept range_impls_construction_set_c = requires {
                  // OR the type is fallible constructible with these args, and
                  // set returns a status of some kind (and is hopefully marked
                  // [[nodiscard]])
-                 requires(T& r, const cursor_type_unchecked_for_t<T>& c,
+                 requires(remove_cvref_t<T>& r,
+                          const cursor_type_unchecked_for_t<T>& c,
                           args_t... args) {
                      requires is_fallible_constructible_c<
                          typename range_definition_inner_t<T>::value_type,
@@ -731,6 +766,15 @@ struct range_get_best_fn_t
     {
         return range_def_for<range_t>::get(range, cursor);
     }
+
+    template <range_c range_t>
+    constexpr decltype(auto) operator() [[nodiscard]] (
+        const range_t& range,
+        const cursor_type_for<range_t>& cursor) const OKAYLIB_NOEXCEPT
+        requires range_impls_get_c<range_t>
+    {
+        return range_def_for<range_t>::get(range, cursor);
+    }
 };
 
 struct range_get_nonconst_ref_fn_t
@@ -867,9 +911,14 @@ struct begin_fn_t
         [[nodiscard]] (const range_t& range) const OKAYLIB_NOEXCEPT
     {
         if constexpr (range_marked_arraylike_c<range_t>) {
-            static_assert(!range_impls_begin_c<range_t>,
-                          "range which is marked arraylike implements begin. "
-                          "The implementation will be ignored.");
+            static_assert(
+                !range_impls_begin_c<range_t> ||
+                    range_strictly_disallows_defined_begin_c<range_t>,
+                "range which is marked arraylike implements begin. either "
+                "remove the implementation or include a strict_flags "
+                "declaration which omits range_strict_flags::implements_begin "
+                "to explicitly declare that you want the implementation to be "
+                "ignored.");
             return size_t(0);
         } else {
             return range_def_for<range_t>::begin(range);
@@ -1058,18 +1107,21 @@ struct range_definition<input_range_t>
     }
 };
 
+template <typename viewed_t> class slice;
+
 // specialization for things that can be indexed with size_t and have an
 // range_t::value_type member and a size() and data() function (stuff like
 // std::array, std::span, and std::vector)
 template <typename input_range_t>
     requires(
         // not array
-        !std::is_array_v<detail::remove_cvref_t<input_range_t>> &&
+        !stdc::is_array_v<detail::remove_cvref_t<input_range_t>> &&
         // not specified to inherit some other range definition
         !has_inherited_range_type_v<detail::remove_cvref_t<input_range_t>> &&
         // provides size_t .size() method and pointer data() method
-        detail::std_arraylike_container<input_range_t> &&
-        std::is_same_v<
+        detail::std_arraylike_container<
+            detail::remove_cvref_t<input_range_t>> &&
+        stdc::is_same_v<
             typename detail::remove_cvref_t<input_range_t>::value_type&,
             decltype(std::declval<detail::remove_cvref_t<input_range_t>&>()
                          [std::declval<size_t>()])>)
