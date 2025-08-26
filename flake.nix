@@ -32,7 +32,6 @@
 
               # backtraces
               libbfd
-              libunwind
             ]) ++ pkgs.lib.optionals (system != flake-utils.lib.system.aarch64-darwin) (with pkgs; [
               gdb
               valgrind

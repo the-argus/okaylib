@@ -26,6 +26,8 @@ const testing_flags = &[_][]const u8{
     "-Wno-deprecated",
     "-DOKAYLIB_NOEXCEPT=", // allow exceptions in testing mode
 
+    "-DBACKWARD_HAS_UNWIND=1",
+    "-DBACKWARD_HAS_BFD=1",
     "-DOKAYLIB_TESTING",
     // "-DOKAYLIB_USE_FMT",
     "-DFMT_HEADER_ONLY",
@@ -199,7 +201,6 @@ pub fn build(b: *std.Build) !void {
     });
     // backtraces
     universal_tests_lib.linkLibCpp();
-    universal_tests_lib.linkSystemLibrary("unwind");
     universal_tests_lib.linkSystemLibrary("bfd");
 
     for (test_source_files) |source_file| {
