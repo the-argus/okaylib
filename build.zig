@@ -193,6 +193,7 @@ pub fn build(b: *std.Build) !void {
         .target = target,
         .optimize = optimize,
         .name = "universal_tests_source_files",
+        .use_lld = false,
     });
 
     universal_tests_lib.addCSourceFiles(.{
@@ -208,6 +209,7 @@ pub fn build(b: *std.Build) !void {
             .name = std.fs.path.stem(source_file),
             .optimize = optimize,
             .target = target,
+            .use_lld = false,
         });
         test_exe.addCSourceFile(.{
             .file = b.path(b.pathJoin(&.{ "tests", source_file })),
