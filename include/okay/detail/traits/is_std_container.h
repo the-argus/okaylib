@@ -1,7 +1,7 @@
 #ifndef __OKAYLIB_TRAITS_IS_CONTAINER_H__
 #define __OKAYLIB_TRAITS_IS_CONTAINER_H__
 
-#include "okay/detail/traits/type_compare.h"
+#include "okay/detail/type_traits.h"
 #include <concepts>
 #include <cstddef>
 #include <type_traits>

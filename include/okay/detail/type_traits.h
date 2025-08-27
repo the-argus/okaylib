@@ -24,6 +24,7 @@ namespace ok::detail::intrinsic {
 template <typename T> inline constexpr bool is_empty = std::is_empty_v<T>;
 template <typename T> inline constexpr bool is_final = std::is_final_v<T>;
 template <typename T> inline constexpr bool is_enum = std::is_enum_v<T>;
+template <typename T> using underlying_type_t = std::underlying_type_t<T>;
 template <typename base_t, typename derived_t>
 inline constexpr bool is_base_of = std::is_base_of_v<base_t, derived_t>;
 #define __ok_has_trivial_destructor(type) std::is_trivially_destructible_v<type>
@@ -48,6 +49,8 @@ struct is_final : public ok::stdc::integral_constant<bool, __is_final(T)>
 template <typename T>
 struct is_enum : public ok::stdc::integral_constant<bool, __is_enum(T)>
 {};
+
+template <typename T> using underlying_type_t = __underlying_type(T);
 
 template <typename base_t, typename derived_t>
 struct is_base_of
@@ -87,6 +90,10 @@ struct is_enum : public ok::stdc::integral_constant<bool, false>
 template <typename base_t, typename derived_t>
 struct is_base_of : public ok::stdc::integral_constant<bool, false>
 {};
+
+// TODO: try to find an acceptable replacement for this
+template <typename T> using underlying_type_t = void;
+
 #define __ok_has_trivial_destructor(type) false
 
 #define __ok_has_trivial_constructor(...) false
@@ -153,6 +160,11 @@ template <typename T> using add_pointer_t = typename add_pointer<T>::type;
 template <typename T> struct is_lvalue_reference : ok::stdc::false_type
 {};
 template <typename T> struct is_lvalue_reference<T&> : ok::stdc::true_type
+{};
+
+template <typename T> struct is_rvalue_reference : ok::stdc::false_type
+{};
+template <typename T> struct is_rvalue_reference<T&&> : ok::stdc::true_type
 {};
 
 template <typename T> struct remove_extent
@@ -317,17 +329,6 @@ template <typename T> struct is_reference<T&&> : public true_type
 {};
 
 template <typename T>
-struct is_nothrow_move_constructible
-    : ok::stdc::bool_constant<noexcept(T(ok::stdc::declval<T&&>()))>
-{};
-
-template <typename T>
-struct is_nothrow_move_assignable
-    : ok::stdc::bool_constant<noexcept(ok::stdc::declval<T&>() =
-                                           ok::stdc::declval<T&&>())>
-{};
-
-template <typename T>
 using is_empty = integral_constant<bool, ok::detail::intrinsic::is_empty<T>>;
 template <typename T>
 using is_final = integral_constant<bool, ok::detail::intrinsic::is_final<T>>;
@@ -482,13 +483,36 @@ struct is_assignable_impl : public false_type
 // well-formed.
 template <typename T, typename U>
 struct is_assignable_impl<
-    T, U, stdc::void_t<decltype(stdc::declval<T>() = stdc::declval<U>())>>
+    T, U, stdc::void_t<decltype(stdc::declval<T&>() = stdc::declval<U>())>>
     : public true_type
 {};
 } // namespace detail
 
 template <typename T, typename... args_t>
 struct is_constructible : detail::is_constructible_impl<T, args_t...>::type
+{};
+
+namespace detail {
+template <typename... args_t> struct is_nothrow_constructible_impl
+{
+    template <typename T, typename = void> struct inner_t
+    {
+        inline static constexpr bool is_noexcept = false;
+    };
+
+    template <typename T>
+    struct inner_t<T, stdc::enable_if_t<is_constructible<T, args_t...>::value>>
+    {
+        inline static constexpr bool is_noexcept =
+            noexcept(T(std::declval<args_t>()...));
+    };
+};
+} // namespace detail
+
+template <typename T, typename... args_t>
+struct is_nothrow_constructible
+    : integral_constant<bool, detail::is_nothrow_constructible_impl<
+                                  args_t...>::template inner_t<T>::is_noexcept>
 {};
 
 template <typename T, typename... args_t>
@@ -587,6 +611,14 @@ struct is_move_constructible : public is_constructible<T, T&&>
         "template argument must be a complete class or an unbounded array");
 };
 
+template <typename T>
+struct is_nothrow_move_constructible : public is_nothrow_constructible<T, T&&>
+{};
+
+template <typename T>
+struct is_nothrow_copy_constructible : public is_nothrow_constructible<T, T&>
+{};
+
 template <typename T, typename U>
 struct is_assignable : detail::is_assignable_impl<T, U>
 {
@@ -594,6 +626,32 @@ struct is_assignable : detail::is_assignable_impl<T, U>
         stdc::detail::is_complete_or_unbounded(detail::type_identity<T>{}),
         "template argument must be a complete class or an unbounded array");
 };
+
+namespace detail {
+template <typename T, typename U, typename = void>
+struct is_nothrow_assignable_impl : false_type
+{
+    inline static constexpr bool is_noexcept = false;
+};
+template <typename T, typename U>
+struct is_nothrow_assignable_impl<T, U, enable_if_t<is_assignable<T, U>::value>>
+    : true_type
+{
+    inline static constexpr bool is_noexcept =
+        noexcept(declval<T&>() = declval<U>());
+};
+} // namespace detail
+
+template <typename T>
+struct is_nothrow_copy_assignable
+    : bool_constant<
+          detail::is_nothrow_assignable_impl<T, const T&>::is_noexcept>
+{};
+
+template <typename T>
+struct is_nothrow_move_assignable
+    : bool_constant<detail::is_nothrow_assignable_impl<T, T&&>::is_noexcept>
+{};
 
 template <typename T>
 struct is_copy_assignable
@@ -789,10 +847,19 @@ template <typename T> struct remove_all_extents<T[]>
 namespace detail {
 struct is_destructible_overloaded_function_impl
 {
-    template <typename T, typename = decltype(declval<T&>().~T())>
-    static true_type func(int);
+    template <typename T> struct extended_true_type : public true_type
+    {
+        inline static constexpr bool is_noexcept = noexcept(declval<T&>().~T());
+    };
+    struct extended_false_type : public true_type
+    {
+        inline static constexpr bool is_noexcept = false;
+    };
 
-    template <typename> static false_type func(...);
+    template <typename T, typename = decltype(declval<T&>().~T())>
+    static extended_true_type<T> func(int);
+
+    template <typename> static extended_false_type func(...);
 };
 
 template <typename T>
@@ -816,15 +883,31 @@ struct is_destructible_safe<T, false, false>
 
 template <typename T>
 struct is_destructible_safe<T, true, false> : public false_type
-{};
+{
+    inline static constexpr bool is_noexcept = false;
+};
 
 template <typename T>
 struct is_destructible_safe<T, false, true> : public true_type
-{};
+{
+    // NOTE: always true?
+    inline static constexpr bool is_noexcept = noexcept(declval<T&>().~T());
+};
 } // namespace detail
 
 template <typename T>
 struct is_destructible : public detail::is_destructible_safe<T>::type
+{
+    static_assert(
+        stdc::detail::is_complete_or_unbounded(
+            stdc::detail::type_identity<T>{}),
+        "template argument must be a complete class or an unbounded array");
+};
+
+template <typename T>
+struct is_nothrow_destructible
+    : public integral_constant<bool,
+                               detail::is_destructible_safe<T>::is_noexcept>
 {
     static_assert(
         stdc::detail::is_complete_or_unbounded(
@@ -950,6 +1033,10 @@ inline constexpr bool is_nothrow_move_assignable_v =
     is_nothrow_move_assignable<T>::value;
 
 template <typename T>
+inline constexpr bool is_nothrow_copy_assignable_v =
+    is_nothrow_copy_assignable<T>::value;
+
+template <typename T>
 inline constexpr bool is_default_constructible_v =
     is_default_constructible<T>::value;
 
@@ -958,12 +1045,48 @@ inline constexpr bool is_nothrow_move_constructible_v =
     is_nothrow_move_constructible<T>::value;
 
 template <typename T>
+inline constexpr bool is_nothrow_copy_constructible_v =
+    is_nothrow_copy_constructible<T>::value;
+
+template <typename T>
+inline constexpr bool is_destructible_v = is_destructible<T>::value;
+
+template <typename T>
+inline constexpr bool is_nothrow_destructible_v =
+    is_nothrow_destructible<T>::value;
+
+template <typename T>
 inline constexpr bool is_lvalue_reference_v = is_lvalue_reference<T>::value;
+
+template <typename T>
+inline constexpr bool is_rvalue_reference_v = is_rvalue_reference<T>::value;
 
 template <typename T, typename U>
 inline constexpr bool is_same_v = is_same<T, U>::value;
 
+template <typename T> inline constexpr bool is_enum_v = stdc::is_enum<T>::value;
+
+template <typename T>
+using underlying_type_t = ::ok::detail::intrinsic::underlying_type_t<T>;
+
 } // namespace ok::stdc
+
+namespace ok {
+template <typename T, typename other_t>
+concept same_as_c = requires { requires stdc::is_same_v<T, other_t>; };
+
+template <typename T>
+concept is_void_c = requires { requires stdc::is_void_v<T>; };
+
+template <typename T>
+concept is_const_c = stdc::is_const_c<T>;
+
+namespace detail {
+/// NOTE: this does not work for function references. Will always return false.
+template <class T>
+concept is_complete_c = requires { sizeof(T); };
+} // namespace detail
+} // namespace ok
 
 // publicize some declarations
 namespace ok {

@@ -1,7 +1,7 @@
 #ifndef __OKAYLIB_DETAIL_TRAITS_MATHOP_TRAITS_H__
 #define __OKAYLIB_DETAIL_TRAITS_MATHOP_TRAITS_H__
 
-#include "okay/detail/traits/type_compare.h"
+#include "okay/detail/type_traits.h"
 #include <cstdint>
 
 namespace ok::detail {

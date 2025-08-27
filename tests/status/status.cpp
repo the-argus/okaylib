@@ -1,7 +1,7 @@
 #include "test_header.h"
 // test header must be first
 #include "okay/anystatus.h"
-#include "okay/status.h"
+#include "okay/error.h"
 
 #include <array>
 

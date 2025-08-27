@@ -1,6 +1,6 @@
 #include "test_header.h"
 // test header must be first
-#include "okay/detail/traits/type_compare.h"
+#include "okay/detail/type_traits.h"
 #include "okay/macros/foreach.h"
 #include "okay/ranges/ranges.h"
 #include "okay/ranges/views/enumerate.h"

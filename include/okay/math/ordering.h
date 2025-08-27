@@ -3,7 +3,6 @@
 
 #include "okay/detail/noexcept.h"
 #include "okay/detail/ok_assert.h"
-#include "okay/detail/traits/type_compare.h"
 #include "okay/detail/type_traits.h"
 #include "okay/opt.h"
 #include <cstdint>
