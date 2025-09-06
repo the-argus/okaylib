@@ -10,6 +10,7 @@
 #include "okay/detail/traits/cloneable.h"
 #include "okay/detail/traits/mathop_traits.h"
 #include "okay/detail/traits/special_member_traits.h"
+#include "okay/ranges/ranges.h"
 #include <cstring> // memcpy
 
 #if defined(OKAYLIB_USE_FMT)
@@ -641,6 +642,7 @@ template <typename range_t> struct range_definition;
 
 template <typename payload_t> struct range_definition<ok::opt<payload_t>>
 {
+    private:
     struct cursor_t
     {
         friend class range_definition;
@@ -653,6 +655,13 @@ template <typename payload_t> struct range_definition<ok::opt<payload_t>>
 
     inline static constexpr bool is_ref_wrapper =
         std::is_reference_v<payload_t>;
+
+    static constexpr range_flags determine_flags() {
+        range_flags result = range_flags::sized;
+        if ()
+    }
+
+    public:
 
     using value_type = std::remove_reference_t<payload_t>;
 
