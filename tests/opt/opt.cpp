@@ -1,11 +1,11 @@
+#include "test_header.h"
+// test header must be first
 #include "okay/containers/array.h"
+#include "okay/macros/foreach.h"
+#include "okay/opt.h"
 #include "okay/ranges/algorithm.h"
 #include "okay/ranges/views/enumerate.h"
 #include "okay/ranges/views/std_for.h"
-#include "test_header.h"
-// test header must be first
-#include "okay/macros/foreach.h"
-#include "okay/opt.h"
 #include "okay/slice.h"
 #include "okay/stdmem.h"
 #include "testing_types.h"

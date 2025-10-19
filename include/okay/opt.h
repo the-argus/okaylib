@@ -10,7 +10,7 @@
 #include "okay/detail/traits/cloneable.h"
 #include "okay/detail/traits/mathop_traits.h"
 #include "okay/detail/traits/special_member_traits.h"
-#include "okay/ranges/ranges.h"
+#include "okay/ranges/range_definition.h"
 #include <cstring> // memcpy
 
 #if defined(OKAYLIB_USE_FMT)
@@ -642,46 +642,30 @@ template <typename range_t> struct range_definition;
 
 template <typename payload_t> struct range_definition<ok::opt<payload_t>>
 {
-    private:
-    struct cursor_t
-    {
-        friend class range_definition;
-
-      private:
-        bool is_out_of_bounds = false;
-    };
-
+  private:
     using opt_range_t = opt<payload_t>;
 
     inline static constexpr bool is_ref_wrapper =
         std::is_reference_v<payload_t>;
 
-    static constexpr range_flags determine_flags() {
-        range_flags result = range_flags::sized;
-        if ()
-    }
-
-    public:
-
+  public:
     using value_type = std::remove_reference_t<payload_t>;
 
-    static constexpr cursor_t begin(const opt_range_t& range) OKAYLIB_NOEXCEPT
-    {
-        return cursor_t{};
-    }
+    constexpr static range_flags flags =
+        range_flags::sized | range_flags::arraylike |
+        range_flags::implements_set | range_flags::sized |
+        range_flags::producing | range_flags::consuming;
 
     static constexpr void increment(const opt_range_t& range,
-                                    cursor_t& cursor) OKAYLIB_NOEXCEPT
+                                    size_t& cursor) OKAYLIB_NOEXCEPT
     {
-        cursor.is_out_of_bounds = true;
+        ++cursor;
     }
 
     static constexpr bool is_inbounds(const opt_range_t& range,
-                                      const cursor_t& cursor) OKAYLIB_NOEXCEPT
+                                      const size_t& cursor) OKAYLIB_NOEXCEPT
     {
-        // NOTE: this is defensive, I'm assuming you might use a cursor on
-        // an opt<T> which has had its item added or removed, so check on access
-        return range.has_value() && !cursor.is_out_of_bounds;
+        return range.has_value() && cursor == 0;
     }
 
     static constexpr size_t size(const opt_range_t& range) OKAYLIB_NOEXCEPT
@@ -693,15 +677,20 @@ template <typename payload_t> struct range_definition<ok::opt<payload_t>>
     /// storing a const reference. no need to check if payload_t is a reference
     /// as it can't be const otherwise.
     template <typename T = payload_t>
-    static constexpr auto& get_ref(opt_range_t& range, const cursor_t& cursor)
+    static constexpr auto& get(opt_range_t& range, size_t cursor)
         requires(!is_const_c<std::remove_reference_t<value_type>>)
     {
+        if (cursor != 0) {
+            __ok_abort("Access to optional with out-of-range index");
+        }
         return range.ref_or_panic();
     }
 
-    static constexpr auto& get_ref(const opt_range_t& range,
-                                   const cursor_t& cursor)
+    static constexpr auto& get(const opt_range_t& range, size_t cursor)
     {
+        if (cursor != 0) {
+            __ok_abort("Access to optional with out-of-range index");
+        }
         return range.ref_or_panic();
     }
 };

@@ -370,8 +370,6 @@ concept partially_equality_comparable_c =
      !detail::spaceship_comparable_c<T> && detail::equality_comparable_c<T>) ||
     partially_orderable_c<T> || strongly_equality_comparable_c<T>;
 
-// all optionals whose payloads are strongly comparable are strongly comparable
-// also
 template <typename T>
     requires strongly_equality_comparable_declaration<T>::value
 struct strongly_equality_comparable_declaration<opt<T>> : public std::true_type
