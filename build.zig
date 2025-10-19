@@ -168,13 +168,13 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    var flags = std.ArrayList([]const u8).init(b.allocator);
-    defer flags.deinit();
-    try flags.appendSlice(if (optimize == .Debug) debug_flags else release_flags);
-    try flags.appendSlice(testing_flags);
+    var flags = std.ArrayList([]const u8){};
+    defer flags.deinit(b.allocator);
+    try flags.appendSlice(b.allocator, if (optimize == .Debug) debug_flags else release_flags);
+    try flags.appendSlice(b.allocator, testing_flags);
 
-    var tests = std.ArrayList(*std.Build.Step.Compile).init(b.allocator);
-    defer tests.deinit();
+    var tests = std.ArrayList(*std.Build.Step.Compile){};
+    defer tests.deinit(b.allocator);
 
     // actual public installation step
     b.installDirectory(.{
@@ -185,13 +185,16 @@ pub fn build(b: *std.Build) !void {
 
     const fmt = b.dependency("fmt", .{});
     const fmt_include_path = b.pathJoin(&.{ fmt.builder.install_path, "include" });
-    try flags.append(b.fmt("-I{s}", .{fmt_include_path}));
+    try flags.append(b.allocator, b.fmt("-I{s}", .{fmt_include_path}));
 
-    const flags_owned = flags.toOwnedSlice() catch @panic("OOM");
+    const flags_owned = flags.toOwnedSlice(b.allocator) catch @panic("OOM");
 
-    const universal_tests_lib = b.addStaticLibrary(.{
-        .target = target,
-        .optimize = optimize,
+    const universal_tests_lib = b.addLibrary(.{
+        .root_module = b.createModule(.{
+            .target = target,
+            .optimize = optimize,
+        }),
+        .linkage = .static,
         .name = "universal_tests_source_files",
         .use_lld = false,
     });
@@ -207,8 +210,10 @@ pub fn build(b: *std.Build) !void {
     for (test_source_files) |source_file| {
         var test_exe = b.addExecutable(.{
             .name = std.fs.path.stem(source_file),
-            .optimize = optimize,
-            .target = target,
+            .root_module = b.createModule(.{
+                .target = target,
+                .optimize = optimize,
+            }),
             .use_lld = false,
         });
         test_exe.addCSourceFile(.{
@@ -224,7 +229,7 @@ pub fn build(b: *std.Build) !void {
         test_exe.linkLibrary(universal_tests_lib);
 
         test_exe.step.dependOn(fmt.builder.getInstallStep());
-        try tests.append(test_exe);
+        try tests.append(b.allocator, test_exe);
     }
 
     const run_tests_step = b.step("run_tests", "Compile and run all the tests");
@@ -245,5 +250,5 @@ pub fn build(b: *std.Build) !void {
         local_test_step.dependOn(&test_install.step);
     }
 
-    _ = zcc.createStep(b, "cdb", try tests.toOwnedSlice());
+    _ = zcc.createStep(b, "cdb", try tests.toOwnedSlice(b.allocator));
 }
