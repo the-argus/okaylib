@@ -254,9 +254,12 @@ TEST_SUITE("ordering")
         REQUIRE(ok::partial_clamp(10., {.min = 20., .max = 30.}) == 20.);
         REQUIRE(ok::partial_clamp(40., {.min = 20., .max = 30.}) == 30.);
         REQUIRE(ok::partial_clamp(25., {.min = 20., .max = 30.}) == 25.);
-        REQUIREABORTS(ok::partial_clamp(0.0 / 0.0, {.min = 20., .max = 30.}));
-        REQUIREABORTS(ok::partial_clamp(1., {.min = 0.0 / 0.0, .max = 30.}));
-        REQUIREABORTS(ok::partial_clamp(1., {.min = 30., .max = 0.0 / 0.0}));
+        REQUIRE(!ok::partial_clamp(0.0 / 0.0, {.min = 20., .max = 30.})
+                     .has_value());
+        REQUIRE(
+            !ok::partial_clamp(1., {.min = 0.0 / 0.0, .max = 30.}).has_value());
+        REQUIRE(
+            !ok::partial_clamp(1., {.min = 30., .max = 0.0 / 0.0}).has_value());
     }
 
 #if defined(OKAYLIB_USE_FMT)

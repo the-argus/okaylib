@@ -552,10 +552,17 @@ struct partial_clamp_fn_t
     constexpr opt<T> operator()(const T& value,
                                 const bounds<T>& bounds) const OKAYLIB_NOEXCEPT
     {
+        constexpr partial_compare_fn_t compare;
+
+        if (compare(bounds.min, bounds.max).as_enum() ==
+            partial_ordering_enum::unordered) {
+            // this function does not have a clear meaning without ordered
+            // values for the boundaries
+            return {};
+        }
+
         __ok_assert(bounds.min <= bounds.max,
                     "min and max passed to clamp are in the wrong order");
-
-        constexpr partial_compare_fn_t compare;
 
         switch (compare(value, bounds.min).as_enum()) {
         case partial_ordering_enum::greater:
