@@ -62,6 +62,9 @@ TEST_SUITE("enumerate")
             std::array<int, 50> ints = {};
             std::fill(ints.begin(), ints.end(), 0);
 
+            static_assert(range_c<decltype(enumerate(ints))>);
+            static_assert(range_c<decltype(ints | enumerate)>);
+
             size_t i = 0;
             ok_foreach(ok_pair(item, index), ints | enumerate)
             {

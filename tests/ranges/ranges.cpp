@@ -84,27 +84,30 @@ static_assert(
 static_assert(
     std::is_same_v<ok::value_type_for<ok::slice<const int>>, const int>);
 // get ref is explicitly for nonconst overload
-static_assert(!ok::detail::range_can_get_ref_c<std::array<const int, 1>>);
-static_assert(!ok::detail::range_can_get_ref_c<ok::slice<const int>>);
+static_assert(
+    ok::detail::range_gets_const_from_nonconst_c<std::array<const int, 1>>);
+static_assert(
+    ok::detail::range_gets_const_from_nonconst_c<ok::slice<const int>>);
 static_assert(!ok::detail::range_impls_construction_set_c<ok::slice<const int>,
                                                           const int&>);
 static_assert(!ok::detail::consuming_range_c<ok::slice<const int>>);
 
 static_assert(ok::detail::consuming_range_c<example_range_cstyle>);
 static_assert(range_marked_finite_c<example_range_bidirectional>);
-static_assert(range_has_baseline_functions_c<example_range_bidirectional>);
+static_assert(
+    ok::detail::common_range_requirements_c<example_range_bidirectional>);
+static_assert(ok::range_c<example_range_bidirectional>);
 static_assert(ok::detail::consuming_range_c<example_range_bidirectional>);
 static_assert(ok::detail::producing_range_c<example_range_bidirectional>);
 static_assert(ok::bidirectional_range_c<example_range_bidirectional>);
 static_assert(!ok::random_access_range_c<example_range_bidirectional>);
 static_assert(ok::detail::consuming_range_c<example_range_cstyle_child>);
 static_assert(ok::random_access_range_c<example_range_cstyle>);
-static_assert(ok::detail::is_valid_cursor_v<size_t>);
 static_assert(ok::range_c<example_range_cstyle>);
-static_assert(ok::detail::range_can_get_ref_c<example_range_cstyle>);
-static_assert(ok::detail::range_can_get_ref_const_c<example_range_cstyle>);
-
-static_assert(ok::detail::range_has_baseline_functions_c<std::vector<int>>);
+static_assert(!ok::detail::range_gets_by_value_c<example_range_cstyle>);
+static_assert(
+    !ok::detail::range_gets_const_from_nonconst_c<example_range_cstyle>);
+static_assert(ok::detail::common_range_requirements_c<std::vector<int>>);
 static_assert(ok::random_access_range_c<std::vector<int>>);
 static_assert(
     ok::same_as_c<std::vector<int>::value_type,
@@ -116,76 +119,76 @@ TEST_SUITE("range traits")
 {
     TEST_CASE("functionality")
     {
-        SUBCASE("iter_get_ref vector")
+        SUBCASE("range_get_ref vector")
         {
             std::vector<int> ints = {0, 1, 2, 3, 4};
             for (size_t i = 0; i < ints.size(); ++i) {
-                REQUIRE(ok::iter_get_ref(ints, i) == i);
+                REQUIRE(ok::range_get_ref(ints, i) == i);
                 static_assert(
-                    ok::same_as_c<decltype(ok::iter_get_ref(ints, i)), int&>);
-                ok::iter_get_ref(ints, i) = 0;
+                    ok::same_as_c<decltype(ok::range_get_ref(ints, i)), int&>);
+                ok::range_get_ref(ints, i) = 0;
                 REQUIRE(ints.at(i) == 0);
             }
         }
 
-        SUBCASE("iter_get_ref aborts when out of bounds")
+        SUBCASE("range_get_ref aborts when out of bounds")
         {
             std::vector<int> ints = {0, 1, 2, 3, 4};
             int c_ints[] = {0, 1, 2, 3, 4};
 
-            REQUIREABORTS(auto& ref = ok::iter_get_ref(ints, 10));
-            REQUIREABORTS(auto& ref = ok::iter_get_ref(c_ints, 10));
+            REQUIREABORTS(auto& ref = ok::range_get_ref(ints, 10));
+            REQUIREABORTS(auto& ref = ok::range_get_ref(c_ints, 10));
         }
 
-        SUBCASE("iter_get_ref example range")
+        SUBCASE("range_get_ref example range")
         {
             example_range_cstyle bytes;
             REQUIRE(bytes.size() < 256); // no overflow, store as bits
             for (size_t i = 0; i < bytes.size(); ++i) {
                 // initialized to zeroes
-                REQUIRE(ok::iter_get_ref(bytes, i) == 0);
+                REQUIRE(ok::range_get_ref(bytes, i) == 0);
                 static_assert(
-                    std::is_same_v<decltype(ok::iter_get_ref(bytes, i)),
+                    std::is_same_v<decltype(ok::range_get_ref(bytes, i)),
                                    uint8_t&>);
-                ok::iter_get_ref(bytes, i) = i;
+                ok::range_get_ref(bytes, i) = i;
                 REQUIRE(bytes[i] == i);
             }
         }
 
-        SUBCASE("iter_get_ref array")
+        SUBCASE("range_get_ref array")
         {
             std::array<int, 5> arr = {0, 1, 2, 3, 4};
             for (size_t i = 0; i < arr.size(); ++i) {
-                REQUIRE(ok::iter_get_ref(arr, i) == i);
+                REQUIRE(ok::range_get_ref(arr, i) == i);
                 static_assert(
-                    std::is_same_v<decltype(ok::iter_get_ref(arr, i)), int&>);
-                ok::iter_get_ref(arr, i) = 0;
+                    std::is_same_v<decltype(ok::range_get_ref(arr, i)), int&>);
+                ok::range_get_ref(arr, i) = 0;
                 REQUIRE(arr.at(i) == 0);
             }
         }
 
-        SUBCASE("iter_get_ref c style array")
+        SUBCASE("range_get_ref c style array")
         {
             int arr[5] = {0, 1, 2, 3, 4};
 
             const int arr2[5] = {0, 1, 2, 3, 4};
 
             for (size_t i = 0; i < sizeof(arr) / sizeof(arr[0]); ++i) {
-                REQUIRE(ok::iter_get_ref(arr, i) == i);
+                REQUIRE(ok::range_get_ref(arr, i) == i);
                 static_assert(
-                    std::is_same_v<decltype(ok::iter_get_ref(arr, i)), int&>);
-                ok::iter_get_ref(arr, i) = 0;
+                    std::is_same_v<decltype(ok::range_get_ref(arr, i)), int&>);
+                ok::range_get_ref(arr, i) = 0;
                 REQUIRE(arr[i] == 0);
             }
 
             for (size_t i = 0; i < sizeof(arr2) / sizeof(arr2[0]); ++i) {
-                const int& iter = ok::iter_get_ref(arr2, i);
-                REQUIRE(ok::iter_get_ref(arr2, i) == i);
-                REQUIRE(ok::iter_get_ref(arr2, i) == iter);
+                const int& iter = ok::range_get_ref(arr2, i);
+                REQUIRE(ok::range_get_ref(arr2, i) == i);
+                REQUIRE(ok::range_get_ref(arr2, i) == iter);
             }
         }
 
-        SUBCASE("iter_set vector")
+        SUBCASE("range_set vector")
         {
             std::vector<int> ints;
             ints.reserve(50);
@@ -194,7 +197,7 @@ TEST_SUITE("range traits")
                 // how does std::back_inserter work? does it avoid this? maybe
                 // have some trait for things with emplace functions?
                 ints.emplace_back();
-                ok::iter_set(ints, i, i);
+                ok::range_set(ints, i, i);
                 REQUIRE(ints.at(i) == i);
             }
             // is iota
@@ -203,11 +206,11 @@ TEST_SUITE("range traits")
             }
         }
 
-        SUBCASE("iter_set example range")
+        SUBCASE("range_set example range")
         {
             example_range_cstyle bytes;
             for (size_t i = 0; i < bytes.size(); ++i) {
-                ok::iter_set(bytes, i, i);
+                ok::range_set(bytes, i, i);
                 REQUIRE(bytes[i] == i);
             }
             // is iota
@@ -216,11 +219,11 @@ TEST_SUITE("range traits")
             }
         }
 
-        SUBCASE("iter_set array")
+        SUBCASE("range_set array")
         {
             std::array<int, 50> arr = {};
             for (size_t i = 0; i < arr.size(); ++i) {
-                ok::iter_set(arr, i, i);
+                ok::range_set(arr, i, i);
                 REQUIRE(arr.at(i) == i);
             }
             // is iota
@@ -229,11 +232,11 @@ TEST_SUITE("range traits")
             }
         }
 
-        SUBCASE("iter_set c-style array")
+        SUBCASE("range_set c-style array")
         {
             int arr[50];
             for (size_t i = 0; i < 50; ++i) {
-                ok::iter_set(arr, i, i);
+                ok::range_set(arr, i, i);
                 REQUIRE(arr[i] == i);
             }
             // is iota
@@ -242,55 +245,51 @@ TEST_SUITE("range traits")
             }
         }
 
-        SUBCASE("iter_get_temporary_ref on vector")
+        SUBCASE("range_get_temporary_ref on vector")
         {
             std::vector<int> ints = {0, 1, 2, 3, 4};
 
             for (size_t i = 0; i < ints.size(); ++i) {
-                const int& tref = ok::iter_get_temporary_ref(ints, i);
+                const int& tref = ok::range_get(ints, i);
                 REQUIRE(tref == i);
                 static_assert(
-                    detail::range_can_get_ref_const_c<std::vector<int>>);
-                static_assert(std::is_same_v<
-                                  decltype(ok::iter_get_temporary_ref(ints, i)),
-                                  const int&>,
+                    range_gets_by_ref_matching_constness_c<std::vector<int>>);
+                static_assert(std::is_same_v<decltype(ok::range_get(ints, i)),
+                                             const int&>,
                               "std::vector not giving a const int& for "
                               "temporary reference, specialization is broken?");
             }
         }
 
-        SUBCASE("iter_get_temporary_ref on example range")
+        SUBCASE("range_get on example range")
         {
             example_range_cstyle bytes;
 
             for (size_t i = 0; i < bytes.size(); ++i) {
-                const int& tref = ok::iter_get_temporary_ref(bytes, i);
+                const int& tref = ok::range_get(bytes, i);
                 REQUIRE(tref == 0); // example range inits to 0
-                static_assert(
-                    std::is_same_v<decltype(ok::iter_get_temporary_ref(bytes,
-                                                                       i)),
-                                   const uint8_t&>,
-                    "example range not giving a const uint8_t& for "
-                    "temporary reference, specialization is broken?");
+                static_assert(std::is_same_v<decltype(ok::range_get(bytes, i)),
+                                             const uint8_t&>,
+                              "example range not giving a const uint8_t& for "
+                              "temporary reference, specialization is broken?");
             }
         }
 
-        SUBCASE("iter_get_temporary_ref on array")
+        SUBCASE("range_get on array")
         {
             std::array<int, 5> ints = {0, 1, 2, 3, 4};
 
             for (size_t i = 0; i < ints.size(); ++i) {
-                const int& tref = ok::iter_get_temporary_ref(ints, i);
+                const int& tref = ok::range_get(ints, i);
                 REQUIRE(tref == i);
-                static_assert(std::is_same_v<
-                                  decltype(ok::iter_get_temporary_ref(ints, i)),
-                                  const int&>,
+                static_assert(std::is_same_v<decltype(ok::range_get(ints, i)),
+                                             const int&>,
                               "std::array not giving a const int& for "
                               "temporary reference, specialization is broken?");
             }
         }
 
-        SUBCASE("iter_copyout array")
+        SUBCASE("range_get all of array")
         {
             std::array<int, 100> ints;
             for (int i = 0; i < ints.size(); ++i) {
@@ -298,13 +297,13 @@ TEST_SUITE("range traits")
             }
 
             for (size_t i = 0; i < ints.size(); ++i) {
-                int copied = ok::iter_copyout(ints, i);
-                REQUIRE(copied == ok::iter_get_ref(ints, i));
+                int copied = ok::range_get(ints, i);
+                REQUIRE(copied == ok::range_get_ref(ints, i));
                 REQUIRE(copied == i);
             }
         }
 
-        SUBCASE("iter_copyout example range")
+        SUBCASE("range_get all of example range")
         {
             example_range_cstyle bytes;
             for (int i = 0; i < bytes.size(); ++i) {
@@ -312,8 +311,8 @@ TEST_SUITE("range traits")
             }
 
             for (size_t i = 0; i < bytes.size(); ++i) {
-                int copied = ok::iter_copyout(bytes, i);
-                REQUIRE(copied == ok::iter_get_ref(bytes, i));
+                int copied = ok::range_get(bytes, i);
+                REQUIRE(copied == ok::range_get_ref(bytes, i));
                 REQUIRE(copied == i);
             }
         }
@@ -438,7 +437,7 @@ TEST_SUITE("range traits")
         {
             int myints[500];
 
-            const int& ref = ok::iter_get_ref(myints, 0UL);
+            const int& ref = ok::range_get_ref(myints, 0UL);
 
             ok_foreach(int& i, myints) i = 20;
 
@@ -476,12 +475,13 @@ TEST_SUITE("range traits")
                 REQUIRE(byte == 20);
             }
 
-            // instantiated twice to make sure duplicate labels dont happen
-            ok_foreach(ok_pair(byte, index), ok::enumerate(bytes))
+            // instantiated twice to make sure duplicate labels dont happen from
+            // macro
+            ok_foreach(ok_pair(byte, index), enumerate(bytes))
             {
                 REQUIRE(byte == 20);
             }
-            ok_foreach(ok_pair(byte, index), ok::enumerate(bytes))
+            ok_foreach(ok_pair(byte, index), enumerate(bytes))
             {
                 REQUIRE(byte == 20);
             }

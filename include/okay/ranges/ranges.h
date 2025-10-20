@@ -2,6 +2,7 @@
 #define __OKAYLIB_RANGES_RANGES_H__
 
 #include "okay/construct.h"
+#include "okay/detail/concepts.h"
 #include "okay/detail/template_util/c_array_length.h"
 #include "okay/detail/template_util/c_array_value_type.h"
 #include "okay/detail/template_util/remove_cvref.h"
@@ -194,7 +195,7 @@ concept range_marked_infinite_c = requires() {
 
 template <typename T>
 concept range_marked_finite_c = requires() {
-    requires !range_definition_inner_t<T>::flags & range_flags::finite;
+    requires range_definition_inner_t<T>::flags& range_flags::finite;
 };
 
 template <typename T>
@@ -274,10 +275,6 @@ concept range_impls_compare_c =
         } -> same_as_c<ok::ordering>;
         requires !range_strictly_must_use_cursor_member_compare_c<T>;
     };
-
-template <typename T, typename other_t>
-concept same_as_without_cvref_c =
-    same_as_c<remove_cvref_t<T>, remove_cvref_t<other_t>>;
 
 template <typename T>
 concept range_impls_const_get_c = requires(
@@ -380,6 +377,50 @@ concept range_can_is_inbounds_c = requires {
     requires range_impls_is_inbounds_c<T> || range_marked_arraylike_c<T>;
 };
 
+template <typename T>
+concept range_gets_const_from_nonconst_c = requires(
+    remove_cvref_t<T>& range, const cursor_type_unchecked_for_t<T>& c) {
+    {
+        range_definition_inner_t<T>::get(range, c)
+    } -> same_as_c<const typename range_definition_inner_t<
+          remove_cvref_t<T>>::value_type&>;
+};
+
+template <typename T>
+concept range_gets_by_ref_matching_constness_c =
+    requires(remove_cvref_t<T>& range,
+             const cursor_type_unchecked_for_t<T>& c) {
+        {
+            range_definition_inner_t<T>::get(range, c)
+        }
+        -> same_as_c<
+            typename range_definition_inner_t<remove_cvref_t<T>>::value_type&>;
+    } &&
+    requires(const remove_cvref_t<T>& range,
+             const cursor_type_unchecked_for_t<T>& c) {
+        {
+            range_definition_inner_t<T>::get(range, c)
+        } -> same_as_c<const typename range_definition_inner_t<
+              remove_cvref_t<T>>::value_type&>;
+    };
+
+template <typename T>
+concept range_gets_by_value_c =
+    requires(const remove_cvref_t<T>& range,
+             const cursor_type_unchecked_for_t<T>& c) {
+        {
+            range_definition_inner_t<T>::get(range, c)
+        } -> same_as_c<
+              typename range_definition_inner_t<remove_cvref_t<T>>::value_type>;
+    } &&
+    (requires(const remove_cvref_t<T>& range,
+              const cursor_type_unchecked_for_t<T>& c) {
+        {
+            range_definition_inner_t<T>::get(range, c)
+        } -> same_as_c<
+              typename range_definition_inner_t<remove_cvref_t<T>>::value_type>;
+    });
+
 // alias in case indirection is added later and (having size def) != (is sized)
 template <typename T>
 concept range_can_size_c = range_impls_size_c<T>;
@@ -408,8 +449,8 @@ concept well_declared_range_c = requires {
                  int(range_marked_sized_c<T>) ==
              1);
     requires range_impls_size_c<T> == range_marked_sized_c<T>;
-    requires range_impls_size_c<T> != range_marked_finite_c<T>;
-    requires range_impls_size_c<T> != range_marked_infinite_c<T>;
+    requires range_impls_size_c<T> !=
+                 (range_marked_finite_c<T> || range_marked_infinite_c<T>);
     // if strict_flags is defined, they must be valid
     requires range_with_strict_flags_c<T> == range_with_valid_strict_flags_c<T>;
 };

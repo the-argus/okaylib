@@ -40,8 +40,8 @@ struct propagate_all_range_definition_functions_with_conversion_t
     constexpr static decltype(auto) begin(const derived_range_t& i)
         requires range_can_begin_c<parent_range_t>
     {
-        return ok::begin(
-            i.template get_view_reference<derived_range_t, parent_range_t>());
+        return cursor_t(ok::begin(
+            i.template get_view_reference<derived_range_t, parent_range_t>()));
     }
 
     constexpr static size_t size(const derived_range_t& i)
