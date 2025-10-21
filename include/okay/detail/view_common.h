@@ -80,7 +80,7 @@ struct propagate_all_range_definition_functions_with_conversion_t
 
     constexpr static void offset(const derived_range_t& i, cursor_t& c,
                                  int64_t offset)
-        requires range_can_offset_c<parent_range_t>
+        requires range_impls_offset_c<parent_range_t>
     {
         ok::range_offset(
             i.template get_view_reference<derived_range_t, parent_range_t>(),

@@ -867,12 +867,12 @@ struct range_offset_fn_t
     constexpr void operator()(const range_t& range,
                               cursor_type_for<range_t>& cursor,
                               int64_t offset) const OKAYLIB_NOEXCEPT
-        requires range_can_offset_c<range_t>
     {
         if constexpr (range_impls_offset_c<range_t>) {
             range_def_for<range_t>::offset(range, cursor, offset);
         } else {
-            static_assert(has_inplace_addition_with_i64_c<range_t>);
+            static_assert(
+                has_inplace_addition_with_i64_c<cursor_type_for<range_t>>);
             cursor += offset;
         }
     }
