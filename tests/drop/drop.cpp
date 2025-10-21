@@ -10,7 +10,7 @@ using namespace ok;
 
 int dummy[500];
 static_assert(random_access_range_c<decltype(dummy | drop(10))>);
-static_assert(detail::range_is_arraylike_v<decltype(dummy)>);
+static_assert(detail::range_marked_arraylike_c<decltype(dummy)>);
 // TODO: make this keep arraylike property
 // static_assert(detail::range_is_arraylike_v<decltype(dummy | drop(10))>);
 
@@ -23,8 +23,7 @@ TEST_SUITE("drop")
             std::array<int, 50> array;
             static_assert(random_access_range_c<decltype(array)>);
             auto half_view = array | drop(25);
-            static_assert(
-                random_access_range_c<decltype(half_view)>);
+            static_assert(random_access_range_c<decltype(half_view)>);
             REQUIRE(half_view.amount() == 25);
             REQUIRE(ok::size(half_view) == 25);
         }
@@ -59,10 +58,7 @@ TEST_SUITE("drop")
             int arr[10];
             size_t counter = 0;
             REQUIRE(ok::size(arr | drop(0)) == ok::size(arr));
-            ok_foreach(auto&& _, arr | drop(0))
-            {
-                ++counter;
-            }
+            ok_foreach(auto&& _, arr | drop(0)) { ++counter; }
             REQUIRE(counter == 10);
         }
 

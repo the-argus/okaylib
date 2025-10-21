@@ -22,7 +22,7 @@ template <typename derived_range_t, typename parent_range_t, typename cursor_t>
 struct propagate_all_range_definition_functions_with_conversion_t
 {
     constexpr static void increment(const derived_range_t& i, cursor_t& c)
-        requires range_can_increment_c<parent_range_t>
+        requires range_impls_increment_c<parent_range_t>
     {
         ok::increment(
             i.template get_view_reference<derived_range_t, parent_range_t>(),
@@ -30,7 +30,7 @@ struct propagate_all_range_definition_functions_with_conversion_t
     }
 
     constexpr static void decrement(const derived_range_t& i, cursor_t& c)
-        requires range_can_decrement_c<parent_range_t>
+        requires range_impls_decrement_c<parent_range_t>
     {
         ok::decrement(
             i.template get_view_reference<derived_range_t, parent_range_t>(),

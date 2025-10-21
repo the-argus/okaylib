@@ -1,8 +1,7 @@
 #ifndef __OKAYLIB_RANGES_INDICES_H__
 #define __OKAYLIB_RANGES_INDICES_H__
 
-#include "okay/detail/noexcept.h"
-#include "okay/ranges/ranges.h"
+#include "okay/ranges/range_definition.h"
 
 namespace ok {
 
@@ -13,21 +12,12 @@ constexpr indices_t indices{};
 
 template <> struct range_definition<indices_t>
 {
-    static constexpr bool is_infinite = true;
+    static constexpr range_flags flags =
+        range_flags::producing | range_flags::arraylike | range_flags::infinite;
 
-    static constexpr size_t begin(const indices_t& i) OKAYLIB_NOEXCEPT
-    {
-        return 0UL;
-    }
+    using value_type = size_t;
 
-    static constexpr bool is_inbounds(const indices_t& i,
-                                      const size_t) OKAYLIB_NOEXCEPT
-    {
-        return true;
-    }
-
-    static constexpr size_t get(const indices_t& i,
-                                const size_t c) OKAYLIB_NOEXCEPT
+    static constexpr size_t get(const indices_t& i, const size_t c) noexcept
     {
         return c;
     }

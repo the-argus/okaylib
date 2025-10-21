@@ -16,8 +16,8 @@ template <typename range_t> struct drop_view_t;
 struct drop_fn_t
 {
     template <typename range_t>
-    constexpr decltype(auto) operator()(range_t&& range,
-                                        size_t amount) const OKAYLIB_NOEXCEPT
+    constexpr auto operator()(range_t&& range,
+                              size_t amount) const OKAYLIB_NOEXCEPT
     {
         // TODO: support these. it should be a simple extension of the
         // drop_cursor_bidir_t
@@ -117,14 +117,52 @@ struct drop_view_t : public underlying_view_type<input_range_t>::type
         }
     }
 };
+} // namespace detail
 
-template <typename input_range_t> struct sized_drop_range_t
+template <typename input_range_t>
+struct range_definition<detail::drop_view_t<input_range_t>>
+    : public detail::propagate_all_range_definition_functions_with_conversion_t<
+          detail::drop_view_t<input_range_t>, input_range_t,
+          detail::drop_cursor_t<input_range_t>>
 {
   private:
+    using range_t = detail::remove_cvref_t<input_range_t>;
     using drop_t = detail::drop_view_t<input_range_t>;
+    using cursor_t = detail::drop_cursor_t<input_range_t>;
+
+    static consteval range_flags determine_flags()
+    {
+        const auto parent_flags =
+            range_definition<detail::remove_cvref_t<range_t>>::flags;
+        // TODO: support arraylike ranges being drop viewed, it should just be a
+        // subtraction from all the indices and the size
+        range_flags initial = parent_flags - range_flags::arraylike;
+
+        // may need to add ref wrapper if we are holding something that returns
+        // lvalue reference by lvalue
+        if ((parent_flags & range_flags::producing &&
+             !detail::range_gets_by_value_c<range_t>) &&
+            std::is_lvalue_reference_v<input_range_t>) {
+            initial = initial | range_flags::ref_wrapper;
+        }
+
+        return initial;
+    }
 
   public:
+    static constexpr bool is_view = true;
+
+    using value_type = value_type_for<input_range_t>;
+
+    static constexpr range_flags flags = determine_flags();
+
+    static_assert(
+        !(random_access_range_c<range_t> &&
+          detail::range_marked_finite_c<range_t>),
+        "Drop view does not support random access ranges of unknown size.");
+
     static constexpr size_t size(const drop_t& i)
+        requires detail::range_can_size_c<range_t>
     {
         const auto& parent_ref = i.template get_view_reference<
             drop_t, detail::remove_cvref_t<input_range_t>>();
@@ -133,42 +171,6 @@ template <typename input_range_t> struct sized_drop_range_t
         // constructor
         return ok::size(parent_ref) - i.amount();
     }
-};
-
-} // namespace detail
-
-template <typename input_range_t>
-struct range_definition<detail::drop_view_t<input_range_t>>
-    : public detail::propagate_begin_t<detail::drop_view_t<input_range_t>,
-                                       detail::remove_cvref_t<input_range_t>,
-                                       detail::drop_cursor_t<input_range_t>>,
-      public detail::propagate_get_set_t<detail::drop_view_t<input_range_t>,
-                                         detail::remove_cvref_t<input_range_t>,
-                                         detail::drop_cursor_t<input_range_t>>,
-      // propagate infinite / finite status, but if sized then use unique
-      // sized_drop_range_t type
-      public std::conditional_t<
-          detail::range_can_size_c<detail::remove_cvref_t<input_range_t>>,
-          detail::sized_drop_range_t<input_range_t>,
-          detail::infinite_static_def_t<detail::range_marked_infinite_c<
-              detail::remove_cvref_t<input_range_t>>>>
-{
-    static constexpr bool is_view = true;
-
-    using value_type = value_type_for<input_range_t>;
-
-    using range_t = detail::remove_cvref_t<input_range_t>;
-    using drop_t = detail::drop_view_t<input_range_t>;
-    using cursor_t = detail::drop_cursor_t<input_range_t>;
-
-    static constexpr bool is_ref_wrapper =
-        !detail::range_impls_get_c<range_t> &&
-        std::is_lvalue_reference_v<input_range_t>;
-
-    static_assert(
-        !(random_access_range_c<range_t> &&
-          detail::range_marked_finite_c<range_t>),
-        "Drop view does not support random access ranges of unknown size.");
 
     constexpr static cursor_t begin(const drop_t& i) OKAYLIB_NOEXCEPT
     {

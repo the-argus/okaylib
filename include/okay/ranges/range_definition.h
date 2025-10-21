@@ -54,10 +54,11 @@ constexpr range_flags operator|(range_flags a, range_flags b)
 constexpr range_flags operator-(range_flags a, range_flags b)
 {
     using flags = range_flags;
-    const auto added = static_cast<std::underlying_type_t<flags>>(a) ^
-                       static_cast<std::underlying_type_t<flags>>(b);
-    return static_cast<flags>(added ^
-                              static_cast<std::underlying_type_t<flags>>(b));
+    const auto shared_flags = static_cast<std::underlying_type_t<flags>>(a) &
+                              static_cast<std::underlying_type_t<flags>>(b);
+    // only leave on ones that were exclusively on in `a`
+    return static_cast<flags>(shared_flags ^
+                              static_cast<std::underlying_type_t<flags>>(a));
 }
 
 constexpr range_flags& operator-=(range_flags& a, range_flags b)

@@ -167,10 +167,6 @@ struct range_definition<detail::joined_view_t<input_range_t>>
         return nosize_flags & range_flags::finite;
     }
 
-    static constexpr bool is_view = true;
-    static constexpr bool is_infinite =
-        detail::range_marked_infinite_c<input_range_t>;
-
   public:
     static constexpr range_flags flags = determine_flags();
 
