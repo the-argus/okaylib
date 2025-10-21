@@ -20,7 +20,7 @@ TEST_SUITE("transform")
 
             for (auto c = ok::begin(ints); ok::is_inbounds(ints, c);
                  ok::increment(ints, c)) {
-                int& item = ok::iter_get_ref(ints, c);
+                int& item = ok::range_get_ref(ints, c);
                 item = c;
             }
 
@@ -28,7 +28,7 @@ TEST_SUITE("transform")
 
             for (auto c = ok::begin(identity); ok::is_inbounds(identity, c);
                  ok::increment(identity, c)) {
-                const int& item = ok::iter_get_temporary_ref(identity, c);
+                int item = ok::range_get(identity, c);
                 REQUIRE(item == c);
             }
         }

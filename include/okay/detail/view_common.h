@@ -38,7 +38,8 @@ struct propagate_all_range_definition_functions_with_conversion_t
     }
 
     constexpr static decltype(auto) begin(const derived_range_t& i)
-        requires range_can_begin_c<parent_range_t>
+        requires(range_can_begin_c<parent_range_t> &&
+                 !range_marked_arraylike_c<derived_range_t>)
     {
         return cursor_t(ok::begin(
             i.template get_view_reference<derived_range_t, parent_range_t>()));
@@ -349,15 +350,15 @@ struct assignment_op_wrapper_t
 
     constexpr payload_t& value() & OKAYLIB_NOEXCEPT
     {
-        return derived()->m_value.value;
+        return this->m_value.value;
     }
     constexpr const payload_t& value() const& OKAYLIB_NOEXCEPT
     {
-        return derived()->m_value.value;
+        return this->m_value.value;
     }
     constexpr payload_t&& value() && OKAYLIB_NOEXCEPT
     {
-        return std::move(derived()->m_value.value);
+        return std::move(this->m_value.value);
     }
     constexpr payload_t& value() const&& = delete;
 

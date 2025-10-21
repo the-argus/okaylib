@@ -164,7 +164,7 @@ struct range_definition<detail::joined_view_t<input_range_t>>
         // if the outer range is not infinite, and they're not both sized, the
         // inner cannot be infinite, then at least one must be finite, therefore
         // the whole thing is finite
-        return nosize_flags & range_flags::finite;
+        return nosize_flags | range_flags::finite;
     }
 
   public:

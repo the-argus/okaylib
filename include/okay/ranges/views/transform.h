@@ -32,33 +32,16 @@ struct transform_fn_t
     operator()(range_t&& range, callable_t&& callable) const OKAYLIB_NOEXCEPT
     {
         using T = detail::remove_cvref_t<range_t>;
-        static_assert(range_c<T>,
-                      "Cannot transform given type- it is not a range.");
-        constexpr bool can_call_with_get_ref_const =
-            std::is_invocable_v<callable_t, const value_type_for<T>&> &&
-            detail::range_can_get_ref_const_c<range_t>;
-        constexpr bool can_call_with_copyout =
-            std::is_invocable_v<callable_t, value_type_for<T>> &&
-            (detail::range_impls_get_c<T> ||
-             detail::range_can_get_ref_const_c<T>);
         static_assert(
-            can_call_with_get_ref_const || can_call_with_copyout,
+            std::is_invocable_v<callable_t, decltype(ok::range_get_best(
+                                                range, ok::begin(range)))>,
             "Given transformation function and given range do not match up: "
-            "there is no way to do `func(ok::iter_get_ref(const range))` "
-            "nor `func(ok::iter_copyout(const range))`. This may also be "
-            "caused by a lambda being marked \"mutable\".");
-        constexpr bool const_ref_call_doesnt_return_void =
-            (detail::range_can_get_ref_const_c<T> &&
-             returns_transformed_type<callable_t,
-                                      const value_type_for<T>&>::value);
-        constexpr bool copied_value_call_doesnt_return_void =
-            ((detail::range_impls_get_c<T> ||
-              detail::range_can_get_ref_const_c<T>) &&
-             returns_transformed_type<callable_t, value_type_for<T>>::value);
-        static_assert(const_ref_call_doesnt_return_void ||
-                          copied_value_call_doesnt_return_void,
-                      "Object given as callable accepts the correct arguments, "
-                      "but always returns void.");
+            "there is no way to call the given callable with the result of "
+            "range_get_best()");
+        static_assert(
+            returns_transformed_type<callable_t, value_type_for<T>>::value,
+            "Object given as callable accepts the correct arguments, "
+            "but always returns void.");
         return transformed_view_t<decltype(range), callable_t>{
             std::forward<range_t>(range), std::forward<callable_t>(callable)};
     }
@@ -93,83 +76,58 @@ struct transformed_view_t : public underlying_view_type<range_t>::type
 
 template <typename input_range_t, typename callable_t>
 struct range_definition<detail::transformed_view_t<input_range_t, callable_t>>
-    : public detail::propagate_sizedness_t<
-          detail::transformed_view_t<input_range_t, callable_t>,
-          detail::remove_cvref_t<input_range_t>>,
-      public detail::propagate_begin_t<
-          detail::transformed_view_t<input_range_t, callable_t>,
-          detail::remove_cvref_t<input_range_t>,
-          cursor_type_for<detail::remove_cvref_t<input_range_t>>, true>,
-      public detail::propagate_boundscheck_t<
-          detail::transformed_view_t<input_range_t, callable_t>,
-          detail::remove_cvref_t<input_range_t>,
-          cursor_type_for<detail::remove_cvref_t<input_range_t>>, true>,
-      public detail::propagate_increment_decrement_t<
+    : public detail::propagate_all_range_definition_functions_with_conversion_t<
           detail::transformed_view_t<input_range_t, callable_t>,
           detail::remove_cvref_t<input_range_t>,
           cursor_type_for<detail::remove_cvref_t<input_range_t>>>
 {
-    static constexpr bool is_view = true;
-
+  private:
     using range_t = std::remove_reference_t<input_range_t>;
     using transformed_t = detail::transformed_view_t<input_range_t, callable_t>;
     using cursor_t = cursor_type_for<range_t>;
-
-    static_assert(detail::producing_range_c<range_t>,
-                  "Cannot transform something which is not an input range.");
 
     template <typename T>
     static constexpr decltype(auto)
     get_and_transform(T& t, const cursor_t& cursor) OKAYLIB_NOEXCEPT
     {
         using inner_def = detail::range_definition_inner_t<range_t>;
-        if constexpr (detail::range_can_get_ref_c<range_t> ||
-                      detail::range_can_get_ref_const_c<range_t>) {
-            return t.transformer_callable()(inner_def::get_ref(
-                t.template get_view_reference<T, range_t>(), cursor));
-        } else {
-            static_assert(detail::range_impls_get_c<range_t>);
-            return t.transformer_callable()(inner_def::get(
-                t.template get_view_reference<T, range_t>(), cursor));
-        }
+        return t.transformer_callable()(ok::range_get_best(
+            t.template get_view_reference<T, range_t>(), cursor));
     }
+
     using transforming_callable_rettype = decltype(get_and_transform(
         std::declval<transformed_t&>(), std::declval<const cursor_t&>()));
 
-    static constexpr bool is_arraylike = detail::arraylike_range_c<range_t>;
+    static constexpr range_flags determine_flags()
+    {
+        auto outflags = range_definition<range_t>::flags;
+        outflags -= range_flags::consuming;
+        outflags -= range_flags::implements_set;
 
-    template <typename T = transforming_callable_rettype>
+        if (!ok::reference_c<transforming_callable_rettype>) {
+            outflags -= range_flags::ref_wrapper;
+        }
+        return outflags;
+    }
+
+  public:
+    static constexpr bool is_view = true;
+
+    using value_type = transforming_callable_rettype;
+
+    static constexpr range_flags flags = determine_flags();
+
+    static_assert(detail::producing_range_c<range_t>,
+                  "Cannot transform something which is not an input range.");
+
     constexpr static auto get(const transformed_t& i,
                               const cursor_t& c) OKAYLIB_NOEXCEPT
-        -> std::enable_if_t<std::is_same_v<T, transforming_callable_rettype> &&
-                                // should only use get() if the transformation
-                                // doesnt seem to create a ref
-                                !std::is_lvalue_reference_v<T>,
-                            T>
     {
         return get_and_transform(i, c);
     }
 
-    template <typename T = transforming_callable_rettype>
-    constexpr static auto get_ref(const transformed_t& i,
-                                  const cursor_t& c) OKAYLIB_NOEXCEPT
-        -> std::enable_if_t<std::is_same_v<T, transforming_callable_rettype> &&
-                                // should only use get() if the transformation
-                                // doesnt seem to create a ref
-                                std::is_lvalue_reference_v<T>,
-                            const std::remove_reference_t<T>&>
-    {
-        return get_and_transform(i, c);
-    }
-
-    template <typename T = transforming_callable_rettype>
-    constexpr static auto get_ref(transformed_t& i,
-                                  const cursor_t& c) OKAYLIB_NOEXCEPT
-        -> std::enable_if_t<std::is_same_v<T, transforming_callable_rettype> &&
-                                // should only use get() if the transformation
-                                // doesnt seem to create a ref
-                                std::is_lvalue_reference_v<T>,
-                            T>
+    constexpr static auto get(transformed_t& i,
+                              const cursor_t& c) OKAYLIB_NOEXCEPT
     {
         return get_and_transform(i, c);
     }
