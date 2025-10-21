@@ -645,16 +645,20 @@ template <typename payload_t> struct range_definition<ok::opt<payload_t>>
   private:
     using opt_range_t = opt<payload_t>;
 
-    inline static constexpr bool is_ref_wrapper =
-        std::is_reference_v<payload_t>;
+    constexpr static range_flags determine_flags()
+    {
+        range_flags initial = range_flags::sized | range_flags::arraylike |
+                              range_flags::implements_set | range_flags::sized |
+                              range_flags::producing | range_flags::consuming;
+        return std::is_reference_v<payload_t>
+                   ? initial | range_flags::ref_wrapper
+                   : initial;
+    }
 
   public:
     using value_type = std::remove_reference_t<payload_t>;
 
-    constexpr static range_flags flags =
-        range_flags::sized | range_flags::arraylike |
-        range_flags::implements_set | range_flags::sized |
-        range_flags::producing | range_flags::consuming;
+    constexpr static range_flags flags = determine_flags();
 
     static constexpr void increment(const opt_range_t& range,
                                     size_t& cursor) OKAYLIB_NOEXCEPT

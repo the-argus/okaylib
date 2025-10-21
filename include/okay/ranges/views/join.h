@@ -140,9 +140,14 @@ struct range_definition<detail::joined_view_t<input_range_t>>
     static constexpr range_flags determine_flags()
     {
         const auto parents_flags = range_def_for<inner_range_t>::flags;
-        const auto nosize_flags =
+        auto nosize_flags =
             parents_flags -
             (range_flags::sized | range_flags::finite | range_flags::infinite);
+        if (!detail::range_gets_by_value_c<inner_range_t> &&
+            (std::is_lvalue_reference_v<input_range_t> ||
+             detail::range_marked_ref_wrapper_c<input_range_t>)) {
+            nosize_flags = nosize_flags | range_flags::ref_wrapper;
+        }
 
         // inherit sizedness from outer range
         const auto outer_flags = range_def_for<outer_range_t>::flags;
@@ -177,11 +182,6 @@ struct range_definition<detail::joined_view_t<input_range_t>>
     using value_type = value_type_for<inner_range_t>;
 
     using cursor_view_t = typename cursor_t::view_t;
-
-    constexpr static bool is_ref_wrapper =
-        !detail::range_impls_get_c<inner_range_t> &&
-        (std::is_lvalue_reference_v<input_range_t> ||
-         detail::range_marked_ref_wrapper_c<input_range_t>);
 
     constexpr static cursor_t begin(const joined_t& joined) OKAYLIB_NOEXCEPT
     {
