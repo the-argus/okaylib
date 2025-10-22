@@ -6,6 +6,7 @@
 #include "okay/ranges/views/keep_if.h"
 #include "okay/ranges/views/transform.h"
 #include "okay/slice.h"
+#include <array>
 
 using namespace ok;
 
@@ -25,8 +26,7 @@ TEST_SUITE("join")
             static_assert(random_access_range_c<decltype(arrays)>);
             // i wish... maybe if the sizes of all the arrays were statically
             // known
-            static_assert(
-                !random_access_range_c<decltype(arrays | join)>);
+            static_assert(!random_access_range_c<decltype(arrays | join)>);
 
             size_t counter = 0;
             auto&& rng = arrays | join;
@@ -34,9 +34,10 @@ TEST_SUITE("join")
             using namespace detail;
             using U = int&;
             static_assert(range_has_definition_c<T>);
-            static_assert(is_valid_value_type_v<detail::range_deduced_value_type_t<T>>);
-            static_assert(range_can_get_ref_const_c<T>);
+            static_assert(!range_gets_by_value_c<T>);
             static_assert(range_c<T>);
+            static_assert(detail::valid_range_value_type_c<
+                          typename range_def_for<T>::value_type>);
             auto t = ok::begin(rng);
             ok_foreach(int i, rng)
             {
@@ -112,10 +113,8 @@ TEST_SUITE("join")
                     ok::is_inbounds(evens_opt_transform, begin_transform),
                     "keep_if and transform -> opt | join are not equivalent");
 
-                auto&& a =
-                    ok::iter_get_temporary_ref(evens_keep_if, begin_keep_if);
-                auto&& b = ok::iter_get_temporary_ref(evens_opt_transform,
-                                                      begin_transform);
+                auto&& a = ok::range_get(evens_keep_if, begin_keep_if);
+                auto&& b = ok::range_get(evens_opt_transform, begin_transform);
 
                 REQUIRE(a == b);
 

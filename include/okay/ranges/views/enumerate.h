@@ -112,11 +112,9 @@ struct range_definition<detail::enumerated_view_t<input_range_t>>
 
     static constexpr range_flags flags = determine_flags();
     static constexpr range_strict_flags strict_flags =
-        range_strict_flags::can_get | range_strict_flags::implements_size |
-        range_strict_flags::implements_begin |
-        range_strict_flags::use_def_decrement |
-        range_strict_flags::use_def_compare |
-        range_strict_flags::use_def_offset;
+        range_strict_flags::disallow_cursor_member_decrement |
+        range_strict_flags::disallow_cursor_member_compare |
+        range_strict_flags::disallow_cursor_member_offset;
 
     using enumerated_t = detail::enumerated_view_t<input_range_t>;
     using cursor_t = detail::enumerated_cursor_t<input_range_t>;
@@ -184,11 +182,10 @@ struct range_definition<detail::enumerated_view_t<input_range_t>>
     constexpr static range_flags flags =
         range_flags::producing | range_flags::arraylike | range_flags::sized;
     constexpr static range_strict_flags strict_flags =
-        range_strict_flags::can_get | range_strict_flags::implements_size |
-        range_strict_flags::use_cursor_compare |
-        range_strict_flags::use_cursor_decrement |
-        range_strict_flags::use_cursor_offset |
-        range_strict_flags::use_cursor_increment;
+        range_strict_flags::disallow_range_def_compare |
+        range_strict_flags::disallow_range_def_decrement |
+        range_strict_flags::disallow_range_def_increment |
+        range_strict_flags::disallow_range_def_offset;
 
     using range_t = std::remove_reference_t<input_range_t>;
     using enumerated_t = detail::enumerated_view_t<input_range_t>;

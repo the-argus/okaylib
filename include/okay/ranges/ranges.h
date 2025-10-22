@@ -45,117 +45,85 @@ template <typename T>
 using range_definition_inner_t =
     typename range_definition_inner_meta_t<remove_cvref_t<T>>::type;
 
-template <typename T>
-concept range_with_strict_flags_c = requires {
-    {
-        range_definition_inner_t<T>::strict_flags
-    } -> same_as_c<const range_strict_flags&>;
-};
+template <typename T> constexpr range_strict_flags get_strict_flags_for_range()
+{
+    if constexpr (requires {
+                      {
+                          range_definition_inner_t<T>::strict_flags
+                      } -> same_as_c<range_strict_flags>;
+                  }) {
+        return range_definition_inner_t<T>::strict_flags;
+    } else {
+        return {};
+    }
+}
 
-/// Used by range declaration so it can be totally invalid if range has strict
-/// flags but not valid strict flags
-template <typename T>
-concept range_with_valid_strict_flags_c = requires {
-    requires range_strict_flags_validate(
-        range_definition_inner_t<T>::flags,
-        range_definition_inner_t<T>::strict_flags);
-};
+template <typename T> constexpr range_flags get_flags_for_range()
+{
+    return range_definition_inner_t<T>::flags;
+}
 
+/// traits to check if something has a give strict flags, with ranges that don't
+/// define strict flags defaulting to all flags off
 template <typename T>
 concept range_strictly_disallows_get_c = requires {
-    requires !(range_definition_inner_t<T>::strict_flags &
-               range_strict_flags::can_get);
+    requires range_definition_inner_t<T>::strict_flags&
+        range_strict_flags::disallow_get;
 };
-// template <typename T>
-// concept range_strictly_must_implement_get_c = requires {
-//     requires range_definition_inner_t<T>::strict_flags&
-//         range_strict_flags::can_get;
-// };
-
 template <typename T>
 concept range_strictly_disallows_set_c = requires {
-    requires !(range_definition_inner_t<T>::strict_flags &
-               range_strict_flags::can_set);
-};
-// template <typename T>
-// concept range_strictly_must_implement_set_c = requires {
-//     requires range_definition_inner_t<T>::strict_flags&
-//         range_strict_flags::can_set;
-// };
-
-/// The range may define a begin() function, but it must not be used. only makes
-/// sense for arraylike generic views, which may inherit a begin() but want to
-/// opt out of using it.
-template <typename T>
-concept range_strictly_disallows_defined_begin_c = requires {
-    requires !(range_definition_inner_t<T>::strict_flags &
-               range_strict_flags::implements_begin);
-};
-// template <typename T>
-// concept range_strictly_must_implement_begin_c = requires {
-//     requires range_definition_inner_t<T>::strict_flags&
-//         range_strict_flags::implements_begin;
-// };
-
-/// the range may define an increment() function, but it should not be used,
-/// in favor of the cursor's operator++().
-template <typename T>
-concept range_strictly_must_use_cursor_member_increment_c = requires {
     requires range_definition_inner_t<T>::strict_flags&
-        range_strict_flags::use_cursor_increment;
+        range_strict_flags::disallow_set;
 };
-/// The range must implement an increment() function which will always be used
-/// over even the cursor's operator++().
 template <typename T>
-concept range_strictly_must_implement_increment_c = requires {
-    requires !(range_definition_inner_t<T>::strict_flags &
-               range_strict_flags::use_cursor_increment);
-};
-
-/// Range may define the size function, but it strictly refuses for it to be
-/// used. only really makes sense for stuff like arraylike or infinite ranges.
-template <typename T>
-concept range_strictly_disallows_defined_size_c = requires {
-    requires !(range_definition_inner_t<T>::strict_flags &
-               range_strict_flags::implements_size);
-};
-// template <typename T>
-// concept range_strictly_must_implement_size_c = requires {
-//     requires range_definition_inner_t<T>::strict_flags&
-//         range_strict_flags::implements_size;
-// };
-
-template <typename T>
-concept range_strictly_must_use_cursor_member_decrement_c = requires {
+concept range_strictly_disallows_begin_c = requires {
     requires range_definition_inner_t<T>::strict_flags&
-        range_strict_flags::use_cursor_decrement;
+        range_strict_flags::disallow_begin;
 };
 template <typename T>
-concept range_strictly_must_implement_decrement_c = requires {
-    requires !(range_definition_inner_t<T>::strict_flags &
-               range_strict_flags::use_def_decrement);
-};
-
-template <typename T>
-concept range_strictly_must_use_cursor_member_offset_c = requires {
+concept range_strictly_disallows_size_c = requires {
     requires range_definition_inner_t<T>::strict_flags&
-        range_strict_flags::use_cursor_offset;
+        range_strict_flags::disallow_size;
 };
 template <typename T>
-concept range_strictly_must_implement_offset_c = requires {
-    requires !(range_definition_inner_t<T>::strict_flags &
-               range_strict_flags::use_def_offset);
-};
-
-template <typename T>
-concept range_strictly_must_use_cursor_member_compare_c = requires {
+concept range_strictly_disallows_cursor_member_increment_c = requires {
     requires range_definition_inner_t<T>::strict_flags&
-        range_strict_flags::use_cursor_compare;
+        range_strict_flags::disallow_cursor_member_increment;
 };
 template <typename T>
-concept range_strictly_must_implement_compare_c = requires {
-    requires !(range_definition_inner_t<T>::strict_flags &
-               range_strict_flags::use_def_compare);
+concept range_strictly_disallows_range_def_increment_c = requires {
+    requires range_definition_inner_t<T>::strict_flags&
+        range_strict_flags::disallow_range_def_increment;
+};
+template <typename T>
+concept range_strictly_disallows_cursor_member_decrement_c = requires {
+    requires range_definition_inner_t<T>::strict_flags&
+        range_strict_flags::disallow_cursor_member_decrement;
+};
+template <typename T>
+concept range_strictly_disallows_range_def_decrement_c = requires {
+    requires range_definition_inner_t<T>::strict_flags&
+        range_strict_flags::disallow_range_def_decrement;
+};
+template <typename T>
+concept range_strictly_disallows_cursor_member_offset_c = requires {
+    requires range_definition_inner_t<T>::strict_flags&
+        range_strict_flags::disallow_cursor_member_offset;
+};
+template <typename T>
+concept range_strictly_disallows_range_def_offset_c = requires {
+    requires range_definition_inner_t<T>::strict_flags&
+        range_strict_flags::disallow_range_def_offset;
+};
+template <typename T>
+concept range_strictly_disallows_cursor_member_compare_c = requires {
+    requires range_definition_inner_t<T>::strict_flags&
+        range_strict_flags::disallow_cursor_member_compare;
+};
+template <typename T>
+concept range_strictly_disallows_range_def_compare_c = requires {
+    requires range_definition_inner_t<T>::strict_flags&
+        range_strict_flags::disallow_range_def_compare;
 };
 
 template <typename T>
@@ -230,29 +198,21 @@ using cursor_type_unchecked_for_t =
 template <typename T>
 concept range_impls_begin_c = requires {
     requires !is_void_c<typename range_begin_rettype_or_void<T>::type>;
+    requires !range_strictly_disallows_begin_c<T>;
 };
-
-template <typename T>
-concept range_impls_is_inbounds_c =
-    requires(const remove_cvref_t<T>& range,
-             const cursor_type_unchecked_for_t<T>& cursor) {
-        {
-            range_definition_inner_t<T>::is_inbounds(range, cursor)
-        } -> same_as_c<bool>;
-    };
 
 template <typename T>
 concept range_impls_increment_c = requires(
     const remove_cvref_t<T>& range, cursor_type_unchecked_for_t<T>& cursor) {
     { range_definition_inner_t<T>::increment(range, cursor) } -> is_void_c;
-    requires !range_strictly_must_use_cursor_member_increment_c<T>;
+    requires !range_strictly_disallows_range_def_increment_c<T>;
 };
 
 template <typename T>
 concept range_impls_decrement_c = requires(
     const remove_cvref_t<T>& range, cursor_type_unchecked_for_t<T>& cursor) {
     { range_definition_inner_t<T>::decrement(range, cursor) } -> is_void_c;
-    requires !range_strictly_must_use_cursor_member_decrement_c<T>;
+    requires !range_strictly_disallows_range_def_decrement_c<T>;
 };
 
 template <typename T>
@@ -262,7 +222,7 @@ concept range_impls_offset_c =
         {
             range_definition_inner_t<T>::offset(range, cursor, offset)
         } -> is_void_c;
-        requires !range_strictly_must_use_cursor_member_offset_c<T>;
+        requires !range_strictly_disallows_range_def_offset_c<T>;
     };
 
 template <typename T>
@@ -273,7 +233,16 @@ concept range_impls_compare_c =
         {
             range_definition_inner_t<T>::compare(range, a, b)
         } -> same_as_c<ok::ordering>;
-        requires !range_strictly_must_use_cursor_member_compare_c<T>;
+        requires !range_strictly_disallows_range_def_compare_c<T>;
+    };
+
+template <typename T>
+concept range_impls_is_inbounds_c =
+    requires(const remove_cvref_t<T>& range,
+             const cursor_type_unchecked_for_t<T>& cursor) {
+        {
+            range_definition_inner_t<T>::is_inbounds(range, cursor)
+        } -> same_as_c<bool>;
     };
 
 template <typename T>
@@ -361,15 +330,13 @@ concept range_impls_construction_set_c = requires {
 template <typename T>
 concept range_impls_size_c = requires(const remove_cvref_t<T>& range) {
     requires range_marked_sized_c<T>;
-    requires !range_strictly_disallows_defined_size_c<T>;
+    requires !range_strictly_disallows_size_c<T>;
     { range_definition_inner_t<T>::size(range) } -> same_as_c<size_t>;
 };
 
 template <typename T>
 concept range_can_begin_c = requires {
-    requires(!range_strictly_disallows_defined_begin_c<T> &&
-             range_impls_begin_c<T>) ||
-                range_marked_arraylike_c<T>;
+    requires(range_impls_begin_c<T> || range_marked_arraylike_c<T>);
 };
 
 template <typename T>
@@ -451,8 +418,8 @@ concept well_declared_range_c = requires {
     requires range_impls_size_c<T> == range_marked_sized_c<T>;
     requires range_impls_size_c<T> !=
                  (range_marked_finite_c<T> || range_marked_infinite_c<T>);
-    // if strict_flags is defined, they must be valid
-    requires range_with_strict_flags_c<T> == range_with_valid_strict_flags_c<T>;
+    requires range_strict_flags_validate(get_flags_for_range<T>(),
+                                         get_strict_flags_for_range<T>());
 };
 } // namespace detail
 
@@ -476,33 +443,32 @@ template <typename T> using cursor_or_void_t = typename cursor_or_void<T>::type;
 
 template <typename T>
 concept range_can_offset_c =
-    (!range_strictly_must_use_cursor_member_offset_c<T> &&
-     range_impls_offset_c<T>) ||
-    (!range_strictly_must_implement_offset_c<T> &&
-     has_inplace_addition_with_i64_c<cursor_or_void_t<T>>);
+    range_impls_offset_c<T> ||
+    (has_inplace_addition_with_i64_c<cursor_or_void_t<T>> &&
+     !range_strictly_disallows_cursor_member_offset_c<T>);
 
 template <typename T>
 concept range_can_compare_c =
-    (!range_strictly_must_use_cursor_member_compare_c<T> &&
-     range_impls_compare_c<T>) ||
-    (!range_strictly_must_implement_compare_c<T> &&
-     orderable_c<cursor_or_void_t<T>>);
+    range_impls_compare_c<T> !=
+    (orderable_c<cursor_or_void_t<T>> &&
+     !range_strictly_disallows_cursor_member_compare_c<T>);
 
+// NOTE: offsetting and incrementing cannot be mutually exclusive, otherwise
+// things without strict flags that use size_t or other numbers as a cursor
+// wouldn't work since those cursors automatically can both increment and offset
 template <typename T>
 concept range_can_increment_c =
-    (!range_strictly_must_use_cursor_member_increment_c<T> &&
-     range_impls_increment_c<T>) ||
-    (!range_strictly_must_implement_increment_c<T> &&
-     has_pre_increment_c<cursor_or_void_t<T>>) ||
-    range_can_offset_c<T>;
+    range_can_offset_c<T> ||
+    (range_impls_increment_c<T> !=
+     (has_pre_increment_c<cursor_or_void_t<T>> &&
+      !range_strictly_disallows_cursor_member_increment_c<T>));
 
 template <typename T>
 concept range_can_decrement_c =
-    (!range_strictly_must_use_cursor_member_decrement_c<T> &&
-     range_impls_decrement_c<T>) ||
-    (!range_strictly_must_implement_decrement_c<T> &&
-     has_pre_decrement_c<cursor_or_void_t<T>>) ||
-    range_can_offset_c<T>;
+    range_can_offset_c<T> ||
+    (range_impls_decrement_c<T> !=
+     (has_pre_decrement_c<cursor_or_void_t<T>> &&
+      !range_strictly_disallows_cursor_member_decrement_c<T>));
 
 template <typename T>
 concept common_range_requirements_c = requires {
@@ -524,8 +490,7 @@ template <typename T>
 concept producing_range_c = requires {
     requires common_range_requirements_c<T>;
     requires range_can_increment_c<T>;
-    requires range_definition_inner_t<T>::flags& range_flags::producing;
-    // we can check this, for set we don't find out until we instantiate it
+    requires get_flags_for_range<T>() & range_flags::producing;
     requires range_impls_get_c<T>;
 };
 } // namespace detail
@@ -781,7 +746,7 @@ struct begin_fn_t
         if constexpr (range_marked_arraylike_c<range_t>) {
             static_assert(
                 !range_impls_begin_c<range_t> ||
-                    range_strictly_disallows_defined_begin_c<range_t>,
+                    range_strictly_disallows_begin_c<range_t>,
                 "range which is marked arraylike implements begin. either "
                 "remove the implementation or include a strict_flags "
                 "declaration which omits range_strict_flags::implements_begin "

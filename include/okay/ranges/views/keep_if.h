@@ -15,18 +15,16 @@ template <typename range_t, typename predicate_t> struct keep_if_view_t;
 
 struct keep_if_fn_t
 {
-    template <typename range_t, typename predicate_t>
+    template <range_c range_t, typename predicate_t>
     constexpr decltype(auto)
     operator()(range_t&& range,
                predicate_t&& filter_predicate) const OKAYLIB_NOEXCEPT
     {
         using T = std::remove_reference_t<range_t>;
-        static_assert(range_c<T>,
-                      "Cannot keep_if given type- it is not a range.");
         static_assert(
             requires(const cursor_type_for<T>& c) {
                 {
-                    filter_predicate(range, ok::range_get_best(range, c))
+                    filter_predicate(ok::range_get_best(range, c))
                 } -> same_as_c<bool>;
             }, "Given keep_if predicate and given range do not match up: "
                "there is no way to call the function with the output of "
@@ -89,34 +87,43 @@ struct range_definition<detail::keep_if_view_t<input_range_t, predicate_t>>
         constexpr flags parent_flags = range_def_for<range_t>::flags;
 
         if (parent_flags & flags::consuming)
-            f = f | flags::consuming;
+            f |= flags::consuming;
 
         if (parent_flags & flags::implements_set)
-            f = f | flags::implements_set;
+            f |= flags::implements_set;
 
         if (parent_flags & flags::infinite)
-            f = f | flags::infinite;
+            f |= flags::infinite;
         else
-            f = f | flags::finite;
+            f |= flags::finite;
 
         if (parent_flags & flags::ref_wrapper ||
             stdc::is_reference_c<input_range_t>)
-            f = f | flags::ref_wrapper;
+            f |= flags::ref_wrapper;
 
         return f;
     }
 
-    static constexpr range_strict_flags determine_strict_flags() noexcept
+    constexpr static range_strict_flags determine_strict_flags()
     {
-        using flags = range_strict_flags;
-        flags f =
-            flags::can_get | flags::implements_begin | flags::use_def_decrement;
-        constexpr flags parent_flags = range_def_for<range_t>::strict_flags;
+        range_strict_flags f{};
 
-        if (parent_flags & flags::can_set) {
-            f = f | flags::can_set;
+        // keep if is never random access, no offsetting
+        f |= range_strict_flags::disallow_cursor_member_offset;
+        f |= range_strict_flags::disallow_range_def_offset;
+
+        // select exclusively one increment and decrement operation
+        if constexpr (detail::range_impls_increment_c<range_t>) {
+            f |= range_strict_flags::disallow_cursor_member_increment;
+        } else if (detail::range_can_increment_c<range_t>) {
+            f |= range_strict_flags::disallow_range_def_increment;
         }
 
+        if constexpr (detail::range_impls_decrement_c<range_t>) {
+            f |= range_strict_flags::disallow_cursor_member_decrement;
+        } else if (detail::range_can_decrement_c<range_t>) {
+            f |= range_strict_flags::disallow_range_def_decrement;
+        }
         return f;
     }
 

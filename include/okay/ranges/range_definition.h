@@ -7,6 +7,7 @@ namespace ok {
 // clang-format off
 enum class range_flags
 {
+    none                = 0b00000000,
     producing           = 0b00000001,
     consuming           = 0b00000010,
     infinite            = 0b00000100,
@@ -17,28 +18,26 @@ enum class range_flags
     ref_wrapper         = 0b10000000,
 };
 
-/// more strict flags which, when present in the range definition, are used to
-/// limit what implementations are detected/ignored. For example, if
-/// can_increment and implements_increment are not defined, then the increment()
-/// implementation in the range definition will be ignored.
+/// Normally, range features are determined by what functions are implemented
+/// on the range. range_strict_flags are an exception which prevent template
+/// machinery from selecting certain operators. These flags exist because there
+/// was a lot of machinery involved with deleting functions and it made writing
+/// and testing views difficult
 enum class range_strict_flags
 {
-    none                        = 0b000000000000,
-    // if use_cursor_increment is not present, then the range must define an
-    // increment() function which will be used instead.
-    use_cursor_increment        = 0b000000000010,
-    use_def_decrement           = 0b000000000100,
-    use_cursor_decrement        = 0b000000001000,
-    use_def_offset              = 0b000000010000,
-    use_cursor_offset           = 0b000000100000,
-    use_def_compare             = 0b000001000000,
-    use_cursor_compare          = 0b000010000000,
-    can_get                     = 0b000100000000,
-    can_set                     = 0b001000000000,
-    // can only be absent if regular flags specify arraylike
-    implements_begin            = 0b010000000000,
-    // can only be absent if arraylike or finite or infinite
-    implements_size             = 0b100000000000,
+    none                                = 0b0000000000000,
+    disallow_range_def_increment        = 0b0000000000010,
+    disallow_cursor_member_increment    = 0b0000000000100,
+    disallow_range_def_decrement        = 0b0000000001000,
+    disallow_cursor_member_decrement    = 0b0000000010000,
+    disallow_range_def_offset           = 0b0000000100000,
+    disallow_cursor_member_offset       = 0b0000001000000,
+    disallow_range_def_compare          = 0b0000010000000,
+    disallow_cursor_member_compare      = 0b0000100000000,
+    disallow_get                        = 0b0001000000000,
+    disallow_set                        = 0b0010000000000,
+    disallow_begin                      = 0b0100000000000,
+    disallow_size                       = 0b1000000000000,
     // must always implement is_inbounds()
 };
 // clang-format on
@@ -59,6 +58,12 @@ constexpr range_flags operator-(range_flags a, range_flags b)
     // only leave on ones that were exclusively on in `a`
     return static_cast<flags>(shared_flags ^
                               static_cast<std::underlying_type_t<flags>>(a));
+}
+
+constexpr range_flags& operator|=(range_flags& a, range_flags b)
+{
+    a = a | b;
+    return a;
 }
 
 constexpr range_flags& operator-=(range_flags& a, range_flags b)
@@ -93,6 +98,13 @@ constexpr range_strict_flags operator-(range_strict_flags a,
                               static_cast<std::underlying_type_t<flags>>(b));
 }
 
+constexpr range_strict_flags& operator|=(range_strict_flags& a,
+                                         range_strict_flags b)
+{
+    a = a | b;
+    return a;
+}
+
 constexpr range_strict_flags& operator-=(range_strict_flags& a,
                                          range_strict_flags b)
 {
@@ -114,43 +126,21 @@ constexpr bool range_strict_flags_validate(range_flags rflags,
     using rflags_e = range_flags;
 
     // a range is only allowed to not implement begin if it is arraylike
-    if (!(sflags & sflags_e::implements_begin) &&
-        !(rflags & rflags_e::arraylike))
+    if (sflags & sflags_e::disallow_begin && !(rflags & rflags_e::arraylike))
         return false;
 
     // cases where you can avoid implementing size(): arraylike, infinite,
     // or finite
-    if (!(sflags & sflags_e::implements_size) &&
+    if (sflags & sflags_e::disallow_size &&
         !(rflags & rflags_e::arraylike || rflags & rflags_e::finite ||
           rflags & rflags_e::infinite))
         return false;
 
-    // do not try to use two implementations of decrement, offset, or compare
-    if (sflags & sflags_e::use_cursor_decrement &&
-        sflags & sflags_e::use_def_decrement)
-        return false;
-    if (sflags & sflags_e::use_cursor_offset &&
-        sflags & sflags_e::use_def_offset)
-        return false;
-    if (sflags & sflags_e::use_cursor_compare &&
-        sflags & sflags_e::use_def_compare)
-        return false;
-
-    const bool can_get = sflags & sflags_e::can_get;
-    const bool can_set = sflags & sflags_e::can_set;
+    const bool disallows_get = sflags & sflags_e::disallow_get;
     const bool producing = rflags & rflags_e::producing;
-    const bool consuming = rflags & rflags_e::consuming;
 
-    // never have both can_set and can_get off
-    if (!can_get && !can_set)
-        return false;
-
-    // if range can set(), then it is consuming
-    if (can_set && !consuming)
-        return false;
-
-    // if range can get(), then it is producing
-    if (can_get && !producing)
+    // a get() function is the only way for a range to produce something
+    if (disallows_get && producing)
         return false;
 
     return true;

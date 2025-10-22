@@ -21,20 +21,63 @@ namespace detail {
 template <typename derived_range_t, typename parent_range_t, typename cursor_t>
 struct propagate_all_range_definition_functions_with_conversion_t
 {
+    // constexpr static void increment(const derived_range_t& i, cursor_t& c)
+    //     requires requires {
+    //         c.increment(i.template get_view_reference<derived_range_t,
+    //                                                   parent_range_t>())
+    //             ->ok::is_void_c;
+    //     }
+    // {
+    //     c.increment(i);
+    // }
+
     constexpr static void increment(const derived_range_t& i, cursor_t& c)
-        requires range_impls_increment_c<parent_range_t>
+        requires std::is_same_v<cursor_t, cursor_type_for<parent_range_t>>
     {
         ok::increment(
             i.template get_view_reference<derived_range_t, parent_range_t>(),
-            cursor_type_for<parent_range_t>(c));
+            c);
     }
 
+    // constexpr static void decrement(const derived_range_t& i, cursor_t& c)
+    //     requires requires {
+    //         c.decrement(i.template get_view_reference<derived_range_t,
+    //                                                   parent_range_t>())
+    //             ->ok::is_void_c;
+    //     }
+    // {
+    //     c.decrement(i);
+    // }
+
     constexpr static void decrement(const derived_range_t& i, cursor_t& c)
-        requires range_impls_decrement_c<parent_range_t>
+        requires std::is_same_v<cursor_t, cursor_type_for<parent_range_t>>
     {
         ok::decrement(
             i.template get_view_reference<derived_range_t, parent_range_t>(),
-            cursor_type_for<parent_range_t>(c));
+            c);
+    }
+
+    // constexpr static void offset(const derived_range_t& i, cursor_t& c,
+    //                              int64_t offset)
+    //     requires requires {
+    //         c.offset(i.template get_view_reference<derived_range_t,
+    //                                                parent_range_t>(),
+    //                  offset)
+    //             ->ok::is_void_c;
+    //     }
+    // {
+    //     c.offset(
+    //         i.template get_view_reference<derived_range_t, parent_range_t>(),
+    //         offset);
+    // }
+
+    constexpr static void offset(const derived_range_t& i, cursor_t& c,
+                                 int64_t offset)
+        requires std::is_same_v<cursor_t, cursor_type_for<parent_range_t>>
+    {
+        ok::range_offset(
+            i.template get_view_reference<derived_range_t, parent_range_t>(), c,
+            offset);
     }
 
     constexpr static decltype(auto) begin(const derived_range_t& i)
@@ -77,15 +120,6 @@ struct propagate_all_range_definition_functions_with_conversion_t
         return range_def_for<parent_range_t>::set(
             i.template get_view_reference<derived_range_t, parent_range_t>(),
             cursor_type_for<parent_range_t>(c), stdc::forward<args_t>(args)...);
-    }
-
-    constexpr static void offset(const derived_range_t& i, cursor_t& c,
-                                 int64_t offset)
-        requires range_impls_offset_c<parent_range_t>
-    {
-        ok::range_offset(
-            i.template get_view_reference<derived_range_t, parent_range_t>(),
-            cursor_type_for<parent_range_t>(c), offset);
     }
 
     constexpr static ok::ordering compare(const derived_range_t& i,
@@ -162,14 +196,9 @@ class owning_view
 };
 
 template <typename T> struct propagate_strict_flags
-{};
-
-template <typename T>
-    requires range_with_strict_flags_c<T>
-struct propagate_strict_flags<T>
 {
     constexpr static range_strict_flags strict_flags =
-        range_def_for<T>::strict_flags;
+        detail::get_strict_flags_for_range<T>();
 };
 
 } // namespace detail

@@ -1,6 +1,7 @@
 #include "test_header.h"
 // test header must be first
 #include "okay/macros/foreach.h"
+#include "okay/ranges/indices.h"
 #include "okay/ranges/views/enumerate.h"
 #include "okay/ranges/views/transform.h"
 #include "okay/slice.h"
@@ -117,6 +118,43 @@ TEST_SUITE("transform")
             REQUIRE(ok::size(stdarray | squared) == arraysize);
             REQUIRE(ok::size(carray | squared) == carraysize);
             REQUIRE(ok::size(vector | squared) == vectorsize);
+        }
+
+        SUBCASE("reference wrapper semantics when holding an lvalue")
+        {
+            std::array<int, 50> ints{};
+
+            auto identity = [](int& i) -> int& { return i; };
+
+            // const here, but we get a mutable reference later
+            const auto tf_view = ints | transform(identity);
+
+            static_assert(
+                std::is_same_v<value_type_for<decltype(tf_view)>, int>);
+            static_assert(detail::consuming_range_c<decltype(tf_view)>);
+
+            for (size_t i = 0; i < ok::size(tf_view); ++i) {
+                ok::range_get(tf_view, i) = i;
+            }
+
+            REQUIRE(ranges_equal(ints, ok::indices));
+        }
+
+        SUBCASE("transform returning a const ref has the correct value_type")
+        {
+            std::array<const int, 50> ints{};
+
+            auto identity = [](const int& i) -> const int& { return i; };
+
+            // const here, but we get a mutable reference later
+            const auto tf_view = ints | transform(identity);
+
+            static_assert(
+                std::is_same_v<value_type_for<decltype(tf_view)>, const int>);
+            static_assert(detail::valid_range_value_type_c<
+                          value_type_for<decltype(tf_view)>>);
+            static_assert(!detail::consuming_range_c<decltype(tf_view)>);
+            static_assert(detail::producing_range_c<decltype(tf_view)>);
         }
     }
 }

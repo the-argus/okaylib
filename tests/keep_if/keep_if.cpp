@@ -22,14 +22,15 @@ TEST_SUITE("keep_if")
 
             for (auto c = ok::begin(ints); ok::is_inbounds(ints, c);
                  ok::increment(ints, c)) {
-                int& item = ok::iter_get_ref(ints, c);
+                int& item = ok::range_get_ref(ints, c);
                 item = c;
             }
 
             auto identity = ints | keep_if([](auto i) { return true; });
+            static_assert(range_c<decltype(identity)>);
             for (auto c = ok::begin(identity); ok::is_inbounds(identity, c);
                  ok::increment(identity, c)) {
-                int& item = ok::iter_get_ref(identity, c);
+                int& item = ok::range_get_ref(identity, c);
                 REQUIRE(item == c);
             }
         }
@@ -61,19 +62,17 @@ TEST_SUITE("keep_if")
 
             std::array<int, 50> ints;
 
-            static_assert(!detail::range_impls_increment_v<decltype(ints)>);
+            static_assert(!detail::range_impls_increment_c<decltype(ints)>);
             static_assert(
-                detail::range_impls_increment_v<decltype(ints |
-                                                         keep_if(is_even))>);
+                detail::range_can_increment_c<decltype(ints |
+                                                       keep_if(is_even))>);
             static_assert(random_access_range_c<decltype(ints)>);
             static_assert(
-                detail::is_bidirectional_range_v<decltype(ints |
-                                                          keep_if(is_even))>);
+                bidirectional_range_c<decltype(ints | keep_if(is_even))>);
             static_assert(
-                !detail::range_can_offset_v<decltype(ints | keep_if(is_even))>);
+                !detail::range_can_offset_c<decltype(ints | keep_if(is_even))>);
             static_assert(
-                !random_access_range_c<decltype(ints |
-                                                           keep_if(is_even))>);
+                !random_access_range_c<decltype(ints | keep_if(is_even))>);
             static_assert(std::is_same_v<
                           cursor_type_for<decltype(ints)>,
                           cursor_type_for<decltype(ints | keep_if(is_even))>>);
@@ -85,10 +84,10 @@ TEST_SUITE("keep_if")
 
             auto&& items = ints | keep_if(is_even);
             auto begin = ok::begin(items);
-            REQUIRE(ok::iter_get_temporary_ref(items, begin) == 0);
+            REQUIRE(ok::range_get(items, begin) == 0);
             for (auto i = ok::begin(items); ok::is_inbounds(items, i);
                  ok::increment(items, i)) {
-                REQUIRE(ok::iter_get_temporary_ref(items, i) % 2 == 0);
+                REQUIRE(ok::range_get(items, i) % 2 == 0);
             }
 
             // or, with macros
@@ -107,16 +106,23 @@ TEST_SUITE("keep_if")
 
             auto filtered = myints | keep_if(is_odd);
             // starts at 1, skipping zero because it is not odd
-            REQUIRE(iter_get_temporary_ref(filtered, ok::begin(filtered)) == 1);
+            REQUIRE(range_get(filtered, ok::begin(filtered)) == 1);
         }
 
         SUBCASE("keep_if by index and then go back to not having index type")
         {
-            auto skip_even = keep_if([](auto i) { return i.second % 2 == 1; });
-            auto get_first = transform([](auto pair) { return pair.first; });
+            auto skip_every_other_enumerated = keep_if([](auto i) -> bool {
+                auto out = ok::get<1>(i) % 2 == 1;
+                printf("index %zu is kept: %s\n", ok::get<1>(i),
+                       out ? "true" : "false");
+                return out;
+            });
+            auto un_enumerate =
+                transform([](ok::tuple<int&, const size_t> pair) -> int& {
+                    return ok::get<0>(pair);
+                });
 
-            std::array<int, 50> ints;
-            memfill(slice(ints), 0);
+            std::array<int, 50> ints{};
 
             ok_foreach(ok_pair(i, index), enumerate(ints))
             {
@@ -124,8 +130,19 @@ TEST_SUITE("keep_if")
                 i = ints.size() - index;
             }
 
-            ok_foreach(const int i, ints | enumerate | skip_even | get_first)
+            using T = decltype(ints | enumerate | skip_every_other_enumerated);
+            static_assert(std::is_same_v<ok::tuple<int&, const size_t>,
+                                         value_type_for<T>>);
+            static_assert(std::is_same_v<ok::tuple<int&, const size_t>,
+                                         decltype(ok::range_get_best(
+                                             stdc::declval<T>(),
+                                             ok::begin(stdc::declval<T>())))>);
+
+            ok_foreach(const int i, ints | enumerate |
+                                        skip_every_other_enumerated |
+                                        un_enumerate)
             {
+                printf("got i value %d\n", i);
                 REQUIRE(i % 2 == 1);
             }
         }

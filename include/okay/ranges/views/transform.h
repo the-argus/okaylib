@@ -13,18 +13,6 @@ namespace ok {
 namespace detail {
 template <typename range_t, typename callable_t> struct transformed_view_t;
 
-template <typename callable_t, typename param_t, typename = void>
-struct returns_transformed_type : public std::false_type
-{};
-template <typename callable_t, typename param_t>
-struct returns_transformed_type<
-    callable_t, param_t,
-    // requires that callable does not return void
-    std::enable_if_t<!std::is_same_v<void, decltype(std::declval<callable_t>()(
-                                               std::declval<param_t>()))>>>
-    : public std::true_type
-{};
-
 struct transform_fn_t
 {
     template <typename range_t, typename callable_t>
@@ -32,16 +20,17 @@ struct transform_fn_t
     operator()(range_t&& range, callable_t&& callable) const OKAYLIB_NOEXCEPT
     {
         using T = detail::remove_cvref_t<range_t>;
-        static_assert(
-            std::is_invocable_v<callable_t, decltype(ok::range_get_best(
-                                                range, ok::begin(range)))>,
-            "Given transformation function and given range do not match up: "
-            "there is no way to call the given callable with the result of "
-            "range_get_best()");
-        static_assert(
-            returns_transformed_type<callable_t, value_type_for<T>>::value,
-            "Object given as callable accepts the correct arguments, "
-            "but always returns void.");
+        static_assert(ok::is_std_invocable_c<const callable_t&,
+                                             decltype(ok::range_get_best(
+                                                 range, ok::begin(range)))>,
+                      "Given transformation function and given range do not "
+                      "match up: there is no way to call a const reference to "
+                      "the given callable with the result of range_get_best(). "
+                      "Make sure the callable is not marked `mutable`.");
+        static_assert(!ok::is_void_c<decltype(callable(
+                          ok::range_get_best(range, ok::begin(range))))>,
+                      "Object given as callable accepts the correct arguments, "
+                      "but always returns void.");
         return transformed_view_t<decltype(range), callable_t>{
             std::forward<range_t>(range), std::forward<callable_t>(callable)};
     }
@@ -51,7 +40,7 @@ template <typename range_t, typename callable_t>
 struct transformed_view_t : public underlying_view_type<range_t>::type
 {
   private:
-    assignment_op_wrapper_t<std::remove_reference_t<callable_t>>
+    assignment_op_wrapper_t<ok::stdc::remove_reference_t<callable_t>>
         m_transformer_callable;
 
   public:
@@ -60,7 +49,8 @@ struct transformed_view_t : public underlying_view_type<range_t>::type
     transformed_view_t(transformed_view_t&&) = default;
     transformed_view_t& operator=(transformed_view_t&&) = default;
 
-    constexpr const callable_t& transformer_callable() const OKAYLIB_NOEXCEPT
+    // NOTE: we only allow callables whose operator() are marked const
+    constexpr decltype(auto) transformer_callable() const OKAYLIB_NOEXCEPT
     {
         return m_transformer_callable.value();
     }
@@ -95,17 +85,26 @@ struct range_definition<detail::transformed_view_t<input_range_t, callable_t>>
             t.template get_view_reference<T, range_t>(), cursor));
     }
 
+    // NOTE: we only allow callables whose operator() are marked const, no need
+    // to check return type when transformed_t is nonconst
     using transforming_callable_rettype = decltype(get_and_transform(
-        std::declval<transformed_t&>(), std::declval<const cursor_t&>()));
+        std::declval<const transformed_t&>(), std::declval<const cursor_t&>()));
 
     static constexpr range_flags determine_flags()
     {
         auto outflags = range_definition<range_t>::flags;
+        outflags |= range_flags::producing;
         outflags -= range_flags::consuming;
         outflags -= range_flags::implements_set;
 
-        if (!ok::reference_c<transforming_callable_rettype>) {
+        if constexpr (!ok::reference_c<transforming_callable_rettype>) {
             outflags -= range_flags::ref_wrapper;
+        } else {
+            outflags |= range_flags::ref_wrapper;
+            if (!ok::is_const_c<ok::stdc::remove_reference_t<
+                    transforming_callable_rettype>>) {
+                outflags |= range_flags::consuming;
+            }
         }
         return outflags;
     }
@@ -113,21 +112,24 @@ struct range_definition<detail::transformed_view_t<input_range_t, callable_t>>
   public:
     static constexpr bool is_view = true;
 
-    using value_type = transforming_callable_rettype;
+    using value_type =
+        ok::stdc::remove_reference_t<transforming_callable_rettype>;
 
     static constexpr range_flags flags = determine_flags();
+    static constexpr range_strict_flags strict_flags =
+        detail::get_strict_flags_for_range<range_t>();
 
     static_assert(detail::producing_range_c<range_t>,
                   "Cannot transform something which is not an input range.");
 
-    constexpr static auto get(const transformed_t& i,
-                              const cursor_t& c) OKAYLIB_NOEXCEPT
+    constexpr static decltype(auto) get(const transformed_t& i,
+                                        const cursor_t& c) OKAYLIB_NOEXCEPT
     {
         return get_and_transform(i, c);
     }
 
-    constexpr static auto get(transformed_t& i,
-                              const cursor_t& c) OKAYLIB_NOEXCEPT
+    constexpr static decltype(auto) get(transformed_t& i,
+                                        const cursor_t& c) OKAYLIB_NOEXCEPT
     {
         return get_and_transform(i, c);
     }

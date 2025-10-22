@@ -36,8 +36,8 @@ struct join_fn_t
     }
 };
 
-template <typename range_t>
-struct joined_view_t : public underlying_view_type<range_t>::type
+template <typename input_range_t>
+struct joined_view_t : public underlying_view_type<input_range_t>::type
 {
     friend class ok::range_definition<joined_view_t>;
 };
@@ -139,10 +139,14 @@ struct range_definition<detail::joined_view_t<input_range_t>>
 
     static constexpr range_flags determine_flags()
     {
-        const auto parents_flags = range_def_for<inner_range_t>::flags;
+        constexpr auto parents_flags = range_def_for<inner_range_t>::flags;
         auto nosize_flags =
             parents_flags -
             (range_flags::sized | range_flags::finite | range_flags::infinite);
+        // can never be arraylike because it's always finite, and even if its
+        // infinite then you still can't figure out the offset of a cursor in
+        // constant time, it can't be random access
+        nosize_flags -= range_flags::arraylike;
         if (!detail::range_gets_by_value_c<inner_range_t> &&
             (std::is_lvalue_reference_v<input_range_t> ||
              detail::range_marked_ref_wrapper_c<input_range_t>)) {
@@ -151,20 +155,17 @@ struct range_definition<detail::joined_view_t<input_range_t>>
 
         // inherit sizedness from outer range
         const auto outer_flags = range_def_for<outer_range_t>::flags;
-        if (outer_flags & range_flags::sized &&
-            parents_flags & range_flags::sized) {
-            return parents_flags;
+        if constexpr (outer_flags & range_flags::sized &&
+                      parents_flags & range_flags::sized) {
+            return nosize_flags | range_flags::finite;
+        } else if constexpr (outer_flags & range_flags::infinite) {
+            return nosize_flags | range_flags::infinite;
+        } else {
+            // if the outer range is not infinite, and they're not both sized,
+            // the inner cannot be infinite, then at least one must be finite,
+            // therefore the whole thing is finite
+            return nosize_flags | range_flags::finite;
         }
-        if (outer_flags & range_flags::infinite) {
-            return nosize_flags & range_flags::infinite;
-        }
-
-        static_assert(!(parents_flags & range_flags::infinite));
-
-        // if the outer range is not infinite, and they're not both sized, the
-        // inner cannot be infinite, then at least one must be finite, therefore
-        // the whole thing is finite
-        return nosize_flags | range_flags::finite;
     }
 
   public:
