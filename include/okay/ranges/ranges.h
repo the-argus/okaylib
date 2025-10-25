@@ -449,7 +449,7 @@ concept range_can_offset_c =
 
 template <typename T>
 concept range_can_compare_c =
-    range_impls_compare_c<T> !=
+    range_impls_compare_c<T> ||
     (orderable_c<cursor_or_void_t<T>> &&
      !range_strictly_disallows_cursor_member_compare_c<T>);
 
