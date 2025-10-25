@@ -113,8 +113,6 @@ TEST_SUITE("keep_if")
         {
             auto skip_every_other_enumerated = keep_if([](auto i) -> bool {
                 auto out = ok::get<1>(i) % 2 == 1;
-                printf("index %zu is kept: %s\n", ok::get<1>(i),
-                       out ? "true" : "false");
                 return out;
             });
             auto un_enumerate =
@@ -142,7 +140,6 @@ TEST_SUITE("keep_if")
                                         skip_every_other_enumerated |
                                         un_enumerate)
             {
-                printf("got i value %d\n", i);
                 REQUIRE(i % 2 == 1);
             }
         }

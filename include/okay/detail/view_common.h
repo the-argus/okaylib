@@ -301,15 +301,11 @@ template <typename T> struct underlying_view_type
     [[nodiscard]] static constexpr auto
     wrap_range_with_view(T view) OKAYLIB_NOEXCEPT
     {
-        static_assert(
-            is_view_v<T> || std::is_lvalue_reference_v<T> ||
-                std::is_rvalue_reference_v<T>,
-            "Attempt to wrap something like a value type which is not a view.");
         if constexpr (is_view_v<T>)
-            return std::forward<T>(view);
+            return view;
         else if constexpr (std::is_lvalue_reference_v<T>)
             return ref_view<T>{view};
-        else if constexpr (std::is_rvalue_reference_v<T>)
+        else
             return owning_view<T>{std::move(view)};
     }
 

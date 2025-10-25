@@ -109,9 +109,9 @@ TEST_SUITE("join")
             auto begin_transform = ok::begin(evens_opt_transform);
 
             while (ok::is_inbounds(evens_keep_if, begin_keep_if)) {
-                __ok_assert(
-                    ok::is_inbounds(evens_opt_transform, begin_transform),
-                    "keep_if and transform -> opt | join are not equivalent");
+                // if this fires it means keep_if and transform -> opt | join
+                // are not equivalent
+                REQUIRE(ok::is_inbounds(evens_opt_transform, begin_transform));
 
                 auto&& a = ok::range_get(evens_keep_if, begin_keep_if);
                 auto&& b = ok::range_get(evens_opt_transform, begin_transform);

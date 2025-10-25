@@ -104,32 +104,13 @@ struct range_definition<detail::keep_if_view_t<input_range_t, predicate_t>>
         return f;
     }
 
-    constexpr static range_strict_flags determine_strict_flags()
-    {
-        range_strict_flags f{};
-
-        // keep if is never random access, no offsetting
-        f |= range_strict_flags::disallow_cursor_member_offset;
-        f |= range_strict_flags::disallow_range_def_offset;
-
-        // select exclusively one increment and decrement operation
-        if constexpr (detail::range_impls_increment_c<range_t>) {
-            f |= range_strict_flags::disallow_cursor_member_increment;
-        } else if (detail::range_can_increment_c<range_t>) {
-            f |= range_strict_flags::disallow_range_def_increment;
-        }
-
-        if constexpr (detail::range_impls_decrement_c<range_t>) {
-            f |= range_strict_flags::disallow_cursor_member_decrement;
-        } else if (detail::range_can_decrement_c<range_t>) {
-            f |= range_strict_flags::disallow_range_def_decrement;
-        }
-        return f;
-    }
-
   public:
     static constexpr range_flags flags = determine_flags();
-    static constexpr range_strict_flags strict_flags = determine_strict_flags();
+    static constexpr range_strict_flags strict_flags =
+        range_strict_flags::disallow_cursor_member_offset |
+        range_strict_flags::disallow_range_def_offset |
+        range_strict_flags::disallow_cursor_member_increment |
+        range_strict_flags::disallow_cursor_member_decrement;
 
     constexpr static cursor_t begin(const keep_if_t& i) OKAYLIB_NOEXCEPT
     {
