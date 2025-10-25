@@ -54,8 +54,7 @@ struct all_closure_t : public underlying_view_type<input_range_t>::type
 
         for (auto cursor = ok::begin(range); ok::is_inbounds(range, cursor);
              ok::increment(range, cursor)) {
-            if (!m_predicate.value()(
-                    ok::iter_get_temporary_ref(range, cursor))) {
+            if (!m_predicate.value()(ok::range_get(range, cursor))) {
                 return false;
             }
         }
