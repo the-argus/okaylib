@@ -121,7 +121,7 @@ TEST_SUITE("slice")
             static_assert(std::is_same_v<decltype(carray.data()), const int*>);
 
             static_assert(
-                !is_std_constructible_v<slice<int>, decltype(carray)&>);
+                !is_std_constructible_c<slice<int>, decltype(carray)&>);
             static_assert(!std::is_constructible_v<slice<int>,
                                                    std::array<const int, 5>&>);
             // cannot be constructed by a value ofc
@@ -130,13 +130,13 @@ TEST_SUITE("slice")
 
             // can never be constructed from rvalues to things
             static_assert(
-                !is_std_constructible_v<slice<const int>, decltype(carray)&&>);
-            static_assert(!is_std_constructible_v<slice<const int>,
+                !is_std_constructible_c<slice<const int>, decltype(carray)&&>);
+            static_assert(!is_std_constructible_c<slice<const int>,
                                                   decltype(carray_2)&&>);
             static_assert(
-                !is_std_constructible_v<slice<int>, decltype(carray)&&>);
+                !is_std_constructible_c<slice<int>, decltype(carray)&&>);
             static_assert(
-                !is_std_constructible_v<slice<int>, decltype(carray_2)&&>);
+                !is_std_constructible_c<slice<int>, decltype(carray_2)&&>);
 
             slice<const int> cslice = carray;
             slice<const int> cslice_2 = carray_2;
@@ -474,7 +474,9 @@ TEST_SUITE("slice")
         {
             const char mystr[] = "Hello, World";
             slice<const char> chars = mystr;
-            fmt::println("whole string: {}, subslice normally: {}, subslice as string: {:s}", mystr, chars, chars);
+            fmt::println("whole string: {}, subslice normally: {}, subslice as "
+                         "string: {:s}",
+                         mystr, chars, chars);
         }
     }
 #endif

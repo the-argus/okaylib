@@ -236,6 +236,32 @@ inline constexpr detail::ranges_equal_fn_t ranges_equal;
 inline constexpr detail::ranges_copy_fn_t<false> ranges_copy;
 inline constexpr detail::ranges_copy_fn_t<true> ranges_copy_as_much_as_will_fit;
 
+template <detail::producing_range_c input_t, typename predicate_t>
+constexpr bool all_of(const input_t& input,
+                      const predicate_t& predicate) OKAYLIB_NOEXCEPT
+{
+    for (auto cursor = ok::begin(input); ok::is_inbounds(input, cursor);
+         ok::increment(input, cursor)) {
+        if (!predicate(ok::range_get(input, cursor))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+template <detail::producing_range_c input_t, typename predicate_t>
+constexpr bool any_of(const input_t& input,
+                      const predicate_t& predicate) OKAYLIB_NOEXCEPT
+{
+    for (auto cursor = ok::begin(input); ok::is_inbounds(input, cursor);
+         ok::increment(input, cursor)) {
+        if (!predicate(ok::range_get(input, cursor))) {
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace ok
 
 #endif
