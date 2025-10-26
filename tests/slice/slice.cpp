@@ -4,7 +4,6 @@
 #include "okay/detail/traits/is_std_container.h"
 #include "okay/macros/foreach.h"
 #include "okay/ranges/algorithm.h"
-#include "okay/ranges/views/all.h"
 #include "okay/ranges/views/drop.h"
 #include "okay/ranges/views/enumerate.h"
 #include "okay/slice.h"
@@ -304,7 +303,7 @@ TEST_SUITE("slice")
             REQUIRE(sizeof(bytes) * 8 == bs.size());
 
             // require all bits are off
-            const bool eql = bs | all([](ok::bit b) { return !b; });
+            const bool eql = ok::all_of(bs, [](ok::bit b) { return !b; });
             REQUIRE(eql);
             REQUIRE(!bs.is_empty());
         }
@@ -320,7 +319,7 @@ TEST_SUITE("slice")
             REQUIRE(sizeof(bytes) * 8 == bs.size());
 
             // require all bits are off
-            const bool eql = bs | all([](ok::bit b) { return !b; });
+            const bool eql = ok::all_of(bs, [](ok::bit b) { return !b; });
             REQUIRE(eql);
             REQUIRE(!bs.is_empty());
         }
@@ -345,7 +344,7 @@ TEST_SUITE("slice")
             // set all the bits to on in the first half
             for (auto c = ok::begin(first_half); ok::is_inbounds(first_half, c);
                  ok::increment(first_half, c)) {
-                ok::iter_set(first_half, c, bit::on());
+                ok::range_set(first_half, c, bit::on());
             }
 
             constexpr uint8_t all_ones = ~uint8_t(0);
@@ -379,7 +378,7 @@ TEST_SUITE("slice")
             REQUIRE(a.items().last() == 255);
 
             bool all_set =
-                a | drop(1) | all([](uint8_t byte) { return byte == 255; });
+                all_of(a | drop(1), [](uint8_t byte) { return byte == 255; });
             REQUIRE(all_set);
 
             // first five least significant bits are skipped

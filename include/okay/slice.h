@@ -712,7 +712,7 @@ template <typename viewed_t> struct range_definition<slice<viewed_t>>
     static constexpr range_flags flags =
         range_flags::sized | range_flags::arraylike |
         (stdc::is_const_c<viewed_t>
-             ? range_flags::sized
+             ? range_flags::none
              : (range_flags::implements_set | range_flags::consuming)) |
         range_flags::producing | range_flags::ref_wrapper;
 
@@ -735,6 +735,8 @@ template <> struct range_definition<const_bit_slice_t>
     static constexpr range_flags flags =
         range_flags::arraylike | range_flags::sized | range_flags::producing;
 
+    using value_type = bit;
+
     static constexpr size_t size(const const_bit_slice_t& bs) OKAYLIB_NOEXCEPT
     {
         return bs.size();
@@ -751,6 +753,8 @@ template <> struct range_definition<bit_slice_t>
     static constexpr range_flags flags =
         range_flags::arraylike | range_flags::sized | range_flags::producing |
         range_flags::consuming | range_flags::implements_set;
+
+    using value_type = bit;
 
     static constexpr size_t size(const bit_slice_t& bs) OKAYLIB_NOEXCEPT
     {
