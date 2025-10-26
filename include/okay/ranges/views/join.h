@@ -52,8 +52,6 @@ struct joined_cursor_t
   private:
     using outer_range_t = detail::remove_cvref_t<input_outer_range_t>;
     using inner_range_t = value_type_for<outer_range_t>;
-    static_assert(!stdc::is_reference_c<outer_range_t> &&
-                  !is_const_c<std::remove_reference_t<outer_range_t>>);
     static_assert(std::is_same_v<detail::remove_cvref_t<input_inner_range_t>,
                                  inner_range_t>,
                   "something broken with join view implementation");
@@ -83,12 +81,11 @@ struct joined_cursor_t
         return m.ref_or_panic().outer;
     }
 
-    template <
-        typename T,
-        std::enable_if_t<std::is_same_v<T, input_inner_range_t>, bool> = true>
     constexpr joined_cursor_t(outer_cursor_t&& outer_cursor,
-                              T&& inner_range) OKAYLIB_NOEXCEPT
-        : m(ok::in_place, std::move(outer_cursor), std::forward<T>(inner_range))
+                              input_inner_range_t inner_range) OKAYLIB_NOEXCEPT
+        : m(ok::in_place, std::move(outer_cursor),
+            std::forward<stdc::remove_reference_t<input_inner_range_t>>(
+                inner_range))
     {
     }
 
@@ -111,15 +108,20 @@ struct joined_cursor_t
         outer_cursor_t outer;
         cursor_type_for<view_t> inner;
 
-        template <typename T,
-                  std::enable_if_t<std::is_same_v<T, input_inner_range_t>,
-                                   bool> = true>
-        constexpr members_t(outer_cursor_t&& _outer, T&& range) OKAYLIB_NOEXCEPT
+        members_t(const members_t&) = default;
+        members_t& operator=(const members_t&) = default;
+        members_t(members_t&&) = default;
+        members_t& operator=(members_t&&) = default;
+
+        constexpr members_t(outer_cursor_t&& _outer,
+                            input_inner_range_t inner_range) OKAYLIB_NOEXCEPT
             : outer(std::move(_outer)),
-              inner_view(std::forward<T>(range)),
+              inner_view(
+                  std::forward<stdc::remove_reference_t<input_inner_range_t>>(
+                      inner_range)),
               inner(ok::begin(inner_view))
         {
-            static_assert(stdc::is_reference_c<decltype(range)>);
+            static_assert(stdc::is_reference_c<decltype(inner_range)>);
         }
     };
 
@@ -168,14 +170,21 @@ struct range_definition<detail::joined_view_t<input_range_t>>
         }
     }
 
+    using outer_range_get_result_t = decltype(range_get_best(
+        std::declval<const outer_range_t&>(),
+        std::declval<cursor_type_for<outer_range_t>>()));
+
+    // NOTE: this conditional here matches the conditional std::move in begin()
+    // below
+    using cursor_arg_t = stdc::conditional_t<
+        stdc::is_lvalue_reference_v<outer_range_get_result_t>,
+        outer_range_get_result_t, outer_range_get_result_t&&>;
+
   public:
     static constexpr range_flags flags = determine_flags();
 
     using joined_t = detail::joined_view_t<input_range_t>;
-    using cursor_t = detail::joined_cursor_t<
-        input_range_t, decltype(range_get_best(
-                           std::declval<const outer_range_t&>(),
-                           std::declval<cursor_type_for<outer_range_t>>()))>;
+    using cursor_t = detail::joined_cursor_t<input_range_t, cursor_arg_t>;
     using value_type = value_type_for<inner_range_t>;
 
     using cursor_view_t = typename cursor_t::view_t;
@@ -188,11 +197,13 @@ struct range_definition<detail::joined_view_t<input_range_t>>
         auto outer_cursor = ok::begin(outer_ref);
 
         while (ok::is_inbounds(outer_ref, outer_cursor)) {
-            auto&& inner = ok::range_get(outer_ref, outer_cursor);
+            auto&& inner = ok::range_get_best(outer_ref, outer_cursor);
             cursor_type_for<inner_range_t> inner_cursor = ok::begin(inner);
 
             // make sure we're not empty
             if (ok::is_inbounds(inner, inner_cursor)) {
+                // make sure the type we pass in for the second argument is the
+                // same as cursor_arg_t
                 if constexpr (stdc::is_lvalue_reference_v<decltype(inner)>) {
                     return cursor_t(std::move(outer_cursor), inner);
                 } else {

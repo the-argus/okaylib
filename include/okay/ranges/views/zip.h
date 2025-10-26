@@ -25,7 +25,7 @@ struct zip_fn_t
     operator()(ranges_t&&... ranges) const OKAYLIB_NOEXCEPT
     {
         // zip puts the output of each range (the input from the view) into
-        // tuples. if no get() or get_ref() is provided, then there's nothing to
+        // tuples. if no get() is provided, then there's nothing to
         // put in the tuple.
         static_assert((... && producing_range_c<ranges_t>),
                       "Cannot zip given types- they are not all input ranges");
@@ -210,18 +210,16 @@ struct range_definition<detail::zipped_view_t<ranges_t...>>
     constexpr static range_strict_flags determine_strict_flags() noexcept
     {
         using flags = range_strict_flags;
-        flags f = flags::implements_begin | flags::can_get;
-
-        if (zipped_t::is_sized)
-            f = f | flags::implements_size;
+        flags f = flags::none;
 
         if (zipped_t::all_bidirectional) {
-            f = f | flags::use_def_decrement;
+            f = f | flags::disallow_cursor_member_decrement;
+            f = f | flags::disallow_cursor_member_increment;
+        }
 
-            if (zipped_t::all_random_access) {
-                f = f | flags::use_def_compare;
-                f = f | flags::use_def_offset;
-            }
+        if (zipped_t::all_random_access) {
+            f = f | flags::disallow_cursor_member_compare;
+            f = f | flags::disallow_cursor_member_offset;
         }
 
         return f;
@@ -438,17 +436,6 @@ struct range_definition<detail::zipped_view_t<ranges_t...>>
     static constexpr range_flags flags =
         range_flags::producing | range_flags::arraylike | range_flags::sized;
 
-    static constexpr range_strict_flags strict_flags =
-        range_strict_flags::can_get | range_strict_flags::implements_size |
-        range_strict_flags::use_cursor_increment |
-        range_strict_flags::use_cursor_offset |
-        range_strict_flags::use_cursor_decrement |
-        range_strict_flags::use_cursor_compare;
-
-    using value_type = decltype(get_impl(
-        stdc::declval<const zipped_t&>(), stdc::declval<const size_t&>(),
-        stdc::make_index_sequence<zipped_t::num_ranges>()));
-
     static constexpr size_t size(const zipped_t& range) OKAYLIB_NOEXCEPT
     {
         return size_t(range.expected_size);
@@ -460,6 +447,9 @@ struct range_definition<detail::zipped_view_t<ranges_t...>>
         return get_impl(range, cursor,
                         stdc::make_index_sequence<zipped_t::num_ranges>());
     }
+
+    using value_type = decltype(get(stdc::declval<const zipped_t&>(),
+                                    stdc::declval<const size_t&>()));
 };
 
 constexpr detail::range_adaptor_t<detail::zip_fn_t> zip;

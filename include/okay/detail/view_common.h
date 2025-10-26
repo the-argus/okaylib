@@ -101,7 +101,7 @@ struct propagate_all_range_definition_functions_with_conversion_t
     {
         return ok::range_get_best(
             i.template get_view_reference<derived_range_t, parent_range_t>(),
-            cursor_type_for<parent_range_t>(c));
+            c);
     }
 
     constexpr static decltype(auto) get(derived_range_t& i, const cursor_t& c)
@@ -109,7 +109,7 @@ struct propagate_all_range_definition_functions_with_conversion_t
     {
         return ok::range_get_best(
             i.template get_view_reference<derived_range_t, parent_range_t>(),
-            cursor_type_for<parent_range_t>(c));
+            c);
     }
 
     template <typename... args_t>
@@ -118,8 +118,8 @@ struct propagate_all_range_definition_functions_with_conversion_t
         requires range_impls_construction_set_c<parent_range_t, args_t...>
     {
         return range_def_for<parent_range_t>::set(
-            i.template get_view_reference<derived_range_t, parent_range_t>(),
-            cursor_type_for<parent_range_t>(c), stdc::forward<args_t>(args)...);
+            i.template get_view_reference<derived_range_t, parent_range_t>(), c,
+            stdc::forward<args_t>(args)...);
     }
 
     constexpr static ok::ordering compare(const derived_range_t& i,
@@ -127,9 +127,8 @@ struct propagate_all_range_definition_functions_with_conversion_t
         requires range_can_compare_c<parent_range_t>
     {
         return ok::range_compare(
-            i.template get_view_reference<derived_range_t, parent_range_t>(),
-            cursor_type_for<parent_range_t>(a),
-            cursor_type_for<parent_range_t>(b));
+            i.template get_view_reference<derived_range_t, parent_range_t>(), a,
+            b);
     }
 
     constexpr static bool is_inbounds(const derived_range_t& i,
@@ -137,7 +136,7 @@ struct propagate_all_range_definition_functions_with_conversion_t
     {
         return ok::is_inbounds(
             i.template get_view_reference<derived_range_t, parent_range_t>(),
-            cursor_type_for<parent_range_t>(c));
+            c);
     }
 };
 
@@ -453,12 +452,23 @@ template <typename derived_t, typename parent_range_t> struct cursor_wrapper_t
     cursor_wrapper_t(cursor_wrapper_t&&) = default;
     cursor_wrapper_t& operator=(cursor_wrapper_t&&) = default;
 
-    constexpr const parent_cursor_t& inner() const OKAYLIB_NOEXCEPT
+    constexpr const parent_cursor_t& inner() const& OKAYLIB_NOEXCEPT
     {
         return m_inner;
     }
-    constexpr parent_cursor_t& inner() OKAYLIB_NOEXCEPT { return m_inner; }
-    constexpr operator parent_cursor_t() const OKAYLIB_NOEXCEPT
+    constexpr parent_cursor_t& inner() & OKAYLIB_NOEXCEPT { return m_inner; }
+
+    constexpr operator parent_cursor_t() && OKAYLIB_NOEXCEPT
+        // if the cursor is not copyable, then the thing being wrapped is not a
+        // multipass range
+            requires stdc::is_copy_constructible_v<parent_cursor_t>
+    {
+        return inner();
+    }
+
+    constexpr operator parent_cursor_t&() & OKAYLIB_NOEXCEPT { return inner(); }
+
+    constexpr operator const parent_cursor_t&() const& OKAYLIB_NOEXCEPT
     {
         return inner();
     }
