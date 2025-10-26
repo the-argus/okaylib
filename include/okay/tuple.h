@@ -38,7 +38,8 @@ template <size_t index, typename payload_t> struct element_container_t
 
     template <typename other_t>
         requires(stdc::is_constructible_v<payload_t, other_t &&>)
-    constexpr element_container_t(other_t&& other) : m_head(stdc::move(other))
+    constexpr element_container_t(other_t&& other)
+        : m_head(stdc::forward<other_t>(other))
     {
     }
 
