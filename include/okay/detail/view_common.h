@@ -162,6 +162,8 @@ class owning_view
 
     owning_view(owning_view&&) = default;
     owning_view& operator=(owning_view&&) = default;
+    owning_view(const owning_view&) = delete;
+    owning_view& operator=(const owning_view&) = delete;
 
     template <typename derived_t, typename desired_reference_t>
     constexpr remove_cvref_t<desired_reference_t>&
@@ -242,6 +244,11 @@ template <typename input_range_t> class ref_view
     constexpr ref_view(range_t& t) OKAYLIB_NOEXCEPT : m_range(ok::addressof(t))
     {
     }
+
+    constexpr ref_view(const ref_view&) = delete;
+    constexpr ref_view& operator=(const ref_view&) = delete;
+    constexpr ref_view(ref_view&&) = default;
+    constexpr ref_view& operator=(ref_view&&) = default;
 
     template <typename derived_t, typename desired_reference_t>
     constexpr auto& get_view_reference() & noexcept
