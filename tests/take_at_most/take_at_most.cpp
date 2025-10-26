@@ -18,18 +18,16 @@ TEST_SUITE("take_at_most")
             std::array<int, 50> array;
             static_assert(random_access_range_c<decltype(array)>);
             auto half_view = array | take_at_most(25);
-            static_assert(
-                random_access_range_c<decltype(half_view)>);
+            static_assert(random_access_range_c<decltype(half_view)>);
             REQUIRE(ok::size(half_view) == 25);
         }
 
         SUBCASE("get first half of forward no increment")
         {
             fifty_items_unknown_size_no_pre_increment_t unknown_size;
-            static_assert(
-                detail::is_multi_pass_range_v<decltype(unknown_size)>);
+            static_assert(multi_pass_range_c<decltype(unknown_size)>);
             auto half_view = unknown_size | take_at_most(25);
-            static_assert(detail::is_multi_pass_range_v<decltype(half_view)>);
+            static_assert(multi_pass_range_c<decltype(half_view)>);
 
             size_t counter = 0;
             ok_foreach(auto&& i, half_view) { ++counter; }
@@ -39,11 +37,9 @@ TEST_SUITE("take_at_most")
         SUBCASE("get first half of bidirectional no increment/decrement")
         {
             fifty_items_bidir_no_pre_decrement_t bidir_nooperators;
-            static_assert(
-                detail::is_bidirectional_range_v<decltype(bidir_nooperators)>);
+            static_assert(bidirectional_range_c<decltype(bidir_nooperators)>);
             auto half_view = bidir_nooperators | take_at_most(25);
-            static_assert(
-                detail::is_bidirectional_range_v<decltype(half_view)>);
+            static_assert(bidirectional_range_c<decltype(half_view)>);
 
             size_t counter = 0;
             ok_foreach(auto&& i, half_view) { ++counter; }
@@ -53,12 +49,11 @@ TEST_SUITE("take_at_most")
         SUBCASE("get first half of bidirectional")
         {
             example_range_bidirectional bidir;
-            static_assert(detail::is_bidirectional_range_v<decltype(bidir)>);
+            static_assert(bidirectional_range_c<decltype(bidir)>);
             auto half_view = bidir | take_at_most(25);
             range_def_for<decltype(half_view)> test;
             static_assert(range_c<decltype(half_view)>);
-            static_assert(
-                detail::is_bidirectional_range_v<decltype(half_view)>);
+            static_assert(bidirectional_range_c<decltype(half_view)>);
 
             size_t count = 0;
             for (auto c = ok::begin(half_view); ok::is_inbounds(half_view, c);

@@ -506,6 +506,8 @@ template <typename derived_t, typename parent_range_t> struct cursor_wrapper_t
         return out;
     }
 
+    constexpr auto operator<=>(const cursor_wrapper_t& other) const = default;
+
   private:
     parent_cursor_t m_inner;
 };

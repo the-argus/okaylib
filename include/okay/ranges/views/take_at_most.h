@@ -64,12 +64,13 @@ struct take_at_most_cursor_t
     friend wrapper_t;
     friend class range_definition<
         detail::take_at_most_view_t<input_parent_range_t>>;
-    friend class ok::orderable_definition<take_at_most_cursor_t>;
 
     constexpr size_t num_consumed() const OKAYLIB_NOEXCEPT
     {
         return m_consumed;
     }
+
+    using wrapper_t::operator<=>;
 
   private:
     size_t m_consumed;
@@ -119,29 +120,12 @@ template <typename input_range_t> struct sized_take_at_most_range_t
 template <typename input_range_t>
 using take_at_most_cursor_optimized_t = std::conditional_t<
     random_access_range_c<detail::remove_cvref_t<input_range_t>> &&
-        !detail::range_marked_finite_c<detail::remove_cvref_t<input_range_t>>,
+        !detail::range_marked_finite_c<detail::remove_cvref_t<input_range_t>> &&
+        range_can_offset_c<detail::remove_cvref_t<input_range_t>>,
     cursor_type_for<detail::remove_cvref_t<input_range_t>>,
     take_at_most_cursor_t<input_range_t>>;
 
 } // namespace detail
-
-template <typename input_parent_range_t>
-class ok::orderable_definition<
-    detail::take_at_most_cursor_t<input_parent_range_t>>
-{
-    using self_t = detail::take_at_most_cursor_t<input_parent_range_t>;
-
-  public:
-    static constexpr bool is_strong_orderable =
-        is_strong_fully_orderable_v<detail::remove_cvref_t<
-            decltype(std::declval<const self_t&>().inner())>>;
-
-    static constexpr ordering cmp(const self_t& lhs,
-                                  const self_t& rhs) OKAYLIB_NOEXCEPT
-    {
-        return ok::cmp(lhs.inner(), rhs.inner());
-    }
-};
 
 template <typename input_range_t>
     requires(!detail::range_marked_arraylike_c<input_range_t>)
@@ -157,36 +141,33 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
     using take_at_most_t = detail::take_at_most_view_t<input_range_t>;
     using cursor_t = detail::take_at_most_cursor_optimized_t<input_range_t>;
 
+    static constexpr bool uses_small_cursor_optimization =
+        std::is_same_v<cursor_t, cursor_type_for<range_t>>;
+
     using value_type = value_type_for<range_t>;
 
   private:
-    constexpr static range_flags determine_flags() noexcept
+    static constexpr range_strict_flags determine_strict_flags()
     {
-        using flags = range_flags;
-        flags f = detail::range_can_size_c<range_t>          ? flags::sized
-                  : detail::range_marked_infinite_c<range_t> ? flags::infinite
-                                                             : flags::finite;
+        auto out = range_strict_flags::disallow_range_def_offset |
+                   range_strict_flags::disallow_cursor_member_offset |
+                   range_strict_flags::disallow_cursor_member_decrement |
+                   range_strict_flags::disallow_cursor_member_increment;
 
-        constexpr flags parent_flags = range_def_for<range_t>::flags;
+        if constexpr (uses_small_cursor_optimization) {
+            // if we use the same cursor as our parent, we might not be able to
+            // disable cursor member increment/decrement, if the parent relies
+            // on it.
+            out -= range_strict_flags::disallow_cursor_member_decrement;
+            out -= range_strict_flags::disallow_cursor_member_increment;
+        }
 
-        if (parent_flags & flags::consuming)
-            f = f | flags::consuming;
-        if (parent_flags & flags::producing)
-            f = f | flags::producing;
-        if (parent_flags & flags::implements_set)
-            f = f | flags::implements_set;
-        if (parent_flags & flags::ref_wrapper ||
-            stdc::is_reference_c<input_range_t>)
-            f = f | flags::ref_wrapper;
-
-        return f;
+        return out;
     }
 
   public:
-    static constexpr range_flags flags = determine_flags();
-    static constexpr range_strict_flags strict_flags =
-        range_def_for<range_t>::strict_flags &
-        range_strict_flags::implements_begin;
+    static constexpr range_flags flags = range_def_for<range_t>::flags;
+    static constexpr range_strict_flags strict_flags = determine_strict_flags();
 
     static constexpr bool is_inbounds(const take_at_most_t& i,
                                       const cursor_t& c) OKAYLIB_NOEXCEPT
@@ -207,7 +188,8 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
                 return false;
             }
 
-            auto advanced = parent_begin + i.amount();
+            auto advanced =
+                ok::range_offset(parent_ref, parent_begin, i.amount());
             // no need to check if within parent bounds- size is constant
             // known, so when instantiating this view we already capped our
             // size
@@ -222,13 +204,8 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
 
     static constexpr void increment(const take_at_most_t& i,
                                     cursor_t& c) OKAYLIB_NOEXCEPT
-        requires detail::range_impls_increment_c<range_t>
+        requires(!uses_small_cursor_optimization)
     {
-        // if its random access, the cursor type might just be the parent cursor
-        // type
-        static_assert(!random_access_range_c<range_t>,
-                      "this code relies on all range definitions which have "
-                      "increment() defined also being not random access");
         const auto& parent_ref =
             i.template get_view_reference<take_at_most_t, range_t>();
         ok::increment(parent_ref, c.inner());
@@ -237,11 +214,8 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
 
     static constexpr void decrement(const take_at_most_t& i,
                                     cursor_t& c) OKAYLIB_NOEXCEPT
-        requires detail::range_impls_decrement_c<range_t>
+        requires(!uses_small_cursor_optimization)
     {
-        static_assert(!random_access_range_c<range_t>,
-                      "this code relies on all range definitions which have "
-                      "decrement() defined also being not random access");
         const auto& parent_ref =
             i.template get_view_reference<take_at_most_t, range_t>();
         ok::decrement(parent_ref, c.inner());
@@ -258,11 +232,25 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
           detail::remove_cvref_t<input_range_t>,
           detail::take_at_most_cursor_optimized_t<input_range_t>>
 {
-    static constexpr bool is_arraylike = true;
     static constexpr bool is_view = true;
 
     using range_t = detail::remove_cvref_t<input_range_t>;
     using take_at_most_t = detail::take_at_most_view_t<input_range_t>;
+
+  private:
+    static constexpr range_flags determine_flags()
+    {
+        range_flags out = range_def_for<range_t>::flags;
+        out -= range_flags::infinite;
+        out |= range_flags::sized;
+        return out;
+    }
+
+  public:
+    static constexpr range_flags flags = determine_flags();
+    /// We are arraylike and shouldn't implement is_inbounds
+    static constexpr range_strict_flags strict_flags =
+        range_strict_flags::disallow_is_inbounds;
 
     static constexpr bool is_ref_wrapper =
         !detail::range_impls_get_c<range_t> &&

@@ -25,20 +25,20 @@ enum class range_flags
 /// and testing views difficult
 enum class range_strict_flags
 {
-    none                                = 0b0000000000000,
-    disallow_range_def_increment        = 0b0000000000010,
-    disallow_cursor_member_increment    = 0b0000000000100,
-    disallow_range_def_decrement        = 0b0000000001000,
-    disallow_cursor_member_decrement    = 0b0000000010000,
-    disallow_range_def_offset           = 0b0000000100000,
-    disallow_cursor_member_offset       = 0b0000001000000,
-    disallow_range_def_compare          = 0b0000010000000,
-    disallow_cursor_member_compare      = 0b0000100000000,
-    disallow_get                        = 0b0001000000000,
-    disallow_set                        = 0b0010000000000,
-    disallow_begin                      = 0b0100000000000,
-    disallow_size                       = 0b1000000000000,
-    // must always implement is_inbounds()
+    none                                = 0b00000000000000,
+    disallow_range_def_increment        = 0b00000000000010,
+    disallow_cursor_member_increment    = 0b00000000000100,
+    disallow_range_def_decrement        = 0b00000000001000,
+    disallow_cursor_member_decrement    = 0b00000000010000,
+    disallow_range_def_offset           = 0b00000000100000,
+    disallow_cursor_member_offset       = 0b00000001000000,
+    disallow_range_def_compare          = 0b00000010000000,
+    disallow_cursor_member_compare      = 0b00000100000000,
+    disallow_get                        = 0b00001000000000,
+    disallow_set                        = 0b00010000000000,
+    disallow_begin                      = 0b00100000000000,
+    disallow_size                       = 0b01000000000000,
+    disallow_is_inbounds                = 0b10000000000000,
 };
 // clang-format on
 

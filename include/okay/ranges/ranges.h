@@ -86,6 +86,11 @@ concept range_strictly_disallows_size_c = requires {
         range_strict_flags::disallow_size;
 };
 template <typename T>
+concept range_strictly_disallows_is_inbounds_c = requires {
+    requires range_definition_inner_t<T>::strict_flags&
+        range_strict_flags::disallow_is_inbounds;
+};
+template <typename T>
 concept range_strictly_disallows_cursor_member_increment_c = requires {
     requires range_definition_inner_t<T>::strict_flags&
         range_strict_flags::disallow_cursor_member_increment;
@@ -243,6 +248,7 @@ concept range_impls_is_inbounds_c =
         {
             range_definition_inner_t<T>::is_inbounds(range, cursor)
         } -> same_as_c<bool>;
+        requires !range_strictly_disallows_is_inbounds_c<T>;
     };
 
 template <typename T>
@@ -336,7 +342,7 @@ concept range_impls_size_c = requires(const remove_cvref_t<T>& range) {
 
 template <typename T>
 concept range_can_begin_c = requires {
-    requires(range_impls_begin_c<T> || range_marked_arraylike_c<T>);
+    requires range_impls_begin_c<T> || range_marked_arraylike_c<T>;
 };
 
 template <typename T>
@@ -710,19 +716,23 @@ struct range_set_fn_t
         if constexpr (range_impls_construction_set_c<range_t,
                                                      construction_args_t...>) {
             return range_def_for<range_t>::set(
-                range, cursor, std::forward<construction_args_t>(args)...);
+                range, cursor, stdc::forward<construction_args_t>(args)...);
         } else {
             constexpr bool use_assignment =
                 (sizeof...(construction_args_t) == 1 && requires {
-                    stdc::is_assignable_v<value_type_for<range_t>,
-                                          construction_args_t...>;
+                    requires stdc::is_assignable_v<value_type_for<range_t>,
+                                                   construction_args_t...>;
                 });
 
             auto& ref = range_def_for<range_t>::get(range, cursor);
 
             if constexpr (use_assignment) {
                 const auto applyer = [&ref](auto&& a) {
-                    ref = stdc::forward<detail::remove_cvref_t<decltype(a)>>(a);
+                    if constexpr (stdc::is_rvalue_reference_v<decltype(a)>) {
+                        ref = std::move(a);
+                    } else {
+                        ref = a;
+                    }
                 };
                 applyer(stdc::forward<construction_args_t>(args)...);
             } else {

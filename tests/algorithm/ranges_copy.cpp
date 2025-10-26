@@ -3,7 +3,6 @@
 #include "okay/containers/array.h"
 #include "okay/ranges/algorithm.h"
 #include "okay/ranges/indices.h"
-#include "okay/ranges/views/all.h"
 #include "okay/ranges/views/drop.h"
 #include "okay/ranges/views/enumerate.h"
 #include "okay/ranges/views/keep_if.h"
@@ -24,7 +23,8 @@ TEST_SUITE("ok::ranges_copy and ok::ranges_copy_as_much_as_will_fit algorithms")
         ok::ranges_copy(ok::dest(b), ok::source(a));
 
         REQUIRE(ranges_equal(b | take_at_most(a.size()), a));
-        bool all_zero = b | drop(a.size()) | all([](auto i) { return i == 0; });
+        bool all_zero =
+            ok::all_of(b | drop(a.size()), [](auto i) { return i == 0; });
         REQUIRE(all_zero);
     }
 
@@ -51,7 +51,7 @@ TEST_SUITE("ok::ranges_copy and ok::ranges_copy_as_much_as_will_fit algorithms")
                                    auto [item, index] = pair;
                                    return item;
                                });
-            static_assert(detail::range_marked_finite_v<decltype(finite_view)>);
+            static_assert(detail::range_marked_finite_c<decltype(finite_view)>);
 
             auto c = ok::begin(finite_view);
 
