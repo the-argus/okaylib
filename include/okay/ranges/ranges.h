@@ -558,31 +558,6 @@ template <typename callable_t> struct range_adaptor_closure_t;
 template <typename callable_t> struct range_adaptor_t;
 template <typename callable_t, typename... args_t> struct partial_called_t;
 
-#define __ok_range_function_assert_not_partially_called_member(funcname)      \
-    template <typename T, typename... U>                                      \
-        requires(!range_c<T> && (is_instance_c<T, range_adaptor_closure_t> || \
-                                 is_instance_c<T, range_adaptor_t> ||         \
-                                 is_instance_c<T, partial_called_t>))         \
-    constexpr auto operator()(const T&, U&&...) const OKAYLIB_NOEXCEPT        \
-    {                                                                         \
-        static_assert(false,                                                  \
-                      "Attempt to call " #funcname ", but the object "        \
-                      "given as range hasn't finished being called. It "      \
-                      "may be a view which takes additional arguments.");     \
-    }
-
-#define __ok_range_function_assert_correct_cursor_type_member                 \
-    template <range_c T, typename U, typename... pack>                        \
-                                                                              \
-        requires(!is_convertible_to_c<const U&,                               \
-                                      const cursor_type_unchecked_for_t<T>&>) \
-    constexpr auto operator()(const T&, const U&, pack&&...)                  \
-        const OKAYLIB_NOEXCEPT                                                \
-    {                                                                         \
-        static_assert(false,                                                  \
-                      "Incorrect cursor type passed as second argument.");    \
-    }
-
 struct range_get_fn_t
 {
     template <range_c range_t>
@@ -678,9 +653,6 @@ struct range_get_ref_fn_t
     {
         return range_def_for<range_t>::get(range, cursor);
     }
-
-    __ok_range_function_assert_not_partially_called_member(range_get_ref)
-        __ok_range_function_assert_correct_cursor_type_member
 };
 
 struct range_set_fn_t
@@ -742,9 +714,6 @@ struct range_set_fn_t
             }
         }
     }
-
-    __ok_range_function_assert_not_partially_called_member(range_set)
-        __ok_range_function_assert_correct_cursor_type_member
 };
 
 struct begin_fn_t
@@ -767,8 +736,6 @@ struct begin_fn_t
             return range_def_for<range_t>::begin(range);
         }
     }
-
-    __ok_range_function_assert_not_partially_called_member(begin)
 };
 
 struct increment_fn_t
@@ -788,9 +755,6 @@ struct increment_fn_t
             ++cursor;
         }
     }
-
-    __ok_range_function_assert_not_partially_called_member(increment)
-        __ok_range_function_assert_correct_cursor_type_member
 };
 
 struct decrement_fn_t
@@ -810,9 +774,6 @@ struct decrement_fn_t
             --cursor;
         }
     }
-
-    __ok_range_function_assert_not_partially_called_member(decrement)
-        __ok_range_function_assert_correct_cursor_type_member
 };
 
 struct range_compare_fn_t
@@ -830,9 +791,6 @@ struct range_compare_fn_t
             return ok::cmp(cursor_a, cursor_b);
         }
     }
-
-    __ok_range_function_assert_not_partially_called_member(range_compare)
-        __ok_range_function_assert_correct_cursor_type_member
 };
 
 struct range_offset_fn_t
@@ -851,9 +809,6 @@ struct range_offset_fn_t
             cursor += offset;
         }
     }
-
-    __ok_range_function_assert_not_partially_called_member(range_offset)
-        __ok_range_function_assert_correct_cursor_type_member
 };
 
 struct is_inbounds_fn_t
@@ -874,9 +829,6 @@ struct is_inbounds_fn_t
             static_assert(false, "no way to increment given range?");
         }
     }
-
-    __ok_range_function_assert_not_partially_called_member(is_inbounds)
-        __ok_range_function_assert_correct_cursor_type_member
 };
 
 struct size_fn_t
@@ -908,8 +860,6 @@ struct size_fn_t
                       "Attempt to get the size of an infinitely large range");
         return 0;
     }
-
-    __ok_range_function_assert_not_partially_called_member(size)
 };
 } // namespace detail
 
