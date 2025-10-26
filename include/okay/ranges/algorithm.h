@@ -255,7 +255,7 @@ constexpr bool any_of(const input_t& input,
 {
     for (auto cursor = ok::begin(input); ok::is_inbounds(input, cursor);
          ok::increment(input, cursor)) {
-        if (!predicate(ok::range_get(input, cursor))) {
+        if (predicate(ok::range_get(input, cursor))) {
             return true;
         }
     }
