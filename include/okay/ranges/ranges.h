@@ -863,12 +863,15 @@ struct is_inbounds_fn_t
         [[nodiscard]] (const range_t& range,
                        const cursor_type_for<range_t>& cursor) const
     {
-        if constexpr (range_impls_is_inbounds_c<range_t>) {
-            return range_def_for<range_t>::is_inbounds(range, cursor);
+        if constexpr (range_marked_arraylike_c<range_t> &&
+                      !range_marked_infinite_c<range_t>) {
+            return cursor < range_def_for<range_t>::size(range);
         } else if constexpr (range_marked_infinite_c<range_t>) {
             return true;
+        } else if constexpr (range_impls_is_inbounds_c<range_t>) {
+            return range_def_for<range_t>::is_inbounds(range, cursor);
         } else {
-            return cursor < range_def_for<range_t>::size(range);
+            static_assert(false, "no way to increment given range?");
         }
     }
 

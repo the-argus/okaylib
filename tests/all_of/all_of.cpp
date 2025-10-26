@@ -77,7 +77,7 @@ TEST_SUITE("ok::all range adaptor")
         auto range = ok::indices | ok::take_at_most(10);
 
         bool matches =
-            range | ok::reverse | ok::keep_if(is_even) | ok::all(is_even);
+            ok::all_of(range | ok::reverse | ok::keep_if(is_even), is_even);
 
         REQUIRE(matches);
 

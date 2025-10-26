@@ -91,7 +91,10 @@ template <typename input_parent_range_t> struct reversed_cursor_t
         return self_t(m_inner + rhs);
     }
 
-    friend class ok::orderable_definition<self_t>;
+    constexpr auto operator<=>(const self_t& rhs) const
+    {
+        return rhs <=> *this; // backwards comparison for reversed view
+    }
 
   private:
     parent_cursor_t m_inner;
@@ -102,34 +105,14 @@ struct reversed_view_t : public underlying_view_type<range_t>::type
 {};
 } // namespace detail
 
-template <typename input_parent_range_t>
-class ok::orderable_definition<detail::reversed_cursor_t<input_parent_range_t>>
-{
-    using self_t = detail::reversed_cursor_t<input_parent_range_t>;
-
-  public:
-    static constexpr bool is_strong_orderable =
-        is_strong_fully_orderable_v<detail::remove_cvref_t<
-            decltype(std::declval<const self_t&>().inner())>>;
-
-    static constexpr ordering cmp(const self_t& lhs,
-                                  const self_t& rhs) OKAYLIB_NOEXCEPT
-    {
-        return ok::cmp(lhs.inner(), rhs.inner());
-    }
-};
-
 template <typename input_range_t>
-    requires(!detail::arraylike_range_c<detail::remove_cvref_t<input_range_t>>)
+    requires(!detail::range_marked_arraylike_c<
+             detail::remove_cvref_t<input_range_t>>)
 struct range_definition<detail::reversed_view_t<input_range_t>>
-    : public detail::propagate_get_set_t<
+    : public detail::propagate_all_range_definition_functions_with_conversion_t<
           detail::reversed_view_t<input_range_t>,
           detail::remove_cvref_t<input_range_t>,
-          detail::reversed_cursor_t<input_range_t>>,
-      public detail::propagate_sizedness_t<
-          detail::reversed_view_t<input_range_t>,
-          detail::remove_cvref_t<input_range_t>>
-// lose boundscheck optimization marker
+          detail::reversed_cursor_t<input_range_t>>
 {
     static constexpr bool is_view = true;
 
@@ -137,9 +120,14 @@ struct range_definition<detail::reversed_view_t<input_range_t>>
     using reverse_t = detail::reversed_view_t<input_range_t>;
     using cursor_t = detail::reversed_cursor_t<input_range_t>;
 
+    using value_type = value_type_for<range_t>;
+
+    static constexpr range_flags flags = detail::get_flags_for_range<range_t>();
+    static constexpr range_strict_flags strict_flags =
+        detail::get_strict_flags_for_range<range_t>();
+
     static_assert(
-        random_access_range_c<range_t> &&
-            detail::range_can_size_c<range_t>,
+        random_access_range_c<range_t> && detail::range_can_size_c<range_t>,
         "Cannot reverse a range which is not both random access and sized.");
 
     constexpr static cursor_t begin(const reverse_t& i) OKAYLIB_NOEXCEPT
@@ -150,33 +138,31 @@ struct range_definition<detail::reversed_view_t<input_range_t>>
         auto size = ok::size(parent);
         return cursor_t(parent_cursor + (size == 0 ? 0 : size - 1));
     }
-
-    constexpr static bool is_inbounds(const reverse_t& i, const cursor_t& c)
-        requires detail::range_can_is_inbounds_c<range_t>
-    {
-        return ok::is_inbounds(
-            i.template get_view_reference<reverse_t, range_t>(),
-            cursor_type_for<range_t>(c));
-    }
 };
 
 // in the case that something is arraylike, just subtract size when doing gets
 // and sets
 template <typename input_range_t>
-    requires detail::arraylike_range_c<detail::remove_cvref_t<input_range_t>>
+    requires detail::range_marked_arraylike_c<
+        detail::remove_cvref_t<input_range_t>>
 struct range_definition<detail::reversed_view_t<input_range_t>>
-    : public detail::propagate_sizedness_t<
+    : public detail::propagate_all_range_definition_functions_with_conversion_t<
           detail::reversed_view_t<input_range_t>,
-          detail::remove_cvref_t<input_range_t>>
+          detail::remove_cvref_t<input_range_t>, size_t>
 {
     using range_t = detail::remove_cvref_t<input_range_t>;
     using reversed_t = detail::reversed_view_t<input_range_t>;
 
-    static constexpr bool is_view = true;
-    static constexpr bool is_arraylike = true;
+    using value_type = value_type_for<range_t>;
 
-    constexpr static value_type_for<range_t> get(const reversed_t& range,
-                                                 size_t cursor) OKAYLIB_NOEXCEPT
+    static constexpr bool is_view = true;
+
+    static constexpr range_flags flags = detail::get_flags_for_range<range_t>();
+    static constexpr range_strict_flags strict_flags =
+        detail::get_strict_flags_for_range<range_t>();
+
+    constexpr static auto get(const reversed_t& range,
+                              size_t cursor) OKAYLIB_NOEXCEPT
         requires detail::range_impls_get_c<range_t>
     {
         const auto& parent_ref =
@@ -185,39 +171,25 @@ struct range_definition<detail::reversed_view_t<input_range_t>>
         __ok_assert(
             cursor < size,
             "Bad cursor passed to reverse_view_t::get(), overflow will occur");
-        return ok::iter_copyout(parent_ref, size - (cursor + 1));
+        return ok::range_get_best(parent_ref, size - (cursor + 1));
     }
 
-    constexpr static value_type_for<range_t>&
-    get_ref(reversed_t& range, size_t cursor) OKAYLIB_NOEXCEPT
-        requires detail::range_can_get_ref_c<range_t>
+    constexpr static auto get(reversed_t& range, size_t cursor) OKAYLIB_NOEXCEPT
+        requires detail::range_impls_get_c<range_t>
     {
         auto& parent_ref =
             range.template get_view_reference<reversed_t, range_t>();
         const size_t size = ok::size(parent_ref);
-        __ok_assert(cursor < size,
-                    "Bad cursor passed to reverse_view_t::get_ref() const, "
-                    "overflow will occur");
-        return ok::iter_get_ref(parent_ref, size - (cursor + 1));
-    }
-
-    constexpr static const value_type_for<range_t>&
-    get_ref(const reversed_t& range, size_t cursor) OKAYLIB_NOEXCEPT
-        requires detail::range_can_get_ref_const_c<range_t>
-    {
-        const auto& parent_ref =
-            range.template get_view_reference<reversed_t, range_t>();
-        const size_t size = ok::size(parent_ref);
-        __ok_assert(cursor < size,
-                    "Bad cursor passed to reverse_view_t::get_ref(), overflow "
-                    "will occur");
-        return ok::iter_get_ref(parent_ref, size - (cursor + 1));
+        __ok_assert(
+            cursor < size,
+            "Bad cursor passed to reverse_view_t::get(), overflow will occur");
+        return ok::range_get_best(parent_ref, size - (cursor + 1));
     }
 
     template <typename... construction_args_t>
         requires detail::range_impls_construction_set_c<range_t,
                                                         construction_args_t...>
-    static constexpr void set(const reversed_t& range, size_t cursor,
+    static constexpr void set(reversed_t& range, size_t cursor,
                               construction_args_t&&... args) OKAYLIB_NOEXCEPT
     {
         const auto& parent_ref =
@@ -226,8 +198,8 @@ struct range_definition<detail::reversed_view_t<input_range_t>>
         __ok_assert(
             cursor < size,
             "Bad cursor passed to reverse_view_t::set(), overflow will occur");
-        ok::iter_set(parent_ref, size - (cursor + 1),
-                     std::forward<construction_args_t>(args)...);
+        ok::range_set(parent_ref, size - (cursor + 1),
+                      std::forward<construction_args_t>(args)...);
     }
 };
 

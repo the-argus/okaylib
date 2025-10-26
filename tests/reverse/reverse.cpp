@@ -21,10 +21,11 @@ TEST_SUITE("reverse")
 
             static_assert(random_access_range_c<decltype(forward)>);
             static_assert(
-                random_access_range_c<decltype(forward | reverse)>);
-            static_assert(detail::range_is_arraylike_v<decltype(forward)>);
+                detail::well_declared_range_c<decltype(forward | reverse)>);
+            static_assert(random_access_range_c<decltype(forward | reverse)>);
+            static_assert(detail::range_marked_arraylike_c<decltype(forward)>);
             static_assert(
-                detail::range_is_arraylike_v<decltype(forward | reverse)>);
+                detail::range_marked_arraylike_c<decltype(forward | reverse)>);
 
             auto reversed = forward | reverse;
             REQUIRE(ok::size(reversed) == ok::size(forward));
@@ -45,19 +46,19 @@ TEST_SUITE("reverse")
             auto size_minus =
                 transform([&](int i) { return ok::size(forward) - 1 - i; });
 
-            fmt::println("Range using size_minus:");
+            // fmt::println("Range using size_minus:");
             for (auto [value, idx] :
                  forward | size_minus | enumerate | std_for) {
                 assert(value == idx);
                 const char* sep = idx == ok::size(forward) - 1 ? "\n" : " -> ";
-                fmt::print("{}: {}{}", value, idx, sep);
+                // fmt::print("{}: {}{}", value, idx, sep);
             }
 
-            fmt::println("Range using reverse:");
+            // fmt::println("Range using reverse:");
             for (auto [value, idx] : forward | reverse | enumerate | std_for) {
                 assert(value == idx);
                 const char* sep = idx == ok::size(forward) - 1 ? "\n" : " -> ";
-                fmt::print("{}: {}{}", value, idx, sep);
+                // fmt::print("{}: {}{}", value, idx, sep);
             }
         }
 
@@ -92,8 +93,8 @@ TEST_SUITE("reverse")
             auto count_backwards_from_ten =
                 indices | take_at_most(10) | reverse;
 
-            static_assert(random_access_range_c<
-                          decltype(count_backwards_from_ten)>);
+            static_assert(
+                random_access_range_c<decltype(count_backwards_from_ten)>);
 
             ok_foreach(ok_pair(item, index),
                        count_backwards_from_ten | enumerate)
