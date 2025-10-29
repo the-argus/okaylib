@@ -310,9 +310,7 @@ template <typename T, typename allocator_impl_t = ok::allocator_t> struct owned
 
 } // namespace alloc
 
-/// Abstract/virtual interface for allocators. Not all functions may be
-/// implemented, depending on `features()`
-class allocator_t
+class nonthreadsafe_arena_t
 {
   public:
     [[nodiscard]] constexpr alloc::result_t<bytes_t>
@@ -327,6 +325,16 @@ class allocator_t
         return impl_allocate(request);
     }
 
+  protected:
+    [[nodiscard]] virtual alloc::result_t<bytes_t>
+    impl_allocate(const alloc::request_t&) OKAYLIB_NOEXCEPT = 0;
+};
+
+/// Abstract/virtual interface for allocators. Not all functions may be
+/// implemented, depending on `features()`
+class nonthreadsafe_allocator_t : public nonthreadsafe_arena_t
+{
+  public:
     constexpr void clear() OKAYLIB_NOEXCEPT { impl_clear(); }
 
     [[nodiscard]] constexpr alloc::feature_flags
@@ -428,9 +436,6 @@ class allocator_t
     }
 
   protected:
-    [[nodiscard]] virtual alloc::result_t<bytes_t>
-    impl_allocate(const alloc::request_t&) OKAYLIB_NOEXCEPT = 0;
-
     virtual void impl_clear() OKAYLIB_NOEXCEPT = 0;
 
     [[nodiscard]] virtual alloc::feature_flags
@@ -445,6 +450,12 @@ class allocator_t
     impl_reallocate_extended(const alloc::reallocate_extended_request_t&
                                  options) OKAYLIB_NOEXCEPT = 0;
 };
+
+class arena_t : public nonthreadsafe_arena_t
+{};
+
+class allocator_t : public arena_t, public virtual nonthreadsafe_allocator_t
+{};
 
 namespace alloc {
 
@@ -542,7 +553,7 @@ constexpr void free(allocator_impl_t& ally, T& object) OKAYLIB_NOEXCEPT
 
 template <typename T, typename... args_t>
 [[nodiscard]] constexpr decltype(auto)
-ok::allocator_t::make(args_t&&... args) OKAYLIB_NOEXCEPT
+ok::nonthreadsafe_allocator_t::make(args_t&&... args) OKAYLIB_NOEXCEPT
 {
     using analysis = decltype(detail::analyze_construction<args_t...>());
     using deduced = typename analysis::associated_type;

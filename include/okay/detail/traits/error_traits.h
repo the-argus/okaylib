@@ -2,11 +2,14 @@
 #define __OKAYLIB_DETAIL_TRAITS_ERROR_TRAITS_H__
 
 #include "okay/detail/template_util/remove_cvref.h"
+#include "okay/detail/traits/is_derived_from.h"
 #include "okay/detail/traits/special_member_traits.h"
 #include "okay/detail/type_traits.h"
 #include <concepts>
 
 namespace ok {
+class abstract_status_t;
+
 template <typename T>
 concept has_make_success = requires() {
     { T::make_success("test string literal") } -> ok::same_as_c<T>;
@@ -23,57 +26,60 @@ concept has_make_success_noargs = requires() {
 
 /// An object which describes the status of an operation, which can either be
 /// good or some sort of failure.
+/// NOTE: any object which is derived from anystatus_t is a status, do this to
+/// reduce template recursion with anystatus and children classes
 template <typename T>
-concept status_object = requires(const T& t) {
-    // a status object must not throw, and it must at least be destructible,
-    // and it must at least be move constructible
-    requires stdc::is_nothrow_destructible_v<T>;
-    requires stdc::is_nothrow_copy_assignable_v<T> ||
-                 !stdc::is_copy_assignable_v<T>;
-    requires stdc::is_nothrow_copy_constructible_v<T> ||
-                 !stdc::is_copy_constructible_v<T>;
-    requires stdc::is_nothrow_move_assignable_v<T> ||
-                 !stdc::is_move_assignable_v<T>;
-    requires stdc::is_nothrow_move_constructible_v<T>;
+concept status_object_c =
+    (!stdc::is_reference_c<T> &&
+     ok::detail::is_derived_from_c<stdc::remove_cv_t<T>, abstract_status_t>) ||
+    requires(const T& t) {
+        // a status object must not throw, and it must at least be destructible,
+        // and it must at least be move constructible
+        requires stdc::is_nothrow_destructible_v<T>;
+        requires stdc::is_nothrow_copy_assignable_v<T> ||
+                     !stdc::is_copy_assignable_v<T>;
+        requires stdc::is_nothrow_copy_constructible_v<T> ||
+                     !stdc::is_copy_constructible_v<T>;
+        requires stdc::is_nothrow_move_assignable_v<T> ||
+                     !stdc::is_move_assignable_v<T>;
+        requires stdc::is_nothrow_move_constructible_v<T>;
 
-    // all member functions of a status object must be noexcept
-    requires noexcept(t.is_success());
+        // all member functions of a status object must be noexcept
+        requires noexcept(t.is_success());
 
-    requires(has_make_success<T> || has_make_success_noargs<T>);
+        requires(has_make_success<T> || has_make_success_noargs<T>);
 
-    // a status object must have an `is_success()` member function
-    { t.is_success() } -> ok::same_as_c<bool>;
-};
+        // a status object must have an `is_success()` member function
+        { t.is_success() } -> ok::same_as_c<bool>;
+    };
 
 template <typename T>
-concept status_enum = requires(T t) {
+concept status_enum_c = requires(T t) {
     requires stdc::is_enum_v<T>;
-    // NOTE: this could be bigger, but anystatus wants it to be <= 4
-    requires sizeof(t) == 1;
+    requires sizeof(t) <= 4;
     { T::success };
     requires stdc::underlying_type_t<T>(T::success) == 0;
 };
 
 template <typename T>
-concept status_type = status_enum<T> || status_object<T>;
+concept status_type_c = status_enum_c<T> || status_object_c<T>;
 
 #define __OK_RES_REQUIRES_CLAUSE                                       \
     requires(!stdc::is_same_v<ok::detail::remove_cvref_t<success_t>,   \
                               ok::detail::remove_cvref_t<status_t>> && \
-             !stdc::is_constructible_v<success_t, status_t> &&         \
-             !stdc::is_constructible_v<status_t, success_t> &&         \
              !is_convertible_to_c<success_t, status_t> &&              \
              !is_convertible_to_c<status_t, success_t> &&              \
              !stdc::is_rvalue_reference_v<success_t> &&                \
              !stdc::is_array_v<success_t> &&                           \
              ok::detail::is_nonthrowing_c<success_t>)
 
-template <typename success_t, status_type status_t, typename = void>
+template <typename success_t, status_type_c status_t, typename = void>
 __OK_RES_REQUIRES_CLAUSE class res;
 
-template <status_type T> auto make_success(const char* strliteral = "") noexcept
+template <status_type_c T>
+auto make_success(const char* strliteral = "") noexcept
 {
-    if constexpr (status_enum<T>) {
+    if constexpr (status_enum_c<T>) {
         return T::success;
     } else {
         if constexpr (has_make_success<T>) {

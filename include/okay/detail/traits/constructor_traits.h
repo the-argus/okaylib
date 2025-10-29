@@ -38,7 +38,7 @@ template <typename... args_t> struct constructor_analysis
         using return_type = decltype(std::declval<const constructor_t&>().make(
             std::declval<args_t>()...));
 
-        static_assert(!status_object<return_type>,
+        static_assert(!status_object_c<return_type>,
                       "Do not return a status or res from a make() function- "
                       "this function is only used for non-failing constructors "
                       "and should return the constructed object directly.");
@@ -81,7 +81,8 @@ template <typename... args_t> struct constructor_analysis
         using return_type =
             decltype(std::declval<const constructor_t&>().make_into_uninit(
                 std::declval<T&>(), std::declval<args_t>()...));
-        static_assert(std::is_void_v<return_type> || status_object<return_type>,
+        static_assert(std::is_void_v<return_type> ||
+                          status_object_c<return_type>,
                       "Return type from make_into_uninit() should be void (if "
                       "the function can't fail) or a status object.");
     };
@@ -117,7 +118,7 @@ template <typename... args_t> struct constructor_analysis
         : public std::true_type
     {
         using type = typename make_fn_analysis<constructor_t>::return_type;
-        static_assert(!status_object<type>,
+        static_assert(!status_object_c<type>,
                       "make() function should not return an error type- you "
                       "probably want to implement make_into_uninit and then "
                       "simply use ok::make to return a res<...> on the stack.");
@@ -151,7 +152,7 @@ template <typename... args_t> struct constructor_analysis
 
         constexpr static bool can_fail =
             has_inplace && !has_rvo &&
-            status_object<typename make_into_uninit_fn_analysis<
+            status_object_c<typename make_into_uninit_fn_analysis<
                 associated_type, constructor_t>::return_type>;
 
         static_assert(can_fail || !has_inplace ||

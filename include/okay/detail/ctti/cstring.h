@@ -6,21 +6,35 @@
 
 namespace ok::ctti::detail {
 // From https://github.com/foonathan/string_id. As usually, thanks Jonathan.
-using hash_t = uint64_t;
-
 // See http://www.isthe.com/chongo/tech/comp/fnv/#FNV-param
-constexpr hash_t fnv_basis = 14695981039346656037ull;
-constexpr hash_t fnv_prime = 1099511628211ull;
+constexpr uint64_t fnv_basis = 14695981039346656037ull;
+constexpr uint64_t fnv_prime = 1099511628211ull;
+constexpr uint32_t fnv_basis_32 = 0x811c9dc5;
+constexpr uint32_t fnv_prime_32 = 0x01000193;
 
 // FNV-1a 64 bit hash
-constexpr hash_t fnv1a_hash(size_t n, const char* str, hash_t hash = fnv_basis)
+constexpr uint64_t fnv1a_hash(size_t n, const char* str,
+                              uint64_t hash = fnv_basis)
 {
     return n > 0 ? fnv1a_hash(n - 1, str + 1, (hash ^ *str) * fnv_prime) : hash;
 }
 
-template <size_t N> constexpr hash_t fnv1a_hash(const char (&array)[N])
+template <size_t N> constexpr uint64_t fnv1a_hash(const char (&array)[N])
 {
     return fnv1a_hash(N - 1, &array[0]);
+}
+
+// FNV-1a 32 bit hash
+constexpr uint32_t fnv1a_hash_32(size_t n, const char* str,
+                                 uint32_t hash = fnv_basis_32)
+{
+    return n > 0 ? fnv1a_hash_32(n - 1, str + 1, (hash ^ *str) * fnv_prime_32)
+                 : hash;
+}
+
+template <size_t N> constexpr uint32_t fnv1a_hash_32(const char (&array)[N])
+{
+    return fnv1a_hash_32(N - 1, &array[0]);
 }
 
 // basically simpler version of slice<char> which includes .hash() and .pad()
@@ -37,9 +51,14 @@ class cstring
     {
     }
 
-    [[nodiscard]] constexpr hash_t hash() const
+    [[nodiscard]] constexpr uint64_t hash() const
     {
         return fnv1a_hash(size(), m_str);
+    }
+
+    [[nodiscard]] constexpr uint64_t hash_32() const
+    {
+        return fnv1a_hash_32(size(), m_str);
     }
 
     [[nodiscard]] constexpr const char* data() const { return m_str; }

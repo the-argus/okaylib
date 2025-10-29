@@ -329,7 +329,7 @@ concept range_impls_construction_set_c = requires {
                          args_t...>;
                      {
                          range_definition_inner_t<T>::set(r, c, args...)
-                     } -> status_type;
+                     } -> status_type_c;
                  };
 };
 

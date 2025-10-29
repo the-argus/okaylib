@@ -2,8 +2,8 @@
 #define __OKAYLIB_ANYSTATUS_H__
 
 #include "okay/allocators/allocator.h"
-#include "okay/ctti/ctti.h"
 #include "okay/detail/noexcept.h"
+#include "okay/error.h"
 #include <cstdint>
 
 #if defined(OKAYLIB_USE_FMT)
@@ -15,275 +15,218 @@ namespace ok {
 class abstract_status_t
 {
   public:
-    virtual uint64_t typehash() const noexcept = 0;
-    virtual bool is_success() const noexcept = 0;
+    [[nodiscard]] virtual bool is_success() const noexcept = 0;
+
+    /// Ask the object to cast itself to another type, returning it as a void*.
+    /// If the object cannot cast to the given type, then this function should
+    /// return nullptr.
+    [[nodiscard]] virtual void* try_cast_to(uint64_t typehash) noexcept = 0;
     // it is assumed that an abstract status is dynamically allocated in some
     // way but if not, this function may return null to indicate that owning
     // pointers don't need to free the pointed-to memory. Normally it is not
     // the job of an object to know its own allocator, but otherwise the pointer
     // would be carried by the owning wrapper type, so this is done in an effort
     // to reduce the size of the res<..., ...> on the stack.
-    virtual opt<ok::allocator_t&> allocator() noexcept = 0;
-    virtual ~abstract_status_t() = 0;
+    //
+    // NOTE: when freeing the object, the pointer to the abstract_status_t will
+    // be passed.
+    [[nodiscard]] virtual opt<ok::allocator_t&> allocator() noexcept = 0;
 
-    /// Given a derived class, construct an instance of it within memory
-    /// allocated by the given allocator, using provided make arguments.
-    /// If the constructed type returns something other than the allocator
-    /// used here to create it, that may result in a memory leak as the
-    /// anystatus_t owning it will not free it properly.
-    template <typename derived_t, typename... args_t>
-        requires(std::derived_from<derived_t, abstract_status_t> &&
-                 is_infallible_constructible_c<derived_t, args_t...>)
-    static res<abstract_status_t&, alloc::error>
-    make_success_derived(ok::allocator_t& allocator, args_t&&... args)
-    {
-        res<abstract_status_t&, alloc::error> out =
-            allocator.make_non_owning(std::forward<args_t>(args)...);
-#ifndef NDEBUG
-        if (out.is_success()) {
-            opt maybe_allocator = out.unwrap_unchecked().allocator();
-            __ok_assert(
-                !maybe_allocator.has_value() ||
-                    ok::addressof(maybe_allocator.ref_unchecked()) ==
-                        ok::addressof(allocator),
-                "Status constructed by make_success_derived returns a "
-                "different allocator than the one it was allocated with.");
-        }
-#endif
-        return out;
-    }
+    virtual ~abstract_status_t() = default;
 };
 
-/// Anystatus can be one of:
-///   - A reference to an abstract_status_t
-///   - A typehash (8 bytes) and an arbitrary unint32_t (usually an enum value)
-///   - A boolean which has no information besides whether it indicates success
-///     or failure.
+/// An anyerr is a (somewhat poorly named) type which is just a u64
+/// internally. It can store any arbitrary enum values *as long as their numeric
+/// representation is not larger than 4 bytes. After type erasure, the enum can
+/// still be casted back to the original type, with runtime checking. However,
+/// hash collisions between types cannot be checked at compile time, and though
+/// very rare, could potentially cause UB down the line due to enum values
+/// incorrectly initialized with values that don't correspond to a valid enum
+/// variant.
+///
+/// It is bad form to use this in any public API. Those should
+/// provide the most possible information and allow the user to erase it if they
+/// want. Really this class should only be used for quick and dirty tasks and/or
+/// entirely private code. Public APIs (especially ones that are generic) should
+/// not expose this.
+///
+/// To ward off UB, you can put static_asserts in a header with all
+/// the enum types and this header included. But this example solution only
+/// works provided that `hashes` contains all of the types ever converted to an
+/// anyerr_t as well as all the types passed to .try_cast<...>()
+///
+/// #include <okay/error.h>
+/// #include <okay/containers/array.h>
+/// #include "myerrors.h"
+///
+/// constexpr ok::array hashes = {
+///     uint32_t(ok::ctti::typehash_32<MyCustomError>()),
+///     uint32_t(ok::ctti::typehash_32<FileIOError>()),
+///     uint32_t(ok::ctti::typehash_32<ok::alloc::error>()),
+/// };
+///
+/// template <typename T>
+/// consteval bool noduplicates(const T& hashlist)
+/// {
+///     for (uint32_t hash : hashlist) {
+///         size_t times_occurred = 0;
+///         for (uint32_t otherhash : hashlist) {
+///             times_occurred += (otherhash == hash);
+///             if (times_occurred > 1)
+///                 return false;
+///         }
+///     }
+///     return true;
+/// }
+///
+/// static_assert(noduplicates(hashes));
+///
+class anyerr_t
+{
+    constexpr static uint64_t enum_value_mask = uint64_t(uint32_t(-1));
+    constexpr static uint64_t enum_typehash_mask = enum_value_mask << 32;
+
+  public:
+    template <status_enum_c enum_t> constexpr anyerr_t(enum_t error)
+    {
+        static_assert(sizeof(void*) == sizeof(uint64_t),
+                      "unsupported platform");
+        static_assert(
+            sizeof(enum_t) <= sizeof(uint32_t),
+            "enum type representation too large to fit in an anyerr_t");
+    }
+
+    template <typename status_t>
+        requires detail::is_instance_c<status_t, ok::status>
+    constexpr anyerr_t(status_t status) : anyerr_t(status.as_enum())
+    {
+    }
+
+    template <status_enum_c enum_t>
+    [[nodiscard]] constexpr opt<enum_t> try_cast() const noexcept
+    {
+        constexpr auto typehash = ctti::typehash_32<enum_t>();
+        const uint32_t stored_typehash = (m_value & enum_typehash_mask) >> 32;
+
+        if (typehash != stored_typehash)
+            return {};
+        return enum_t(m_value & enum_value_mask);
+    }
+
+    constexpr static anyerr_t make_success() noexcept { return anyerr_t(); }
+
+    [[nodiscard]] constexpr bool is_success() const noexcept
+    {
+        return (m_value & enum_value_mask) == 0;
+    }
+
+  private:
+    constexpr anyerr_t() = default;
+    uint64_t m_value = 0;
+};
+
+/// anystatus_t is an owning pointer to an abstract_status_t. It is usually
+/// nonnull unless it is initialized with anystatus_t::make_success() or after
+/// being moved out of. In these cases, the status appears as a success, but can
+/// never be acquired with try_cast_to<T>().
 class anystatus_t
 {
   public:
-    enum class variant
+    constexpr static anystatus_t make_success() noexcept
     {
-        abstract,
-        status_enum,
-        boolean,
-    };
-
-    enum class tag
-    {
-        success,
-        failure,
-    };
-
-  private:
-    uint64_t typehash;
-    // this is guaranteed to be at least 8 byte aligned so the pointer's last
-    // three bits are free. The first bit refers to whether or not this is
-    // an error. The second bit refers to whether or not this is a boolean.
-    // The third bit refers to whether or not this is an enum value (ie. the
-    // top 32 bits are active). If this is a pointer to an abstract_status_t,
-    // all the bottom bits will be zero (ie. the ptr will be evenly divisible
-    // by 8).
-    abstract_status_t* abstract_ptr;
-
-    // TODO: support 32 bit platforms
-    static_assert(sizeof(abstract_status_t*) == 8,
-                  "Only platforms where pointers are 8 bytes are supported by "
-                  "okaylib's anystatus_t.");
-
-    static constexpr uint64_t is_enum_mask = 0b0100;
-    static constexpr uint64_t is_bool_mask = 0b0010;
-    static constexpr uint64_t is_failure_mask = 0b0001;
-    static constexpr uint64_t is_any_mask = 0b0111;
-
-    [[nodiscard]] constexpr variant
-    variant_inner(uint64_t& bottom_three_bits) const OKAYLIB_NOEXCEPT
-    {
-        bottom_three_bits = std::bit_cast<uint64_t>(abstract_ptr) & is_any_mask;
-        if (bottom_three_bits) {
-            // either an enum or boolean
-            if (bottom_three_bits & is_enum_mask) {
-                __ok_assert(!(bottom_three_bits & is_bool_mask),
-                            "Invalid/corrupted anystatus_t");
-                return variant::status_enum;
-            } else {
-                __ok_assert(bottom_three_bits & is_bool_mask,
-                            "Invalid/corrupted anystatus_t");
-                return variant::boolean;
-            }
-        } else {
-            return variant::abstract;
-        }
+        return anystatus_t();
     }
 
-    constexpr void destroy() noexcept
+    [[nodiscard]] constexpr bool is_success() const noexcept
     {
-        // we are only owning if our contained type is a pointer to something
-        if (this->type() != variant::abstract)
-            return;
-
-        auto allocator = abstract_ptr->allocator();
-
-        // call virtual destructor
-        abstract_ptr->~abstract_status_t();
-
-        // deallocate actual memory
-        if (allocator) {
-            // NOTE: telling the allocator that this object is just the vptr
-            // but that is probably not true. However allocators are
-            // designed to remember size information if it is relevant so
-            // there's no need to report the correct size here.
-            allocator.ref_unchecked().deallocate(
-                ok::raw_slice(*std::bit_cast<uint8_t*>(abstract_ptr), 8));
-        }
+        return !m_status || m_status->is_success();
     }
 
-    constexpr static inline const char* default_hint =
-        "anystatus_t::tag construction";
-
-  public:
-    constexpr anystatus_t(tag success, const char* hint = default_hint) noexcept
-        : abstract_ptr(std::bit_cast<abstract_status_t*>(
-              is_bool_mask & uint64_t(success == tag::failure))),
-          typehash(std::bit_cast<uint64_t>(hint))
+    template <typename T>
+        requires detail::is_derived_from_c<T, abstract_status_t>
+    explicit constexpr anystatus_t(T* error) : m_status(error)
     {
     }
 
-    template <status_object status_t>
-        requires(std::derived_from<status_t, abstract_status_t>)
-    constexpr anystatus_t(status_t& status) noexcept
-        : abstract_ptr(ok::addressof(status)), typehash(status.typehash())
+    template <typename T>
+        requires detail::is_derived_from_c<T, abstract_status_t>
+    explicit constexpr anystatus_t(T& error) : m_status(ok::addressof(error))
     {
     }
 
-    template <status_enum status_t>
-    constexpr anystatus_t(status_t status) noexcept
-        : abstract_ptr(std::bit_cast<abstract_status_t*>(
-              uint64_t(std::underlying_type_t<status_t>(status) << 32) |
-              is_enum_mask)),
-          typehash(ok::ctti::typehash<status_t>())
+    template <typename T>
+        requires detail::is_derived_from_c<T, abstract_status_t>
+    constexpr opt<T&> try_cast() noexcept
     {
-        static_assert(sizeof(status_t) <= 4,
-                      "anystatus implementation relies on status enums being "
-                      "less than four bytes.");
+        if (!m_status)
+            return {};
+
+        if (void* casted = m_status->try_cast_to(ok::ctti::typehash<T>()))
+            return *static_cast<T*>(casted);
+        return {};
     }
 
-    // cannot copy an anystatus because it may be a pointer to something which
-    // cannot be copied
-    anystatus_t(const anystatus_t& other) = delete;
-    anystatus_t& operator=(const anystatus_t& other) = delete;
+    template <typename T>
+        requires detail::is_derived_from_c<T, abstract_status_t>
+    constexpr opt<const T&> try_cast() const noexcept
+    {
+        if (!m_status)
+            return {};
+
+        if (const void* casted = m_status->try_cast_to(ok::ctti::typehash<T>()))
+            return *static_cast<const T*>(casted);
+        return {};
+    }
+
+    anystatus_t(const anystatus_t&) = delete;
+    anystatus_t& operator=(const anystatus_t&) = delete;
+
     constexpr anystatus_t(anystatus_t&& other) noexcept
-        : abstract_ptr(std::exchange(other.abstract_ptr, nullptr)),
-          typehash(other.typehash)
+        : m_status(other.m_status)
     {
+        other.m_status = nullptr;
     }
 
     constexpr anystatus_t& operator=(anystatus_t&& other) noexcept
     {
-        this->destroy();
-        abstract_ptr = std::exchange(other.abstract_ptr, nullptr);
-        typehash = other.typehash;
+        if (ok::addressof(other) == this)
+            return *this;
+
+        if (m_status)
+            destroy_assume_nonnull();
+
+        m_status = other.m_status;
+        other.m_status = nullptr;
+
         return *this;
     }
 
-    [[nodiscard]] constexpr static anystatus_t
-    make_success(const char* hint) noexcept
+    constexpr ~anystatus_t()
     {
-        return anystatus_t(tag::success, hint);
+        if (m_status)
+            destroy_assume_nonnull();
     }
 
-    [[nodiscard]] constexpr variant type() const OKAYLIB_NOEXCEPT
-    {
-        uint64_t dummy;
-        return this->variant_inner(dummy);
-    }
+  private:
+    anystatus_t() noexcept = default;
 
-    /// Check if this status contains the given type (enum, abstract_status_t
-    /// reference, or boolean)
-    template <typename T> [[nodiscard]] constexpr bool is() const noexcept
+    void destroy_assume_nonnull() const noexcept
     {
-        constexpr auto hash = ok::ctti::typehash<T>();
-        // if this is a bool, then instead of a typehash there is a char*
-        // present
-        if (std::bit_cast<uint64_t>(abstract_ptr) & is_bool_mask) {
-            return hash == ok::ctti::typehash<bool>();
-        }
-        return hash == typehash;
-    }
+        auto allocator = m_status->allocator();
 
-    [[nodiscard]] constexpr bool is_success() const OKAYLIB_NOEXCEPT
-    {
-        uint64_t bottom_three_bits;
-        switch (this->variant_inner(bottom_three_bits)) {
-        case variant::abstract:
-            return this->abstract_ptr->is_success();
-            break;
-        case variant::status_enum:
-            return (std::bit_cast<uint64_t>(abstract_ptr) ^
-                    bottom_three_bits) == 0;
-            break;
-        case variant::boolean:
-            return !(std::bit_cast<uint64_t>(abstract_ptr) & is_failure_mask);
-            break;
+        m_status->~abstract_status_t();
+
+        // NOTE: passing a sizeof(void* as the size of m_status here, allocator
+        // has to remember actual size of allocation, this is only a hint)
+        if (allocator) {
+            allocator.ref_unchecked().deallocate(ok::raw_slice(
+                *reinterpret_cast<uint8_t*>(m_status), sizeof(void*)));
         }
     }
 
-    constexpr ~anystatus_t() noexcept { this->destroy(); }
-
-#if defined(OKAYLIB_USE_FMT)
-    friend struct fmt::formatter<anystatus_t>;
-#endif
+    abstract_status_t* m_status = nullptr;
 };
-
-static_assert(status_object<anystatus_t>);
 
 } // namespace ok
-
-#if defined(OKAYLIB_USE_FMT)
-template <> struct fmt::formatter<ok::anystatus_t::variant>
-{
-    constexpr format_parse_context::iterator parse(format_parse_context& ctx)
-    {
-        return ctx.begin();
-    }
-
-    format_context::iterator format(const ok::anystatus_t::variant& tag,
-                                    format_context& ctx) const
-    {
-        switch (tag) {
-        case ok::anystatus_t::variant::abstract:
-            return fmt::format_to(ctx.out(), "anystatus_t::variant::abstract");
-            break;
-        case ok::anystatus_t::variant::status_enum:
-            return fmt::format_to(ctx.out(),
-                                  "anystatus_t::variant::status_enum");
-            break;
-        case ok::anystatus_t::variant::boolean:
-            return fmt::format_to(ctx.out(), "anystatus_t::variant::boolean");
-            break;
-        }
-    }
-};
-
-template <> struct fmt::formatter<ok::anystatus_t>
-{
-    constexpr format_parse_context::iterator parse(format_parse_context& ctx)
-    {
-        return ctx.begin();
-    }
-
-    format_context::iterator format(const ok::anystatus_t& anystatus,
-                                    format_context& ctx) const
-    {
-        if (anystatus.is_success()) {
-            return fmt::format_to(ctx.out(), "anystatus_t<success, {}>",
-                                  anystatus.type());
-        } else {
-            return fmt::format_to(ctx.out(), "anystatus_t<failure, {}>",
-                                  anystatus.type());
-        }
-    }
-};
-#endif
 
 #endif

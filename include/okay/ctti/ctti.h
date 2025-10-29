@@ -3,7 +3,6 @@
 /// CTTI: Compile Time Type Information
 
 #include "okay/detail/ctti/pretty_function.h"
-#include "okay/slice.h"
 
 namespace ok::ctti {
 
@@ -20,6 +19,8 @@ inline constexpr struct
 
 inline constexpr uint64_t forbidden_hash =
     nameof_inner<decltype(nameless_dummy)>.hash();
+inline constexpr uint32_t forbidden_hash_32 =
+    nameof_inner<decltype(nameless_dummy)>.hash_32();
 
 } // namespace detail
 
@@ -33,12 +34,21 @@ template <typename T> constexpr uint64_t typehash()
     return detail::nameof_inner<T>.hash();
 }
 
-/// Get a pointer to a string literal and a length which contains the name of
-/// the given type.
-template <typename T> constexpr slice<const char> nameof()
+/// Get a (probably) unique 4 byte number for a given type, at compile time.
+template <typename T> constexpr uint32_t typehash_32()
+{
+    static_assert(detail::nameof_inner<T>.hash_32() !=
+                      detail::forbidden_hash_32,
+                  "Attempt to get the typehash of an unnamed struct/class.");
+    return detail::nameof_inner<T>.hash_32();
+}
+
+/// Get a c-style null terminated string (not necessarily unique) identifier for
+/// a given type
+template <typename T> constexpr char* nameof()
 {
     constexpr auto cstr = detail::nameof_inner<T>;
-    return ok::raw_slice<const char>(*cstr.data(), cstr.size());
+    return cstr.data();
 }
 
 } // namespace ok::ctti

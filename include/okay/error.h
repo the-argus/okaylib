@@ -1,6 +1,7 @@
 #ifndef __OKAYLIB_ERROR_H__
 #define __OKAYLIB_ERROR_H__
 
+#include "okay/ctti/ctti.h"
 #include "okay/detail/abort.h"
 #include "okay/detail/addressof.h"
 #include "okay/detail/memory.h"
@@ -18,7 +19,10 @@
 #endif
 
 namespace ok {
-template <status_enum enum_t> class status
+/// The purpose of status is to make enums appear to have the same API as status
+/// objects (wrapping a status object in a status doesn't make sense. normally
+/// objects provide the functions themselves, its just enums cant have members)
+template <status_enum_c enum_t> class status
 {
   private:
     enum_t m_status;
@@ -67,12 +71,12 @@ concept and_then_callable_noargs = requires(callable_t c) {
 };
 template <typename callable_t, typename status_t>
 concept convert_error_callable = requires(callable_t c) {
-    requires status_object<decltype(c(std::declval<status_t>()))> ||
-                 status_enum<decltype(c(std::declval<status_t>()))>;
+    requires status_object_c<decltype(c(std::declval<status_t>()))> ||
+                 status_enum_c<decltype(c(std::declval<status_t>()))>;
 };
 template <typename callable_t>
 concept convert_error_callable_noargs = requires(callable_t c) {
-    requires status_object<decltype(c())> || status_enum<decltype(c())>;
+    requires status_object_c<decltype(c())> || status_enum_c<decltype(c())>;
 };
 template <typename callable_t, typename success_t, typename status_t>
 concept transform_callable = requires(callable_t c) {
@@ -87,7 +91,7 @@ concept transform_callable_noargs = requires(callable_t c) {
 };
 } // namespace detail
 
-template <typename success_t, status_type status_t>
+template <typename success_t, status_type_c status_t>
 __OK_RES_REQUIRES_CLAUSE class res<
     success_t, status_t, std::enable_if_t<!stdc::is_reference_c<success_t>>>
 {
@@ -219,10 +223,25 @@ __OK_RES_REQUIRES_CLAUSE class res<
         }
     }
 
-    constexpr res(status_t status) OKAYLIB_NOEXCEPT : m_status(status)
+    constexpr res(status_t&& status) OKAYLIB_NOEXCEPT
+        : m_status(std::move(status))
     {
         bool other_is_success;
-        if constexpr (status_object<status_t>)
+        if constexpr (status_object_c<status_t>)
+            other_is_success = status.is_success();
+        else
+            other_is_success = status == status_t::success;
+        if (other_is_success) [[unlikely]]
+            __ok_abort("Attempt to construct an ok::res with no success value "
+                       "but a status that says there is one.");
+    }
+
+    constexpr res(const status_t& status) OKAYLIB_NOEXCEPT
+        requires stdc::is_copy_constructible_v<status_t>
+        : m_status(status)
+    {
+        bool other_is_success;
+        if constexpr (status_object_c<status_t>)
             other_is_success = status.is_success();
         else
             other_is_success = status == status_t::success;
@@ -380,7 +399,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
 
     [[nodiscard]] constexpr bool is_success() const OKAYLIB_NOEXCEPT
     {
-        if constexpr (status_enum<status_t>) {
+        if constexpr (status_enum_c<status_t>) {
             return m_status == status_t::success;
         } else {
             return m_status.is_success();
@@ -599,7 +618,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
 #endif
 };
 
-template <typename success_t, status_type status_t>
+template <typename success_t, status_type_c status_t>
 __OK_RES_REQUIRES_CLAUSE class res<
     success_t, status_t, std::enable_if_t<stdc::is_reference_c<success_t>>>
 {
@@ -620,7 +639,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
     constexpr res(status_t status) OKAYLIB_NOEXCEPT : m_status(status)
     {
         bool other_is_success;
-        if constexpr (status_object<status_t>)
+        if constexpr (status_object_c<status_t>)
             other_is_success = status.is_success();
         else
             other_is_success = status == status_t::success;
@@ -637,7 +656,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
 
     [[nodiscard]] constexpr bool is_success() const OKAYLIB_NOEXCEPT
     {
-        if constexpr (status_enum<status_t>) {
+        if constexpr (status_enum_c<status_t>) {
             return m_status == status_t::success;
         } else {
             return m_status.is_success();
@@ -689,7 +708,6 @@ __OK_RES_REQUIRES_CLAUSE class res<
     friend struct fmt::formatter<res>;
 #endif
 };
-
 } // namespace ok
 
 #if defined(OKAYLIB_USE_FMT)

@@ -2,6 +2,7 @@
 // test header must be first
 #include "okay/error.h"
 #include "okay/macros/try.h"
+#include "okay/slice.h"
 #include "testing_types.h"
 
 #include <array>
@@ -10,12 +11,12 @@
 
 using namespace ok;
 
-static_assert(status_enum<StatusCodeA>);
-static_assert(status_enum<StatusCodeB>);
-static_assert(status_object<status<StatusCodeA>>);
-static_assert(status_object<status<StatusCodeB>>);
+static_assert(status_enum_c<StatusCodeA>);
+static_assert(status_enum_c<StatusCodeB>);
+static_assert(status_object_c<status<StatusCodeA>>);
+static_assert(status_object_c<status<StatusCodeB>>);
 // can't nest a res as a status object
-static_assert(!status_object<res<int, status<StatusCodeB>>>);
+static_assert(!status_object_c<res<int, status<StatusCodeB>>>);
 // if status and payload are both trivially copyable, then so is the res
 static_assert(std::is_trivially_copyable_v<res<int, status<StatusCodeB>>>);
 static_assert(std::is_trivially_copyable_v<res<int&, status<StatusCodeB>>>);

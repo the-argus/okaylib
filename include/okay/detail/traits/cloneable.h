@@ -25,7 +25,7 @@ concept cloneable_member_impl_fallible_c = requires(const T& t, T& nonconst) {
     requires detail::is_instance_c<decltype(t.try_clone()), res> &&
                  std::is_same_v<typename decltype(t.try_clone())::success_type,
                                 T> &&
-                 status_type<decltype(t.try_clone_into(nonconst))> &&
+                 status_type_c<decltype(t.try_clone_into(nonconst))> &&
                  // the res returned by t.clone() should have the same status
                  // type as clone_into()
                  std::is_same_v<typename decltype(t.try_clone())::status_type,
