@@ -310,7 +310,7 @@ template <typename T, typename allocator_impl_t = ok::allocator_t> struct owned
 
 } // namespace alloc
 
-class nonthreadsafe_arena_t
+class nonthreadsafe_allocate_interface_t
 {
   public:
     [[nodiscard]] constexpr alloc::result_t<bytes_t>
@@ -330,13 +330,53 @@ class nonthreadsafe_arena_t
     impl_allocate(const alloc::request_t&) OKAYLIB_NOEXCEPT = 0;
 };
 
+class local_allocator_interface_t : public nonthreadsafe_allocate_interface_t
+{
+    struct allocator_restore_point_t
+    {
+        friend class local_allocator_interface_t;
+
+        allocator_restore_point_t(const allocator_restore_point_t&) = delete;
+        allocator_restore_point_t&
+        operator=(const allocator_restore_point_t&) = delete;
+        allocator_restore_point_t(allocator_restore_point_t&&) = delete;
+        allocator_restore_point_t&
+        operator=(allocator_restore_point_t&&) = delete;
+
+        constexpr ~allocator_restore_point_t()
+        {
+            m_allocator.restore_scope(m_handle);
+        }
+
+        allocator_restore_point_t() = delete;
+
+      private:
+        constexpr allocator_restore_point_t(
+            local_allocator_interface_t& allocator)
+            : m_allocator(allocator), m_handle(allocator.new_scope())
+
+        {
+        }
+
+        void* m_handle;
+        local_allocator_interface_t& m_allocator;
+    };
+
+    [[nodiscard]] constexpr allocator_restore_point_t begin_scope()
+    {
+        return allocator_restore_point_t(*this);
+    }
+
+  protected:
+    [[nodiscard]] virtual void* new_scope();
+    virtual void restore_scope(void* handle);
+};
+
 /// Abstract/virtual interface for allocators. Not all functions may be
 /// implemented, depending on `features()`
-class nonthreadsafe_allocator_t : public nonthreadsafe_arena_t
+class nonthreadsafe_allocator_t : public nonthreadsafe_allocate_interface_t
 {
   public:
-    constexpr void clear() OKAYLIB_NOEXCEPT { impl_clear(); }
-
     [[nodiscard]] constexpr alloc::feature_flags
     features() const OKAYLIB_NOEXCEPT
     {
@@ -436,8 +476,6 @@ class nonthreadsafe_allocator_t : public nonthreadsafe_arena_t
     }
 
   protected:
-    virtual void impl_clear() OKAYLIB_NOEXCEPT = 0;
-
     [[nodiscard]] virtual alloc::feature_flags
     impl_features() const OKAYLIB_NOEXCEPT = 0;
 
@@ -451,10 +489,13 @@ class nonthreadsafe_allocator_t : public nonthreadsafe_arena_t
                                  options) OKAYLIB_NOEXCEPT = 0;
 };
 
-class arena_t : public nonthreadsafe_arena_t
+/// Threadsafe allocate interface
+class allocate_interface_t : public nonthreadsafe_allocate_interface_t
 {};
 
-class allocator_t : public arena_t, public virtual nonthreadsafe_allocator_t
+/// Threadsafe allocator
+class allocator_t : public allocate_interface_t,
+                    virtual public nonthreadsafe_allocator_t
 {};
 
 namespace alloc {
