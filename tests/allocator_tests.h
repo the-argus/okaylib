@@ -11,51 +11,81 @@
 
 template <typename allocator_t> struct allocator_tests
 {
+    constexpr static bool has_clear = requires(allocator_t& a) {
+        { a.clear() } -> ok::same_as_c<void>;
+    };
+
+    constexpr static bool has_deallocate = requires(allocator_t& a, void* v) {
+        { a.deallocate(v) } -> ok::same_as_c<void>;
+    };
+
+    constexpr static bool has_make =
+        ok::detail::is_derived_from_c<allocator_t,
+                                      ok::nonthreadsafe_allocator_t>;
+
     inline static void alloc_1mb_andfree(allocator_t& ally)
     {
         using namespace ok;
+        if constexpr (has_make) {
 
-        // alloc::owned destroyed as lvalue
-        {
-            auto result = ally.make(array::undefined<u8, 1024>);
-            if (result.okay()) {
-                alloc::owned mb = result.release();
-            } else {
-                // early return because this isnt going to be able to allocate
-                // at all, but thats fine, erroring is not bad behavior,
-                // hopefully any problems will be caught in other tests
-                return;
+            // alloc::owned destroyed as lvalue
+            {
+                auto result = ally.make(array::undefined<u8, 1024>);
+                if (result.is_success()) {
+                    alloc::owned mb = result.unwrap();
+                } else {
+                    // early return because this isnt going to be able to
+                    // allocate at all, but thats fine, erroring is not bad
+                    // behavior, hopefully any problems will be caught in other
+                    // tests
+                    return;
+                }
             }
-        }
 
-        // alloc::owned destroyed as rvalue
-        {
-            auto&& _ = ally.make(array::undefined<u8, 1024>).release();
-        }
+            // alloc::owned destroyed as rvalue
+            {
+                auto&& _ = ally.make(array::undefined<u8, 1024>).unwrap();
+            }
 
-        // alloc::owned destroyed within result
-        {
-            auto&& _ = ally.make(array::undefined<u8, 1024>);
+            // alloc::owned destroyed within result
+            {
+                auto&& _ = ally.make(array::undefined<u8, 1024>);
+            }
         }
 
         // manual free
         // if statement is here to prevent assert in make_non_owning from firing
-        if (ally.features() & alloc::feature_flags::can_clear) {
-            array_t<u8, 1024>& array =
-                ally.make_non_owning(array::undefined<u8, 1024>).release();
+        array_t<u8, 1024>& array =
+            ally.make_non_owning(array::undefined<u8, 1024>).unwrap();
 
-            ok::free(ally, array);
+        if constexpr (has_make) {
+            ok::destroy_and_free(ally, array);
+        } else if constexpr (has_clear) {
+            ally.clear();
         }
     }
 
     inline static void alloc_1k_induvidual_bytes(allocator_t& ally)
     {
-        using namespace ok;
-        std::vector<alloc::owned<u8>> bytes;
-        bytes.reserve(1024);
+        if constexpr (has_make) {
+            using namespace ok;
+            std::vector<alloc::owned<u8>> bytes;
+            bytes.reserve(1024);
 
-        for (u64 i = 0; i < 1024; ++i) {
-            bytes.push_back(ally.template make<u8>(0).release());
+            for (u64 i = 0; i < 1024; ++i) {
+                bytes.push_back(ally.template make<u8>(0).unwrap());
+            }
+        } else if constexpr (has_clear) {
+            using namespace ok;
+            std::vector<u8*> bytes;
+            bytes.reserve(1024);
+
+            for (u64 i = 0; i < 1024; ++i) {
+                bytes.push_back(ok::addressof(
+                    ally.template make_non_owning<u8>(0).unwrap()));
+            }
+
+            ally.clear();
         }
     }
 
@@ -74,10 +104,10 @@ template <typename allocator_t> struct allocator_tests
                 alloc::request_t{.num_bytes = num_bytes, .alignment = 16});
 
             // its okay for the allocator to fail, just not return bad memory
-            if (!result.okay())
+            if (!result.is_success())
                 continue;
 
-            bytes_t bytes = result.release();
+            bytes_t bytes = result.unwrap();
 
             REQUIRE(bytes.size() >= num_bytes);
             REQUIRE(uintptr_t(bytes.address_of_first()) % 16 == 0);
@@ -87,9 +117,9 @@ template <typename allocator_t> struct allocator_tests
                 REQUIRE(bytes[i] == 0);
             }
 
-            if (ally.features() & alloc::feature_flags::can_clear) {
+            if constexpr (has_clear) {
                 ally.clear();
-            } else {
+            } else if constexpr (has_deallocate) {
                 ally.deallocate(bytes);
             }
         }
@@ -102,60 +132,62 @@ template <typename allocator_t> struct allocator_tests
                                   .num_bytes = 0,
                                   .alignment = 16,
                               })
-                    .err() == ok::alloc::error::unsupported);
+                    .status() == ok::alloc::error::unsupported);
     }
 
     inline static void allocate_and_clear_repeatedly(allocator_t& ally)
     {
-        using namespace ok;
-        if (!(ally.features() & alloc::feature_flags::can_clear))
-            return;
-
-        // if we cant allocate a megabyte at all, quit because this is a block
-        // allocator or something
-        auto mb_allocation =
-            ally.allocate(alloc::request_t{.num_bytes = 1024, .alignment = 16});
-        if (!mb_allocation.okay()) {
-            return;
-        }
-        ally.clear();
-
-        for (u64 i = 0; i < 10000; ++i) {
-            bytes_t allocated =
-                ally.allocate(
-                        alloc::request_t{.num_bytes = 1024, .alignment = 16})
-                    .release();
+        if constexpr (has_clear) {
+            using namespace ok;
+            // if we cant allocate a megabyte at all, quit because this is a
+            // block allocator or something
+            auto mb_allocation = ally.allocate(
+                alloc::request_t{.num_bytes = 1024, .alignment = 16});
+            if (!mb_allocation.is_success()) {
+                return;
+            }
             ally.clear();
+
+            for (u64 i = 0; i < 10000; ++i) {
+                bytes_t allocated =
+                    ally.allocate(alloc::request_t{.num_bytes = 1024,
+                                                   .alignment = 16})
+                        .unwrap();
+                ally.clear();
+            }
         }
     }
 
     inline static void inplace_feature_flag(allocator_t& ally)
     {
         using namespace ok;
-        if (ally.features() &
-            alloc::feature_flags::can_predictably_realloc_in_place) {
-            return;
-        }
-
-        bytes_t allocation =
-            ally.allocate(alloc::request_t{.num_bytes = 1, .alignment = 1})
-                .release();
-
-        defer d([&] {
-            ally.deallocate(allocation);
-            if (ally.features() & alloc::feature_flags::can_clear) {
-                ally.clear();
+        if constexpr (has_make) {
+            if (ally.features() &
+                alloc::feature_flags::can_predictably_realloc_in_place) {
+                return;
             }
-        });
 
-        auto reallocation = ally.reallocate(alloc::reallocate_request_t{
-            .memory = allocation,
-            .new_size_bytes = 1,
-            .flags =
-                alloc::flags::expand_back | alloc::flags::in_place_orelse_fail,
-        });
+            bytes_t allocation =
+                ally.allocate(alloc::request_t{.num_bytes = 1, .alignment = 1})
+                    .unwrap();
 
-        REQUIRE(reallocation.err() == alloc::error::unsupported);
+            defer d([&] {
+                if constexpr (has_deallocate) {
+                    ally.deallocate(allocation);
+                } else if constexpr (has_clear) {
+                    ally.clear();
+                }
+            });
+
+            auto reallocation = ally.reallocate(alloc::reallocate_request_t{
+                .memory = allocation,
+                .new_size_bytes = 1,
+                .flags = alloc::flags::expand_back |
+                         alloc::flags::in_place_orelse_fail,
+            });
+
+            REQUIRE(reallocation.status() == alloc::error::unsupported);
+        }
     }
 
     inline void run_all_fuzzed(allocator_t& ally)
@@ -203,8 +235,15 @@ run_allocator_tests_static_and_dynamic_dispatch(allocator_t& allocator)
 {
     allocator_tests<allocator_t> static_dispatch;
     static_dispatch.run_all_fuzzed(allocator);
-    allocator_tests<ok::allocator_t> dynamic_dispatch;
-    dynamic_dispatch.run_all_fuzzed(allocator);
+
+    if constexpr (ok::detail::is_derived_from_c<
+                      allocator_t, ok::nonthreadsafe_allocator_t>) {
+        allocator_tests<ok::allocator_t> dynamic_dispatch;
+        dynamic_dispatch.run_all_fuzzed(allocator);
+    } else {
+        allocator_tests<ok::allocate_interface_t> dynamic_dispatch;
+        dynamic_dispatch.run_all_fuzzed(allocator);
+    }
 }
 
 #endif

@@ -14,9 +14,8 @@
 #include "okay/detail/template_util/c_array_value_type.h"
 #include "okay/detail/traits/is_derived_from.h"
 #include "okay/math/ordering.h"
+#include "okay/slice.h"
 #include "okay/tuple.h"
-// for reinterpret_as_bytes
-#include "okay/stdmem.h"
 
 namespace ok {
 
@@ -41,7 +40,7 @@ enum class error : uint8_t
     platform_failure,
 };
 
-inline constexpr size_t default_align = alignof(std::max_align_t);
+inline constexpr size_t default_align = alignof(::max_align_t);
 
 template <typename T> using result_t = ok::res<T, error>;
 
@@ -65,39 +64,17 @@ enum class flags : uint16_t
 enum class feature_flags : uint16_t
 {
     // clang-format off
-    // whether it is valid to call allocator functions from multiple
-    // threads. Additionally requires that allocations do not have any
-    // state that can be modified from other threads threough the
-    // allocator, like a stacklike allocator where another thread can
-    // allocate between operations and change whether your allocation
-    // is on top of the stack.
-    is_threadsafe                               = 0x0001,
-    // whether this allocator supports clearing. if it does not support
-    // clearing, then clear() should just print a warning about potential leaks.
-    can_clear                                   = 0x0002,
     // Can this allocator sometimes reallocate in-place, and, crucially, can it
     // know whether the in-place reallocation will succeed before performing it?
     // (C's realloc cannot do this, because you can't know whether the
     // in-placeness succeeded until after calling it)
     // If this flag is off, then passing in_place_orelse_fail will always return
     // error::unsupported.
-    can_predictably_realloc_in_place            = 0x0004,
-    // If this is true, then the allocator can only allocate. Calling realloc on
-    // such an allocator will error with error::unsupported. Calling deallocate
-    // will do nothing. If an allocator is only_alloc but not clear, then a
-    // warning about potential memory leaks may be printed.
-    can_only_alloc                              = 0x0008,
-    // Similar to only_alloc (see above) except this allocator supports
-    // specifically freeing in LIFO order, and reallocating only the most
-    // recent allocation. `reallocate_extended()` is not guaranteed to be
-    // supported on any allocation (including the most recent allocation) if
-    // this flag is specified. This flag is mutually exclusive with
-    // feature_flags::only_alloc and feature_flags::threadsafe.
-    is_stacklike                                = 0x001,
-    can_expand_back                             = 0x0020,
-    can_expand_front                            = 0x0040,
+    can_predictably_realloc_in_place            = 0b000001,
+    can_expand_back                             = 0b000010,
+    can_expand_front                            = 0b000100,
     // Whether shrinking provides any benefits for this allocator
-    can_reclaim                                 = 0x0080,
+    can_reclaim                                 = 0b001000,
     // clang-format on
 };
 
@@ -135,8 +112,7 @@ struct request_t
 {
     size_t num_bytes;
     size_t alignment = alloc::default_align;
-    void* future_compat = nullptr;
-    flags flags; // only for leave_nonzeroed, all other flags do nothing
+    bool leave_nonzeroed = false;
 };
 
 struct reallocate_request_t
@@ -254,14 +230,17 @@ template <typename T, typename allocator_impl_t = ok::allocator_t> struct owned
 
     [[nodiscard]] constexpr T& operator*() const
     {
+        __ok_assert(m_allocation, "nullptr dereference on owned<T>");
         return *reinterpret_cast<T*>(m_allocation);
     }
     [[nodiscard]] constexpr T* operator->() const
     {
+        __ok_assert(m_allocation, "nullptr dereference on owned<T>");
         return reinterpret_cast<T*>(m_allocation);
     }
     [[nodiscard]] constexpr T& value() const
     {
+        __ok_assert(m_allocation, "nullptr dereference on owned<T>");
         return *reinterpret_cast<T*>(m_allocation);
     }
 
@@ -282,8 +261,9 @@ template <typename T, typename allocator_impl_t = ok::allocator_t> struct owned
         m_allocator = other.m_allocator;
     }
 
-    [[nodiscard]] constexpr T& into_non_owning_ref()
+    [[nodiscard]] constexpr T& release()
     {
+        __ok_assert(m_allocation, "attempt to release null owned<T>");
         return *static_cast<T*>(std::exchange(m_allocation, nullptr));
     }
 
@@ -293,8 +273,7 @@ template <typename T, typename allocator_impl_t = ok::allocator_t> struct owned
     constexpr void destroy() noexcept
     {
         if (m_allocation) {
-            m_allocator->deallocate(
-                reinterpret_as_bytes(slice_from_one(value())));
+            m_allocator->deallocate(m_allocation);
         }
     }
 
@@ -324,95 +303,6 @@ class nonthreadsafe_allocate_interface_t
         }
         return impl_allocate(request);
     }
-
-  protected:
-    [[nodiscard]] virtual alloc::result_t<bytes_t>
-    impl_allocate(const alloc::request_t&) OKAYLIB_NOEXCEPT = 0;
-};
-
-class local_allocator_interface_t : public nonthreadsafe_allocate_interface_t
-{
-    struct allocator_restore_point_t
-    {
-        friend class local_allocator_interface_t;
-
-        allocator_restore_point_t(const allocator_restore_point_t&) = delete;
-        allocator_restore_point_t&
-        operator=(const allocator_restore_point_t&) = delete;
-        allocator_restore_point_t(allocator_restore_point_t&&) = delete;
-        allocator_restore_point_t&
-        operator=(allocator_restore_point_t&&) = delete;
-
-        constexpr ~allocator_restore_point_t()
-        {
-            m_allocator.restore_scope(m_handle);
-        }
-
-        allocator_restore_point_t() = delete;
-
-      private:
-        constexpr allocator_restore_point_t(
-            local_allocator_interface_t& allocator)
-            : m_allocator(allocator), m_handle(allocator.new_scope())
-
-        {
-        }
-
-        void* m_handle;
-        local_allocator_interface_t& m_allocator;
-    };
-
-    [[nodiscard]] constexpr allocator_restore_point_t begin_scope()
-    {
-        return allocator_restore_point_t(*this);
-    }
-
-  protected:
-    [[nodiscard]] virtual void* new_scope();
-    virtual void restore_scope(void* handle);
-};
-
-/// Abstract/virtual interface for allocators. Not all functions may be
-/// implemented, depending on `features()`
-class nonthreadsafe_allocator_t : public nonthreadsafe_allocate_interface_t
-{
-  public:
-    [[nodiscard]] constexpr alloc::feature_flags
-    features() const OKAYLIB_NOEXCEPT
-    {
-        return impl_features();
-    }
-
-    constexpr void deallocate(bytes_t bytes) OKAYLIB_NOEXCEPT
-    {
-        if (!bytes.is_empty()) [[likely]]
-            impl_deallocate(bytes);
-    }
-
-    [[nodiscard]] constexpr alloc::result_t<bytes_t>
-    reallocate(const alloc::reallocate_request_t& options) OKAYLIB_NOEXCEPT
-    {
-        if (!options.is_valid()) [[unlikely]] {
-            __ok_assert(false, "invalid reallocate_request_t");
-            return alloc::error::usage;
-        }
-        return impl_reallocate(options);
-    }
-
-    [[nodiscard]] constexpr alloc::result_t<alloc::reallocation_extended_t>
-    reallocate_extended(const alloc::reallocate_extended_request_t& options)
-        OKAYLIB_NOEXCEPT
-    {
-        if (!options.is_valid()) [[unlikely]] {
-            __ok_assert(false, "invalid reallocate_extended_request_t");
-            return alloc::error::usage;
-        }
-        return impl_reallocate_extended(options);
-    }
-
-    template <typename T = detail::deduced_t, typename... args_t>
-    [[nodiscard]] constexpr decltype(auto)
-    make(args_t&&... args) OKAYLIB_NOEXCEPT;
 
     /// Version of make which simply returns an allocation error or a reference
     /// to the newly allocated thing. Does not accept failing constructors.
@@ -451,14 +341,10 @@ class nonthreadsafe_allocator_t : public nonthreadsafe_allocate_interface_t
                       "Cannot call make_non_owning with the given arguments, "
                       "there is no matching infallible constructor.");
 
-        // TODO: logging here, this should be a warning
-        // __ok_assert(features() & alloc::feature_flags::can_clear,
-        //             "Using make_non_owning on an allocator which cannot
-        //             clear, " "this may lead to memory leaks.");
         auto allocation_result = allocate(alloc::request_t{
             .num_bytes = sizeof(actual_t),
             .alignment = alignof(actual_t),
-            .flags = alloc::flags::leave_nonzeroed,
+            .leave_nonzeroed = true,
         });
         if (!allocation_result.is_success()) [[unlikely]] {
             return return_type(allocation_result.status());
@@ -476,10 +362,100 @@ class nonthreadsafe_allocator_t : public nonthreadsafe_allocate_interface_t
     }
 
   protected:
+    [[nodiscard]] virtual alloc::result_t<bytes_t>
+    impl_allocate(const alloc::request_t&) OKAYLIB_NOEXCEPT = 0;
+};
+
+class arena_allocator_restore_scope_interface_t
+{
+    struct allocator_restore_point_t
+    {
+        friend class ok::arena_allocator_restore_scope_interface_t;
+
+        allocator_restore_point_t(const allocator_restore_point_t&) = delete;
+        allocator_restore_point_t&
+        operator=(const allocator_restore_point_t&) = delete;
+        allocator_restore_point_t(allocator_restore_point_t&&) = delete;
+        allocator_restore_point_t&
+        operator=(allocator_restore_point_t&&) = delete;
+
+        constexpr ~allocator_restore_point_t()
+        {
+            m_allocator.restore_scope(m_handle);
+        }
+
+        allocator_restore_point_t() = delete;
+
+      private:
+        constexpr allocator_restore_point_t(
+            ok::arena_allocator_restore_scope_interface_t& allocator)
+            : m_allocator(allocator), m_handle(allocator.new_scope())
+        {
+        }
+
+        void* m_handle;
+        ok::arena_allocator_restore_scope_interface_t& m_allocator;
+    };
+
+    [[nodiscard]] constexpr allocator_restore_point_t
+    begin_scope() OKAYLIB_NOEXCEPT
+    {
+        return allocator_restore_point_t(*this);
+    }
+
+  protected:
+    [[nodiscard]] virtual void* new_scope() OKAYLIB_NOEXCEPT = 0;
+    virtual void restore_scope(void* handle) OKAYLIB_NOEXCEPT = 0;
+};
+
+class nonthreadsafe_allocator_t : public nonthreadsafe_allocate_interface_t
+{
+  public:
+    [[nodiscard]] constexpr alloc::feature_flags
+    features() const OKAYLIB_NOEXCEPT
+    {
+        return impl_features();
+    }
+
+    constexpr void deallocate(void* memory) OKAYLIB_NOEXCEPT
+    {
+        if (memory) [[likely]]
+            impl_deallocate(memory);
+    }
+
+    [[nodiscard]] constexpr alloc::result_t<bytes_t>
+    reallocate(const alloc::reallocate_request_t& options) OKAYLIB_NOEXCEPT
+    {
+        if (!options.is_valid()) [[unlikely]] {
+            __ok_assert(false, "invalid reallocate_request_t");
+            return alloc::error::usage;
+        }
+        return impl_reallocate(options);
+    }
+
+    [[nodiscard]] constexpr alloc::result_t<alloc::reallocation_extended_t>
+    reallocate_extended(const alloc::reallocate_extended_request_t& options)
+        OKAYLIB_NOEXCEPT
+    {
+        if (!options.is_valid()) [[unlikely]] {
+            __ok_assert(false, "invalid reallocate_extended_request_t");
+            return alloc::error::usage;
+        }
+        return impl_reallocate_extended(options);
+    }
+
+    template <typename T = detail::deduced_t, typename... args_t>
+    [[nodiscard]] constexpr decltype(auto)
+    make(args_t&&... args) OKAYLIB_NOEXCEPT;
+
+  protected:
     [[nodiscard]] virtual alloc::feature_flags
     impl_features() const OKAYLIB_NOEXCEPT = 0;
 
-    virtual void impl_deallocate(bytes_t bytes) OKAYLIB_NOEXCEPT = 0;
+    /// NOTE: the implementation of this is not required to check for nullptr,
+    /// that should be handled by the deallocate() wrapper that users actually
+    /// call
+    virtual void impl_deallocate(void* memory) OKAYLIB_NOEXCEPT = 0;
 
     [[nodiscard]] virtual alloc::result_t<bytes_t> impl_reallocate(
         const alloc::reallocate_request_t& options) OKAYLIB_NOEXCEPT = 0;
@@ -539,7 +515,7 @@ reallocate_in_place_orelse_keep_old_nocopy(
     using flags_underlying_t = std::underlying_type_t<flags>;
     constexpr auto mask =
         static_cast<flags_underlying_t>(flags::leave_nonzeroed);
-    const auto leave_nonzeroed_bit =
+    const bool leave_nonzeroed =
         static_cast<flags_underlying_t>(options.flags) & mask;
 
     auto [bytes_offset_back, bytes_offset_front, new_size] =
@@ -548,7 +524,7 @@ reallocate_in_place_orelse_keep_old_nocopy(
     // propagate leave_nonzeroed request to allocate call
     result_t<bytes_t> res = allocator.allocate(alloc::request_t{
         .num_bytes = new_size,
-        .flags = flags(leave_nonzeroed_bit),
+        .leave_nonzeroed = leave_nonzeroed,
     });
 
     if (!res.is_success()) [[unlikely]]
@@ -561,8 +537,12 @@ reallocate_in_place_orelse_keep_old_nocopy(
 }
 } // namespace alloc
 
+/// Calls the destructor of an object and then frees its memory
 template <typename T, typename allocator_impl_t>
-constexpr void free(allocator_impl_t& ally, T& object) OKAYLIB_NOEXCEPT
+    requires ok::detail::is_derived_from_c<allocator_impl_t,
+                                           ok::nonthreadsafe_allocator_t>
+constexpr void destroy_and_free(allocator_impl_t& ally,
+                                T& object) OKAYLIB_NOEXCEPT
 {
     static_assert(
         detail::is_derived_from_c<allocator_impl_t, allocator_t>,
@@ -589,7 +569,7 @@ constexpr void free(allocator_impl_t& ally, T& object) OKAYLIB_NOEXCEPT
             object[i].~VT();
         }
     }
-    ally.deallocate(ok::reinterpret_as_bytes(ok::slice_from_one(object)));
+    ally.deallocate(ok::addressof(object));
 }
 
 template <typename T, typename... args_t>
@@ -619,7 +599,7 @@ ok::nonthreadsafe_allocator_t::make(args_t&&... args) OKAYLIB_NOEXCEPT
     auto allocation_result = allocate(alloc::request_t{
         .num_bytes = sizeof(actual_t),
         .alignment = alignof(actual_t),
-        .flags = alloc::flags::leave_nonzeroed,
+        .leave_nonzeroed = true,
     });
 
     using initialization_return_type =
@@ -646,7 +626,7 @@ ok::nonthreadsafe_allocator_t::make(args_t&&... args) OKAYLIB_NOEXCEPT
     }
 
     uint8_t* object_start =
-        allocation_result.unwrap().unchecked_address_of_first_item();
+        allocation_result.unwrap_unchecked().unchecked_address_of_first_item();
 
     __ok_assert(uintptr_t(object_start) % alignof(actual_t) == 0,
                 "Misaligned memory produced by allocator");

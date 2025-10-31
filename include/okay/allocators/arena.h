@@ -9,66 +9,34 @@
 
 namespace ok {
 
-template <typename allocator_impl_t> class arena_t : public allocator_t
+template <typename allocator_impl_t = ok::nonthreadsafe_allocator_t>
+class arena_t : public ok::allocate_interface_t,
+                public ok::arena_allocator_restore_scope_interface_t
 {
   public:
-    static constexpr alloc::feature_flags type_features =
-        alloc::feature_flags::can_only_alloc | alloc::feature_flags::can_clear;
-
     constexpr explicit arena_t(bytes_t static_buffer) OKAYLIB_NOEXCEPT;
-    // owning constructor (if you initialize the arena this way, then it will
-    // try to realloc if overfull and destroy() will free the initial buffer
-    constexpr explicit arena_t(bytes_t&& initial_buffer,
+    // owning constructor (if you initialize the arena this way, then destroy()
+    // will free the initial buffer)
+    constexpr explicit arena_t(bytes_t initial_buffer,
                                allocator_impl_t& backing_allocator)
         OKAYLIB_NOEXCEPT;
 
-    constexpr arena_t(arena_t&& other) OKAYLIB_NOEXCEPT
-        : m_memory(other.m_memory),
-          m_available_memory(other.m_available_memory),
-          m_backing(std::exchange(other.m_backing, nullopt))
-    {
-    }
-
-    constexpr arena_t& operator=(arena_t&& other) OKAYLIB_NOEXCEPT
-    {
-        destroy();
-        m_memory = other.m_memory;
-        m_available_memory = other.m_available_memory;
-        m_backing = std::exchange(other.m_backing, nullopt);
-        return *this;
-    }
+    constexpr arena_t(arena_t&& other) OKAYLIB_NOEXCEPT;
+    constexpr arena_t& operator=(arena_t&& other) OKAYLIB_NOEXCEPT;
 
     arena_t& operator=(const arena_t&) = delete;
     arena_t(const arena_t&) = delete;
 
     constexpr ~arena_t() OKAYLIB_NOEXCEPT_FORCE { destroy(); }
 
+    constexpr void clear() OKAYLIB_NOEXCEPT;
+
   protected:
     [[nodiscard]] inline alloc::result_t<bytes_t>
     impl_allocate(const alloc::request_t&) OKAYLIB_NOEXCEPT final;
 
-    inline void impl_clear() OKAYLIB_NOEXCEPT final;
-
-    [[nodiscard]] inline alloc::feature_flags
-    impl_features() const OKAYLIB_NOEXCEPT final
-    {
-        return type_features;
-    }
-
-    inline void impl_deallocate(bytes_t) OKAYLIB_NOEXCEPT final {}
-
-    [[nodiscard]] inline alloc::result_t<bytes_t>
-    impl_reallocate(const alloc::reallocate_request_t&) OKAYLIB_NOEXCEPT final
-    {
-        return alloc::error::unsupported;
-    }
-
-    [[nodiscard]] inline alloc::result_t<alloc::reallocation_extended_t>
-    impl_reallocate_extended(const alloc::reallocate_extended_request_t&
-                                 options) OKAYLIB_NOEXCEPT final
-    {
-        return alloc::error::unsupported;
-    }
+    [[nodiscard]] virtual inline void* new_scope() OKAYLIB_NOEXCEPT;
+    virtual inline void restore_scope(void* handle) OKAYLIB_NOEXCEPT;
 
   private:
     constexpr void destroy() OKAYLIB_NOEXCEPT;
@@ -78,7 +46,7 @@ template <typename allocator_impl_t> class arena_t : public allocator_t
     opt<allocator_impl_t&> m_backing;
 };
 
-arena_t(bytes_t static_buffer) -> arena_t<ok::allocator_t>;
+// arena_t(bytes_t static_buffer) -> arena_t<ok::nonthreadsafe_allocator_t>;
 
 template <typename allocator_impl_t>
 constexpr arena_t<allocator_impl_t>::arena_t(bytes_t static_buffer)
@@ -88,8 +56,27 @@ constexpr arena_t<allocator_impl_t>::arena_t(bytes_t static_buffer)
 }
 
 template <typename allocator_impl_t>
+constexpr arena_t<allocator_impl_t>&
+arena_t<allocator_impl_t>::operator=(arena_t&& other) OKAYLIB_NOEXCEPT
+{
+    destroy();
+    m_memory = other.m_memory;
+    m_available_memory = other.m_available_memory;
+    m_backing = std::exchange(other.m_backing, nullopt);
+    return *this;
+}
+
+template <typename allocator_impl_t>
+constexpr arena_t<allocator_impl_t>::arena_t(arena_t&& other) OKAYLIB_NOEXCEPT
+    : m_memory(other.m_memory),
+      m_available_memory(other.m_available_memory),
+      m_backing(std::exchange(other.m_backing, nullopt))
+{
+}
+
+template <typename allocator_impl_t>
 constexpr arena_t<allocator_impl_t>::arena_t(
-    bytes_t&& initial_buffer,
+    bytes_t initial_buffer,
     allocator_impl_t& backing_allocator) OKAYLIB_NOEXCEPT
     : m_memory(initial_buffer),
       m_available_memory(initial_buffer),
@@ -100,10 +87,9 @@ constexpr arena_t<allocator_impl_t>::arena_t(
 template <typename allocator_impl_t>
 constexpr void arena_t<allocator_impl_t>::destroy() OKAYLIB_NOEXCEPT
 {
-    if (m_backing) {
-        auto& backing = m_backing.ref_or_panic();
-        backing.deallocate(m_memory);
-    }
+    if (m_backing)
+        m_backing.ref_unchecked().deallocate(
+            m_memory.unchecked_address_of_first_item());
 }
 
 template <typename allocator_impl_t>
@@ -112,7 +98,6 @@ arena_t<allocator_impl_t>::impl_allocate(const alloc::request_t& request)
     OKAYLIB_NOEXCEPT
 {
     using namespace alloc;
-    const bool should_zero = !(request.flags & flags::leave_nonzeroed);
     void* aligned_start_voidptr =
         m_available_memory.unchecked_address_of_first_item();
     size_t space_remaining_after_alignment = m_available_memory.size();
@@ -137,14 +122,35 @@ arena_t<allocator_impl_t>::impl_allocate(const alloc::request_t& request)
         .length = m_available_memory.size() - start_index,
     });
 
-    if (should_zero) {
+    if (!request.leave_nonzeroed) {
         std::memset(aligned_start, 0, allocated_size);
     }
     return raw_slice(*aligned_start, allocated_size);
 }
 
 template <typename allocator_impl_t>
-inline void arena_t<allocator_impl_t>::impl_clear() OKAYLIB_NOEXCEPT
+[[nodiscard]] inline void*
+arena_t<allocator_impl_t>::new_scope() OKAYLIB_NOEXCEPT
+{
+    ok::res result = this->make_non_owning<bytes_t>(m_available_memory);
+    if (result.is_success()) [[likely]]
+        return ok::addressof(result.unwrap_unchecked());
+    else
+        return nullptr;
+}
+
+template <typename allocator_impl_t>
+inline void
+arena_t<allocator_impl_t>::restore_scope(void* handle) OKAYLIB_NOEXCEPT
+{
+    if (!handle) [[unlikely]]
+        return;
+
+    m_available_memory = *static_cast<bytes_t*>(handle);
+}
+
+template <typename allocator_impl_t>
+constexpr void arena_t<allocator_impl_t>::clear() OKAYLIB_NOEXCEPT
 {
 #ifndef NDEBUG
     ok::memfill(m_memory, 0);
