@@ -30,7 +30,8 @@ class abstract_status_t
     //
     // NOTE: when freeing the object, the pointer to the abstract_status_t will
     // be passed.
-    [[nodiscard]] virtual opt<ok::allocator_t&> allocator() noexcept = 0;
+    [[nodiscard]] virtual opt<ok::nonthreadsafe_allocator_t&>
+    allocator() noexcept = 0;
 
     virtual ~abstract_status_t() = default;
 };
@@ -216,11 +217,8 @@ class anystatus_t
 
         m_status->~abstract_status_t();
 
-        // NOTE: passing a sizeof(void* as the size of m_status here, allocator
-        // has to remember actual size of allocation, this is only a hint)
         if (allocator) {
-            allocator.ref_unchecked().deallocate(ok::raw_slice(
-                *reinterpret_cast<uint8_t*>(m_status), sizeof(void*)));
+            allocator.ref_unchecked().deallocate(m_status);
         }
     }
 
