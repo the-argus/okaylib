@@ -2,6 +2,7 @@
 #define __OKAYLIB_ANYSTATUS_H__
 
 #include "okay/allocators/allocator.h"
+#include "okay/ctti/ctti.h"
 #include "okay/detail/noexcept.h"
 #include "okay/error.h"
 #include <cstdint>
