@@ -6,22 +6,6 @@
 
 namespace ok {
 namespace detail {
-
-template <typename T, typename E> struct res_accessor_t
-{
-    static constexpr void set_result_error_byte(res<T, E>& res,
-                                                uint8_t byte) noexcept
-    {
-        res.get_error_payload() = byte;
-    }
-
-    static constexpr T&
-    get_result_payload_ref_unchecked(res<T, E>& res) noexcept
-    {
-        return res.get_value_unchecked_payload();
-    }
-};
-
 template <typename T> struct make_into_uninitialized_fn_t
 {
     template <typename... args_t>
@@ -131,25 +115,25 @@ template <typename T = detail::deduced_t, typename... args_t>
                     std::forward<decltype(innerargs)>(innerargs)...);
             } else {
                 if constexpr (analysis::can_fail) {
-                    using enum_type =
-                        typename decltype(constructor.make_into_uninit(
-                            std::declval<actual_t&>(),
-                            std::forward<decltype(innerargs)>(
-                                innerargs)...))::enum_type;
-                    ok::res<actual_t, enum_type> out;
+                    using status_type = decltype(constructor.make_into_uninit(
+                        std::declval<actual_t&>(),
+                        std::forward<decltype(innerargs)>(innerargs)...));
 
-                    auto& uninit = detail::res_accessor_t<actual_t, enum_type>::
-                        get_result_payload_ref_unchecked(out);
+                    using accessor =
+                        detail::res_accessor_t<actual_t, status_type>;
+                    auto out = accessor::construct_uninitialized_res();
 
-                    detail::res_accessor_t<actual_t, enum_type>::
-                        set_result_error_byte(
-                            out,
-                            uint8_t(constructor
-                                        .make_into_uninit(
-                                            uninit,
-                                            std::forward<decltype(innerargs)>(
-                                                innerargs)...)
-                                        .err()));
+                    auto& uninit =
+                        accessor::get_result_payload_ref_unchecked(out);
+
+                    // statuses have to be nothrow move constructible, so we can
+                    // call make make_into_uninit and just move the result into
+                    // the error of the output error. this initializes both the
+                    // status and the payload in one move
+                    accessor::emplace_error_nodestroy(
+                        out, std::move(constructor.make_into_uninit(
+                                 uninit, std::forward<decltype(innerargs)>(
+                                             innerargs)...)));
 
                     return out;
                 } else {
@@ -161,8 +145,6 @@ template <typename T = detail::deduced_t, typename... args_t>
                         out.value,
                         std::forward<decltype(innerargs)>(innerargs)...);
 
-                    // TODO: what is codegen like for this? if constructor is
-                    // constexpr, is not doing a std::move better?
                     return std::move(out.value);
                 }
             }

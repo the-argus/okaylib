@@ -1,7 +1,6 @@
 #ifndef __OKAYLIB_ERROR_H__
 #define __OKAYLIB_ERROR_H__
 
-#include "okay/ctti/ctti.h"
 #include "okay/detail/abort.h"
 #include "okay/detail/addressof.h"
 #include "okay/detail/memory.h"
@@ -89,6 +88,19 @@ concept transform_callable_noargs = requires(callable_t c) {
     // it is valid to form res with the returned type and the same error type
     requires !std::is_void_v<res<decltype(c()), status_t>>;
 };
+
+template <typename T, typename E> struct res_accessor_t
+{
+    static constexpr res<T, E> construct_uninitialized_res() noexcept;
+
+    template <typename... args_t>
+        requires ok::is_infallible_constructible_c<E, args_t...>
+    static constexpr void emplace_error_nodestroy(res<T, E>& res,
+                                                  args_t&&... byte) noexcept;
+
+    static constexpr T&
+    get_result_payload_ref_unchecked(res<T, E>& res) noexcept;
+};
 } // namespace detail
 
 template <typename success_t, status_type_c status_t>
@@ -107,9 +119,16 @@ __OK_RES_REQUIRES_CLAUSE class res<
                                std::forward<args_t>(args)...);
     }
 
+    // called internally in detail::res_accessor_t  and then in construct.h
+    // in order to avoid moves when initializing some objects with failing
+    // constructors into a res
+    constexpr res() = default;
+
   public:
     using success_type = success_t;
     using status_type = status_t;
+
+    template <typename T, typename E> friend class detail::res_accessor_t;
 
     // use compiler generated copy/move if one is present in the
     // uninitialized_storage_t (meaning the success_t is trivialy)
@@ -708,6 +727,33 @@ __OK_RES_REQUIRES_CLAUSE class res<
     friend struct fmt::formatter<res>;
 #endif
 };
+
+namespace detail {
+template <typename T, typename E>
+constexpr res<T, E> res_accessor_t<T, E>::construct_uninitialized_res() noexcept
+{
+    return res<T, E>();
+}
+
+template <typename T, typename E>
+template <typename... args_t>
+    requires ok::is_infallible_constructible_c<E, args_t...>
+constexpr void
+res_accessor_t<T, E>::emplace_error_nodestroy(res<T, E>& res,
+                                              args_t&&... args) noexcept
+{
+    ok::stdc::construct_at(ok::addressof(res.m_status),
+                           std::forward<args_t>(args)...);
+}
+
+template <typename T, typename E>
+constexpr T&
+res_accessor_t<T, E>::get_result_payload_ref_unchecked(res<T, E>& res) noexcept
+{
+    return res.m_success.value;
+}
+} // namespace detail
+
 } // namespace ok
 
 #if defined(OKAYLIB_USE_FMT)

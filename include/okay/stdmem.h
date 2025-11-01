@@ -9,6 +9,16 @@
 #include <cstring>
 
 namespace ok {
+inline constexpr bool fill_freed_memory_with_debug_bytes =
+#ifndef NDEBUG
+    true
+#else
+    false
+#endif
+    ;
+
+inline constexpr uint8_t debug_byte = 0x69;
+
 enum class mem_error : uint8_t
 {
     okay,
@@ -83,6 +93,8 @@ template <typename T>
 template <typename slice_viewed_t, typename... constructor_args_t>
 constexpr void memfill(ok::slice<slice_viewed_t> slice,
                        constructor_args_t&&... args) OKAYLIB_NOEXCEPT;
+
+constexpr void mark_bytes_freed_if_debugging(bytes_t slice) OKAYLIB_NOEXCEPT;
 
 /// Converts a slice of any type into a slice of bytes. Doing this is usually a
 /// bad idea.
@@ -228,6 +240,14 @@ constexpr void ok::memfill(ok::slice<slice_viewed_t> slice,
             ok::make_into_uninitialized<slice_viewed_t>(
                 item, std::forward<constructor_args_t>(args)...);
         }
+    }
+}
+
+constexpr void
+ok::mark_bytes_freed_if_debugging(ok::bytes_t slice) OKAYLIB_NOEXCEPT
+{
+    if constexpr (ok::fill_freed_memory_with_debug_bytes) {
+        ok::memfill(slice, ok::debug_byte);
     }
 }
 

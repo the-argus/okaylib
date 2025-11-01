@@ -123,6 +123,8 @@ struct reallocate_request_t
     size_t new_size_bytes;
     // ignored if shrinking or if zero
     size_t preferred_size_bytes = 0;
+    // ok::alloc::default_align if zero
+    size_t alignment = 0;
     // just for try_defragment or leave_nonzeroed. flags::expand_back and
     // flags::shrink_back do nothing.
     alloc::flags flags;
@@ -141,6 +143,11 @@ struct reallocate_request_t
                (preferred_size_bytes == 0 ||
                 (new_size_bytes >= memory.size() &&
                  preferred_size_bytes > new_size_bytes));
+    }
+
+    [[nodiscard]] constexpr bool min_alignment() const noexcept
+    {
+        return alignment ? alignment : ok::alloc::default_align;
     }
 };
 
@@ -272,12 +279,7 @@ struct owned
     constexpr ~owned() { destroy(); }
 
   private:
-    constexpr void destroy() noexcept
-    {
-        if (m_allocation) {
-            m_allocator->deallocate(m_allocation);
-        }
-    }
+    constexpr void destroy() noexcept { m_allocator->deallocate(m_allocation); }
 
     constexpr owned(T& allocation, allocator_impl_t& allocator) noexcept
         : m_allocation(ok::addressof(allocation)),

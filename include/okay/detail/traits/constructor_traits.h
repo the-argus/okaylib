@@ -2,8 +2,13 @@
 #define __OKAYLIB_DETAIL_TRAITS_CONSTRUCTOR_TRAITS_H__
 
 #include "okay/detail/traits/error_traits.h"
+#include "okay/detail/traits/is_instance.h"
 #include "okay/detail/traits/special_member_traits.h"
 #include <type_traits>
+
+namespace ok {
+template <status_enum_c enum_t> class status;
+}
 
 namespace ok::detail {
 struct bad_construction_analysis : public std::false_type
@@ -81,10 +86,17 @@ template <typename... args_t> struct constructor_analysis
         using return_type =
             decltype(std::declval<const constructor_t&>().make_into_uninit(
                 std::declval<T&>(), std::declval<args_t>()...));
-        static_assert(std::is_void_v<return_type> ||
-                          status_object_c<return_type>,
+        static_assert(ok::stdc::is_void_v<return_type> ||
+                          status_type_c<return_type>,
                       "Return type from make_into_uninit() should be void (if "
                       "the function can't fail) or a status object.");
+        static_assert(
+            !ok::detail::is_instance_c<return_type, ok::status>,
+            "Avoid returning an ok::status from make_into_uninit(), "
+            "just return the enum type directly instead (the return "
+            "type should match the second template argument of the "
+            "res that you want to be returned when you construct "
+            "this object with ok::make(), like: ok::res<T, return_type>)");
     };
 
     template <typename constructor_t, typename = void>
@@ -152,7 +164,7 @@ template <typename... args_t> struct constructor_analysis
 
         constexpr static bool can_fail =
             has_inplace && !has_rvo &&
-            status_object_c<typename make_into_uninit_fn_analysis<
+            status_type_c<typename make_into_uninit_fn_analysis<
                 associated_type, constructor_t>::return_type>;
 
         static_assert(can_fail || !has_inplace ||

@@ -9,8 +9,10 @@
 
 namespace ok {
 
+// TODO: use atomics and conditionally allow arena to implement threadsafe
+// allocate_interface_t if its allocator_impl_t also does
 template <typename allocator_impl_t = ok::nonthreadsafe_allocator_t>
-class arena_t : public ok::allocate_interface_t,
+class arena_t : public ok::nonthreadsafe_allocate_interface_t,
                 public ok::arena_allocator_restore_scope_interface_t
 {
   public:
@@ -44,6 +46,70 @@ class arena_t : public ok::allocate_interface_t,
     bytes_t m_memory;
     bytes_t m_available_memory;
     opt<allocator_impl_t&> m_backing;
+};
+
+template <typename arena_impl_t>
+class arena_compat_wrapper_t : public ok::nonthreadsafe_allocator_t
+{
+  public:
+    arena_compat_wrapper_t() = delete;
+    explicit arena_compat_wrapper_t(arena_impl_t& arena)
+        : m_arena(ok::addressof(arena))
+    {
+    }
+
+  protected:
+    alloc::result_t<bytes_t>
+    impl_allocate(const alloc::request_t& request) OKAYLIB_NOEXCEPT final
+    {
+        return m_arena->allocate(request);
+    }
+
+    alloc::feature_flags impl_features() const OKAYLIB_NOEXCEPT final
+    {
+        // doesnt implement any nice features
+        return {};
+    }
+
+    void impl_deallocate(void* memory) OKAYLIB_NOEXCEPT final
+    {
+        // deallocating with an arena is a no-op
+        return;
+    }
+
+    alloc::result_t<bytes_t> impl_reallocate(
+        const alloc::reallocate_request_t& options) OKAYLIB_NOEXCEPT final
+    {
+        // just allocate a new block with the new size and do a copy
+        res allocation = m_arena->allocate(alloc::request_t{
+            .num_bytes = options.preferred_size_bytes,
+            .alignment = options.min_alignment(),
+            .leave_nonzeroed = true,
+        });
+
+        if (!allocation.is_success()) [[unlikely]]
+            return allocation;
+
+        bytes_t newmem = allocation.unwrap();
+
+        // ignore result of memcopy
+        auto&& _ = ok_memcopy(.to = newmem, .from = options.memory);
+
+        // freeing the old allocation is not possible with arena
+        return newmem;
+    }
+
+    alloc::result_t<alloc::reallocation_extended_t> impl_reallocate_extended(
+        const alloc::reallocate_extended_request_t& options)
+        OKAYLIB_NOEXCEPT final
+    {
+        // arena cannot do a reallocate extended request
+        // TODO: could sort of implement a compat for this
+        return alloc::error::unsupported;
+    }
+
+  private:
+    arena_impl_t* m_arena;
 };
 
 // arena_t(bytes_t static_buffer) -> arena_t<ok::nonthreadsafe_allocator_t>;
