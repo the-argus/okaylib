@@ -32,7 +32,7 @@ template <typename allocator_t> struct allocator_tests
             {
                 auto result = ally.make(array::undefined<u8, 1024>);
                 if (result.is_success()) {
-                    alloc::owned mb = result.unwrap();
+                    alloc::owned mb = std::move(result.unwrap());
                 } else {
                     // early return because this isnt going to be able to
                     // allocate at all, but thats fine, erroring is not bad
@@ -120,7 +120,7 @@ template <typename allocator_t> struct allocator_tests
             if constexpr (has_clear) {
                 ally.clear();
             } else if constexpr (has_deallocate) {
-                ally.deallocate(bytes);
+                ally.deallocate(bytes.address_of_first());
             }
         }
     }
@@ -173,7 +173,7 @@ template <typename allocator_t> struct allocator_tests
 
             defer d([&] {
                 if constexpr (has_deallocate) {
-                    ally.deallocate(allocation);
+                    ally.deallocate(allocation.address_of_first());
                 } else if constexpr (has_clear) {
                     ally.clear();
                 }

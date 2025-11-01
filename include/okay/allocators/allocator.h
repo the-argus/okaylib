@@ -20,6 +20,7 @@
 namespace ok {
 
 class allocator_t;
+class nonthreadsafe_allocator_t;
 
 namespace alloc {
 enum class error : uint8_t
@@ -224,9 +225,10 @@ struct reallocation_extended_t
     size_t bytes_offset_front = 0;
 };
 
-template <typename T, typename allocator_impl_t = ok::allocator_t> struct owned
+template <typename T, typename allocator_impl_t = ok::nonthreadsafe_allocator_t>
+struct owned
 {
-    friend class ok::allocator_t;
+    friend class ok::nonthreadsafe_allocator_t;
 
     [[nodiscard]] constexpr T& operator*() const
     {
@@ -408,22 +410,22 @@ class arena_allocator_restore_scope_interface_t
     virtual void restore_scope(void* handle) OKAYLIB_NOEXCEPT = 0;
 };
 
-class nonthreadsafe_allocator_t : public nonthreadsafe_allocate_interface_t
+class nonthreadsafe_allocator_t
+    : virtual public nonthreadsafe_allocate_interface_t
 {
   public:
-    [[nodiscard]] constexpr alloc::feature_flags
-    features() const OKAYLIB_NOEXCEPT
+    [[nodiscard]] alloc::feature_flags features() const OKAYLIB_NOEXCEPT
     {
         return impl_features();
     }
 
-    constexpr void deallocate(void* memory) OKAYLIB_NOEXCEPT
+    void deallocate(void* memory) OKAYLIB_NOEXCEPT
     {
         if (memory) [[likely]]
             impl_deallocate(memory);
     }
 
-    [[nodiscard]] constexpr alloc::result_t<bytes_t>
+    [[nodiscard]] alloc::result_t<bytes_t>
     reallocate(const alloc::reallocate_request_t& options) OKAYLIB_NOEXCEPT
     {
         if (!options.is_valid()) [[unlikely]] {
@@ -433,7 +435,7 @@ class nonthreadsafe_allocator_t : public nonthreadsafe_allocate_interface_t
         return impl_reallocate(options);
     }
 
-    [[nodiscard]] constexpr alloc::result_t<alloc::reallocation_extended_t>
+    [[nodiscard]] alloc::result_t<alloc::reallocation_extended_t>
     reallocate_extended(const alloc::reallocate_extended_request_t& options)
         OKAYLIB_NOEXCEPT
     {
@@ -445,8 +447,7 @@ class nonthreadsafe_allocator_t : public nonthreadsafe_allocate_interface_t
     }
 
     template <typename T = detail::deduced_t, typename... args_t>
-    [[nodiscard]] constexpr decltype(auto)
-    make(args_t&&... args) OKAYLIB_NOEXCEPT;
+    [[nodiscard]] decltype(auto) make(args_t&&... args) OKAYLIB_NOEXCEPT;
 
   protected:
     [[nodiscard]] virtual alloc::feature_flags
@@ -466,7 +467,7 @@ class nonthreadsafe_allocator_t : public nonthreadsafe_allocate_interface_t
 };
 
 /// Threadsafe allocate interface
-class allocate_interface_t : public nonthreadsafe_allocate_interface_t
+class allocate_interface_t : virtual public nonthreadsafe_allocate_interface_t
 {};
 
 /// Threadsafe allocator
@@ -573,7 +574,7 @@ constexpr void destroy_and_free(allocator_impl_t& ally,
 }
 
 template <typename T, typename... args_t>
-[[nodiscard]] constexpr decltype(auto)
+[[nodiscard]] decltype(auto)
 ok::nonthreadsafe_allocator_t::make(args_t&&... args) OKAYLIB_NOEXCEPT
 {
     using analysis = decltype(detail::analyze_construction<args_t...>());

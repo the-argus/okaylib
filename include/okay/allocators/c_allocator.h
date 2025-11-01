@@ -7,12 +7,12 @@
 
 namespace ok {
 
-class c_allocator_t : public allocator_t
+class c_allocator_t : public ok::allocator_t
 {
   public:
     static constexpr alloc::feature_flags type_features =
         alloc::feature_flags::can_expand_back |
-        alloc::feature_flags::can_reclaim | alloc::feature_flags::is_threadsafe;
+        alloc::feature_flags::can_reclaim;
 
     c_allocator_t() = default;
 
@@ -20,12 +20,10 @@ class c_allocator_t : public allocator_t
     [[nodiscard]] inline alloc::result_t<bytes_t>
     impl_allocate(const alloc::request_t&) OKAYLIB_NOEXCEPT final;
 
-    inline void impl_clear() OKAYLIB_NOEXCEPT final;
-
     [[nodiscard]] inline alloc::feature_flags
     impl_features() const OKAYLIB_NOEXCEPT final;
 
-    inline void impl_deallocate(bytes_t) OKAYLIB_NOEXCEPT final;
+    inline void impl_deallocate(void* memory) OKAYLIB_NOEXCEPT final;
 
     [[nodiscard]] inline alloc::result_t<bytes_t>
     impl_reallocate(const alloc::reallocate_request_t&) OKAYLIB_NOEXCEPT final;
@@ -35,7 +33,7 @@ class c_allocator_t : public allocator_t
                                  options) OKAYLIB_NOEXCEPT final;
 
   private:
-    [[nodiscard]] constexpr alloc::result_t<bytes_t>
+    [[nodiscard]] inline alloc::result_t<bytes_t>
     realloc_inner(bytes_t memory, size_t new_size,
                   bool zeroed) OKAYLIB_NOEXCEPT;
 };
@@ -66,19 +64,16 @@ c_allocator_t::impl_allocate(const alloc::request_t& request) OKAYLIB_NOEXCEPT
     auto out = ok::raw_slice(*mem, nbytes);
 
     // TODO: disable this if platform guarantees memory is zeroed?
-    if (!(request.flags & alloc::flags::leave_nonzeroed)) [[unlikely]] {
-        memfill(out, 0);
+    if (!(request.leave_nonzeroed)) [[unlikely]] {
+        ok::memfill(out, 0);
     }
 
     return out;
 }
 
-inline void c_allocator_t::impl_deallocate(bytes_t bytes) OKAYLIB_NOEXCEPT
+inline void c_allocator_t::impl_deallocate(void* memory) OKAYLIB_NOEXCEPT
 {
-    if (bytes.size() == 0) [[unlikely]] {
-        return;
-    }
-    ::free(bytes.unchecked_address_of_first_item());
+    ::free(memory);
 }
 
 [[nodiscard]] inline alloc::result_t<bytes_t> c_allocator_t::impl_reallocate(
@@ -98,13 +93,13 @@ inline void c_allocator_t::impl_deallocate(bytes_t bytes) OKAYLIB_NOEXCEPT
     auto res = realloc_inner(
         options.memory,
         ok::max(options.preferred_size_bytes, options.new_size_bytes), zeroed);
-    if (!res.okay()) [[unlikely]]
-        return res.err();
+    if (!res.is_success()) [[unlikely]]
+        return res.status();
 
-    return res.release_ref();
+    return res.unwrap();
 }
 
-[[nodiscard]] constexpr alloc::result_t<bytes_t>
+[[nodiscard]] inline alloc::result_t<bytes_t>
 c_allocator_t::realloc_inner(bytes_t memory, size_t new_size,
                              bool zeroed) OKAYLIB_NOEXCEPT
 {
@@ -167,10 +162,10 @@ c_allocator_t::realloc_inner(bytes_t memory, size_t new_size,
         auto res =
             this->realloc_inner(options.memory, new_size,
                                 !(options.flags & flags::leave_nonzeroed));
-        if (!res.okay()) [[unlikely]]
-            return res.err();
+        if (!res.is_success()) [[unlikely]]
+            return res.status();
 
-        return reallocation_extended_t{.memory = res.release_ref()};
+        return reallocation_extended_t{.memory = res.unwrap()};
     }
 
     // shrink_front may be requested. make a new allocation so we dont have to
@@ -207,15 +202,6 @@ c_allocator_t::impl_features() const OKAYLIB_NOEXCEPT
 {
     return type_features;
 }
-
-inline void c_allocator_t::impl_clear() OKAYLIB_NOEXCEPT
-{
-    // TODO: make this a warning message
-    __ok_assert(false,
-                "Potential leak: trying to clear allocator but it does not "
-                "support clearing. Check features() before calling clear?");
-}
-
 } // namespace ok
 
 #endif
