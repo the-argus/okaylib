@@ -14,22 +14,22 @@ class arena_t : public ok::allocate_interface_t,
                 public ok::arena_allocator_restore_scope_interface_t
 {
   public:
-    constexpr explicit arena_t(bytes_t static_buffer) OKAYLIB_NOEXCEPT;
+    inline explicit arena_t(bytes_t static_buffer) OKAYLIB_NOEXCEPT;
     // owning constructor (if you initialize the arena this way, then destroy()
     // will free the initial buffer)
-    constexpr explicit arena_t(bytes_t initial_buffer,
-                               allocator_impl_t& backing_allocator)
+    inline explicit arena_t(bytes_t initial_buffer,
+                            allocator_impl_t& backing_allocator)
         OKAYLIB_NOEXCEPT;
 
-    constexpr arena_t(arena_t&& other) OKAYLIB_NOEXCEPT;
-    constexpr arena_t& operator=(arena_t&& other) OKAYLIB_NOEXCEPT;
+    inline arena_t(arena_t&& other) OKAYLIB_NOEXCEPT;
+    inline arena_t& operator=(arena_t&& other) OKAYLIB_NOEXCEPT;
 
     arena_t& operator=(const arena_t&) = delete;
     arena_t(const arena_t&) = delete;
 
-    constexpr ~arena_t() OKAYLIB_NOEXCEPT_FORCE { destroy(); }
+    ~arena_t() OKAYLIB_NOEXCEPT_FORCE { destroy(); }
 
-    constexpr void clear() OKAYLIB_NOEXCEPT;
+    inline void clear() OKAYLIB_NOEXCEPT;
 
   protected:
     [[nodiscard]] inline alloc::result_t<bytes_t>
@@ -39,7 +39,7 @@ class arena_t : public ok::allocate_interface_t,
     virtual inline void restore_scope(void* handle) OKAYLIB_NOEXCEPT;
 
   private:
-    constexpr void destroy() OKAYLIB_NOEXCEPT;
+    inline void destroy() OKAYLIB_NOEXCEPT;
 
     bytes_t m_memory;
     bytes_t m_available_memory;
@@ -49,14 +49,14 @@ class arena_t : public ok::allocate_interface_t,
 // arena_t(bytes_t static_buffer) -> arena_t<ok::nonthreadsafe_allocator_t>;
 
 template <typename allocator_impl_t>
-constexpr arena_t<allocator_impl_t>::arena_t(bytes_t static_buffer)
+inline arena_t<allocator_impl_t>::arena_t(bytes_t static_buffer)
     OKAYLIB_NOEXCEPT : m_memory(static_buffer),
                        m_available_memory(static_buffer)
 {
 }
 
 template <typename allocator_impl_t>
-constexpr arena_t<allocator_impl_t>&
+inline arena_t<allocator_impl_t>&
 arena_t<allocator_impl_t>::operator=(arena_t&& other) OKAYLIB_NOEXCEPT
 {
     destroy();
@@ -67,7 +67,7 @@ arena_t<allocator_impl_t>::operator=(arena_t&& other) OKAYLIB_NOEXCEPT
 }
 
 template <typename allocator_impl_t>
-constexpr arena_t<allocator_impl_t>::arena_t(arena_t&& other) OKAYLIB_NOEXCEPT
+inline arena_t<allocator_impl_t>::arena_t(arena_t&& other) OKAYLIB_NOEXCEPT
     : m_memory(other.m_memory),
       m_available_memory(other.m_available_memory),
       m_backing(std::exchange(other.m_backing, nullopt))
@@ -75,17 +75,16 @@ constexpr arena_t<allocator_impl_t>::arena_t(arena_t&& other) OKAYLIB_NOEXCEPT
 }
 
 template <typename allocator_impl_t>
-constexpr arena_t<allocator_impl_t>::arena_t(
-    bytes_t initial_buffer,
-    allocator_impl_t& backing_allocator) OKAYLIB_NOEXCEPT
-    : m_memory(initial_buffer),
-      m_available_memory(initial_buffer),
-      m_backing(backing_allocator)
+inline arena_t<allocator_impl_t>::arena_t(bytes_t initial_buffer,
+                                          allocator_impl_t& backing_allocator)
+    OKAYLIB_NOEXCEPT : m_memory(initial_buffer),
+                       m_available_memory(initial_buffer),
+                       m_backing(backing_allocator)
 {
 }
 
 template <typename allocator_impl_t>
-constexpr void arena_t<allocator_impl_t>::destroy() OKAYLIB_NOEXCEPT
+inline void arena_t<allocator_impl_t>::destroy() OKAYLIB_NOEXCEPT
 {
     if (m_backing)
         m_backing.ref_unchecked().deallocate(
@@ -150,7 +149,7 @@ arena_t<allocator_impl_t>::restore_scope(void* handle) OKAYLIB_NOEXCEPT
 }
 
 template <typename allocator_impl_t>
-constexpr void arena_t<allocator_impl_t>::clear() OKAYLIB_NOEXCEPT
+void arena_t<allocator_impl_t>::clear() OKAYLIB_NOEXCEPT
 {
 #ifndef NDEBUG
     ok::memfill(m_memory, 0);
