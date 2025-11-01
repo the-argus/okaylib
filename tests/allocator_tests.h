@@ -238,10 +238,11 @@ run_allocator_tests_static_and_dynamic_dispatch(allocator_t& allocator)
 
     if constexpr (ok::detail::is_derived_from_c<
                       allocator_t, ok::nonthreadsafe_allocator_t>) {
-        allocator_tests<ok::allocator_t> dynamic_dispatch;
+        allocator_tests<ok::nonthreadsafe_allocator_t> dynamic_dispatch;
         dynamic_dispatch.run_all_fuzzed(allocator);
     } else {
-        allocator_tests<ok::allocate_interface_t> dynamic_dispatch;
+        allocator_tests<ok::nonthreadsafe_allocate_interface_t>
+            dynamic_dispatch;
         dynamic_dispatch.run_all_fuzzed(allocator);
     }
 }

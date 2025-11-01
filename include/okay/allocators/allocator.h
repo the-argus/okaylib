@@ -547,9 +547,10 @@ template <typename T, typename allocator_impl_t>
 constexpr void destroy_and_free(allocator_impl_t& ally,
                                 T& object) OKAYLIB_NOEXCEPT
 {
-    static_assert(
-        detail::is_derived_from_c<allocator_impl_t, allocator_t>,
-        "Type given in first argument does not inherit from ok::allocator_t.");
+    static_assert(detail::is_derived_from_c<allocator_impl_t,
+                                            ok::nonthreadsafe_allocator_t>,
+                  "Type given in first argument does not inherit from "
+                  "ok::nonthreadsafe_allocator_t.");
     static_assert(is_std_destructible_c<T>,
                   "The destructor you're trying to call with ok::free is "
                   "not " __ok_msg_nothrow "destructible");
