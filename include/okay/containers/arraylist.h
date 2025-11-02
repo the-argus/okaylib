@@ -3,8 +3,8 @@
 
 #include "okay/allocators/allocator.h"
 #include "okay/defer.h"
+#include "okay/error.h"
 #include "okay/ranges/ranges.h"
-#include "okay/status.h"
 
 #if defined(OKAYLIB_USE_FMT)
 #include <fmt/core.h>
@@ -59,7 +59,7 @@ class arraylist_t
     static_assert(!std::is_void_v<T>, "cannot create an array list of void.");
     static_assert(
         std::is_trivially_copyable_v<T> || std::is_move_constructible_v<T> ||
-            is_std_constructible_v<T, T&&>,
+            is_std_constructible_c<T, T&&>,
         "Type given to arraylist_t must be either trivially copyable or move "
         "constructible, otherwise it cannot move the items when reallocating.");
     static_assert(!is_const_c<T>,
@@ -141,7 +141,7 @@ class arraylist_t
                 return status;
             }
         }
-        return alloc::error::okay;
+        return alloc::error::success;
     }
 
     /// Returns error describing any potential failure due to allocation, but
@@ -240,7 +240,7 @@ class arraylist_t
             ok::make_into_uninitialized<T>(uninit,
                                            std::forward<args_t>(args)...);
             ++m.size;
-            return status(alloc::error::okay);
+            return status(alloc::error::success);
         }
     }
 
@@ -358,10 +358,10 @@ class arraylist_t
                          alloc::flags::leave_nonzeroed,
             });
 
-        if (!reallocated.okay()) [[unlikely]]
+        if (!reallocated.is_success()) [[unlikely]]
             return;
 
-        bytes_t& new_bytes = reallocated.release_ref();
+        bytes_t& new_bytes = reallocated.unwrap();
         __ok_assert((void*)new_bytes.unchecked_address_of_first_item() ==
                         m.items,
                     "Backing allocator for arraylist did not reallocate "
@@ -424,16 +424,16 @@ class arraylist_t
     template <typename... args_t>
     [[nodiscard]] constexpr auto resize(size_t new_size,
                                         args_t&&... args) OKAYLIB_NOEXCEPT
-        -> std::enable_if_t<is_infallible_constructible_v<T, args_t...>,
+        -> std::enable_if_t<is_infallible_constructible_c<T, args_t...>,
                             status<alloc::error>>
     {
         if (this->size() == new_size) [[unlikely]] {
-            return alloc::error::okay;
+            return alloc::error::success;
         }
 
         if (new_size == 0) [[unlikely]] {
             clear();
-            return alloc::error::okay;
+            return alloc::error::success;
         }
 
         if (this->capacity() == 0) {
@@ -453,7 +453,7 @@ class arraylist_t
                 }
             }
             m.size = new_size;
-            return alloc::error::okay;
+            return alloc::error::success;
         }
 
         const bool shrinking = this->size() > new_size;
@@ -471,7 +471,7 @@ class arraylist_t
                 status<alloc::error> status =
                     reallocate((new_size - capacity()) * sizeof(T), 0);
 
-                if (!status.okay())
+                if (!status.is_success())
                     return status;
             }
 
@@ -496,7 +496,7 @@ class arraylist_t
             m.size = new_size;
         }
 
-        return alloc::error::okay;
+        return alloc::error::success;
     }
 
     /// the old shrink and leak. the shrinky leaky
@@ -522,7 +522,7 @@ class arraylist_t
     template <typename... args_t>
     constexpr auto append(args_t&&... args) OKAYLIB_NOEXCEPT
         -> std::enable_if_t<
-            is_constructible_v<T, args_t...>,
+            is_constructible_c<T, args_t...>,
             // append may return the error type from an erroring constructor
             decltype(insert_at(this->size(), std::forward<args_t>(args)...))>
     {
@@ -536,16 +536,16 @@ class arraylist_t
     append_range(const other_range_t& range) OKAYLIB_NOEXCEPT
     {
         static_assert(
-            is_infallible_constructible_v<T, value_type_for<other_range_t>>,
+            is_infallible_constructible_c<T, value_type_for<other_range_t>>,
             "Cannot append the given range: the contents of the arraylist "
             "cannot be constructed from the contents of the given range (at "
             "least not without a potential error at each construction).");
-        static_assert(!detail::range_marked_infinite_v<other_range_t>,
+        static_assert(!detail::range_marked_infinite_c<other_range_t>,
                       "Cannot append an infinite range.");
 
         __ok_internal_assert(this->capacity() >= this->size());
 
-        if constexpr (detail::range_impls_size_v<other_range_t>) {
+        if constexpr (detail::range_impls_size_c<other_range_t>) {
             const size_t size = ok::size(range);
             const size_t extra_space = this->capacity() - this->size();
             if (size > extra_space) {
@@ -559,15 +559,14 @@ class arraylist_t
 
         for (auto cursor = ok::begin(range); ok::is_inbounds(range, cursor);
              ok::increment(range, cursor)) {
-            auto status =
-                this->append(ok::iter_get_temporary_ref(range, cursor));
-            if constexpr (!detail::range_impls_size_v<other_range_t>) {
+            auto status = this->append(ok::range_get_best(range, cursor));
+            if constexpr (!detail::range_impls_size_c<other_range_t>) {
                 if (!status.okay()) [[unlikely]] {
                     return status;
                 }
             }
         }
-        return alloc::error::okay;
+        return alloc::error::success;
     }
 
     constexpr ~arraylist_t() { destroy(); }
@@ -580,19 +579,19 @@ class arraylist_t
             m.backing_allocator->allocate(alloc::request_t{
                 .num_bytes = initial_bytes,
                 .alignment = alignof(T),
-                .flags = alloc::flags::leave_nonzeroed,
+                .leave_nonzeroed = true,
             });
 
-        if (!res.okay()) [[unlikely]] {
-            return res.err();
+        if (!res.is_success()) [[unlikely]] {
+            return res.status();
         }
 
-        bytes_t& memory = res.release_ref();
+        bytes_t& memory = res.unwrap();
         m.items =
             reinterpret_cast<T*>(memory.unchecked_address_of_first_item());
         m.capacity = memory.size() / sizeof(T);
 
-        return alloc::error::okay;
+        return alloc::error::success;
     }
 
     /// "spots" is the currently allocated spots, including uninitialized
@@ -617,11 +616,11 @@ class arraylist_t
                         .flags = realloc_flags | flags::in_place_orelse_fail,
                     });
 
-            if (!res.okay()) [[unlikely]] {
-                return res.err();
+            if (!res.is_success()) [[unlikely]] {
+                return res.status();
             }
 
-            auto& reallocation = res.release_ref();
+            auto& reallocation = res.unwrap();
             if (reallocation.was_in_place) {
                 // sanity checks
                 __ok_assert(
@@ -660,7 +659,7 @@ class arraylist_t
                 m.items = dest;
                 m.capacity = reallocation.memory.size() / sizeof(T);
             }
-            return alloc::error::okay;
+            return alloc::error::success;
         } else {
             const size_t capacity_bytes = this->capacity() * sizeof(T);
             result_t<bytes_t> res =
@@ -674,16 +673,16 @@ class arraylist_t
                     .flags = realloc_flags,
                 });
 
-            if (!res.okay()) [[unlikely]] {
-                return res.err();
+            if (!res.is_success()) [[unlikely]] {
+                return res.status();
             }
 
-            bytes_t& bytes = res.release_ref();
+            bytes_t& bytes = res.unwrap();
 
             m.items =
                 reinterpret_cast<T*>(bytes.unchecked_address_of_first_item());
             m.capacity = bytes.size() / sizeof(T);
-            return alloc::error::okay;
+            return alloc::error::success;
         }
     }
 
@@ -757,7 +756,7 @@ template <typename T> struct spots_preallocated_t
         auto res = allocator.allocate(alloc::request_t{
             .num_bytes = sizeof(T) * num_spots_preallocated,
             .alignment = alignof(T),
-            .flags = alloc::flags::leave_nonzeroed,
+            .leave_nonzeroed = true,
         });
 
         if (!res.okay()) [[unlikely]] {
@@ -775,7 +774,7 @@ template <typename T> struct spots_preallocated_t
             .size = 0,
             .backing_allocator = ok::addressof(allocator),
         });
-        return alloc::error::okay;
+        return alloc::error::success;
     }
 };
 
@@ -801,7 +800,7 @@ struct copy_items_from_range_t
                      backing_allocator_t& allocator,
                      const input_range_t& range) const OKAYLIB_NOEXCEPT
     {
-        static_assert(ok::detail::range_can_size_v<input_range_t>,
+        static_assert(ok::detail::range_can_size_c<input_range_t>,
                       "Size of range unknown, refusing to copy out its items "
                       "using arraylist::copy_items_from_range constructor.");
         using T = value_type_for<const input_range_t&>;
@@ -819,14 +818,14 @@ struct copy_items_from_range_t
         alloc::result_t<bytes_t> res = allocator.allocate(alloc::request_t{
             .num_bytes = num_items * sizeof(T),
             .alignment = alignof(T),
-            .flags = alloc::flags::leave_nonzeroed,
+            .leave_nonzeroed = true,
         });
 
-        if (!res.okay()) [[unlikely]] {
-            return res.err();
+        if (!res.is_success()) [[unlikely]] {
+            return res.status();
         }
 
-        auto& bytes = res.release_ref();
+        auto& bytes = res.unwrap();
         T* const memory =
             reinterpret_cast<T*>(bytes.unchecked_address_of_first_item());
         const size_t bytes_allocated = bytes.size();
@@ -835,7 +834,7 @@ struct copy_items_from_range_t
         size_t i = 0;
         for (auto cursor = ok::begin(range); ok::is_inbounds(range, cursor);
              ok::increment(range, cursor)) {
-            new (memory + i) T(ok::iter_get_temporary_ref(range, cursor));
+            new (memory + i) T(ok::range_get_best(range, cursor));
             ++i;
         }
 
@@ -846,7 +845,7 @@ struct copy_items_from_range_t
             .backing_allocator = ok::addressof(allocator),
         });
 
-        return alloc::error::okay;
+        return alloc::error::success;
     };
 };
 

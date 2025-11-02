@@ -14,7 +14,7 @@ namespace ok {
 /// always passed the in_place_orelse_fail flag.
 /// Freeing a subslice of the original allocation with this allocator is
 /// defined behavior, unlike page_allocator_t.
-class reserving_page_allocator_t : public allocator_t
+class reserving_page_allocator_t : public nonthreadsafe_allocator_t
 {
   public:
     // NOTE: page allocator not threadsafe, uses errno and GetLastError on win
@@ -33,8 +33,7 @@ class reserving_page_allocator_t : public allocator_t
     };
 
     reserving_page_allocator_t() = delete;
-    explicit constexpr reserving_page_allocator_t(
-        const options_t& options) noexcept
+    explicit reserving_page_allocator_t(const options_t& options) noexcept
         : m_pages_reserved(options.pages_reserved)
     {
     }
@@ -73,19 +72,12 @@ class reserving_page_allocator_t : public allocator_t
 
         __ok_internal_assert(reservation_result.bytes >= total_bytes);
 
-        if (!(request.flags & alloc::flags::leave_nonzeroed)) {
+        if (!(request.leave_nonzeroed)) {
             std::memset(reservation_result.data, 0, total_bytes);
         }
 
         return ok::raw_slice(*static_cast<uint8_t*>(reservation_result.data),
                              total_bytes);
-    }
-
-    inline void impl_clear() OKAYLIB_NOEXCEPT final
-    {
-        __ok_assert(false, "reserving_page_allocator_t cannot clear, calling "
-                           "this may indicate a memory leak. Check "
-                           "allocator.features() before calling clear()?");
     }
 
     [[nodiscard]] inline alloc::feature_flags
@@ -94,7 +86,7 @@ class reserving_page_allocator_t : public allocator_t
         return type_features;
     }
 
-    inline void impl_deallocate(bytes_t bytes) OKAYLIB_NOEXCEPT final
+    inline void impl_deallocate(void* memory) OKAYLIB_NOEXCEPT final
     {
         size_t page_size = mmap::get_page_size();
         if (page_size == 0) [[unlikely]] {
@@ -104,8 +96,7 @@ class reserving_page_allocator_t : public allocator_t
             page_size = 4096;
         }
         const auto code =
-            mmap::memory_unmap(bytes.unchecked_address_of_first_item(),
-                               page_size * m_pages_reserved);
+            mmap::memory_unmap(memory, page_size * m_pages_reserved);
         __ok_internal_assert(code == 0);
     }
 
