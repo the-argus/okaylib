@@ -9,12 +9,14 @@
 // #endif
 #include <cstdio>
 #include <exception>
+#if defined(OKAYLIB_TESTING_BACKTRACE)
 namespace detail_testing {
 // defined in backward.cpp
 void print_stack_trace(void* st);
 void* get_stack_trace();
 void delete_stack_trace(void* st);
 } // namespace detail_testing
+#endif
 
 namespace reserve {
 class _abort_exception : std::exception
@@ -26,16 +28,20 @@ class _abort_exception : std::exception
 
     constexpr void cancel_stack_trace_print()
     {
+#if defined(OKAYLIB_TESTING_BACKTRACE)
         detail_testing::delete_stack_trace(m_st);
+#endif
         m_st = nullptr;
     }
 
     inline ~_abort_exception() override
     {
+#if defined(OKAYLIB_TESTING_BACKTRACE)
         if (m_st) {
             detail_testing::print_stack_trace(m_st);
             detail_testing::delete_stack_trace(m_st);
         }
+#endif
     }
 
   private:
@@ -43,12 +49,21 @@ class _abort_exception : std::exception
 };
 } // namespace reserve
 
+#if defined(OKAYLIB_TESTING_BACKTRACE)
 #define __ok_abort(msg)                                                       \
     {                                                                         \
         ::fprintf(stderr, "Okaylib abort called at %s:%d in %s: %s\n",        \
                   __FILE__, __LINE__, __FUNCTION__, msg);                     \
         throw ::reserve::_abort_exception(detail_testing::get_stack_trace()); \
     }
+#else
+#define __ok_abort(msg)                                                       \
+    {                                                                         \
+        ::fprintf(stderr, "Okaylib abort called at %s:%d in %s: %s\n",        \
+                  __FILE__, __LINE__, __FUNCTION__, msg);                     \
+        throw ::reserve::_abort_exception(nullptr); \
+    }
+#endif
 #else
 #include <cstdlib>
 #define __ok_abort(msg) \

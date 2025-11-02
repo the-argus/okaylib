@@ -26,11 +26,15 @@ const testing_flags = &[_][]const u8{
     "-Wno-deprecated",
     "-DOKAYLIB_NOEXCEPT=", // allow exceptions in testing mode
 
-    "-DBACKWARD_HAS_UNWIND=1",
-    "-DBACKWARD_HAS_BFD=1",
     "-DOKAYLIB_TESTING",
     // "-DOKAYLIB_USE_FMT",
     "-DFMT_HEADER_ONLY",
+};
+
+const testing_backtrace_flags = &[_][]const u8{
+    "-DOKAYLIB_TESTING_BACKTRACE",
+    "-DBACKWARD_HAS_UNWIND=1",
+    "-DBACKWARD_HAS_BFD=1",
 };
 
 const okaylib_headers = &[_][]const u8{
@@ -158,7 +162,7 @@ const test_source_files = &[_][]const u8{
     "segmented_list/segmented_list.cpp",
 };
 
-const universal_tests_source_files = &[_][]const u8{
+const tests_backtrace_source_files = &[_][]const u8{
     // backtraces for tests
     "tests/backward.cpp",
 };
@@ -168,10 +172,16 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const use_backtrace = b.option(bool, "use_backtrace", "use backtrace library to get nice stack traces from tests") orelse true;
+
     var flags = std.ArrayList([]const u8){};
     defer flags.deinit(b.allocator);
     try flags.appendSlice(b.allocator, if (optimize == .Debug) debug_flags else release_flags);
     try flags.appendSlice(b.allocator, testing_flags);
+
+    if (use_backtrace) {
+        try flags.appendSlice(b.allocator, testing_backtrace_flags);
+    }
 
     var tests = std.ArrayList(*std.Build.Step.Compile){};
     defer tests.deinit(b.allocator);
@@ -189,23 +199,25 @@ pub fn build(b: *std.Build) !void {
 
     const flags_owned = flags.toOwnedSlice(b.allocator) catch @panic("OOM");
 
-    const universal_tests_lib = b.addLibrary(.{
+    const test_backtraces_lib = b.addLibrary(.{
         .root_module = b.createModule(.{
             .target = target,
             .optimize = optimize,
         }),
         .linkage = .static,
-        .name = "universal_tests_source_files",
+        .name = "test_backtraces_source_files",
         .use_lld = false,
     });
 
-    universal_tests_lib.addCSourceFiles(.{
-        .files = universal_tests_source_files,
-        .flags = flags_owned,
-    });
-    // backtraces
-    universal_tests_lib.linkLibCpp();
-    universal_tests_lib.linkSystemLibrary("bfd");
+    if (use_backtrace) {
+        test_backtraces_lib.addCSourceFiles(.{
+            .files = tests_backtrace_source_files,
+            .flags = flags_owned,
+        });
+        // backtraces
+        test_backtraces_lib.linkSystemLibrary("bfd");
+    }
+    test_backtraces_lib.linkLibCpp();
 
     for (test_source_files) |source_file| {
         var test_exe = b.addExecutable(.{
@@ -225,8 +237,9 @@ pub fn build(b: *std.Build) !void {
         test_exe.addIncludePath(b.path("tests"));
         test_exe.addIncludePath(b.path("include"));
 
-        // backtraces
-        test_exe.linkLibrary(universal_tests_lib);
+        if (use_backtrace) {
+            test_exe.linkLibrary(test_backtraces_lib);
+        }
 
         test_exe.step.dependOn(fmt.builder.getInstallStep());
         try tests.append(b.allocator, test_exe);
