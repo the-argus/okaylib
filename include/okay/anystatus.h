@@ -89,7 +89,8 @@ class anyerr_t
     constexpr static uint64_t enum_typehash_mask = enum_value_mask << 32;
 
   public:
-    template <status_enum_c enum_t> constexpr anyerr_t(enum_t error)
+    template <status_enum_c enum_t>
+    constexpr anyerr_t(enum_t error) : m_value(uint32_t(error))
     {
         static_assert(sizeof(void*) == sizeof(uint64_t),
                       "unsupported platform");
