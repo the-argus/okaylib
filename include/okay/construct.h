@@ -32,22 +32,23 @@ template <typename T> struct make_into_uninitialized_fn_t
                 "Attempt to call make_into_uninitialized but there is no known "
                 "way to construct a T into an uninitialized spot of memory.");
 
-            constexpr auto call_constructor = [](T& uninitialized,
-                                                 const auto& constructor,
-                                                 auto&&... innerargs) noexcept {
-                if constexpr (analysis::has_inplace) {
-                    return constructor.make_into_uninit(
-                        uninitialized,
-                        std::forward<decltype(innerargs)>(innerargs)...);
-                } else {
-                    // fall back to move constructor if no in-place construction
-                    // is defined
-                    new (ok::addressof(uninitialized))
-                        T(std::move(constructor.make(
-                            std::forward<decltype(innerargs)>(innerargs)...)));
-                    return;
-                }
-            };
+            constexpr auto call_constructor =
+                []<typename... inner_args_t>(
+                    T& uninitialized, const auto& constructor,
+                    inner_args_t&&... innerargs) noexcept {
+                    if constexpr (analysis::has_inplace) {
+                        return constructor.make_into_uninit(
+                            uninitialized,
+                            std::forward<inner_args_t>(innerargs)...);
+                    } else {
+                        // fall back to move constructor if no in-place
+                        // construction is defined
+                        new (ok::addressof(uninitialized))
+                            T(std::move(constructor.make(
+                                std::forward<inner_args_t>(innerargs)...)));
+                        return;
+                    }
+                };
 
             return call_constructor(uninitialized,
                                     std::forward<args_t>(args)...);
@@ -74,7 +75,7 @@ struct deduced_t
 /// situations where the constructor only provides a make_into_uninit()
 /// function.
 template <typename T = detail::deduced_t, typename... args_t>
-[[nodiscard]] constexpr auto make(args_t&&... args) OKAYLIB_NOEXCEPT
+[[nodiscard]] constexpr decltype(auto) make(args_t&&... args) OKAYLIB_NOEXCEPT
 {
     constexpr bool is_constructed_type_deduced =
         std::is_same_v<T, detail::deduced_t>;
@@ -105,19 +106,21 @@ template <typename T = detail::deduced_t, typename... args_t>
             "Bad typehint provided to ok::make<...> which was able to "
             "deduce the type and found something else.");
 
-        constexpr auto decomposed_output = [](const auto& constructor,
-                                              auto&&... innerargs) noexcept {
+        constexpr auto decomposed_output =
+            []<typename constructor_t, typename... inner_args_t>(
+                const constructor_t& constructor,
+                inner_args_t&&... innerargs) -> decltype(auto) {
             if constexpr (analysis::has_rvo) {
                 static_assert(!analysis::can_fail,
                               "bad template analysis? found that something has "
                               ".make() but also it can fail");
                 return constructor.make(
-                    std::forward<decltype(innerargs)>(innerargs)...);
+                    std::forward<inner_args_t>(innerargs)...);
             } else {
                 if constexpr (analysis::can_fail) {
                     using status_type = decltype(constructor.make_into_uninit(
                         std::declval<actual_t&>(),
-                        std::forward<decltype(innerargs)>(innerargs)...));
+                        std::forward<inner_args_t>(innerargs)...));
 
                     using accessor =
                         detail::res_accessor_t<actual_t, status_type>;
@@ -126,14 +129,15 @@ template <typename T = detail::deduced_t, typename... args_t>
                     auto& uninit =
                         accessor::get_result_payload_ref_unchecked(out);
 
-                    // statuses have to be nothrow move constructible, so we can
-                    // call make make_into_uninit and just move the result into
-                    // the error of the output error. this initializes both the
-                    // status and the payload in one move
+                    // statuses have to be nothrow move constructible, so we
+                    // can call make make_into_uninit and just move the
+                    // result into the error of the output error. this
+                    // initializes both the status and the payload in one
+                    // move
                     accessor::emplace_error_nodestroy(
-                        out, std::move(constructor.make_into_uninit(
-                                 uninit, std::forward<decltype(innerargs)>(
-                                             innerargs)...)));
+                        out,
+                        std::move(constructor.make_into_uninit(
+                            uninit, std::forward<inner_args_t>(innerargs)...)));
 
                     return out;
                 } else {
@@ -142,8 +146,7 @@ template <typename T = detail::deduced_t, typename... args_t>
                     detail::uninitialized_storage_t<actual_t> out;
 
                     constructor.make_into_uninit(
-                        out.value,
-                        std::forward<decltype(innerargs)>(innerargs)...);
+                        out.value, std::forward<inner_args_t>(innerargs)...);
 
                     return std::move(out.value);
                 }

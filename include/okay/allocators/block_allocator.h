@@ -138,6 +138,12 @@ class block_allocator_t : public ok::nonthreadsafe_allocator_t
         return ok_memcontains(.outer = m.memory, .inner = bytes);
     }
 
+    bool contains(const void* memory) const noexcept
+    {
+        return ok_memcontains(.outer = m.memory,
+                              .inner = slice_from_one(*(uint8_t*)memory));
+    }
+
     inline void clear() OKAYLIB_NOEXCEPT;
 
   protected:
@@ -241,8 +247,7 @@ template <typename allocator_impl_t>
 inline void block_allocator_t<allocator_impl_t>::impl_deallocate(void* memory)
     OKAYLIB_NOEXCEPT
 {
-    __ok_assert(ok_memcontains(.outer = m.memory,
-                               .inner = slice_from_one(*(uint8_t*)memory)),
+    __ok_assert(this->contains(memory),
                 "Attempt to free bytes from block allocator which do not all "
                 "belong to that allocator");
 
@@ -257,7 +262,7 @@ template <typename allocator_impl_t>
 block_allocator_t<allocator_impl_t>::impl_reallocate(
     const alloc::reallocate_request_t& request) OKAYLIB_NOEXCEPT
 {
-    __ok_assert(ok_memcontains(.outer = m.memory, .inner = request.memory),
+    __ok_assert(this->contains(request.memory),
                 "Attempt to realloc bytes from block allocator which do not "
                 "all belong to that allocator");
     __ok_assert((request.memory.unchecked_address_of_first_item() -

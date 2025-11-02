@@ -33,7 +33,7 @@ TEST_SUITE("block allocator")
                         },
                     .num_initial_blocks_per_blocksize = 1024,
                 })
-                .release();
+                .unwrap();
         run_allocator_tests_static_and_dynamic_dispatch(slab);
     }
 }
