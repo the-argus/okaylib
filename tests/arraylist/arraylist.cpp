@@ -22,7 +22,7 @@ struct ooming_allocator_t : ok::allocator_t
 
     static constexpr alloc::feature_flags type_features =
         alloc::feature_flags::can_expand_back |
-        alloc::feature_flags::can_reclaim | alloc::feature_flags::is_threadsafe;
+        alloc::feature_flags::can_reclaim;
 
     [[nodiscard]] inline alloc::result_t<bytes_t>
     impl_allocate(const alloc::request_t& request) OKAYLIB_NOEXCEPT final
@@ -31,12 +31,6 @@ struct ooming_allocator_t : ok::allocator_t
             return alloc::error::oom;
 
         return backing_actual->allocate(request);
-    }
-
-    inline void impl_clear() OKAYLIB_NOEXCEPT final
-    {
-        if (backing_actual)
-            backing_actual->clear();
     }
 
     [[nodiscard]] inline alloc::feature_flags
@@ -48,10 +42,10 @@ struct ooming_allocator_t : ok::allocator_t
         return backing_actual->features();
     }
 
-    inline void impl_deallocate(bytes_t bytes) OKAYLIB_NOEXCEPT final
+    inline void impl_deallocate(void* memory) OKAYLIB_NOEXCEPT final
     {
         if (backing_actual)
-            backing_actual->deallocate(bytes);
+            backing_actual->deallocate(memory);
     }
 
     [[nodiscard]] inline alloc::result_t<bytes_t> impl_reallocate(
@@ -103,16 +97,16 @@ struct trivial_with_failing_construction
         template <typename...>
         using associated_type = trivial_with_failing_construction;
 
-        constexpr status<alloc::error>
+        constexpr alloc::error
         make_into_uninit(trivial_with_failing_construction& uninit,
                          ok::allocator_t& allocator, int initial_value) const
         {
             auto res = allocator.make_non_owning<int>(initial_value);
-            if (res.okay()) {
-                uninit.contents = &res.release();
-                return alloc::error::okay;
+            if (res.is_success()) {
+                uninit.contents = &res.unwrap();
+                return alloc::error::success;
             }
-            return res.err();
+            return res.status();
         }
     };
 };
@@ -138,7 +132,7 @@ auto make_slab(backing_allocator_t& allocator)
                     },
                 .num_initial_blocks_per_blocksize = 1,
             })
-            .release();
+            .unwrap();
 }
 
 TEST_SUITE("arraylist")
@@ -155,33 +149,33 @@ TEST_SUITE("arraylist")
         {
             arraylist_t i = arraylist::empty<int>(reserving);
             arraylist_t j =
-                arraylist::spots_preallocated<int>(reserving, 50).release();
+                arraylist::spots_preallocated<int>(reserving, 50).unwrap();
             // tons of zeroed ints
             array_t arr = array::defaulted_or_zeroed<int, 500>();
             arraylist_t k =
-                arraylist::copy_items_from_range(reserving, arr).release();
+                arraylist::copy_items_from_range(reserving, arr).unwrap();
         }
 
         SUBCASE("c allocator")
         {
             arraylist_t i = arraylist::empty<int>(malloc);
             arraylist_t j =
-                arraylist::spots_preallocated<int>(malloc, 50).release();
+                arraylist::spots_preallocated<int>(malloc, 50).unwrap();
             // tons of zeroed ints
             array_t arr = array::defaulted_or_zeroed<int, 500>();
             arraylist_t k =
-                arraylist::copy_items_from_range(malloc, arr).release();
+                arraylist::copy_items_from_range(malloc, arr).unwrap();
         }
 
         SUBCASE("slab allocator")
         {
             arraylist_t i = arraylist::empty<int>(slab);
             arraylist_t j =
-                arraylist::spots_preallocated<int>(slab, 50).release();
+                arraylist::spots_preallocated<int>(slab, 50).unwrap();
             // tons of zeroed ints
             array_t arr = array::defaulted_or_zeroed<int, 500>();
             arraylist_t k =
-                arraylist::copy_items_from_range(slab, arr).release();
+                arraylist::copy_items_from_range(slab, arr).unwrap();
         }
     }
 
@@ -201,7 +195,7 @@ TEST_SUITE("arraylist")
             "move construction causes right number of destructions with full")
         {
             arraylist_t i =
-                arraylist::copy_items_from_range(backing, example).release();
+                arraylist::copy_items_from_range(backing, example).unwrap();
             arraylist_t j = std::move(i);
         }
 
@@ -216,9 +210,9 @@ TEST_SUITE("arraylist")
         SUBCASE("move assignment causes right number of destructions with full")
         {
             arraylist_t i =
-                arraylist::copy_items_from_range(backing, example).release();
+                arraylist::copy_items_from_range(backing, example).unwrap();
             arraylist_t j =
-                arraylist::copy_items_from_range(backing, example).release();
+                arraylist::copy_items_from_range(backing, example).unwrap();
             j = std::move(i);
         }
     }
@@ -228,7 +222,7 @@ TEST_SUITE("arraylist")
         ok::c_allocator_t allocator;
         ok::array_t arr{1, 2, 3, 4, 5};
         auto listres = arraylist::copy_items_from_range(allocator, arr);
-        auto& list = listres.release_ref();
+        auto& list = listres.unwrap();
 
         SUBCASE("items matches direct iteration")
         {
@@ -279,7 +273,7 @@ TEST_SUITE("arraylist")
 
             for (size_t i = 0; i < 4097; ++i) {
                 auto result = dup.append(i);
-                REQUIRE(result.okay());
+                REQUIRE(result.is_success());
             }
 
             // throw in move assignment for good measure, maybe reallocation
@@ -299,7 +293,7 @@ TEST_SUITE("arraylist")
 
             for (size_t i = 0; i < 4097; ++i) {
                 auto result = dup.append(i);
-                REQUIRE(result.okay());
+                REQUIRE(result.is_success());
             }
 
             dup2 = std::move(dup);
@@ -317,7 +311,7 @@ TEST_SUITE("arraylist")
 
             for (size_t i = 0; i < 4097; ++i) {
                 auto result = dup.append(i);
-                REQUIRE(result.okay());
+                REQUIRE(result.is_success());
             }
 
             dup2 = std::move(dup);
@@ -341,7 +335,7 @@ TEST_SUITE("arraylist")
 
             auto result = alist.append(arraylist::copy_items_from_range,
                                        backing, sub_array);
-            REQUIRE(result.okay());
+            REQUIRE(result.is_success());
             REQUIRE(alist.size() == 1);
             bool eql = ranges_equal(alist[0], sub_array);
             REQUIRE(eql);
@@ -361,10 +355,12 @@ TEST_SUITE("arraylist")
             auto result =
                 alist.append(arraylist::copy_items_from_range,
                              failing_allocator, array_t{1, 2, 3, 4, 5, 6});
+#ifdef OKAYLIB_USE_FMT
             fmt::println("Tried to create a new array inside of `alist`, got "
                          "return code {}",
                          result);
             fmt::println("Size of `alist`: {}", alist.size());
+#endif
         }
     }
 
@@ -375,20 +371,20 @@ TEST_SUITE("arraylist")
             c_allocator_t backing;
             arraylist_t nums = arraylist::copy_items_from_range(
                                    backing, indices | take_at_most(10))
-                                   .release();
+                                   .unwrap();
 
             REQUIRE(nums.size() == 10);
 
             auto insert_begin_result = nums.insert_at(0, 0);
-            REQUIRE(insert_begin_result.okay());
+            REQUIRE(insert_begin_result.is_success());
             REQUIRE(nums.size() == 11);
 
             auto insert_middle_result = nums.insert_at(5, 0);
-            REQUIRE(insert_middle_result.okay());
+            REQUIRE(insert_middle_result.is_success());
             REQUIRE(nums.size() == 12);
 
             auto insert_end_result = nums.insert_at(nums.size(), 0);
-            REQUIRE(insert_end_result.okay());
+            REQUIRE(insert_end_result.is_success());
             REQUIRE(nums.size() == 13);
         }
 
@@ -397,13 +393,13 @@ TEST_SUITE("arraylist")
             c_allocator_t backing;
             arraylist_t nums = arraylist::copy_items_from_range(
                                    backing, indices | take_at_most(10))
-                                   .release();
+                                   .unwrap();
 
             REQUIREABORTS(auto&& _ = nums.insert_at(12, 1));
             REQUIREABORTS(auto&& _ = nums.insert_at(13, 1));
             REQUIREABORTS(auto&& _ = nums.insert_at(50, 1));
             auto res = nums.insert_at(10, 11);
-            REQUIRE(res.okay());
+            REQUIRE(res.is_success());
         }
 
         SUBCASE(
@@ -413,7 +409,7 @@ TEST_SUITE("arraylist")
             ok::array_t initial_state = {0, 2, 4, 6, 8};
             arraylist_t nums =
                 arraylist::copy_items_from_range(backing, initial_state)
-                    .release();
+                    .unwrap();
 
             auto require_nums_is_equal_to = [&nums](const auto& new_range) {
                 bool eql = ranges_equal(nums, new_range);
@@ -424,24 +420,24 @@ TEST_SUITE("arraylist")
 
             {
                 auto res = nums.insert_at(1, 1);
-                REQUIRE(res.okay());
+                REQUIRE(res.is_success());
             }
 
             require_nums_is_equal_to(ok::array_t{0, 1, 2, 4, 6, 8});
 
-            REQUIRE(nums.insert_at(3, 3).okay());
+            REQUIRE(nums.insert_at(3, 3).is_success());
 
             require_nums_is_equal_to(ok::array_t{0, 1, 2, 3, 4, 6, 8});
 
-            REQUIRE(nums.insert_at(5, 5).okay());
+            REQUIRE(nums.insert_at(5, 5).is_success());
 
             require_nums_is_equal_to(ok::array_t{0, 1, 2, 3, 4, 5, 6, 8});
 
-            REQUIRE(nums.insert_at(7, 7).okay());
+            REQUIRE(nums.insert_at(7, 7).is_success());
 
             require_nums_is_equal_to(ok::array_t{0, 1, 2, 3, 4, 5, 6, 7, 8});
 
-            REQUIRE(nums.insert_at(0, 42).okay());
+            REQUIRE(nums.insert_at(0, 42).is_success());
 
             require_nums_is_equal_to(
                 ok::array_t{42, 0, 1, 2, 3, 4, 5, 6, 7, 8});
@@ -458,7 +454,7 @@ TEST_SUITE("arraylist")
 
             auto result = alist.insert_at(0, arraylist::copy_items_from_range,
                                           backing, sub_array);
-            REQUIRE(result.okay());
+            REQUIRE(result.is_success());
             REQUIRE(alist.size() == 1);
             bool eql = ranges_equal(alist[0], sub_array);
             REQUIRE(eql);
@@ -479,7 +475,7 @@ TEST_SUITE("arraylist")
 
             auto result = alist.insert_at(0, arraylist::copy_items_from_range,
                                           failing, sub_array);
-            REQUIRE(!result.okay());
+            REQUIRE(!result.is_success());
             REQUIRE(alist.size() == 0);
         }
 
@@ -500,13 +496,13 @@ TEST_SUITE("arraylist")
             array_t sub_array{1, 2, 3, 4, 5, 6};
             auto status = alist.insert_at(0, arraylist::copy_items_from_range,
                                           failing, sub_array);
-            REQUIRE(status.okay());
+            REQUIRE(status.is_success());
             REQUIRE(alist.size() == 1);
 
             for (size_t i = 0; i < 30; ++i) {
                 status = alist.insert_at(0, arraylist::copy_items_from_range,
                                          failing, sub_array);
-                REQUIRE(status.okay());
+                REQUIRE(status.is_success());
             }
 
             // make some items distinguishable so we can test if they moved
@@ -529,7 +525,7 @@ TEST_SUITE("arraylist")
             array_t different_sub_array{1, 2, 3};
             status = alist.insert_at(0, arraylist::copy_items_from_range,
                                      failing, sub_array);
-            REQUIRE(!status.okay());
+            REQUIRE(!status.is_success());
             REQUIRE(alist.size() == 31);
 
             // make sure all elements past 0 are the same as sub_array
@@ -565,14 +561,14 @@ TEST_SUITE("arraylist")
                 trivial_with_failing_construction::failing_construction{};
             for (size_t i = 0; i < 5; ++i) {
                 auto result = alist.insert_at(0, constructor, failing, i);
-                REQUIRE(result.okay());
+                REQUIRE(result.is_success());
                 REQUIRE(!alist.is_empty());
             }
 
             failing.should_oom = true;
 
             auto result = alist.insert_at(0, constructor, failing, 0);
-            REQUIRE(!result.okay());
+            REQUIRE(!result.is_success());
 
             // everything still normal
             REQUIRE(*alist[0].contents == 4);
@@ -584,8 +580,7 @@ TEST_SUITE("arraylist")
             // free all the ints that were validated
             ok_foreach(auto intptr_wrapper, alist)
             {
-                main_backing.deallocate(reinterpret_as_bytes(
-                    slice_from_one(*intptr_wrapper.contents)));
+                main_backing.deallocate(intptr_wrapper.contents);
             }
         }
     }
@@ -669,7 +664,7 @@ TEST_SUITE("arraylist")
             c_allocator_t backing;
             ok::array_t initial = {0, 1, 2, 2, 3, 4, 4, 5, 6, 7, 7, 8};
             arraylist_t alist =
-                arraylist::copy_items_from_range(backing, initial).release();
+                arraylist::copy_items_from_range(backing, initial).unwrap();
 
             REQUIRE(!ok::ranges_equal(alist, ok::indices));
 
@@ -694,7 +689,7 @@ TEST_SUITE("arraylist")
                 REQUIRE(alist
                             .append(arraylist::copy_items_from_range, backing,
                                     initial)
-                            .okay());
+                            .is_success());
             }
 
             REQUIRE(alist[0].remove(0) == 1); // alist[0] = {2, 3}
@@ -713,7 +708,7 @@ TEST_SUITE("arraylist")
             c_allocator_t backing;
             arraylist_t alist = arraylist::copy_items_from_range(
                                     backing, array_t{0, 1, 2, 3, 4})
-                                    .release();
+                                    .unwrap();
 
             REQUIRE(ok::ranges_equal(alist, array_t{0, 1, 2, 3, 4}));
             REQUIRE(alist.pop_last().ref_or_panic() == 4);
@@ -755,7 +750,7 @@ TEST_SUITE("arraylist")
             c_allocator_t backing;
             arraylist_t alist = arraylist::copy_items_from_range(
                                     backing, array_t{0, 6, 7, 3, 4, 5, 1, 2})
-                                    .release();
+                                    .unwrap();
 
             REQUIRE(!ranges_equal(alist, indices));
             REQUIRE(alist.remove_and_swap_last(2) == 7);
@@ -776,7 +771,7 @@ TEST_SUITE("arraylist")
             array_t initial = {0, 6, 7, 3, 4, 5, 1, 2};
             c_allocator_t backing;
             arraylist_t alist =
-                arraylist::copy_items_from_range(backing, initial).release();
+                arraylist::copy_items_from_range(backing, initial).unwrap();
             REQUIRE(alist.capacity() == initial.size());
             REQUIRE(alist.capacity() == alist.size());
 
@@ -788,7 +783,7 @@ TEST_SUITE("arraylist")
 
             // okay now reallocate
             auto status = alist.increase_capacity_by_at_least(100);
-            const bool good = status.okay() &&
+            const bool good = status.is_success() &&
                               ranges_equal(alist, array_t{0, 6, 2, 3, 4, 5, 1});
             REQUIRE(good);
             alist.remove_and_swap_last(1);
@@ -801,7 +796,7 @@ TEST_SUITE("arraylist")
         c_allocator_t backing;
         arraylist_t alist = arraylist::copy_items_from_range(
                                 backing, indices | take_at_most(100))
-                                .release();
+                                .unwrap();
 
         for (size_t i = 0; i < 50; ++i) {
             alist.pop_last();
@@ -819,7 +814,7 @@ TEST_SUITE("arraylist")
         indices | take_at_most(100) |
             for_each([&](size_t i) { alist.append(i); });
 
-        backing.deallocate(reinterpret_as_bytes(items));
+        backing.deallocate(items.unchecked_address_of_first_item());
 
         REQUIRE(ranges_equal(alist, indices));
     }
@@ -945,7 +940,7 @@ TEST_SUITE("arraylist")
         arraylist_t alist =
             arraylist::copy_items_from_range(
                 backing, indices | take_at_most(2 * page_size / sizeof(size_t)))
-                .release();
+                .unwrap();
 
         REQUIRE(alist.items().size_bytes() == 2 * page_size);
         REQUIRE(alist.capacity() == alist.size());
@@ -972,12 +967,12 @@ TEST_SUITE("arraylist")
 
             auto status = alist.append_range(array_t{0, 1, 2, 3});
 
-            REQUIRE(status.okay());
+            REQUIRE(status.is_success());
             REQUIRE(ranges_equal(alist, initial));
 
             status = alist.append_range(array_t{4, 5, 6, 7, 8});
 
-            REQUIRE(status.okay());
+            REQUIRE(status.is_success());
             REQUIRE(ranges_equal(alist, array_t{0, 1, 2, 3, 4, 5, 6, 7, 8}));
         }
 
@@ -990,19 +985,19 @@ TEST_SUITE("arraylist")
             const array_t initial = {0, 1, 2, 3};
             const auto initial_finite = initial | identity;
             static_assert(
-                detail::range_marked_finite_v<decltype(initial_finite)>);
+                detail::range_marked_finite_c<decltype(initial_finite)>);
 
             auto status = alist.append_range(initial_finite);
 
-            REQUIRE(status.okay());
+            REQUIRE(status.is_success());
             REQUIRE(ranges_equal(alist, initial));
 
             const auto second_finite = array_t{4, 5, 6, 7, 8} | identity;
             static_assert(
-                detail::range_marked_finite_v<decltype(second_finite)>);
+                detail::range_marked_finite_c<decltype(second_finite)>);
             status = alist.append_range(second_finite);
 
-            REQUIRE(status.okay());
+            REQUIRE(status.is_success());
             REQUIRE(ranges_equal(alist, array_t{0, 1, 2, 3, 4, 5, 6, 7, 8}));
         }
     }
@@ -1014,10 +1009,10 @@ TEST_SUITE("arraylist")
             c_allocator_t backing;
             arraylist_t alist = arraylist::copy_items_from_range(
                                     backing, indices | take_at_most(100))
-                                    .release();
+                                    .unwrap();
             REQUIRE(alist.capacity() == 100);
             auto status = alist.increase_capacity_by_at_least(100);
-            const bool good = status.okay() && alist.capacity() >= 200;
+            const bool good = status.is_success() && alist.capacity() >= 200;
             REQUIRE(good);
         }
 
@@ -1026,7 +1021,7 @@ TEST_SUITE("arraylist")
             c_allocator_t backing;
             arraylist_t alist = arraylist::empty<size_t>(backing);
             auto status = alist.increase_capacity_by_at_least(100);
-            const bool good = status.okay() && alist.capacity() >= 100;
+            const bool good = status.is_success() && alist.capacity() >= 100;
             REQUIRE(good);
         }
     }

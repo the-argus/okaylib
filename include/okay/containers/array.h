@@ -30,7 +30,7 @@ template <typename T, size_t num_items> struct undefined_t;
 template <typename T, size_t num_items> class array_t
 {
   public:
-    static_assert(!std::is_reference_v<T>,
+    static_assert(!stdc::is_reference_c<T>,
                   "ok::array_t cannot store references.");
     static_assert(!std::is_void_v<T>, "Cannot create an array_t of void.");
 
@@ -66,7 +66,7 @@ template <typename T, size_t num_items> class array_t
         if (index >= num_items) [[unlikely]] {
             __ok_abort("Out of bounds access into ok::array_t");
         }
-        return std::move(__m_items[index]);
+        return stdc::move(__m_items[index]);
     }
 
     constexpr value_type&& operator[](size_t index) const&& = delete;
@@ -98,7 +98,7 @@ template <typename T, size_t num_items> class array_t
 // `ok::array_t my_array_t = {...}`
 template <typename T, typename... pack>
 array_t(T, pack...)
-    -> array_t<std::enable_if_t<(std::is_same_v<T, pack> && ...), T>,
+    -> array_t<stdc::enable_if_t<(stdc::is_same_v<T, pack> && ...), T>,
                1 + sizeof...(pack)>;
 
 namespace array {
@@ -109,7 +109,7 @@ template <typename T, size_t num_items> struct defaulted_or_zeroed_t
     {
         array_t<T, num_items> out;
         if constexpr (std::is_trivially_constructible_v<T>) {
-            std::memset(out.__m_items, 0, num_items * sizeof(T));
+            ::memset(out.__m_items, 0, num_items * sizeof(T));
         }
         return out;
     };

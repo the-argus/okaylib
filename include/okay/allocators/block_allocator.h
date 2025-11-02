@@ -45,7 +45,8 @@ template <typename allocator_impl_t>
 class block_allocator_t : public ok::nonthreadsafe_allocator_t
 {
   private:
-    static_assert(detail::is_derived_from_c<allocator_impl_t, ok::allocator_t>,
+    static_assert(detail::is_derived_from_c<allocator_impl_t,
+                                            ok::nonthreadsafe_allocator_t>,
                   "Type given to block_allocator_t as a backing allocator is "
                   "not a child of ok::allocator_t.");
     struct free_block_t

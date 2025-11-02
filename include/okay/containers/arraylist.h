@@ -38,7 +38,7 @@ class arraylist_t
     members_t m;
 
     constexpr arraylist_t(members_t&& members) OKAYLIB_NOEXCEPT
-        : m(std::forward<members_t>(members))
+        : m(stdc::forward<members_t>(members))
     {
     }
 
@@ -54,11 +54,11 @@ class arraylist_t
     friend struct fmt::formatter<arraylist_t>;
 #endif
 
-    static_assert(!std::is_reference_v<T>,
+    static_assert(!stdc::is_reference_c<T>,
                   "arraylist_t cannot store references.");
-    static_assert(!std::is_void_v<T>, "cannot create an array list of void.");
+    static_assert(!stdc::is_void_v<T>, "cannot create an array list of void.");
     static_assert(
-        std::is_trivially_copyable_v<T> || std::is_move_constructible_v<T> ||
+        std::is_trivially_copyable_v<T> || stdc::is_move_constructible_v<T> ||
             is_std_constructible_c<T, T&&>,
         "Type given to arraylist_t must be either trivially copyable or move "
         "constructible, otherwise it cannot move the items when reallocating.");
@@ -130,14 +130,14 @@ class arraylist_t
     {
         if (this->capacity() == 0) {
             auto status = this->make_first_allocation();
-            if (!status.okay()) [[unlikely]] {
+            if (!status.is_success()) [[unlikely]] {
                 return status;
             }
         } else if (this->capacity() <= this->size()) {
             // 2x growth rate
             auto status =
                 this->reallocate(sizeof(T), this->capacity() * sizeof(T));
-            if (!status.okay()) [[unlikely]] {
+            if (!status.is_success()) [[unlikely]] {
                 return status;
             }
         }
@@ -158,7 +158,7 @@ class arraylist_t
         // if else handles initial allocation and then future reallocation
         {
             auto status = this->ensure_additional_capacity();
-            if (!status.okay()) [[unlikely]] {
+            if (!status.is_success()) [[unlikely]] {
                 return status;
             }
         }
@@ -200,10 +200,9 @@ class arraylist_t
         // populate moved-out item
         auto& uninit = m.items[idx];
 
-        using make_result_type = decltype(ok::make_into_uninitialized<T>(
+        using enum_t = decltype(ok::make_into_uninitialized<T>(
             std::declval<T&>(), std::forward<args_t>(args)...));
-        if constexpr (!std::is_void_v<make_result_type>) {
-            using enum_t = typename make_result_type::enum_type;
+        if constexpr (!std::is_void_v<enum_t>) {
             static_assert(
                 is_convertible_to_c<alloc::error, enum_t>,
                 "In order to use a potentially failing constructor with "
@@ -212,7 +211,7 @@ class arraylist_t
             auto result = ok::make_into_uninitialized<T>(
                 uninit, std::forward<args_t>(args)...);
 
-            if (result.okay()) [[likely]] {
+            if (result == enum_t::success) [[likely]] {
                 ++m.size;
             } else {
                 // move all other items BACK to where they were before (this is
@@ -235,7 +234,7 @@ class arraylist_t
                     }
                 }
             }
-            return status(enum_t(result.err()));
+            return status(enum_t(result));
         } else {
             ok::make_into_uninitialized<T>(uninit,
                                            std::forward<args_t>(args)...);
@@ -337,16 +336,16 @@ class arraylist_t
             return;
         }
 
-        bytes_t bytes =
-            reinterpret_as_bytes(raw_slice(*m.items, this->capacity()));
-
         if (this->size() == 0) {
-            m.backing_allocator->deallocate(bytes);
+            m.backing_allocator->deallocate(m.items);
             m.items = nullptr;
             m.capacity = 0;
             m.size = 0;
             return;
         }
+
+        const bytes_t bytes =
+            reinterpret_as_bytes(raw_slice(*m.items, this->capacity()));
 
         alloc::result_t<bytes_t> reallocated =
             m.backing_allocator->reallocate(alloc::reallocate_request_t{
@@ -438,7 +437,7 @@ class arraylist_t
 
         if (this->capacity() == 0) {
             auto status = make_first_allocation(new_size * sizeof(T));
-            if (!status.okay()) {
+            if (!status.is_success()) {
                 return status;
             }
             __ok_assert(this->capacity() >= new_size,
@@ -551,7 +550,7 @@ class arraylist_t
             if (size > extra_space) {
                 auto status =
                     this->increase_capacity_by_at_least(size - extra_space);
-                if (!status.okay()) [[unlikely]] {
+                if (!status.is_success()) [[unlikely]] {
                     return status;
                 }
             }
@@ -561,7 +560,7 @@ class arraylist_t
              ok::increment(range, cursor)) {
             auto status = this->append(ok::range_get_best(range, cursor));
             if constexpr (!detail::range_impls_size_c<other_range_t>) {
-                if (!status.okay()) [[unlikely]] {
+                if (!status.is_success()) [[unlikely]] {
                     return status;
                 }
             }
@@ -653,8 +652,7 @@ class arraylist_t
                 }
 
                 // free old allocation
-                m.backing_allocator->deallocate(
-                    reinterpret_as_bytes(raw_slice(*m.items, m.capacity)));
+                m.backing_allocator->deallocate(m.items);
 
                 m.items = dest;
                 m.capacity = reallocation.memory.size() / sizeof(T);
@@ -704,8 +702,7 @@ class arraylist_t
 
         this->call_destructor_on_all_items();
 
-        m.backing_allocator->deallocate(
-            reinterpret_as_bytes(raw_slice(*m.items, m.capacity)));
+        m.backing_allocator->deallocate(m.items);
     }
 };
 
@@ -747,7 +744,7 @@ template <typename T> struct spots_preallocated_t
     }
 
     template <typename backing_allocator_t>
-    [[nodiscard]] constexpr status<alloc::error>
+    [[nodiscard]] constexpr alloc::error
     make_into_uninit(arraylist_t<T, backing_allocator_t>& output,
                      backing_allocator_t& allocator,
                      size_t num_spots_preallocated) const OKAYLIB_NOEXCEPT
@@ -759,11 +756,11 @@ template <typename T> struct spots_preallocated_t
             .leave_nonzeroed = true,
         });
 
-        if (!res.okay()) [[unlikely]] {
-            return res.err();
+        if (!res.is_success()) [[unlikely]] {
+            return res.status();
         }
 
-        bytes_t& bytes = res.release_ref();
+        bytes_t& bytes = res.unwrap();
         T* start =
             reinterpret_cast<T*>(bytes.unchecked_address_of_first_item());
         const size_t num_bytes_allocated = bytes.size();
@@ -794,7 +791,7 @@ struct copy_items_from_range_t
     }
 
     template <typename backing_allocator_t, typename input_range_t>
-    [[nodiscard]] constexpr status<alloc::error>
+    [[nodiscard]] constexpr alloc::error
     make_into_uninit(ok::arraylist_t<value_type_for<const input_range_t&>,
                                      backing_allocator_t>& output,
                      backing_allocator_t& allocator,
@@ -862,19 +859,21 @@ inline constexpr detail::copy_items_from_range_t copy_items_from_range;
 template <typename T, typename backing_allocator_t>
 struct range_definition<ok::arraylist_t<T, backing_allocator_t>>
 {
-    static inline constexpr bool is_arraylike = true;
-
     using range_t = ok::arraylist_t<T, backing_allocator_t>;
+
+    static constexpr auto flags =
+        ok::range_flags::arraylike | ok::range_flags::sized |
+        ok::range_flags::consuming | ok::range_flags::producing;
 
     using value_type = T;
 
-    static constexpr value_type& get_ref(range_t& r, size_t c) OKAYLIB_NOEXCEPT
+    static constexpr value_type& get(range_t& r, size_t c) OKAYLIB_NOEXCEPT
     {
         return r[c];
     }
 
-    static constexpr const value_type& get_ref(const range_t& r,
-                                               size_t c) OKAYLIB_NOEXCEPT
+    static constexpr const value_type& get(const range_t& r,
+                                           size_t c) OKAYLIB_NOEXCEPT
     {
         return r[c];
     }
