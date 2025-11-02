@@ -15,7 +15,7 @@ TEST_SUITE("block allocator")
                                        backing, {.num_initial_spots = 1024,
                                                  .num_bytes_per_block = 64,
                                                  .minimum_alignment = 16})
-                                       .release();
+                                       .unwrap();
         run_allocator_tests_static_and_dynamic_dispatch(blocks);
     }
 }
