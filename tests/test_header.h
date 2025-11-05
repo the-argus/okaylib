@@ -28,8 +28,5 @@
         auto&& rng1 = range1;                             \
         auto&& rng2 = range2;                             \
         bool ranges_equal = ok::ranges_equal(rng1, rng2); \
-        if (!ranges_equal) {                              \
-            fmt::println("{} != {}", rng1, rng2);         \
-        }                                                 \
         REQUIRE(ranges_equal);                            \
     }

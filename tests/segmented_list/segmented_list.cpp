@@ -18,23 +18,23 @@ TEST_SUITE("segmented list")
             segmented_list_t a = segmented_list::empty<int>(
                                      c_allocator,
                                      {
-                                         .num_initial_contiguous_spots = 0,
+                                         .expected_max_capacity = 0,
                                      })
-                                     .release();
+                                     .unwrap();
 
             segmented_list_t b = segmented_list::empty<int>(
                                      c_allocator,
                                      {
-                                         .num_initial_contiguous_spots = 1,
+                                         .expected_max_capacity = 1,
                                      })
-                                     .release();
+                                     .unwrap();
 
             segmented_list_t c = segmented_list::empty<int>(
                                      c_allocator,
                                      {
-                                         .num_initial_contiguous_spots = 21384,
+                                         .expected_max_capacity = 21384,
                                      })
-                                     .release();
+                                     .unwrap();
             REQUIRE(a.size() == 0);
             REQUIRE(a.is_empty());
             REQUIRE(b.size() == 0);
@@ -59,7 +59,7 @@ TEST_SUITE("segmented list")
                 segmented_list::copy_items_from_range(
                     c_allocator,
                     rng | transform([](ok::bit b) { return bool(b); }), {})
-                    .release();
+                    .unwrap();
             REQUIRE_RANGES_EQUAL(rng, bools);
         }
     }
