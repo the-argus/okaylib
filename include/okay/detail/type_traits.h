@@ -25,6 +25,7 @@ template <typename T> inline constexpr bool is_empty = std::is_empty_v<T>;
 template <typename T> inline constexpr bool is_final = std::is_final_v<T>;
 template <typename T> inline constexpr bool is_enum = std::is_enum_v<T>;
 template <typename T> using underlying_type_t = std::underlying_type_t<T>;
+template <typename T> using remove_const_t = std::remove_const_t<T>;
 template <typename base_t, typename derived_t>
 inline constexpr bool is_base_of = std::is_base_of_v<base_t, derived_t>;
 #define __ok_has_trivial_destructor(type) std::is_trivially_destructible_v<type>
@@ -45,6 +46,10 @@ struct is_empty : public ok::stdc::integral_constant<bool, __is_empty(T)>
 template <typename T>
 struct is_final : public ok::stdc::integral_constant<bool, __is_final(T)>
 {};
+
+#if __has_builtin(__remove_const)
+template <typename T> using remove_const_t = __remove_const(T);
+#endif
 
 template <typename T>
 struct is_enum : public ok::stdc::integral_constant<bool, __is_enum(T)>
@@ -91,6 +96,17 @@ template <typename base_t, typename derived_t>
 struct is_base_of : public ok::stdc::integral_constant<bool, false>
 {};
 
+template <typename T> struct remove_const
+{
+    using type = T;
+};
+template <typename T> struct remove_const<const T>
+{
+    using type = T;
+};
+
+template <typename T> using remove_const_t = remove_const<T>::type;
+
 // TODO: try to find an acceptable replacement for this
 template <typename T> using underlying_type_t = void;
 
@@ -104,6 +120,9 @@ template <typename T> using underlying_type_t = void;
 #endif
 
 namespace ok::stdc {
+template <typename T>
+using remove_const_t = ok::detail::intrinsic::remove_const_t<T>;
+
 template <typename T> struct remove_cv
 {
     using type = T;
@@ -442,8 +461,8 @@ template <typename from_t, typename to_t> struct is_convertible_impl
     static auto test_convert(...) -> stdc::false_type;
 
     template <typename f_t, typename t_t>
-    static auto
-    test(int) -> decltype(test_convert<t_t, f_t>(stdc::declval<f_t>()));
+    static auto test(int)
+        -> decltype(test_convert<t_t, f_t>(stdc::declval<f_t>()));
 
     template <typename f_t, typename t_t> static stdc::false_type test(...);
 

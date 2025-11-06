@@ -11,6 +11,12 @@ concept same_as_without_cvref_c =
 
 template <typename T>
 concept reference_c = stdc::is_reference_c<T>;
+
+template <typename T>
+concept integral_c = stdc::is_integral_v<T>;
+
+template <typename T>
+concept floating_point_c = stdc::is_floating_point_v<T>;
 } // namespace ok
 
 #endif
