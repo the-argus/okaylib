@@ -90,7 +90,7 @@ TEST_SUITE("bit_arraylist_t")
 
         SUBCASE("copy booleans from range constructor")
         {
-            array_t bools = {true, false, true, true};
+            maybe_undefined_array_t bools = {true, false, true, true};
             bit_arraylist_t copied =
                 bit_arraylist::copy_booleans_from_range(c_allocator, bools)
                     .unwrap();

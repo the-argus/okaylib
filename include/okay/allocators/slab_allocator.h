@@ -10,8 +10,8 @@ namespace slab_allocator {
 
 struct blocks_description_t
 {
-    size_t blocksize;
-    size_t alignment;
+    size_t blocksize{};
+    size_t alignment{};
 };
 
 template <size_t nblocksizes> struct options_t

@@ -9,7 +9,7 @@ TEST_SUITE("arena allocator")
 {
     TEST_CASE("allocator tests")
     {
-        ok::array_t<u8, 10000> bytes = {};
+        ok::zeroed_array_t<u8, 10000> bytes;
         arena_t arena(bytes);
         run_allocator_tests_static_and_dynamic_dispatch(arena);
     }

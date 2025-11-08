@@ -149,7 +149,8 @@ TEST_SUITE("keep_if")
             const auto keep_if_less_than_100 =
                 ok::keep_if([](int i) -> bool { return i < 100; });
 
-            constexpr ok::array_t nums = {0, 100, 1, 100, 2, 100, 3, 100};
+            constexpr ok::maybe_undefined_array_t nums = {0, 100, 1, 100,
+                                                          2, 100, 3, 100};
 
             int counter = 0;
             ok_foreach(int i, nums | keep_if_less_than_100)

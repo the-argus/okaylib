@@ -85,7 +85,7 @@ TEST_SUITE("segmented list")
 
         SUBCASE("move construct copy_items_from_range segmented lists")
         {
-            constexpr array_t initial = {0, 1, 2, 3};
+            constexpr maybe_undefined_array_t initial = {0, 1, 2, 3};
             auto res_a =
                 segmented_list::copy_items_from_range(c_allocator, initial);
             auto& list_a = res_a.unwrap();
@@ -179,7 +179,7 @@ TEST_SUITE("segmented list")
         {
             auto res_a = segmented_list::empty<int>(c_allocator, {});
             auto& list_a = res_a.unwrap();
-            constexpr array_t initial = {0, 1, 2, 3, 4, 5};
+            constexpr maybe_undefined_array_t initial = {0, 1, 2, 3, 4, 5};
             auto res_b =
                 segmented_list::copy_items_from_range(c_allocator, initial);
             auto& list_b = res_b.unwrap();
@@ -286,19 +286,20 @@ TEST_SUITE("segmented list")
             // make sure a reallocation is going to happen
             REQUIRE(list.capacity() < 5);
             REQUIRE(list[0] == 1);
-            REQUIRE_RANGES_EQUAL(list, ok::array_t{1});
+            REQUIRE_RANGES_EQUAL(list, ok::maybe_undefined_array_t{1});
             REQUIRE(list.insert_at(0, 0).is_success());
             REQUIRE(list.insert_at(2, 2).is_success());
             REQUIRE(list.insert_at(3, 3).is_success());
             REQUIRE(list.insert_at(4, 4).is_success());
-            constexpr auto expected = ok::array_t{0, 1, 2, 3, 4};
+            constexpr auto expected =
+                ok::maybe_undefined_array_t{0, 1, 2, 3, 4};
             REQUIRE_RANGES_EQUAL(list, expected);
             REQUIRE(list.capacity() >= 5);
         }
 
         SUBCASE("insert into copy_items_from_range segmented lists")
         {
-            constexpr array_t initial = {0, 1, 2, 3};
+            constexpr maybe_undefined_array_t initial = {0, 1, 2, 3};
             segmented_list_t list =
                 segmented_list::copy_items_from_range(c_allocator, initial)
                     .unwrap();
@@ -307,7 +308,7 @@ TEST_SUITE("segmented list")
             REQUIREABORTS(auto&& _ = list.insert_at(initial.size(), 0));
             REQUIRE(list.insert_at(0, 0).is_success());
             REQUIRE(list.insert_at(5, 4).is_success());
-            constexpr auto arr = ok::array_t{0, 0, 1, 2, 3, 4};
+            constexpr auto arr = ok::maybe_undefined_array_t{0, 0, 1, 2, 3, 4};
             REQUIRE_RANGES_EQUAL(list, arr);
         }
 

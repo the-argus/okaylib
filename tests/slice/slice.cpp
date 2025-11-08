@@ -349,7 +349,7 @@ TEST_SUITE("slice")
 
             constexpr uint8_t all_ones = ~uint8_t(0);
 
-            array_t<uint8_t, sizeof(bytes)> expected = {
+            maybe_undefined_array_t<uint8_t, sizeof(bytes)> expected = {
                 all_ones, all_ones, all_ones, all_ones, 0, 0, 0, 0};
 
             REQUIRE(ranges_equal(bytes, expected));
@@ -365,7 +365,7 @@ TEST_SUITE("slice")
 
         SUBCASE("subslice() with some offset")
         {
-            array_t a = array::defaulted_or_zeroed<uint8_t, 100>();
+            zeroed_array_t<uint8_t, 100> a{};
 
             const bit_slice_t offsetted =
                 raw_bit_slice(slice(a), a.items().size_bits() - 5, 5);
@@ -387,7 +387,7 @@ TEST_SUITE("slice")
 
         SUBCASE("raw_bit_slice with zero size")
         {
-            array_t bytes = array::defaulted_or_zeroed<uint8_t, 10>();
+            zeroed_array_t<uint8_t, 10> bytes{};
 
             REQUIREABORTS(auto bs = raw_bit_slice(slice(bytes), 0, 8));
             REQUIREABORTS(auto bs = raw_bit_slice(slice(bytes), 0, 20));
@@ -405,7 +405,7 @@ TEST_SUITE("slice")
 
         SUBCASE("bit_slice_t::subslice with zero size")
         {
-            array_t bytes = array::defaulted_or_zeroed<uint8_t, 10>();
+            zeroed_array_t<uint8_t, 10> bytes{};
             auto bs = raw_bit_slice(slice(bytes), bytes.items().size_bits(), 0);
 
             REQUIRE(bs.subslice({.start = 40, .length = 0}).is_empty());
@@ -415,7 +415,7 @@ TEST_SUITE("slice")
 
         SUBCASE("is_byte_aligned()")
         {
-            array_t bytes = array::defaulted_or_zeroed<uint8_t, 10>();
+            zeroed_array_t<uint8_t, 10> bytes;
             auto bs = raw_bit_slice(slice(bytes), bytes.items().size_bits(), 0);
 
             REQUIRE(bs.subslice({.start = 32, .length = 0}).is_byte_aligned());
@@ -431,7 +431,7 @@ TEST_SUITE("slice")
 
         SUBCASE("toggle_bit()")
         {
-            array_t bytes = array::defaulted_or_zeroed<uint8_t, 10>();
+            zeroed_array_t<uint8_t, 10> bytes;
             auto bs = raw_bit_slice(slice(bytes), bytes.items().size_bits(), 0);
 
             bs.toggle_bit(0);

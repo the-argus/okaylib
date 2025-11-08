@@ -10,7 +10,7 @@ TEST_SUITE("c_allocator")
 {
     TEST_CASE("allocator tests")
     {
-        ok::array_t<u8, 64 * 5100> bytes = {};
+        ok::zeroed_array_t<u8, 64 * 5100> bytes;
         arena_t arena(bytes);
         arena_compat_wrapper_t arena_compat(arena);
         static_assert(ok::allocator_c<decltype(arena_compat)>);

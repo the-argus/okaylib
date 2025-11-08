@@ -151,7 +151,7 @@ TEST_SUITE("arraylist")
             arraylist_t j =
                 arraylist::spots_preallocated<int>(reserving, 50).unwrap();
             // tons of zeroed ints
-            array_t arr = array::defaulted_or_zeroed<int, 500>();
+            zeroed_array_t<int, 500> arr;
             arraylist_t k =
                 arraylist::copy_items_from_range(reserving, arr).unwrap();
         }
@@ -162,7 +162,7 @@ TEST_SUITE("arraylist")
             arraylist_t j =
                 arraylist::spots_preallocated<int>(malloc, 50).unwrap();
             // tons of zeroed ints
-            array_t arr = array::defaulted_or_zeroed<int, 500>();
+            zeroed_array_t<int, 500> arr;
             arraylist_t k =
                 arraylist::copy_items_from_range(malloc, arr).unwrap();
         }
@@ -173,7 +173,7 @@ TEST_SUITE("arraylist")
             arraylist_t j =
                 arraylist::spots_preallocated<int>(slab, 50).unwrap();
             // tons of zeroed ints
-            array_t arr = array::defaulted_or_zeroed<int, 500>();
+            zeroed_array_t<int, 500> arr;
             arraylist_t k =
                 arraylist::copy_items_from_range(slab, arr).unwrap();
         }
@@ -182,7 +182,7 @@ TEST_SUITE("arraylist")
     TEST_CASE("move semantics")
     {
         c_allocator_t backing;
-        array_t example{1, 2, 3, 4, 5};
+        maybe_undefined_array_t example{1, 2, 3, 4, 5};
 
         SUBCASE(
             "move construction causes right number of destructions with empty")
@@ -220,7 +220,7 @@ TEST_SUITE("arraylist")
     TEST_CASE("items() and size() and data()")
     {
         ok::c_allocator_t allocator;
-        ok::array_t arr{1, 2, 3, 4, 5};
+        ok::maybe_undefined_array_t arr{1, 2, 3, 4, 5};
         auto listres = arraylist::copy_items_from_range(allocator, arr);
         auto& list = listres.unwrap();
 
@@ -328,7 +328,7 @@ TEST_SUITE("arraylist")
         {
             c_allocator_t backing;
 
-            array_t sub_array{1, 2, 3, 4, 5, 6};
+            maybe_undefined_array_t sub_array{1, 2, 3, 4, 5, 6};
 
             arraylist_t alist =
                 arraylist::empty<arraylist_t<int, c_allocator_t>>(backing);
@@ -352,9 +352,9 @@ TEST_SUITE("arraylist")
                 arraylist::empty<arraylist_t<int, ooming_allocator_t>>(
                     working_allocator);
 
-            auto result =
-                alist.append(arraylist::copy_items_from_range,
-                             failing_allocator, array_t{1, 2, 3, 4, 5, 6});
+            auto result = alist.append(
+                arraylist::copy_items_from_range, failing_allocator,
+                maybe_undefined_array_t{1, 2, 3, 4, 5, 6});
 #ifdef OKAYLIB_USE_FMT
             fmt::println("Tried to create a new array inside of `alist`, got "
                          "return code {}",
@@ -406,7 +406,7 @@ TEST_SUITE("arraylist")
             "after being moved by insert_at, values of arraylist are preserved")
         {
             c_allocator_t backing;
-            ok::array_t initial_state = {0, 2, 4, 6, 8};
+            ok::maybe_undefined_array_t initial_state = {0, 2, 4, 6, 8};
             arraylist_t nums =
                 arraylist::copy_items_from_range(backing, initial_state)
                     .unwrap();
@@ -423,31 +423,35 @@ TEST_SUITE("arraylist")
                 REQUIRE(res.is_success());
             }
 
-            require_nums_is_equal_to(ok::array_t{0, 1, 2, 4, 6, 8});
+            require_nums_is_equal_to(
+                ok::maybe_undefined_array_t{0, 1, 2, 4, 6, 8});
 
             REQUIRE(nums.insert_at(3, 3).is_success());
 
-            require_nums_is_equal_to(ok::array_t{0, 1, 2, 3, 4, 6, 8});
+            require_nums_is_equal_to(
+                ok::maybe_undefined_array_t{0, 1, 2, 3, 4, 6, 8});
 
             REQUIRE(nums.insert_at(5, 5).is_success());
 
-            require_nums_is_equal_to(ok::array_t{0, 1, 2, 3, 4, 5, 6, 8});
+            require_nums_is_equal_to(
+                ok::maybe_undefined_array_t{0, 1, 2, 3, 4, 5, 6, 8});
 
             REQUIRE(nums.insert_at(7, 7).is_success());
 
-            require_nums_is_equal_to(ok::array_t{0, 1, 2, 3, 4, 5, 6, 7, 8});
+            require_nums_is_equal_to(
+                ok::maybe_undefined_array_t{0, 1, 2, 3, 4, 5, 6, 7, 8});
 
             REQUIRE(nums.insert_at(0, 42).is_success());
 
             require_nums_is_equal_to(
-                ok::array_t{42, 0, 1, 2, 3, 4, 5, 6, 7, 8});
+                ok::maybe_undefined_array_t{42, 0, 1, 2, 3, 4, 5, 6, 7, 8});
         }
 
         SUBCASE("insert_at with copy from range constructor")
         {
             c_allocator_t backing;
 
-            array_t sub_array{1, 2, 3, 4, 5, 6};
+            maybe_undefined_array_t sub_array{1, 2, 3, 4, 5, 6};
 
             arraylist_t alist =
                 arraylist::empty<arraylist_t<int, c_allocator_t>>(backing);
@@ -467,7 +471,7 @@ TEST_SUITE("arraylist")
 
             ooming_allocator_t failing;
 
-            array_t sub_array{1, 2, 3, 4, 5, 6};
+            maybe_undefined_array_t sub_array{1, 2, 3, 4, 5, 6};
 
             arraylist_t alist =
                 arraylist::empty<arraylist_t<int, ooming_allocator_t>>(
@@ -493,7 +497,7 @@ TEST_SUITE("arraylist")
                     main_backing);
 
             // insert some copies of sub_array
-            array_t sub_array{1, 2, 3, 4, 5, 6};
+            maybe_undefined_array_t sub_array{1, 2, 3, 4, 5, 6};
             auto status = alist.insert_at(0, arraylist::copy_items_from_range,
                                           failing, sub_array);
             REQUIRE(status.is_success());
@@ -522,7 +526,7 @@ TEST_SUITE("arraylist")
 
             // now have a failing allocator call
             failing.should_oom = true;
-            array_t different_sub_array{1, 2, 3};
+            maybe_undefined_array_t different_sub_array{1, 2, 3};
             status = alist.insert_at(0, arraylist::copy_items_from_range,
                                      failing, sub_array);
             REQUIRE(!status.is_success());
@@ -662,7 +666,8 @@ TEST_SUITE("arraylist")
         SUBCASE("remove with trivial objects")
         {
             c_allocator_t backing;
-            ok::array_t initial = {0, 1, 2, 2, 3, 4, 4, 5, 6, 7, 7, 8};
+            ok::maybe_undefined_array_t initial = {0, 1, 2, 2, 3, 4,
+                                                   4, 5, 6, 7, 7, 8};
             arraylist_t alist =
                 arraylist::copy_items_from_range(backing, initial).unwrap();
 
@@ -682,7 +687,7 @@ TEST_SUITE("arraylist")
             arraylist_t alist =
                 arraylist::empty<arraylist_t<int, c_allocator_t>>(backing);
 
-            constexpr array_t initial = {1, 2, 3};
+            constexpr maybe_undefined_array_t initial = {1, 2, 3};
 
             // append three arraylists, each a copy of `initial`
             for (size_t i = 0; i < 3; ++i) {
@@ -698,25 +703,28 @@ TEST_SUITE("arraylist")
 
             arraylist_t out = alist.remove(1);
             REQUIRE(alist.size() == 2);
-            REQUIRE(ranges_equal(out, array_t{1, 3}));
-            REQUIRE(ranges_equal(alist[0], array_t{2, 3}));
-            REQUIRE(ranges_equal(alist[1], array_t{1, 2}));
+            REQUIRE(ranges_equal(out, maybe_undefined_array_t{1, 3}));
+            REQUIRE(ranges_equal(alist[0], maybe_undefined_array_t{2, 3}));
+            REQUIRE(ranges_equal(alist[1], maybe_undefined_array_t{1, 2}));
         }
 
         SUBCASE("pop_last with trivial objects")
         {
             c_allocator_t backing;
-            arraylist_t alist = arraylist::copy_items_from_range(
-                                    backing, array_t{0, 1, 2, 3, 4})
-                                    .unwrap();
+            arraylist_t alist =
+                arraylist::copy_items_from_range(
+                    backing, maybe_undefined_array_t{0, 1, 2, 3, 4})
+                    .unwrap();
 
-            REQUIRE(ok::ranges_equal(alist, array_t{0, 1, 2, 3, 4}));
+            REQUIRE(ok::ranges_equal(alist,
+                                     maybe_undefined_array_t{0, 1, 2, 3, 4}));
             REQUIRE(alist.pop_last().ref_or_panic() == 4);
-            REQUIRE(ok::ranges_equal(alist, array_t{0, 1, 2, 3}));
+            REQUIRE(
+                ok::ranges_equal(alist, maybe_undefined_array_t{0, 1, 2, 3}));
             REQUIRE(alist.pop_last().ref_or_panic() == 3);
-            REQUIRE(ok::ranges_equal(alist, array_t{0, 1, 2}));
+            REQUIRE(ok::ranges_equal(alist, maybe_undefined_array_t{0, 1, 2}));
             REQUIRE(alist.pop_last().ref_or_panic() == 2);
-            REQUIRE(ok::ranges_equal(alist, array_t{0, 1}));
+            REQUIRE(ok::ranges_equal(alist, maybe_undefined_array_t{0, 1}));
         }
 
         SUBCASE("pop_last with nontrivial objects")
@@ -728,18 +736,19 @@ TEST_SUITE("arraylist")
             // append three arraylists, each a copy of `initial`
             for (size_t i = 0; i < 3; ++i) {
                 alist.append(arraylist::copy_items_from_range, backing,
-                             array_t{1, 2, 3});
+                             maybe_undefined_array_t{1, 2, 3});
             }
             REQUIRE(alist.size() == 3);
 
-            REQUIRE(ranges_equal(array_t{1, 2, 3},
+            REQUIRE(ranges_equal(maybe_undefined_array_t{1, 2, 3},
                                  alist.pop_last().ref_or_panic()));
             REQUIRE(alist[1].pop_last().ref_or_panic() == 3);
-            REQUIRE(
-                ranges_equal(array_t{1, 2}, alist.pop_last().ref_or_panic()));
+            REQUIRE(ranges_equal(maybe_undefined_array_t{1, 2},
+                                 alist.pop_last().ref_or_panic()));
             REQUIRE(alist[0].pop_last().ref_or_panic() == 3);
             REQUIRE(alist[0].pop_last().ref_or_panic() == 2);
-            REQUIRE(ranges_equal(array_t{1}, alist.pop_last().ref_or_panic()));
+            REQUIRE(ranges_equal(maybe_undefined_array_t{1},
+                                 alist.pop_last().ref_or_panic()));
         }
     }
 
@@ -748,15 +757,18 @@ TEST_SUITE("arraylist")
         SUBCASE("correct ordering")
         {
             c_allocator_t backing;
-            arraylist_t alist = arraylist::copy_items_from_range(
-                                    backing, array_t{0, 6, 7, 3, 4, 5, 1, 2})
-                                    .unwrap();
+            arraylist_t alist =
+                arraylist::copy_items_from_range(
+                    backing, maybe_undefined_array_t{0, 6, 7, 3, 4, 5, 1, 2})
+                    .unwrap();
 
             REQUIRE(!ranges_equal(alist, indices));
             REQUIRE(alist.remove_and_swap_last(2) == 7);
-            REQUIRE(ranges_equal(alist, array_t{0, 6, 2, 3, 4, 5, 1}));
+            REQUIRE(ranges_equal(alist,
+                                 maybe_undefined_array_t{0, 6, 2, 3, 4, 5, 1}));
             REQUIRE(alist.remove_and_swap_last(1) == 6);
-            REQUIRE(ranges_equal(alist, array_t{0, 1, 2, 3, 4, 5}));
+            REQUIRE(
+                ranges_equal(alist, maybe_undefined_array_t{0, 1, 2, 3, 4, 5}));
             REQUIRE(alist.remove_and_swap_last(0) == 0);
             REQUIRE(alist.remove_and_swap_last(0) == 5);
             REQUIRE(alist.remove_and_swap_last(0) == 4);
@@ -768,7 +780,7 @@ TEST_SUITE("arraylist")
 
         SUBCASE("still works after reallocation")
         {
-            array_t initial = {0, 6, 7, 3, 4, 5, 1, 2};
+            maybe_undefined_array_t initial = {0, 6, 7, 3, 4, 5, 1, 2};
             c_allocator_t backing;
             arraylist_t alist =
                 arraylist::copy_items_from_range(backing, initial).unwrap();
@@ -779,12 +791,15 @@ TEST_SUITE("arraylist")
             // no reallocation yet
             REQUIRE(alist.capacity() == alist.size() + 1);
             // ordering is preserved
-            REQUIRE(ranges_equal(alist, array_t{0, 6, 2, 3, 4, 5, 1}));
+            REQUIRE(ranges_equal(alist,
+                                 maybe_undefined_array_t{0, 6, 2, 3, 4, 5, 1}));
 
             // okay now reallocate
             auto status = alist.increase_capacity_by_at_least(100);
-            const bool good = status.is_success() &&
-                              ranges_equal(alist, array_t{0, 6, 2, 3, 4, 5, 1});
+            const bool good =
+                status.is_success() &&
+                ranges_equal(alist,
+                             maybe_undefined_array_t{0, 6, 2, 3, 4, 5, 1});
             REQUIRE(good);
             alist.remove_and_swap_last(1);
             REQUIRE(ranges_equal(alist, indices));
@@ -917,15 +932,15 @@ TEST_SUITE("arraylist")
         REQUIREABORTS(
             auto&& _ =
                 static_cast<const decltype(alist)&>(alist).items().last());
-        array_t{0, 1, 2, 3} |
+        maybe_undefined_array_t{0, 1, 2, 3} |
             for_each([&alist](int i) { auto&& _ = alist.append(i); });
         REQUIRE(alist.items().first() == 0);
         REQUIRE(alist.items().last() == 3);
 
         alist.items().first() = 1;
-        REQUIRE(ranges_equal(alist, array_t{1, 1, 2, 3}));
+        REQUIRE(ranges_equal(alist, maybe_undefined_array_t{1, 1, 2, 3}));
         alist.items().last() = 2;
-        REQUIRE(ranges_equal(alist, array_t{1, 1, 2, 2}));
+        REQUIRE(ranges_equal(alist, maybe_undefined_array_t{1, 1, 2, 2}));
         alist.items().first() = 0;
         alist.items().last() = 3;
         REQUIRE(ranges_equal(alist, indices));
@@ -963,17 +978,19 @@ TEST_SUITE("arraylist")
         {
             c_allocator_t backing;
             auto alist = arraylist::empty<int>(backing);
-            array_t initial = {0, 1, 2, 3};
+            maybe_undefined_array_t initial = {0, 1, 2, 3};
 
-            auto status = alist.append_range(array_t{0, 1, 2, 3});
+            auto status =
+                alist.append_range(maybe_undefined_array_t{0, 1, 2, 3});
 
             REQUIRE(status.is_success());
             REQUIRE(ranges_equal(alist, initial));
 
-            status = alist.append_range(array_t{4, 5, 6, 7, 8});
+            status = alist.append_range(maybe_undefined_array_t{4, 5, 6, 7, 8});
 
             REQUIRE(status.is_success());
-            REQUIRE(ranges_equal(alist, array_t{0, 1, 2, 3, 4, 5, 6, 7, 8}));
+            REQUIRE(ranges_equal(
+                alist, maybe_undefined_array_t{0, 1, 2, 3, 4, 5, 6, 7, 8}));
         }
 
         SUBCASE("finite range")
@@ -982,7 +999,7 @@ TEST_SUITE("arraylist")
             auto alist = arraylist::empty<int>(backing);
 
             const auto identity = keep_if([](auto&&) { return true; });
-            const array_t initial = {0, 1, 2, 3};
+            const maybe_undefined_array_t initial = {0, 1, 2, 3};
             const auto initial_finite = initial | identity;
             static_assert(
                 detail::range_marked_finite_c<decltype(initial_finite)>);
@@ -992,13 +1009,15 @@ TEST_SUITE("arraylist")
             REQUIRE(status.is_success());
             REQUIRE(ranges_equal(alist, initial));
 
-            const auto second_finite = array_t{4, 5, 6, 7, 8} | identity;
+            const auto second_finite =
+                maybe_undefined_array_t{4, 5, 6, 7, 8} | identity;
             static_assert(
                 detail::range_marked_finite_c<decltype(second_finite)>);
             status = alist.append_range(second_finite);
 
             REQUIRE(status.is_success());
-            REQUIRE(ranges_equal(alist, array_t{0, 1, 2, 3, 4, 5, 6, 7, 8}));
+            REQUIRE(ranges_equal(
+                alist, maybe_undefined_array_t{0, 1, 2, 3, 4, 5, 6, 7, 8}));
         }
     }
 

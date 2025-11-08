@@ -32,13 +32,13 @@ TEST_SUITE("ok::any range adaptor")
 
         SUBCASE("ok::array_t")
         {
-            ok::array_t test = {2, 4, 6, 8, 10};
+            ok::maybe_undefined_array_t test = {2, 4, 6, 8, 10};
 
             bool any_odd = ok::any_of(test, is_odd);
 
             REQUIRE(!any_odd);
 
-            ok::array_t test_not_even = {2, 4, 6, 8, 11};
+            ok::maybe_undefined_array_t test_not_even = {2, 4, 6, 8, 11};
 
             any_odd = ok::any_of(test_not_even, is_odd);
 

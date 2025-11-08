@@ -5,6 +5,7 @@
 #include "okay/detail/abort.h"
 #include "okay/detail/noexcept.h"
 #include "okay/slice.h"
+#include "okay/stdmem.h"
 
 #include <cstddef>
 #include <cstring>
@@ -14,134 +15,121 @@
 #endif
 
 namespace ok {
-
-namespace array {
-namespace detail {
-template <typename T, size_t num_items> struct defaulted_or_zeroed_t;
-template <typename T, size_t num_items> struct undefined_t;
-} // namespace detail
-} // namespace array
+#define __ok_internal_array_impl                                               \
+                                                                               \
+  public:                                                                      \
+    static_assert(!stdc::is_reference_c<T>,                                    \
+                  "ok::array_t cannot store references.");                     \
+    static_assert(!std::is_void_v<T>, "Cannot create an array_t of void.");    \
+                                                                               \
+    static_assert(num_items != 0, "Cannot create an array_t of zero items.");  \
+                                                                               \
+    using value_type = T;                                                      \
+                                                                               \
+    [[nodiscard]] constexpr value_type& operator[](size_t index) &             \
+        OKAYLIB_NOEXCEPT                                                       \
+    {                                                                          \
+        if (index >= num_items) [[unlikely]] {                                 \
+            __ok_abort("Out of bounds access into ok::array_t");               \
+        }                                                                      \
+        return __m_items[index];                                               \
+    }                                                                          \
+                                                                               \
+    [[nodiscard]] constexpr const value_type& operator[](size_t index)         \
+        const& OKAYLIB_NOEXCEPT                                                \
+    {                                                                          \
+        if (index >= num_items) [[unlikely]] {                                 \
+            __ok_abort("Out of bounds access into ok::array_t");               \
+        }                                                                      \
+        return __m_items[index];                                               \
+    }                                                                          \
+                                                                               \
+    [[nodiscard]] constexpr value_type&& operator[](size_t index) &&           \
+        OKAYLIB_NOEXCEPT                                                       \
+    {                                                                          \
+        if (index >= num_items) [[unlikely]] {                                 \
+            __ok_abort("Out of bounds access into ok::array_t");               \
+        }                                                                      \
+        return stdc::move(__m_items[index]);                                   \
+    }                                                                          \
+                                                                               \
+    constexpr value_type&& operator[](size_t index) const&& = delete;          \
+                                                                               \
+    [[nodiscard]] constexpr value_type* data()& noexcept { return __m_items; } \
+                                                                               \
+    [[nodiscard]] constexpr const value_type* data() const& noexcept           \
+    {                                                                          \
+        return __m_items;                                                      \
+    }                                                                          \
+                                                                               \
+    [[nodiscard]] constexpr slice<const T> items() const& OKAYLIB_NOEXCEPT     \
+    {                                                                          \
+        return raw_slice(*data(), size());                                     \
+    }                                                                          \
+    [[nodiscard]] constexpr slice<T> items() & OKAYLIB_NOEXCEPT                \
+    {                                                                          \
+        return raw_slice(*data(), size());                                     \
+    }                                                                          \
+                                                                               \
+    [[nodiscard]] constexpr size_t size() const noexcept { return num_items; } \
+                                                                               \
+    T __m_items[num_items];
 
 // NOTE: this class was originally written for c++17 and only had aggregate
 // initialization (default constructor was marked private). Unfortunately, C++20
 // forces the class to have no declared constructors, so it is now possible to
 // leave arrays of trivially constructible objects uninitialized by default
 // constructing them.
-template <typename T, size_t num_items> class array_t
+template <typename T, size_t num_items> struct array_t
 {
-  public:
-    static_assert(!stdc::is_reference_c<T>,
-                  "ok::array_t cannot store references.");
-    static_assert(!std::is_void_v<T>, "Cannot create an array_t of void.");
+    static_assert(
+        !stdc::is_trivially_constructible_v<T>,
+        "Cannot use ok::array_t with a trivially constructible type. Either "
+        "add a default constructor to your type (best practice) or use "
+        "ok::undefined_array_t and be aware of undefined initialization.");
 
-    static_assert(num_items != 0, "Cannot create an array_t of zero items.");
+    __ok_internal_array_impl
+};
 
-    using value_type = T;
+template <typename T, size_t num_items> struct zeroed_array_t
+{
+    static_assert(stdc::is_trivially_constructible_v<T>,
+                  "ok::zeroed_array_t can only be used with trivially "
+                  "constructible types, use ok::array_t for types that have "
+                  "some defined initialization / default construction.");
+    static_assert(stdc::is_constructible_v<T, int>,
+                  "type must be constructible with an integer 0 to be used in "
+                  "zeroed_array_t");
 
-    // factory functions
-    friend struct ok::array::detail::defaulted_or_zeroed_t<T, num_items>;
-    friend struct ok::array::detail::undefined_t<T, num_items>;
+    // no aggregate initialization for zeroed array, it's always zeroed
+    constexpr zeroed_array_t() noexcept { ok::memfill(ok::slice(*this), 0); }
 
-    [[nodiscard]] constexpr value_type& operator[](size_t index) &
-        OKAYLIB_NOEXCEPT
-    {
-        if (index >= num_items) [[unlikely]] {
-            __ok_abort("Out of bounds access into ok::array_t");
-        }
-        return __m_items[index];
-    }
+    __ok_internal_array_impl
+};
 
-    [[nodiscard]] constexpr const value_type&
-    operator[](size_t index) const& OKAYLIB_NOEXCEPT
-    {
-        if (index >= num_items) [[unlikely]] {
-            __ok_abort("Out of bounds access into ok::array_t");
-        }
-        return __m_items[index];
-    }
+/// A maybe_undefined_array_t is an array of trivially constructible objects
+/// which will be left uninitialized if the array is default constructed. Use it
+/// only if aggregate initialization is needed for an array containing a
+/// trivially constructible type.
+template <typename T, size_t num_items> struct maybe_undefined_array_t
+{
+    static_assert(stdc::is_trivially_constructible_v<T>,
+                  "ok::undefined_array_t can only be used with trivially "
+                  "constructible types, use ok::array_t for types that have "
+                  "some defined initialization / default construction.");
 
-    [[nodiscard]] constexpr value_type&& operator[](size_t index) &&
-        OKAYLIB_NOEXCEPT
-    {
-        if (index >= num_items) [[unlikely]] {
-            __ok_abort("Out of bounds access into ok::array_t");
-        }
-        return stdc::move(__m_items[index]);
-    }
-
-    constexpr value_type&& operator[](size_t index) const&& = delete;
-
-    [[nodiscard]] constexpr value_type* data() & noexcept { return __m_items; }
-
-    [[nodiscard]] constexpr const value_type* data() const& noexcept
-    {
-        return __m_items;
-    }
-
-    [[nodiscard]] constexpr slice<const T> items() const& OKAYLIB_NOEXCEPT
-    {
-        return raw_slice(*data(), size());
-    }
-    [[nodiscard]] constexpr slice<T> items() & OKAYLIB_NOEXCEPT
-    {
-        return raw_slice(*data(), size());
-    }
-
-    [[nodiscard]] constexpr size_t size() const noexcept { return num_items; }
-
-    // this can't be private because we want aggregate initialization
-    // please dont touch it :)
-    T __m_items[num_items];
+    __ok_internal_array_impl
 };
 
 // aggregate initialization template deducation, so you can do
 // `ok::array_t my_array_t = {...}`
 template <typename T, typename... pack>
-array_t(T, pack...)
-    -> array_t<stdc::enable_if_t<(stdc::is_same_v<T, pack> && ...), T>,
-               1 + sizeof...(pack)>;
-
-namespace array {
-namespace detail {
-template <typename T, size_t num_items> struct defaulted_or_zeroed_t
-{
-    [[nodiscard]] constexpr auto make() const noexcept
-    {
-        array_t<T, num_items> out;
-        if constexpr (std::is_trivially_constructible_v<T>) {
-            ::memset(out.__m_items, 0, num_items * sizeof(T));
-        }
-        return out;
-    };
-
-    [[nodiscard]] constexpr auto operator()() const noexcept
-    {
-        return ok::make(*this);
-    }
-};
-template <typename T, size_t num_items> struct undefined_t
-{
-    [[nodiscard]] constexpr auto make() const noexcept
-    {
-        return array_t<T, num_items>();
-    };
-
-    [[nodiscard]] constexpr auto operator()() const noexcept
-    {
-        return ok::make(*this);
-    }
-};
-} // namespace detail
-
-template <typename T, size_t num_items>
-inline constexpr auto defaulted_or_zeroed =
-    detail::defaulted_or_zeroed_t<T, num_items>{};
-
-template <typename T, size_t num_items>
-inline constexpr auto undefined = detail::undefined_t<T, num_items>{};
-
-} // namespace array
-
+    requires(stdc::is_same_v<T, pack> && ...)
+array_t(T, pack...) -> array_t<T, 1 + sizeof...(pack)>;
+template <typename T, typename... pack>
+    requires(stdc::is_same_v<T, pack> && ...)
+maybe_undefined_array_t(T, pack...)
+    -> maybe_undefined_array_t<T, 1 + sizeof...(pack)>;
 } // namespace ok
 
 #if defined(OKAYLIB_USE_FMT)

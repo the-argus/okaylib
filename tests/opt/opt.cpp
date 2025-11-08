@@ -444,7 +444,7 @@ TEST_SUITE("opt")
 
         SUBCASE("copy_out and move_out with opt slice")
         {
-            array_t<uint8_t, 3> bytes = {0, 1, 2};
+            maybe_undefined_array_t<uint8_t, 3> bytes = {0, 1, 2};
             opt<slice<const uint8_t>> i = bytes;
 
             slice<const uint8_t> j = i.take().ref_or_panic();
@@ -455,7 +455,7 @@ TEST_SUITE("opt")
             REQUIRE(!i.take().has_value());
             i.emplace(bytes);
 
-            array_t<uint8_t, 3> dummy = {2, 3, 1};
+            maybe_undefined_array_t<uint8_t, 3> dummy = {2, 3, 1};
             REQUIRE(i.copy_out_or(dummy).is_alias_for(bytes));
             REQUIRE(i.ref_or_panic().is_alias_for(bytes));
             i.reset();

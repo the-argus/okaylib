@@ -4,6 +4,7 @@
 #include "okay/allocators/allocator.h"
 #include "okay/containers/array.h"
 #include "okay/defer.h"
+#include "okay/ranges/algorithm.h"
 #include "okay/short_arithmetic_types.h"
 #include <doctest.h>
 #include <random>
@@ -29,7 +30,7 @@ template <ok::memory_resource_c allocator_t> struct allocator_tests
 
             // alloc::owned destroyed as lvalue
             {
-                auto result = ally.make(array::undefined<u8, 1024>);
+                ok::res result = ally.template make<zeroed_array_t<u8, 1024>>();
                 if (result.is_success()) {
                     alloc::owned mb = std::move(result.unwrap());
                 } else {
@@ -43,19 +44,20 @@ template <ok::memory_resource_c allocator_t> struct allocator_tests
 
             // alloc::owned destroyed as rvalue
             {
-                auto&& _ = ally.make(array::undefined<u8, 1024>).unwrap();
+                auto&& _ =
+                    ally.template make<zeroed_array_t<u8, 1024>>().unwrap();
             }
 
             // alloc::owned destroyed within result
             {
-                auto&& _ = ally.make(array::undefined<u8, 1024>);
+                ok::res result = ally.template make<zeroed_array_t<u8, 1024>>();
             }
         }
 
         // manual free
         // if statement is here to prevent assert in make_non_owning from firing
-        array_t<u8, 1024>& array =
-            ally.make_non_owning(array::undefined<u8, 1024>).unwrap();
+        auto& array =
+            ally.template make_non_owning<zeroed_array_t<u8, 1024>>().unwrap();
 
         if constexpr (has_make) {
             ok::destroy_and_free(ally, array);
@@ -191,7 +193,7 @@ template <ok::memory_resource_c allocator_t> struct allocator_tests
 
     inline void run_all_fuzzed(allocator_t& ally)
     {
-        constexpr ok::array_t test_functions{
+        constexpr ok::maybe_undefined_array_t test_functions{
             alloc_1mb_andfree,
             alloc_1k_induvidual_bytes,
             allocations_are_correctly_sized_aligned_and_zeroed,
@@ -200,24 +202,14 @@ template <ok::memory_resource_c allocator_t> struct allocator_tests
             allocating_zero_bytes_returns_unsupported,
         };
 
-        auto visited =
-            ok::array::defaulted_or_zeroed<bool, test_functions.size()>();
+        ok::zeroed_array_t<bool, test_functions.size()> visited;
 
         constexpr auto seed = 1;
         std::default_random_engine engine(seed);
         std::uniform_int_distribution<u64> distribution(
             0, test_functions.size() - 1);
 
-        auto all_visited = [&visited] {
-            for (u64 i = 0; i < visited.size(); ++i) {
-                if (!visited[i]) {
-                    return false;
-                }
-            }
-            return true;
-        };
-
-        while (!all_visited()) {
+        while (!ok::all_of(visited)) {
             u64 idx = distribution(engine);
             while (visited[idx]) {
                 idx = distribution(engine);

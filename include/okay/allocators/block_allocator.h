@@ -28,13 +28,11 @@ template <typename free_block_t>
 free_everything_in_block_allocator_buffer(bytes_t memory, size_t blocksize,
                                           free_block_t* initial_iter = nullptr)
 {
+    ok::slice items = reinterpret_bytes_as<free_block_t>(memory);
     free_block_t* free_list_iter = initial_iter;
-    for (size_t i = 0; i < memory.size() / blocksize; ++i) {
-        auto* ptr = reinterpret_cast<free_block_t*>(
-            memory.unchecked_address_of_first_item() + (i * blocksize));
-        __ok_internal_assert(!(uintptr_t(ptr) % alignof(free_block_t)));
-        *ptr = free_block_t{.prev = free_list_iter};
-        free_list_iter = ptr;
+    for (size_t i = 0; i < items.size(); ++i) {
+        items[i] = free_block_t{.prev = free_list_iter};
+        free_list_iter = ok::addressof(items[i]);
     }
     return free_list_iter;
 }

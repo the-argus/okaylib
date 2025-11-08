@@ -32,13 +32,13 @@ TEST_SUITE("ok::all range adaptor")
 
         SUBCASE("ok::array_t")
         {
-            ok::array_t test = {2, 4, 6, 8, 10};
+            ok::maybe_undefined_array_t test = {2, 4, 6, 8, 10};
 
             bool all_even = ok::all_of(test, [](int i) { return i % 2 == 0; });
 
             REQUIRE(all_even);
 
-            ok::array_t test_not_even = {2, 4, 6, 8, 11};
+            ok::maybe_undefined_array_t test_not_even = {2, 4, 6, 8, 11};
 
             all_even =
                 ok::all_of(test_not_even, [](int i) { return i % 2 == 0; });

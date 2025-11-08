@@ -47,7 +47,7 @@ TEST_SUITE("bit_array containers")
                         bit::off(), bit::off(), bit::off(), bit::off(),
                         bit::off(), bit::off(), bit::off(), bit::off(),
                     }, bs));
-            REQUIRE(ok::ranges_equal(array_t{
+            REQUIRE(ok::ranges_equal(maybe_undefined_array_t{
                         false, false, false, false,
                         false, false, false, false,
                         false, false, false, false,
@@ -63,7 +63,7 @@ TEST_SUITE("bit_array containers")
             print_bit_array(bs);
 
             // clang-format off
-            REQUIRE(ok::ranges_equal(array_t{
+            REQUIRE(ok::ranges_equal(maybe_undefined_array_t{
                     true, true, true, true,
                     true, true, true, true,
                     true, true, true, true,
@@ -86,7 +86,8 @@ TEST_SUITE("bit_array containers")
             static_assert(bs.size_bits() == 4);
             printf("bit string: ");
             print_bit_array(bs);
-            REQUIRE(ranges_equal(bs, ok::array_t{false, true, false, true}));
+            REQUIRE(ranges_equal(
+                bs, ok::maybe_undefined_array_t{false, true, false, true}));
         }
 
         SUBCASE("bit_array == and != operators")

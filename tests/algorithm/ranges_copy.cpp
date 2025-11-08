@@ -17,8 +17,8 @@ TEST_SUITE("ok::ranges_copy and ok::ranges_copy_as_much_as_will_fit algorithms")
 
     TEST_CASE("copy from one array to another")
     {
-        array_t a{1, 2, 3, 4, 5, 6};
-        array_t b = array::defaulted_or_zeroed<int, 20>();
+        maybe_undefined_array_t a{1, 2, 3, 4, 5, 6};
+        zeroed_array_t<int, 20> b;
 
         ok::ranges_copy(ok::dest(b), ok::source(a));
 
@@ -32,15 +32,16 @@ TEST_SUITE("ok::ranges_copy and ok::ranges_copy_as_much_as_will_fit algorithms")
     {
         SUBCASE("indices into sized (array)")
         {
-            array_t array = array::undefined<int, 5>();
+            maybe_undefined_array_t<int, 5> array;
             ranges_copy(dest(array), source(indices));
 
-            REQUIRE(ranges_equal(array, array_t{0, 1, 2, 3, 4}));
+            REQUIRE(
+                ranges_equal(array, maybe_undefined_array_t{0, 1, 2, 3, 4}));
         }
 
         SUBCASE("indices into finite")
         {
-            array_t array = array::defaulted_or_zeroed<int, 10>();
+            zeroed_array_t<int, 10> array;
 
             auto finite_view = array | enumerate |
                                keep_if([](auto pair) -> bool {
@@ -58,13 +59,14 @@ TEST_SUITE("ok::ranges_copy and ok::ranges_copy_as_much_as_will_fit algorithms")
             ranges_copy(dest(finite_view), source(indices));
 
             // only affect every other item
-            REQUIRE(ranges_equal(array, array_t{0, 0, 1, 0, 2, 0, 3, 0, 4, 0}));
+            REQUIRE(ranges_equal(
+                array, maybe_undefined_array_t{0, 0, 1, 0, 2, 0, 3, 0, 4, 0}));
         }
     }
 
     TEST_CASE("copy from finite to finite")
     {
-        ok::array_t a = {0, 1, 2, 3, 4};
+        ok::maybe_undefined_array_t a = {0, 1, 2, 3, 4};
         auto finite_view = a | enumerate | keep_if([](auto pair) -> bool {
                                auto [item, index] = pair;
                                return index % 2 == 0;
@@ -78,6 +80,6 @@ TEST_SUITE("ok::ranges_copy and ok::ranges_copy_as_much_as_will_fit algorithms")
 
         ranges_copy(dest(finite_view), source(finite_input));
 
-        REQUIRE(ranges_equal(a, array_t{1, 1, 3, 3, 4}));
+        REQUIRE(ranges_equal(a, maybe_undefined_array_t{1, 1, 3, 3, 4}));
     }
 }

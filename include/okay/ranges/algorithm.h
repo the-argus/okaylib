@@ -6,6 +6,15 @@
 namespace ok {
 namespace detail {
 
+struct identity_fn_t
+{
+    template <typename T>
+    constexpr decltype(auto) operator()(T&& item) const noexcept
+    {
+        return std::forward<T>(item);
+    }
+};
+
 struct ranges_equal_fn_t
 {
     template <producing_range_c range_lhs_t, producing_range_c range_rhs_t>
@@ -235,6 +244,7 @@ template <bool allow_small_destination = false> struct ranges_copy_fn_t
 inline constexpr detail::ranges_equal_fn_t ranges_equal;
 inline constexpr detail::ranges_copy_fn_t<false> ranges_copy;
 inline constexpr detail::ranges_copy_fn_t<true> ranges_copy_as_much_as_will_fit;
+inline constexpr detail::identity_fn_t identity;
 
 template <detail::producing_range_c input_t, typename predicate_t>
 constexpr bool all_of(const input_t& input,
@@ -249,6 +259,12 @@ constexpr bool all_of(const input_t& input,
     return true;
 }
 
+template <detail::producing_range_c input_t>
+constexpr bool all_of(const input_t& input) OKAYLIB_NOEXCEPT
+{
+    return all_of(input, identity);
+}
+
 template <detail::producing_range_c input_t, typename predicate_t>
 constexpr bool any_of(const input_t& input,
                       const predicate_t& predicate) OKAYLIB_NOEXCEPT
@@ -260,6 +276,12 @@ constexpr bool any_of(const input_t& input,
         }
     }
     return false;
+}
+
+template <detail::producing_range_c input_t>
+constexpr bool any_of(const input_t& input) OKAYLIB_NOEXCEPT
+{
+    return any_of(input, identity);
 }
 
 } // namespace ok
