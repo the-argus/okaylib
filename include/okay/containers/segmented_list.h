@@ -479,11 +479,33 @@ template <typename T, typename backing_allocator_t> class segmented_list_t
     }
 
     template <typename... args_t>
-    [[nodiscard]] constexpr auto insert_at(const size_t idx,
-                                           args_t&&... args) OKAYLIB_NOEXCEPT;
+    [[nodiscard]] constexpr ok::alloc::result_t<T&>
+    insert_at(const size_t idx, args_t&&... args) OKAYLIB_NOEXCEPT
+    {
+        __ok_assert(idx < this->size() || idx == 0,
+                    "out of bounds access in segmented_list_t<T>::insert_at");
+        if (this->size() == this->capacity()) {
+            // realloc
+        }
+        // okaylib developer assert
+        __ok_assert(this->capacity() > this->size(), "bad realloc?");
+
+        T& new_item = this->unchecked_access(this->size());
+
+        ok::make_into_uninitialized<T>(new_item,
+                                       ok::stdc::forward<args_t>(args)...);
+
+        ++m.size;
+
+        return alloc::error::success;
+    }
 
     template <typename... args_t>
-    [[nodiscard]] constexpr auto append(args_t&&... args) OKAYLIB_NOEXCEPT;
+    [[nodiscard]] constexpr ok::alloc::result_t<T&>
+    append(args_t&&... args) OKAYLIB_NOEXCEPT
+    {
+        return insert_at(0, ok::stdc::forward<args_t>(args)...);
+    }
 
     /// Returns an error only if allocation to expand space for the new items
     /// errored.
