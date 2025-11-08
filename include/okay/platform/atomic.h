@@ -35,10 +35,15 @@
 namespace ok {
 template <typename T> class atomic_t;
 
-template <ok::integral_c T> class atomic_t<T>
+template <typename T>
+concept atomic_c = (stdc::is_integral_v<T> && !stdc::is_floating_point_v<T>) ||
+                   stdc::is_pointer_v<T>;
+
+template <atomic_c T> class atomic_t<T>
 {
     mutable ok::detail::atomic_base<T> m_atomic;
 
+  public:
     T load(memory_order order = memory_order::seq_cst) const volatile noexcept
         OKAYLIB_CHECK_LOAD_MEMORY_ORDER(order)
     {
@@ -76,6 +81,71 @@ template <ok::integral_c T> class atomic_t<T>
     {
         return ok::detail::atomic_exchange(ok::addressof(m_atomic), newvalue,
                                            order);
+    }
+
+    T fetch_add(T rhs,
+                memory_order order = memory_order::seq_cst) volatile _NOEXCEPT
+    {
+        return ok::detail::atomic_fetch_add(ok::addressof(this->m_atomic), rhs,
+                                            order);
+    }
+
+    T fetch_add(T rhs, memory_order order = memory_order::seq_cst) _NOEXCEPT
+    {
+        return ok::detail::atomic_fetch_add(ok::addressof(this->m_atomic), rhs,
+                                            order);
+    }
+
+    T fetch_sub(T rhs,
+                memory_order order = memory_order::seq_cst) volatile _NOEXCEPT
+    {
+        return ok::detail::atomic_fetch_sub(ok::addressof(this->m_atomic), rhs,
+                                            order);
+    }
+
+    T fetch_sub(T rhs, memory_order order = memory_order::seq_cst) _NOEXCEPT
+    {
+        return ok::detail::atomic_fetch_sub(ok::addressof(this->m_atomic), rhs,
+                                            order);
+    }
+
+    T fetch_and(T rhs,
+                memory_order order = memory_order::seq_cst) volatile _NOEXCEPT
+    {
+        return ok::detail::atomic_fetch_and(ok::addressof(this->m_atomic), rhs,
+                                            order);
+    }
+
+    T fetch_and(T rhs, memory_order order = memory_order::seq_cst) _NOEXCEPT
+    {
+        return ok::detail::atomic_fetch_and(ok::addressof(this->m_atomic), rhs,
+                                            order);
+    }
+
+    T fetch_or(T rhs,
+               memory_order order = memory_order::seq_cst) volatile _NOEXCEPT
+    {
+        return ok::detail::atomic_fetch_or(ok::addressof(this->m_atomic), rhs,
+                                           order);
+    }
+
+    T fetch_or(T rhs, memory_order order = memory_order::seq_cst) _NOEXCEPT
+    {
+        return ok::detail::atomic_fetch_or(ok::addressof(this->m_atomic), rhs,
+                                           order);
+    }
+
+    T fetch_xor(T rhs,
+                memory_order order = memory_order::seq_cst) volatile _NOEXCEPT
+    {
+        return ok::detail::atomic_fetch_xor(ok::addressof(this->m_atomic), rhs,
+                                            order);
+    }
+
+    T fetch_xor(T rhs, memory_order order = memory_order::seq_cst) _NOEXCEPT
+    {
+        return ok::detail::atomic_fetch_xor(ok::addressof(this->m_atomic), rhs,
+                                            order);
     }
 
     bool compare_exchange_weak(T& expected, T newvalue,

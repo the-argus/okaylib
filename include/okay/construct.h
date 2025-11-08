@@ -6,6 +6,27 @@
 
 namespace ok {
 namespace detail {
+struct is_success_fn_t
+{
+    template <ok::status_type_c status_t>
+    constexpr bool operator()
+        [[nodiscard]] (const status_t& status) const OKAYLIB_NOEXCEPT
+    {
+        if constexpr (ok::status_enum_c<status_t>) {
+            return status == status_t::success;
+        } else {
+            return status.is_success();
+        }
+    }
+
+    template <ok::detail::is_instance_c<ok::res> result_t>
+    constexpr bool operator()
+        [[nodiscard]] (const result_t& result) const OKAYLIB_NOEXCEPT
+    {
+        return result.is_success();
+    }
+};
+
 template <typename T> struct make_into_uninitialized_fn_t
 {
     template <typename... args_t>
@@ -43,8 +64,9 @@ template <typename T> struct make_into_uninitialized_fn_t
                     } else {
                         // fall back to move constructor if no in-place
                         // construction is defined
-                        new (ok::addressof(uninitialized))
-                            T(std::move(constructor.make(
+                        ok::stdc::construct_at(
+                            ok::addressof(uninitialized),
+                            std::move(constructor.make(
                                 std::forward<inner_args_t>(innerargs)...)));
                         return;
                     }
@@ -61,6 +83,8 @@ template <typename T> struct make_into_uninitialized_fn_t
 template <typename T>
 constexpr inline detail::make_into_uninitialized_fn_t<T>
     make_into_uninitialized;
+
+constexpr inline detail::is_success_fn_t is_success;
 
 namespace detail {
 struct deduced_t
