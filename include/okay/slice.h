@@ -597,12 +597,6 @@ template <typename viewed_t> struct undefined_memory_t
     [[nodiscard]] static constexpr undefined_memory_t
     from_bytes(const bytes_t& bytes) OKAYLIB_NOEXCEPT
     {
-        if (bytes.size() % sizeof(viewed_t) != 0) [[unlikely]] {
-            __ok_abort(
-                "Attempt to construct an undefined_memory_t from a bytes_t, "
-                "but the given number of bytes is not divisible by sizeof(T) "
-                "(ie. there would be some extra space).");
-        }
         if (uintptr_t(bytes.unchecked_address_of_first_item()) %
                 alignof(viewed_t) !=
             0) [[unlikely]] {
