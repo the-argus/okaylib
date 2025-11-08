@@ -13,6 +13,7 @@ TEST_SUITE("c_allocator")
         ok::array_t<u8, 64 * 5100> bytes = {};
         arena_t arena(bytes);
         arena_compat_wrapper_t arena_compat(arena);
+        static_assert(ok::allocator_c<decltype(arena_compat)>);
         auto blockpool = linked_blockpool_allocator::start_with_one_pool(
                              arena_compat,
                              linked_blockpool_allocator::options_t{

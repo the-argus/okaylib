@@ -36,8 +36,7 @@ class ExamplePolymorphicStatus : public ok::abstract_status_t
     [[nodiscard]] bool is_success() const noexcept override { return success; }
 
     // no need to free it, the tests will just put it into some stack space
-    [[nodiscard]] opt<ok::nonthreadsafe_allocator_t&>
-    allocator() noexcept override
+    [[nodiscard]] opt<ok::allocator_t&> allocator() noexcept override
     {
         return {};
     }

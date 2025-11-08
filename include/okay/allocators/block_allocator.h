@@ -41,14 +41,10 @@ free_everything_in_block_allocator_buffer(bytes_t memory, size_t blocksize,
 } // namespace detail
 } // namespace block_allocator
 
-template <typename allocator_impl_t>
-class block_allocator_t : public ok::nonthreadsafe_allocator_t
+template <allocator_c allocator_impl_t>
+class block_allocator_t : public ok::allocator_t
 {
   private:
-    static_assert(detail::is_derived_from_c<allocator_impl_t,
-                                            ok::nonthreadsafe_allocator_t>,
-                  "Type given to block_allocator_t as a backing allocator is "
-                  "not a child of ok::allocator_t.");
     struct free_block_t
     {
         free_block_t* prev;
@@ -173,7 +169,7 @@ class block_allocator_t : public ok::nonthreadsafe_allocator_t
 block_allocator_t(const block_allocator::fixed_buffer_options_t& static_buffer)
     -> block_allocator_t<ok::allocator_t>;
 
-template <typename allocator_impl_t>
+template <allocator_c allocator_impl_t>
 inline void block_allocator_t<allocator_impl_t>::grow() OKAYLIB_NOEXCEPT
 {
     __ok_internal_assert(!m.free_head);
@@ -185,8 +181,8 @@ inline void block_allocator_t<allocator_impl_t>::grow() OKAYLIB_NOEXCEPT
             .memory = m.memory,
             .new_size_bytes = m.memory.size() + m.blocksize,
             .preferred_size_bytes = m.memory.size() * 2,
-            .flags = alloc::flags::in_place_orelse_fail |
-                     alloc::flags::leave_nonzeroed,
+            .flags = alloc::realloc_flags::in_place_orelse_fail |
+                     alloc::realloc_flags::leave_nonzeroed,
         });
 
     if (!reallocation.is_success()) [[unlikely]] {
@@ -208,7 +204,7 @@ inline void block_allocator_t<allocator_impl_t>::grow() OKAYLIB_NOEXCEPT
     __ok_internal_assert(m.free_head);
 }
 
-template <typename allocator_impl_t>
+template <allocator_c allocator_impl_t>
 [[nodiscard]] inline alloc::result_t<bytes_t>
 block_allocator_t<allocator_impl_t>::impl_allocate(
     const alloc::request_t& request) OKAYLIB_NOEXCEPT
@@ -236,7 +232,7 @@ block_allocator_t<allocator_impl_t>::impl_allocate(
     return output_memory;
 }
 
-template <typename allocator_impl_t>
+template <allocator_c allocator_impl_t>
 inline void block_allocator_t<allocator_impl_t>::clear() OKAYLIB_NOEXCEPT
 {
     m.free_head =
@@ -244,7 +240,7 @@ inline void block_allocator_t<allocator_impl_t>::clear() OKAYLIB_NOEXCEPT
             free_block_t>(m.memory, m.blocksize);
 }
 
-template <typename allocator_impl_t>
+template <allocator_c allocator_impl_t>
 inline void block_allocator_t<allocator_impl_t>::impl_deallocate(void* memory)
     OKAYLIB_NOEXCEPT
 {
@@ -258,7 +254,7 @@ inline void block_allocator_t<allocator_impl_t>::impl_deallocate(void* memory)
     free_block->prev = std::exchange(m.free_head, free_block);
 }
 
-template <typename allocator_impl_t>
+template <allocator_c allocator_impl_t>
 [[nodiscard]] inline alloc::result_t<bytes_t>
 block_allocator_t<allocator_impl_t>::impl_reallocate(
     const alloc::reallocate_request_t& request) OKAYLIB_NOEXCEPT
@@ -287,7 +283,7 @@ block_allocator_t<allocator_impl_t>::impl_reallocate(
             ? request.new_size_bytes
             : ok::min(request.preferred_size_bytes, m.blocksize);
 
-    if (!(request.flags & alloc::flags::leave_nonzeroed)) {
+    if (!(request.flags & alloc::realloc_flags::leave_nonzeroed)) {
         std::memset(request.memory.unchecked_address_of_first_item() +
                         request.memory.size(),
                     0, newsize - request.memory.size());
@@ -305,7 +301,7 @@ struct alloc_initial_buf_t
     using associated_type =
         block_allocator_t<ok::detail::remove_cvref_t<allocator_impl_t_cref>>;
 
-    template <typename allocator_impl_t>
+    template <allocator_c allocator_impl_t>
     [[nodiscard]] constexpr auto operator()(
         allocator_impl_t& allocator,
         const alloc_initial_buf_options_t& options) const OKAYLIB_NOEXCEPT
@@ -313,7 +309,7 @@ struct alloc_initial_buf_t
         return ok::make(*this, allocator, options);
     }
 
-    template <typename allocator_impl_t>
+    template <allocator_c allocator_impl_t>
     [[nodiscard]] constexpr alloc::error make_into_uninit(
         ok::block_allocator_t<allocator_impl_t>& uninit,
         allocator_impl_t& allocator,

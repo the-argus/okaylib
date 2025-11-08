@@ -3,15 +3,15 @@
 
 #include "okay/allocators/allocator.h"
 #include "okay/detail/ok_unreachable.h"
+#include "okay/error.h"
 #include "okay/opt.h"
-#include "okay/status.h"
 #include <atomic>
 
 namespace ok {
 namespace detail {
 // NOTE: refcounts and payload always allocated together, so undropped weak
 // references will prevent the deallocation of memory for the object.
-template <typename T, typename allocator_impl_t> struct arc_payload_t
+template <typename T, allocator_c allocator_impl_t> struct arc_payload_t
 {
     std::atomic<uint64_t> strong_refcount;
     std::atomic<uint64_t> weak_refcount;
@@ -22,18 +22,14 @@ static_assert(std::atomic<uint64_t>::is_always_lock_free);
 inline constexpr uint64_t lock_bit = 1UL << 63;
 } // namespace detail
 
-template <typename T, typename allocator_impl_t> struct variant_arc_t;
-template <typename T, typename allocator_impl_t> struct ro_arc_t;
-template <typename T, typename allocator_impl_t> struct weak_arc_t;
+template <typename T, allocator_c allocator_impl_t> struct variant_arc_t;
+template <typename T, allocator_c allocator_impl_t> struct ro_arc_t;
+template <typename T, allocator_c allocator_impl_t> struct weak_arc_t;
 
 /// Atomically borrow counted *mutable* reference
-template <typename T, typename allocator_impl_t = ok::allocator_t>
+template <typename T, allocator_c allocator_impl_t = ok::allocator_t>
 struct unique_rw_arc_t
 {
-    static_assert(detail::is_derived_from_v<allocator_impl_t, allocator_t>,
-                  "Allocator type parameter to unique_rw_arc_t must be derived "
-                  "from ok::allocator_t");
-
     friend ro_arc_t<T, allocator_impl_t>;
     friend variant_arc_t<T, allocator_impl_t>;
     friend unique_rw_arc_t<T, ok::allocator_t>;
@@ -137,13 +133,9 @@ struct unique_rw_arc_t
 };
 
 /// Read-only atomically refcounted pointer
-template <typename T, typename allocator_impl_t = ok::allocator_t>
+template <typename T, allocator_c allocator_impl_t = ok::allocator_t>
 struct ro_arc_t
 {
-    static_assert(detail::is_derived_from_v<allocator_impl_t, allocator_t>,
-                  "Allocator type parameter to ro_arc_t must be derived from "
-                  "ok::allocator_t");
-
     struct make;
     friend struct make;
 
@@ -284,8 +276,7 @@ struct ro_arc_t
         // are any spinning + waiting to promote) so we can deallocate
         // everything
         if (m_payload->weak_refcount.fetch_sub(1) == 1) {
-            m_payload->allocator->deallocate(
-                ok::reinterpret_as_bytes(ok::slice_from_one(*m_payload)));
+            m_payload->allocator->deallocate(m_payload);
         } else {
             // weak refs exist, mark as destroyed and leave allocated
             m_payload->strong_refcount.store(0);
@@ -300,7 +291,7 @@ struct ro_arc_t
     detail::arc_payload_t<T, allocator_impl_t>* m_payload;
 };
 
-template <typename T, typename allocator_impl_t = ok::allocator_t>
+template <typename T, allocator_c allocator_impl_t = ok::allocator_t>
 struct weak_arc_t
 {
     friend unique_rw_arc_t<T, allocator_impl_t>;
@@ -414,9 +405,10 @@ struct weak_arc_t
     detail::arc_payload_t<T, allocator_impl_t>* m_payload;
 };
 
-template <typename T, typename allocator_impl_t>
-[[nodiscard]] constexpr auto ro_arc_t<T, allocator_impl_t>::demote_to_weak()
-    OKAYLIB_NOEXCEPT -> weak_arc_t<T, allocator_impl_t>
+template <typename T, allocator_c allocator_impl_t>
+[[nodiscard]] constexpr auto
+ro_arc_t<T, allocator_impl_t>::demote_to_weak() OKAYLIB_NOEXCEPT
+    -> weak_arc_t<T, allocator_impl_t>
 {
     // okay to add to weak because we have some in strong
     m_payload->weak_refcount.fetch_add(1);
@@ -426,7 +418,7 @@ template <typename T, typename allocator_impl_t>
     return out;
 }
 
-template <typename T, typename allocator_impl_t>
+template <typename T, allocator_c allocator_impl_t>
 [[nodiscard]] constexpr ro_arc_t<T, allocator_impl_t>
 unique_rw_arc_t<T, allocator_impl_t>::demote_to_readonly() OKAYLIB_NOEXCEPT
 {
@@ -441,7 +433,7 @@ unique_rw_arc_t<T, allocator_impl_t>::demote_to_readonly() OKAYLIB_NOEXCEPT
     return out;
 }
 
-template <typename T, typename allocator_impl_t>
+template <typename T, allocator_c allocator_impl_t>
 [[nodiscard]] constexpr weak_arc_t<T, allocator_impl_t>
 unique_rw_arc_t<T, allocator_impl_t>::spawn_weak_arc() OKAYLIB_NOEXCEPT
 {
@@ -451,7 +443,7 @@ unique_rw_arc_t<T, allocator_impl_t>::spawn_weak_arc() OKAYLIB_NOEXCEPT
     return weak_arc_t(m_payload);
 }
 
-template <typename T, typename allocator_impl_t>
+template <typename T, allocator_c allocator_impl_t>
 [[nodiscard]] constexpr weak_arc_t<T, allocator_impl_t>
 ro_arc_t<T, allocator_impl_t>::spawn_weak_arc() OKAYLIB_NOEXCEPT
 {
@@ -474,7 +466,7 @@ enum class arc_ownership : uint8_t
     weak,
 };
 
-template <typename T, typename allocator_impl_t = ok::allocator_t>
+template <typename T, allocator_c allocator_impl_t = ok::allocator_t>
 struct variant_arc_t
 {
     friend variant_arc_t<T, ok::allocator_t>;
@@ -766,7 +758,7 @@ struct variant_arc_t
     arc_ownership m_mode;
 };
 
-template <typename T, typename allocator_impl_t>
+template <typename T, allocator_c allocator_impl_t>
 struct unique_rw_arc_t<T, allocator_impl_t>::make
 {
     make() = delete;
@@ -774,23 +766,23 @@ struct unique_rw_arc_t<T, allocator_impl_t>::make
     static constexpr auto with =
         [](status<alloc::error>& out_status, allocator_impl_t& allocator,
            auto&&... constructor_args) -> unique_rw_arc_t {
-        static_assert(is_std_constructible_v<T, decltype(constructor_args)...>,
+        static_assert(is_std_constructible_c<T, decltype(constructor_args)...>,
                       "Cannot make a unique_rw_arc_t with the given arguments- "
                       "there is no matching constructor for T.");
         using payload_t = detail::arc_payload_t<T, allocator_impl_t>;
         alloc::result_t<bytes_t> res = allocator.allocate(alloc::request_t{
             .num_bytes = sizeof(payload_t),
             .alignment = alignof(payload_t),
-            .flags = alloc::flags::leave_nonzeroed,
+            .leave_nonzeroed = true,
         });
 
-        if (!res.okay()) [[unlikely]] {
-            out_status = res.err();
+        if (!res.is_success()) [[unlikely]] {
+            out_status = res.status();
             return unique_rw_arc_t();
         }
 
         payload_t& payload = *reinterpret_cast<payload_t*>(
-            res.release_ref().unchecked_address_of_first_item());
+            res.unwrap().unchecked_address_of_first_item());
 
         // this unique ref holds the lock until it is destroyed. only when
         // unique ref is active is the strong refcount exactly equal to
@@ -801,24 +793,21 @@ struct unique_rw_arc_t<T, allocator_impl_t>::make
         new (ok::addressof(payload.object))
             T(std::forward<decltype(constructor_args)>(constructor_args)...);
 
-        out_status = alloc::error::okay;
+        out_status = alloc::error::success;
 
         return unique_rw_arc_t(ok::addressof(payload));
     };
 };
 
-template <typename T, typename allocator_impl_t = ok::allocator_t>
+template <typename T, allocator_c allocator_impl_t = ok::allocator_t>
 [[nodiscard]] alloc::result_t<unique_rw_arc_t<T, allocator_impl_t>>
 into_arc(T&& item, allocator_impl_t& allocator) OKAYLIB_NOEXCEPT
 {
-    static_assert(detail::is_derived_from_v<allocator_impl_t, allocator_t>,
-                  "Type given as allocator for into_arc is not derived "
-                  "from allocator.");
-    status<alloc::error> out_status;
+    status<alloc::error> out_status = alloc::error::success;
     auto out = unique_rw_arc_t<T, allocator_impl_t>::make::with(
         out_status, allocator, std::forward<T>(item));
-    if (!out_status.okay()) {
-        return out_status.err();
+    if (!out_status.is_success()) {
+        return out_status.as_enum();
     }
     return out;
 }

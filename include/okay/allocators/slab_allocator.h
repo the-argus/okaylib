@@ -25,8 +25,8 @@ template <size_t nblocksizes> struct options_t
 struct with_blocks_t;
 } // namespace slab_allocator
 
-template <typename allocator_impl_t, size_t num_blocksizes>
-class slab_allocator_t : public ok::nonthreadsafe_allocator_t
+template <allocator_c allocator_impl_t, size_t num_blocksizes>
+class slab_allocator_t : public ok::allocator_t
 {
   private:
     struct members_t
@@ -77,7 +77,7 @@ class slab_allocator_t : public ok::nonthreadsafe_allocator_t
     }
 };
 
-template <typename allocator_impl_t, size_t num_blocksizes>
+template <allocator_c allocator_impl_t, size_t num_blocksizes>
 [[nodiscard]] inline alloc::result_t<bytes_t>
 slab_allocator_t<allocator_impl_t, num_blocksizes>::impl_allocate(
     const alloc::request_t& request) OKAYLIB_NOEXCEPT
@@ -98,7 +98,7 @@ slab_allocator_t<allocator_impl_t, num_blocksizes>::impl_allocate(
     return alloc::error::oom;
 }
 
-template <typename allocator_impl_t, size_t num_blocksizes>
+template <allocator_c allocator_impl_t, size_t num_blocksizes>
 inline void
 slab_allocator_t<allocator_impl_t, num_blocksizes>::clear() OKAYLIB_NOEXCEPT
 {
@@ -107,7 +107,7 @@ slab_allocator_t<allocator_impl_t, num_blocksizes>::clear() OKAYLIB_NOEXCEPT
     }
 }
 
-template <typename allocator_impl_t, size_t num_blocksizes>
+template <allocator_c allocator_impl_t, size_t num_blocksizes>
 inline void slab_allocator_t<allocator_impl_t, num_blocksizes>::impl_deallocate(
     void* memory) OKAYLIB_NOEXCEPT
 {
@@ -123,12 +123,12 @@ inline void slab_allocator_t<allocator_impl_t, num_blocksizes>::impl_deallocate(
                 "to be contained within any of its block allocators.");
 }
 
-template <typename allocator_impl_t, size_t num_blocksizes>
+template <allocator_c allocator_impl_t, size_t num_blocksizes>
 [[nodiscard]] inline alloc::result_t<bytes_t>
 slab_allocator_t<allocator_impl_t, num_blocksizes>::impl_reallocate(
     const alloc::reallocate_request_t& request) OKAYLIB_NOEXCEPT
 {
-    if (request.flags & alloc::flags::in_place_orelse_fail) {
+    if (request.flags & alloc::realloc_flags::in_place_orelse_fail) {
         for (size_t i = 0; i < num_blocksizes; ++i) {
             auto& allocator = m.allocators[i];
             if (allocator.contains(request.memory)) {
@@ -180,7 +180,7 @@ slab_allocator_t<allocator_impl_t, num_blocksizes>::impl_reallocate(
 
         auto&& _ = ok_memcopy(.to = newbytes, .from = request.memory);
 
-        if (!(request.flags & alloc::flags::leave_nonzeroed)) {
+        if (!(request.flags & alloc::realloc_flags::leave_nonzeroed)) {
             std::memset(newbytes.unchecked_address_of_first_item() +
                             request.memory.size(),
                         0, newbytes.size() - request.memory.size());
@@ -204,7 +204,7 @@ struct with_blocks_t
         slab_allocator_t<detail::remove_cvref_t<allocator_impl_t_c_ref>,
                          detail::remove_cvref_t<options_ref>::num_blocksizes>;
 
-    template <typename allocator_impl_t, size_t num_blocksizes>
+    template <allocator_c allocator_impl_t, size_t num_blocksizes>
     [[nodiscard]] constexpr auto
     operator()(allocator_impl_t& allocator,
                const options_t<num_blocksizes>& options) const OKAYLIB_NOEXCEPT
@@ -212,7 +212,7 @@ struct with_blocks_t
         return ok::make(*this, allocator, options);
     }
 
-    template <typename allocator_impl_t, size_t num_blocksizes>
+    template <allocator_c allocator_impl_t, size_t num_blocksizes>
     [[nodiscard]] constexpr alloc::error make_into_uninit(
         associated_type<allocator_impl_t, const options_t<num_blocksizes>&>&
             uninit,

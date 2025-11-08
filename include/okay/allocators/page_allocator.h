@@ -47,19 +47,11 @@ class page_allocator_t : public allocator_t
 
         __ok_internal_assert(result.bytes >= total_bytes);
 
-        if (!(request.flags & alloc::flags::leave_nonzeroed)) {
+        if (!(request.leave_nonzeroed)) {
             std::memset(result.data, 0, result.bytes);
         }
 
         return ok::raw_slice(*static_cast<uint8_t*>(result.data), result.bytes);
-    }
-
-    inline void impl_clear() OKAYLIB_NOEXCEPT final
-    {
-        __ok_assert(
-            false,
-            "page_allocator_t cannot clear, calling this may indicate a memory "
-            "leak. Check allocator.features() before calling clear()?");
     }
 
     [[nodiscard]] inline alloc::feature_flags
@@ -68,16 +60,18 @@ class page_allocator_t : public allocator_t
         return type_features;
     }
 
-    inline void impl_deallocate(bytes_t bytes) OKAYLIB_NOEXCEPT final
+    inline void impl_deallocate(void* memory) OKAYLIB_NOEXCEPT final
     {
         const size_t page_size = mmap::get_page_size();
         if (page_size == 0) [[unlikely]] {
             __ok_assert(false, "unable to get page size on this platform");
             return;
         }
-        const auto code = mmap::memory_unmap(
-            bytes.data(),
-            runtime_round_up_to_multiple_of(page_size, bytes.size()));
+        // NOTE: just passing in page_size always- I think the kernel internally
+        // should keep track of contiguously allocated pages, on
+        // windows/linux/mac? maybe not, in that case we need to insert size
+        // markers into the page allocations
+        const auto code = mmap::memory_unmap(memory, page_size);
         __ok_internal_assert(code == 0);
     }
 

@@ -12,15 +12,14 @@
 #include "okay/construct.h"
 #include "okay/detail/template_util/c_array_length.h"
 #include "okay/detail/template_util/c_array_value_type.h"
-#include "okay/detail/traits/is_derived_from.h"
 #include "okay/math/ordering.h"
 #include "okay/slice.h"
 #include "okay/tuple.h"
 
 namespace ok {
 
+class memory_resource_t;
 class allocator_t;
-class nonthreadsafe_allocator_t;
 
 namespace alloc {
 enum class error : uint8_t
@@ -44,7 +43,7 @@ inline constexpr size_t default_align = alignof(::max_align_t);
 
 template <typename T> using result_t = ok::res<T, error>;
 
-enum class flags : uint16_t
+enum class realloc_flags : uint16_t
 {
     // clang-format off
     expand_front                    = 0b00000001,
@@ -79,9 +78,9 @@ enum class feature_flags : uint16_t
 };
 
 /// Merge two sets of flags.
-constexpr flags operator|(flags a, flags b)
+constexpr realloc_flags operator|(realloc_flags a, realloc_flags b)
 {
-    using flags = flags;
+    using flags = realloc_flags;
     return static_cast<flags>(static_cast<std::underlying_type_t<flags>>(a) |
                               static_cast<std::underlying_type_t<flags>>(b));
 }
@@ -94,9 +93,9 @@ constexpr feature_flags operator|(feature_flags a, feature_flags b)
 }
 
 /// Check if two sets of flags have anything in common.
-constexpr bool operator&(flags a, flags b)
+constexpr bool operator&(realloc_flags a, realloc_flags b)
 {
-    using flags = flags;
+    using flags = realloc_flags;
     return static_cast<std::underlying_type_t<flags>>(a) &
            static_cast<std::underlying_type_t<flags>>(b);
 }
@@ -126,12 +125,12 @@ struct reallocate_request_t
     size_t alignment = 0;
     // just for try_defragment or leave_nonzeroed. flags::expand_back and
     // flags::shrink_back do nothing.
-    alloc::flags flags;
+    alloc::realloc_flags flags;
 
     [[nodiscard]] constexpr bool is_valid() const OKAYLIB_NOEXCEPT
     {
-        constexpr alloc::flags forbidden =
-            flags::shrink_front | flags::expand_front;
+        constexpr alloc::realloc_flags forbidden =
+            realloc_flags::shrink_front | realloc_flags::expand_front;
 
         // cannot expand or shrink front
         return !(flags & forbidden) && !memory.is_empty() &&
@@ -158,25 +157,29 @@ struct reallocate_extended_request_t
     size_t required_bytes_front;
     size_t preferred_bytes_front = 0;
     void* future_compat = nullptr;
-    alloc::flags flags;
+    alloc::realloc_flags flags;
 
     [[nodiscard]] constexpr bool is_valid() const OKAYLIB_NOEXCEPT
     {
-        const bool changing_back =
-            flags & flags::expand_back || flags & flags::shrink_back;
-        const bool changing_front =
-            flags & flags::expand_front || flags & flags::shrink_front;
+        const bool changing_back = flags & realloc_flags::expand_back ||
+                                   flags & realloc_flags::shrink_back;
+        const bool changing_front = flags & realloc_flags::expand_front ||
+                                    flags & realloc_flags::shrink_front;
         return
             // exactly one of expand_back or shrink_back, and one of shrink_back
             // and expand_back
-            ((flags & flags::expand_back) != (flags & flags::shrink_back) ||
-             (flags & flags::expand_front) != (flags & flags::shrink_front)) &&
+            ((flags & realloc_flags::expand_back) !=
+                 (flags & realloc_flags::shrink_back) ||
+             (flags & realloc_flags::expand_front) !=
+                 (flags & realloc_flags::shrink_front)) &&
             // preferred bytes should not be specified if shrinking
-            ((flags & flags::expand_front) || preferred_bytes_front == 0) &&
-            ((flags & flags::expand_back) || preferred_bytes_back == 0) &&
+            ((flags & realloc_flags::expand_front) ||
+             preferred_bytes_front == 0) &&
+            ((flags & realloc_flags::expand_back) ||
+             preferred_bytes_back == 0) &&
             // cannot shrink more than size of allocation
-            (((flags & flags::shrink_back) * required_bytes_back) +
-             ((flags & flags::shrink_front) * required_bytes_front)) <
+            (((flags & realloc_flags::shrink_back) * required_bytes_back) +
+             ((flags & realloc_flags::shrink_front) * required_bytes_front)) <
                 memory.size() &&
             // some bytes need to be required; a no-op is assumed to be a
             // mistake
@@ -211,14 +214,14 @@ struct reallocate_extended_request_t
 
         new_size = memory.size();
 
-        if (flags & flags::expand_back)
+        if (flags & realloc_flags::expand_back)
             new_size += amount_changed_back;
-        else if (flags & flags::shrink_back)
+        else if (flags & realloc_flags::shrink_back)
             new_size -= amount_changed_back;
 
-        if (flags & flags::expand_front)
+        if (flags & realloc_flags::expand_front)
             new_size += amount_changed_front;
-        else if (flags & flags::shrink_front)
+        else if (flags & realloc_flags::shrink_front)
             new_size -= amount_changed_front;
 
         return out;
@@ -231,10 +234,9 @@ struct reallocation_extended_t
     size_t bytes_offset_front = 0;
 };
 
-template <typename T, typename allocator_impl_t = ok::nonthreadsafe_allocator_t>
-struct owned
+template <typename T, typename allocator_impl_t = ok::allocator_t> struct owned
 {
-    friend class ok::nonthreadsafe_allocator_t;
+    friend class ok::allocator_t;
 
     [[nodiscard]] constexpr T& operator*() const
     {
@@ -292,7 +294,9 @@ struct owned
 
 } // namespace alloc
 
-class nonthreadsafe_allocate_interface_t
+/// A memory resource is anything that can allocate memory, but not necessarily
+/// free or reallocate it
+class memory_resource_t
 {
   public:
     [[nodiscard]] constexpr alloc::result_t<bytes_t>
@@ -411,8 +415,7 @@ class arena_allocator_restore_scope_interface_t
     virtual void restore_scope(void* handle) OKAYLIB_NOEXCEPT = 0;
 };
 
-class nonthreadsafe_allocator_t
-    : virtual public nonthreadsafe_allocate_interface_t
+class allocator_t : virtual public memory_resource_t
 {
   public:
     [[nodiscard]] alloc::feature_flags features() const OKAYLIB_NOEXCEPT
@@ -467,14 +470,74 @@ class nonthreadsafe_allocator_t
                                  options) OKAYLIB_NOEXCEPT = 0;
 };
 
-/// Threadsafe allocate interface
-class allocate_interface_t : virtual public nonthreadsafe_allocate_interface_t
-{};
+// A concept which requires that a type implements the functions allocate() and
+// make_non_owning(), which can be provided by inheriting from
+// alloc::memory_resource_t but do not have to be
+template <typename T>
+concept memory_resource_c = requires(const T& const_allocator, T& allocator,
+                                     const alloc::request_t& request) {
+    { allocator.allocate(request) } -> ok::same_as_c<alloc::result_t<bytes_t>>;
 
-/// Threadsafe allocator
-class allocator_t : public allocate_interface_t,
-                    virtual public nonthreadsafe_allocator_t
-{};
+    // incomplete test for make_non_owning
+    {
+        allocator.template make_non_owning<int>(1)
+    } -> ok::same_as_c<alloc::result_t<int&>>;
+
+    {
+        allocator.template make_non_owning<int>()
+    } -> ok::same_as_c<alloc::result_t<int&>>;
+
+    requires !(requires {
+        { const_allocator.allocate(request) };
+    });
+};
+
+template <typename T>
+concept allocator_c = requires(
+    const T& const_allocator, T& allocator,
+    const alloc::reallocate_request_t& reallocate_request,
+    const alloc::reallocate_extended_request_t& reallocate_extended_request,
+    void* voidptr) {
+    requires memory_resource_c<T>;
+
+    { const_allocator.features() } -> ok::same_as_c<alloc::feature_flags>;
+
+    { allocator.deallocate(voidptr) } -> ok::is_void_c;
+
+    {
+        allocator.reallocate(reallocate_request)
+    } -> ok::same_as_c<alloc::result_t<bytes_t>>;
+
+    {
+        allocator.reallocate_extended(reallocate_extended_request)
+    } -> ok::same_as_c<alloc::result_t<alloc::reallocation_extended_t>>;
+
+    // make sure nonconst functions do not work on const version
+    requires !(requires {
+        { const_allocator.deallocate(voidptr) };
+        { const_allocator.reallocate(reallocate_request) };
+        { const_allocator.reallocate_extended(reallocate_extended_request) };
+    });
+
+    // approximate make() function
+    // the owned value can optionally provide specialization for the allocator,
+    // or it can just return an owned pointing to a polymorphic allocator_t
+    requires(requires {
+                {
+                    allocator.template make<int>(1)
+                } -> ok::same_as_c<alloc::result_t<alloc::owned<int, T>>>;
+                {
+                    allocator.template make<int>()
+                } -> ok::same_as_c<alloc::result_t<alloc::owned<int, T>>>;
+            }) || (requires {
+                {
+                    allocator.template make<int>(1)
+                } -> ok::same_as_c<alloc::result_t<alloc::owned<int>>>;
+                {
+                    allocator.template make<int>()
+                } -> ok::same_as_c<alloc::result_t<alloc::owned<int>>>;
+            });
+};
 
 namespace alloc {
 
@@ -488,17 +551,13 @@ struct potentially_in_place_reallocation_t
 /// Wrapper around reallocate_extended which tries to do
 /// in_place_orelse_fail and then allocates a separate buffer of the correct
 /// size if in_place reallocation failed.
-template <typename allocator_impl_t>
+template <allocator_c allocator_impl_t>
 [[nodiscard]] constexpr result_t<potentially_in_place_reallocation_t>
 reallocate_in_place_orelse_keep_old_nocopy(
     allocator_impl_t& allocator,
     const alloc::reallocate_extended_request_t& options)
 {
-    static_assert(detail::is_derived_from_c<allocator_impl_t, allocator_t>,
-                  "Cannot call reallocate on the given type- it is not derived "
-                  "from ok::allocator_t.");
-
-    __ok_assert(options.flags & flags::in_place_orelse_fail,
+    __ok_assert(options.flags & realloc_flags::in_place_orelse_fail,
                 "Attempt to call reallocate_in_place_orelse_keep_old_nocopy "
                 "but the given options do not specify in_place_orelse_fail");
 
@@ -514,11 +573,7 @@ reallocate_in_place_orelse_keep_old_nocopy(
         };
     }
 
-    using flags_underlying_t = std::underlying_type_t<flags>;
-    constexpr auto mask =
-        static_cast<flags_underlying_t>(flags::leave_nonzeroed);
-    const bool leave_nonzeroed =
-        static_cast<flags_underlying_t>(options.flags) & mask;
+    const bool leave_nonzeroed = options.flags & realloc_flags::leave_nonzeroed;
 
     auto [bytes_offset_back, bytes_offset_front, new_size] =
         options.calculate_new_preferred_size();
@@ -540,16 +595,10 @@ reallocate_in_place_orelse_keep_old_nocopy(
 } // namespace alloc
 
 /// Calls the destructor of an object and then frees its memory
-template <typename T, typename allocator_impl_t>
-    requires ok::detail::is_derived_from_c<allocator_impl_t,
-                                           ok::nonthreadsafe_allocator_t>
+template <typename T, allocator_c allocator_impl_t>
 constexpr void destroy_and_free(allocator_impl_t& ally,
                                 T& object) OKAYLIB_NOEXCEPT
 {
-    static_assert(detail::is_derived_from_c<allocator_impl_t,
-                                            ok::nonthreadsafe_allocator_t>,
-                  "Type given in first argument does not inherit from "
-                  "ok::nonthreadsafe_allocator_t.");
     static_assert(is_std_destructible_c<T>,
                   "The destructor you're trying to call with ok::free is "
                   "not " __ok_msg_nothrow "destructible");
@@ -577,7 +626,7 @@ constexpr void destroy_and_free(allocator_impl_t& ally,
 
 template <typename T, typename... args_t>
 [[nodiscard]] decltype(auto)
-ok::nonthreadsafe_allocator_t::make(args_t&&... args) OKAYLIB_NOEXCEPT
+ok::allocator_t::make(args_t&&... args) OKAYLIB_NOEXCEPT
 {
     using analysis = decltype(detail::analyze_construction<args_t...>());
     using deduced = typename analysis::associated_type;

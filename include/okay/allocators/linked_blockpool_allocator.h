@@ -11,16 +11,10 @@ namespace linked_blockpool_allocator {
 struct start_with_one_pool_t;
 }
 
-template <typename allocator_impl_t>
+template <allocator_c allocator_impl_t = ok::allocator_t>
 class linked_blockpool_allocator_t : public ok::allocator_t
 {
   public:
-    static_assert(detail::is_derived_from_c<allocator_impl_t,
-                                            ok::nonthreadsafe_allocator_t>,
-                  "Invalid type given to linked_blockpool_allocator_t for "
-                  "backing allocator- it needs to be a complete allocator "
-                  "which implements deallocate().");
-
     static constexpr alloc::feature_flags type_features =
         alloc::feature_flags::can_predictably_realloc_in_place |
         alloc::feature_flags::can_expand_back;
@@ -188,7 +182,7 @@ class linked_blockpool_allocator_t : public ok::allocator_t
     }
 };
 
-template <typename allocator_impl_t>
+template <allocator_c allocator_impl_t>
 inline status<alloc::error>
 linked_blockpool_allocator_t<allocator_impl_t>::alloc_new_blockpool()
     OKAYLIB_NOEXCEPT
@@ -246,7 +240,7 @@ linked_blockpool_allocator_t<allocator_impl_t>::alloc_new_blockpool()
     return alloc::error::success;
 }
 
-template <typename allocator_impl_t>
+template <allocator_c allocator_impl_t>
 [[nodiscard]] inline alloc::result_t<bytes_t>
 linked_blockpool_allocator_t<allocator_impl_t>::impl_allocate(
     const alloc::request_t& request) OKAYLIB_NOEXCEPT
@@ -277,7 +271,7 @@ linked_blockpool_allocator_t<allocator_impl_t>::impl_allocate(
     return ok::raw_slice(*reinterpret_cast<uint8_t*>(free), m.blocksize);
 }
 
-template <typename allocator_impl_t>
+template <allocator_c allocator_impl_t>
 inline void linked_blockpool_allocator_t<allocator_impl_t>::impl_deallocate(
     void* memory) OKAYLIB_NOEXCEPT
 {
@@ -316,7 +310,7 @@ inline void linked_blockpool_allocator_t<allocator_impl_t>::impl_deallocate(
     m.free_head = new_free;
 }
 
-template <typename allocator_impl_t>
+template <allocator_c allocator_impl_t>
 [[nodiscard]] inline alloc::result_t<bytes_t>
 linked_blockpool_allocator_t<allocator_impl_t>::impl_reallocate(
     const alloc::reallocate_request_t& request) OKAYLIB_NOEXCEPT
@@ -338,7 +332,7 @@ linked_blockpool_allocator_t<allocator_impl_t>::impl_reallocate(
             ? request.new_size_bytes
             : ok::min(request.preferred_size_bytes, m.blocksize);
 
-    if (!(request.flags & alloc::flags::leave_nonzeroed)) {
+    if (!(request.flags & alloc::realloc_flags::leave_nonzeroed)) {
         std::memset(request.memory.unchecked_address_of_first_item() +
                         request.memory.size(),
                     0, newsize - request.memory.size());
@@ -363,7 +357,7 @@ struct start_with_one_pool_t
     using associated_type = linked_blockpool_allocator_t<
         std::remove_reference_t<allocator_impl_t_ref>>;
 
-    template <typename allocator_impl_t>
+    template <allocator_c allocator_impl_t>
     [[nodiscard]] constexpr auto
     operator()(allocator_impl_t& allocator,
                const options_t& options) const OKAYLIB_NOEXCEPT
@@ -371,7 +365,7 @@ struct start_with_one_pool_t
         return ok::make(*this, allocator, options);
     }
 
-    template <typename allocator_impl_t>
+    template <allocator_c allocator_impl_t>
     constexpr alloc::error
     make_into_uninit(linked_blockpool_allocator_t<allocator_impl_t>& uninit,
                      allocator_impl_t& allocator,

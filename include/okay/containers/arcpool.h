@@ -133,9 +133,7 @@ template <typename item_t> struct arcpool_freestack_t
 /// reference at the exact same time the weak reference attempted promotion.
 /// Also, this requires more compare exchanges and spinning than a typical
 /// strongcount/weakcount implementation
-template <typename T,
-          ::ok::detail::is_derived_from_c<ok::allocator_t> allocator_impl_t>
-class arcpool_t
+template <typename T, allocator_c allocator_impl_t> class arcpool_t
 {
     struct item_t;
     friend struct item_t;
@@ -472,17 +470,21 @@ class arcpool_t
     constexpr arcpool_t&
     operator=(const arcpool_t& other) OKAYLIB_NOEXCEPT = delete;
 
-    constexpr ~arcpool_t()
+    constexpr ~arcpool_t() OKAYLIB_NOEXCEPT_FORCE
     {
-        if (!m_allocator)
+        if (!m_root)
             return;
+
+        // developer assert
+        __ok_assert(m_allocator,
+                    "if arcpool has root it should have allocator");
 
         item_buffer_t* iter = m_root->item_buffer.next;
 
-        constexpr auto dbg = [](item_t* start, size_t len) {
+        constexpr auto dbg = [](const item_buffer_t& buf) {
 #ifndef NDEBUG
-            for (size_t i = 0; i < len; ++i) {
-                __ok_assert(start[i]->counters.load_strongcount() == 0,
+            for (size_t i = 0; i < buf.length; ++i) {
+                __ok_assert(buf.items[i].counters.load_strongcount() == 0,
                             "Attempt to destroy an arcpool while some of the "
                             "pointers are still live");
             }
@@ -491,17 +493,16 @@ class arcpool_t
 
         while (iter) {
             auto* temp = iter->next;
-            dbg(iter->items, iter->length);
+            dbg(*iter);
             m_allocator->deallocate(iter);
             iter = temp;
         }
-        dbg(m_root->items, m_root->length);
+        dbg(m_root->item_buffer);
         m_allocator->deallocate(m_root);
     }
 };
 
-template <typename T,
-          ::ok::detail::is_derived_from_c<ok::allocator_t> allocator_impl_t>
+template <typename T, allocator_c allocator_impl_t>
 [[nodiscard]] constexpr arcpool_t<T, allocator_impl_t>::strong_t::
 operator arcpool_t<T, allocator_impl_t>::weak_t() const noexcept
 {

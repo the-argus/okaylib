@@ -84,11 +84,11 @@ inline void c_allocator_t::impl_deallocate(void* memory) OKAYLIB_NOEXCEPT
         options.is_valid(),
         "invalid reallocate request. validation check bypassed. did "
         "you call impl_reallocate() directly?");
-    if (options.flags & flags::in_place_orelse_fail) [[unlikely]] {
+    if (options.flags & realloc_flags::in_place_orelse_fail) [[unlikely]] {
         return error::unsupported;
     }
 
-    const bool zeroed = !(options.flags & flags::leave_nonzeroed);
+    const bool zeroed = !(options.flags & realloc_flags::leave_nonzeroed);
 
     auto res = realloc_inner(
         options.memory,
@@ -131,12 +131,12 @@ c_allocator_t::realloc_inner(bytes_t memory, size_t new_size,
 }
 
 [[nodiscard]] inline auto c_allocator_t::impl_reallocate_extended(
-    const alloc::reallocate_extended_request_t& options)
-    OKAYLIB_NOEXCEPT -> alloc::result_t<alloc::reallocation_extended_t>
+    const alloc::reallocate_extended_request_t& options) OKAYLIB_NOEXCEPT
+    -> alloc::result_t<alloc::reallocation_extended_t>
 {
     using namespace alloc;
 
-    if (options.flags & flags::in_place_orelse_fail) {
+    if (options.flags & realloc_flags::in_place_orelse_fail) {
         // not a supported operation by C allocator
         return error::couldnt_expand_in_place;
     }
@@ -148,7 +148,7 @@ c_allocator_t::realloc_inner(bytes_t memory, size_t new_size,
         return error::unsupported;
     }
 
-    if (options.flags & flags::expand_front) [[unlikely]] {
+    if (options.flags & realloc_flags::expand_front) [[unlikely]] {
         __ok_assert(false,
                     "unsupported flag expand_front passed to c allocator");
         return error::unsupported;
@@ -159,9 +159,9 @@ c_allocator_t::realloc_inner(bytes_t memory, size_t new_size,
 
     // early out if this looks like a regular realloc
     if (bytes_offset_front == 0) [[likely]] {
-        auto res =
-            this->realloc_inner(options.memory, new_size,
-                                !(options.flags & flags::leave_nonzeroed));
+        auto res = this->realloc_inner(
+            options.memory, new_size,
+            !(options.flags & realloc_flags::leave_nonzeroed));
         if (!res.is_success()) [[unlikely]]
             return res.status();
 
@@ -179,7 +179,7 @@ c_allocator_t::realloc_inner(bytes_t memory, size_t new_size,
     // memory is lost.
     {
         size_t size = options.memory.size() - bytes_offset_front;
-        if (options.flags & flags::shrink_back) {
+        if (options.flags & realloc_flags::shrink_back) {
             size -= bytes_offset_back;
         }
 

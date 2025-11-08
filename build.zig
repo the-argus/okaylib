@@ -70,6 +70,7 @@ const okaylib_headers = &[_][]const u8{
     "containers/bit_array.h",
     "containers/fixed_arraylist.h",
     "containers/segmented_list.h",
+    "containers/arcpool.h",
 
     "detail/template_util/c_array_length.h",
     "detail/template_util/c_array_value_type.h",
@@ -154,6 +155,7 @@ const test_source_files = &[_][]const u8{
     "arc/arc.cpp",
     "all_of/all_of.cpp",
     "any_of/any_of.cpp",
+    "arcpool/arcpool.cpp",
     "arraylist/arraylist.cpp",
     "algorithm/ranges_equal.cpp",
     "algorithm/ranges_copy.cpp",

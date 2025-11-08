@@ -11,8 +11,8 @@ namespace ok {
 
 // TODO: use atomics and conditionally allow arena to implement threadsafe
 // allocate_interface_t if its allocator_impl_t also does
-template <typename allocator_impl_t = ok::nonthreadsafe_allocator_t>
-class arena_t : public ok::nonthreadsafe_allocate_interface_t,
+template <allocator_c allocator_impl_t = ok::allocator_t>
+class arena_t : public ok::memory_resource_t,
                 public ok::arena_allocator_restore_scope_interface_t
 {
   public:
@@ -49,10 +49,15 @@ class arena_t : public ok::nonthreadsafe_allocate_interface_t,
 };
 
 template <typename arena_impl_t>
-class arena_compat_wrapper_t : public ok::nonthreadsafe_allocator_t
+class arena_compat_wrapper_t : public ok::allocator_t
 {
   public:
     arena_compat_wrapper_t() = delete;
+    arena_compat_wrapper_t(const arena_compat_wrapper_t&) = delete;
+    arena_compat_wrapper_t& operator=(const arena_compat_wrapper_t&) = delete;
+    arena_compat_wrapper_t(arena_compat_wrapper_t&&) = delete;
+    arena_compat_wrapper_t& operator=(arena_compat_wrapper_t&&) = delete;
+
     explicit arena_compat_wrapper_t(arena_impl_t& arena)
         : m_arena(ok::addressof(arena))
     {
@@ -112,16 +117,14 @@ class arena_compat_wrapper_t : public ok::nonthreadsafe_allocator_t
     arena_impl_t* m_arena;
 };
 
-// arena_t(bytes_t static_buffer) -> arena_t<ok::nonthreadsafe_allocator_t>;
-
-template <typename allocator_impl_t>
+template <allocator_c allocator_impl_t>
 inline arena_t<allocator_impl_t>::arena_t(bytes_t static_buffer)
     OKAYLIB_NOEXCEPT : m_memory(static_buffer),
                        m_available_memory(static_buffer)
 {
 }
 
-template <typename allocator_impl_t>
+template <allocator_c allocator_impl_t>
 inline arena_t<allocator_impl_t>&
 arena_t<allocator_impl_t>::operator=(arena_t&& other) OKAYLIB_NOEXCEPT
 {
@@ -132,7 +135,7 @@ arena_t<allocator_impl_t>::operator=(arena_t&& other) OKAYLIB_NOEXCEPT
     return *this;
 }
 
-template <typename allocator_impl_t>
+template <allocator_c allocator_impl_t>
 inline arena_t<allocator_impl_t>::arena_t(arena_t&& other) OKAYLIB_NOEXCEPT
     : m_memory(other.m_memory),
       m_available_memory(other.m_available_memory),
@@ -140,7 +143,7 @@ inline arena_t<allocator_impl_t>::arena_t(arena_t&& other) OKAYLIB_NOEXCEPT
 {
 }
 
-template <typename allocator_impl_t>
+template <allocator_c allocator_impl_t>
 inline arena_t<allocator_impl_t>::arena_t(bytes_t initial_buffer,
                                           allocator_impl_t& backing_allocator)
     OKAYLIB_NOEXCEPT : m_memory(initial_buffer),
@@ -149,7 +152,7 @@ inline arena_t<allocator_impl_t>::arena_t(bytes_t initial_buffer,
 {
 }
 
-template <typename allocator_impl_t>
+template <allocator_c allocator_impl_t>
 inline void arena_t<allocator_impl_t>::destroy() OKAYLIB_NOEXCEPT
 {
     if (m_backing)
@@ -157,7 +160,7 @@ inline void arena_t<allocator_impl_t>::destroy() OKAYLIB_NOEXCEPT
             m_memory.unchecked_address_of_first_item());
 }
 
-template <typename allocator_impl_t>
+template <allocator_c allocator_impl_t>
 [[nodiscard]] inline alloc::result_t<bytes_t>
 arena_t<allocator_impl_t>::impl_allocate(const alloc::request_t& request)
     OKAYLIB_NOEXCEPT
@@ -193,7 +196,7 @@ arena_t<allocator_impl_t>::impl_allocate(const alloc::request_t& request)
     return raw_slice(*aligned_start, allocated_size);
 }
 
-template <typename allocator_impl_t>
+template <allocator_c allocator_impl_t>
 [[nodiscard]] inline void*
 arena_t<allocator_impl_t>::new_scope() OKAYLIB_NOEXCEPT
 {
@@ -204,7 +207,7 @@ arena_t<allocator_impl_t>::new_scope() OKAYLIB_NOEXCEPT
         return nullptr;
 }
 
-template <typename allocator_impl_t>
+template <allocator_c allocator_impl_t>
 inline void
 arena_t<allocator_impl_t>::restore_scope(void* handle) OKAYLIB_NOEXCEPT
 {
@@ -214,7 +217,7 @@ arena_t<allocator_impl_t>::restore_scope(void* handle) OKAYLIB_NOEXCEPT
     m_available_memory = *static_cast<bytes_t*>(handle);
 }
 
-template <typename allocator_impl_t>
+template <allocator_c allocator_impl_t>
 void arena_t<allocator_impl_t>::clear() OKAYLIB_NOEXCEPT
 {
 #ifndef NDEBUG

@@ -9,19 +9,18 @@
 #include <random>
 #include <vector>
 
-template <typename allocator_t> struct allocator_tests
+static_assert(ok::memory_resource_c<ok::memory_resource_t>);
+static_assert(ok::allocator_c<ok::allocator_t>);
+
+template <ok::memory_resource_c allocator_t> struct allocator_tests
 {
     constexpr static bool has_clear = requires(allocator_t& a) {
         { a.clear() } -> ok::same_as_c<void>;
     };
 
-    constexpr static bool has_deallocate = requires(allocator_t& a, void* v) {
-        { a.deallocate(v) } -> ok::same_as_c<void>;
-    };
+    constexpr static bool has_deallocate = ok::allocator_c<allocator_t>;
 
-    constexpr static bool has_make =
-        ok::detail::is_derived_from_c<allocator_t,
-                                      ok::nonthreadsafe_allocator_t>;
+    constexpr static bool has_make = ok::allocator_c<allocator_t>;
 
     inline static void alloc_1mb_andfree(allocator_t& ally)
     {
@@ -182,8 +181,8 @@ template <typename allocator_t> struct allocator_tests
             auto reallocation = ally.reallocate(alloc::reallocate_request_t{
                 .memory = allocation,
                 .new_size_bytes = 1,
-                .flags = alloc::flags::expand_back |
-                         alloc::flags::in_place_orelse_fail,
+                .flags = alloc::realloc_flags::expand_back |
+                         alloc::realloc_flags::in_place_orelse_fail,
             });
 
             REQUIRE(reallocation.status() == alloc::error::unsupported);
@@ -236,13 +235,11 @@ run_allocator_tests_static_and_dynamic_dispatch(allocator_t& allocator)
     allocator_tests<allocator_t> static_dispatch;
     static_dispatch.run_all_fuzzed(allocator);
 
-    if constexpr (ok::detail::is_derived_from_c<
-                      allocator_t, ok::nonthreadsafe_allocator_t>) {
-        allocator_tests<ok::nonthreadsafe_allocator_t> dynamic_dispatch;
+    if constexpr (ok::detail::is_derived_from_c<allocator_t, ok::allocator_t>) {
+        allocator_tests<ok::allocator_t> dynamic_dispatch;
         dynamic_dispatch.run_all_fuzzed(allocator);
     } else {
-        allocator_tests<ok::nonthreadsafe_allocate_interface_t>
-            dynamic_dispatch;
+        allocator_tests<ok::memory_resource_t> dynamic_dispatch;
         dynamic_dispatch.run_all_fuzzed(allocator);
     }
 }

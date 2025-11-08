@@ -352,9 +352,9 @@ class arraylist_t
                 .memory = bytes,
                 .new_size_bytes = size() * sizeof(T),
                 // flags besides in_place_orelse_fail not really necessary
-                .flags = alloc::flags::shrink_back |
-                         alloc::flags::in_place_orelse_fail |
-                         alloc::flags::leave_nonzeroed,
+                .flags = alloc::realloc_flags::shrink_back |
+                         alloc::realloc_flags::in_place_orelse_fail |
+                         alloc::realloc_flags::leave_nonzeroed,
             });
 
         if (!reallocated.is_success()) [[unlikely]]
@@ -599,7 +599,8 @@ class arraylist_t
     reallocate(size_t required_bytes, size_t preferred_bytes)
     {
         using namespace alloc;
-        const auto realloc_flags = flags::leave_nonzeroed | flags::expand_back;
+        const auto realloc_flags =
+            realloc_flags::leave_nonzeroed | realloc_flags::expand_back;
 
         if constexpr (!std::is_trivially_copyable_v<T>) {
             // if we're not trivially copyable, dont let the allocator do
@@ -612,7 +613,8 @@ class arraylist_t
                             raw_slice(*m.items, this->capacity())),
                         .required_bytes_back = required_bytes,
                         .preferred_bytes_back = preferred_bytes,
-                        .flags = realloc_flags | flags::in_place_orelse_fail,
+                        .flags =
+                            realloc_flags | realloc_flags::in_place_orelse_fail,
                     });
 
             if (!res.is_success()) [[unlikely]] {

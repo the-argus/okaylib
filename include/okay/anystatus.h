@@ -31,8 +31,7 @@ class abstract_status_t
     //
     // NOTE: when freeing the object, the pointer to the abstract_status_t will
     // be passed.
-    [[nodiscard]] virtual opt<ok::nonthreadsafe_allocator_t&>
-    allocator() noexcept = 0;
+    [[nodiscard]] virtual opt<ok::allocator_t&> allocator() noexcept = 0;
 
     virtual ~abstract_status_t() = default;
 };

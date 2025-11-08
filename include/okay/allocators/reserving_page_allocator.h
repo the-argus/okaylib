@@ -14,7 +14,7 @@ namespace ok {
 /// always passed the in_place_orelse_fail flag.
 /// Freeing a subslice of the original allocation with this allocator is
 /// defined behavior, unlike page_allocator_t.
-class reserving_page_allocator_t : public nonthreadsafe_allocator_t
+class reserving_page_allocator_t : public allocator_t
 {
   public:
     // NOTE: page allocator not threadsafe, uses errno and GetLastError on win
@@ -117,7 +117,7 @@ class reserving_page_allocator_t : public nonthreadsafe_allocator_t
             return alloc::error::platform_failure;
         }
 
-        if (request.flags & alloc::flags::shrink_back) [[unlikely]] {
+        if (request.flags & alloc::realloc_flags::shrink_back) [[unlikely]] {
             // TODO: probably try to reclaim memory here, however it requires
             // inserting bookkeeping data that says how many pages were
             // initially allocated
