@@ -37,16 +37,18 @@ class arraylist_t
     };
     members_t m;
 
-    constexpr arraylist_t(members_t&& members) OKAYLIB_NOEXCEPT
-        : m(stdc::forward<members_t>(members))
-    {
-    }
-
     // for use in factory functions but not public API. this effectively creates
     // an uninitialized array list object (at least, invariants are not upheld)
     arraylist_t() = default;
 
   public:
+    // this constructor should only be called by private implementations-
+    // members_t is private
+    constexpr arraylist_t(members_t&& members) OKAYLIB_NOEXCEPT
+        : m(stdc::forward<members_t>(members))
+    {
+    }
+
     friend class arraylist::detail::spots_preallocated_t<T>;
     friend class arraylist::detail::copy_items_from_range_t;
     friend class arraylist::detail::empty_t<T>;

@@ -444,17 +444,6 @@ struct range_definition<bit_arraylist_t<backing_allocator_t>>
         range_flags::sized | range_flags::arraylike | range_flags::consuming |
         range_flags::producing | range_flags::implements_set;
 
-    // static constexpr size_t begin(const bit_arraylist_t&) OKAYLIB_NOEXCEPT
-    // {
-    //     return 0;
-    // }
-
-    // static constexpr bool is_inbounds(const bit_arraylist_t& bs,
-    //                                   size_t cursor) OKAYLIB_NOEXCEPT
-    // {
-    //     return cursor < bs.size_bits();
-    // }
-
     static constexpr size_t size(const bit_arraylist_t& bs) OKAYLIB_NOEXCEPT
     {
         return bs.size_bits();

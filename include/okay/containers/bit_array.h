@@ -181,17 +181,6 @@ template <size_t max_elems> struct range_definition<bit_array_t<max_elems>>
     using bit_array_t = bit_array_t<max_elems>;
     using value_type = ok::bit;
 
-    // static constexpr size_t begin(const bit_array_t&) OKAYLIB_NOEXCEPT
-    // {
-    //     return 0;
-    // }
-
-    // static constexpr bool is_inbounds(const bit_array_t& bs,
-    //                                   size_t cursor) OKAYLIB_NOEXCEPT
-    // {
-    //     return cursor < max_elems;
-    // }
-
     static constexpr size_t size(const bit_array_t& bs) OKAYLIB_NOEXCEPT
     {
         return max_elems;
