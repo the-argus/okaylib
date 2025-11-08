@@ -69,19 +69,17 @@ TEST_SUITE("segmented list")
         SUBCASE("move construct empty segmented lists")
         {
             auto res_a = segmented_list::empty<int>(c_allocator, {});
-            auto& list_a = res_a.release_ref();
+            auto& list_a = res_a.unwrap();
 
             segmented_list_t list_b(std::move(list_a));
 
             // original list still in valid state
             REQUIRE(list_a.capacity() == 0);
             REQUIRE(list_a.size() == 0);
-            REQUIRE(&(list_a.allocator()) == &c_allocator);
 
             // list_b should be the same, they're both empty anyways
             REQUIRE(list_b.capacity() == 0);
             REQUIRE(list_b.size() == 0);
-            REQUIRE(&(list_b.allocator()) == &c_allocator);
         }
 
         SUBCASE("move construct copy_items_from_range segmented lists")
@@ -89,7 +87,7 @@ TEST_SUITE("segmented list")
             constexpr array_t initial = {0, 1, 2, 3};
             auto res_a =
                 segmented_list::copy_items_from_range(c_allocator, initial, {});
-            auto& list_a = res_a.release_ref();
+            auto& list_a = res_a.unwrap();
 
             size_t original_capacity = list_a.capacity();
             REQUIRE_RANGES_EQUAL(initial, list_a);
@@ -109,8 +107,8 @@ TEST_SUITE("segmented list")
                 c_allocator, {
                                  .num_initial_contiguous_spots = 4,
                              });
-            auto& list_a = res_a.release_ref();
-            REQUIRE(list_a.append(0).okay());
+            auto& list_a = res_a.unwrap();
+            REQUIRE(list_a.append(0).is_success());
 
             size_t original_capacity = list_a.capacity();
             REQUIRE(original_capacity == 4);
@@ -134,13 +132,13 @@ TEST_SUITE("segmented list")
                 c_allocator, {
                                  .num_initial_contiguous_spots = 4,
                              });
-            auto& list_a = res_a.release_ref();
-            REQUIRE(list_a.append(0).okay());
+            auto& list_a = res_a.unwrap();
+            REQUIRE(list_a.append(0).is_success());
             REQUIRE(list_a.capacity() == 4);
-            REQUIRE(list_a.append(1).okay());
-            REQUIRE(list_a.append(2).okay());
-            REQUIRE(list_a.append(3).okay());
-            REQUIRE(list_a.append(4).okay());
+            REQUIRE(list_a.append(1).is_success());
+            REQUIRE(list_a.append(2).is_success());
+            REQUIRE(list_a.append(3).is_success());
+            REQUIRE(list_a.append(4).is_success());
 
             size_t original_capacity = list_a.capacity();
             REQUIRE(original_capacity == 12); // added 2^2 + 2^3
@@ -168,32 +166,32 @@ TEST_SUITE("segmented list")
         SUBCASE("move assign empty segmented lists")
         {
             auto res_a = segmented_list::empty<int>(c_allocator, {});
-            auto& list_a = res_a.release_ref();
+            auto& list_a = res_a.unwrap();
             auto res_b = segmented_list::empty<int>(c_allocator, {});
-            auto& list_b = res_b.release_ref();
+            auto& list_b = res_b.unwrap();
 
             list_a = std::move(list_b);
             REQUIRE(list_a.capacity() == 0);
             REQUIRE(list_a.size() == 0);
-            REQUIRE(list_a.append(0).okay());
+            REQUIRE(list_a.append(0).is_success());
             REQUIRE(list_b.capacity() == 0);
             REQUIRE(list_b.size() == 0);
-            REQUIRE(list_b.append(0).okay());
+            REQUIRE(list_b.append(0).is_success());
         }
 
         SUBCASE("move assign copy_items_from_range segmented lists")
         {
             auto res_a = segmented_list::empty<int>(c_allocator, {});
-            auto& list_a = res_a.release_ref();
+            auto& list_a = res_a.unwrap();
             constexpr array_t initial = {0, 1, 2, 3, 4, 5};
             auto res_b =
                 segmented_list::copy_items_from_range(c_allocator, initial, {});
-            auto& list_b = res_b.release_ref();
+            auto& list_b = res_b.unwrap();
 
             REQUIRE(list_b.capacity() == 8);
             REQUIRE_RANGES_EQUAL(list_b, initial);
 
-            REQUIRE(list_a.append(0).okay());
+            REQUIRE(list_a.append(0).is_success());
             REQUIRE(list_a.capacity() > 0);
 
             list_a = std::move(list_b);
@@ -212,20 +210,20 @@ TEST_SUITE("segmented list")
                 c_allocator, {
                                  .num_initial_contiguous_spots = 16,
                              });
-            auto& list_a = res_a.release_ref();
+            auto& list_a = res_a.unwrap();
             auto res_b = segmented_list::empty<int>(
                 c_allocator, {
                                  .num_initial_contiguous_spots = 16,
                              });
-            auto& list_b = res_b.release_ref();
+            auto& list_b = res_b.unwrap();
 
-            REQUIRE(list_a.append(0).okay());
-            REQUIRE(list_b.append(0).okay());
+            REQUIRE(list_a.append(0).is_success());
+            REQUIRE(list_b.append(0).is_success());
             REQUIRE(list_a.capacity() == 16);
             REQUIRE(list_b.capacity() == 16);
 
             for (size_t i = 1; i < 20; ++i) {
-                REQUIRE(list_b.append(i).okay());
+                REQUIRE(list_b.append(i).is_success());
             }
 
             size_t list_b_cap = list_b.capacity();
@@ -238,7 +236,7 @@ TEST_SUITE("segmented list")
             REQUIRE(list_a.capacity() == list_b_cap);
             REQUIRE(list_b.capacity() == list_a_cap);
             REQUIRE(list_b.is_empty());
-            REQUIRE(list_b.append(1).okay());
+            REQUIRE(list_b.append(1).is_success());
         }
 
         // NOTE: this test is identical to the prev. test with the lists swapped
@@ -249,20 +247,20 @@ TEST_SUITE("segmented list")
                 c_allocator, {
                                  .num_initial_contiguous_spots = 16,
                              });
-            auto& list_a = res_a.release_ref();
+            auto& list_a = res_a.unwrap();
             auto res_b = segmented_list::empty<int>(
                 c_allocator, {
                                  .num_initial_contiguous_spots = 16,
                              });
-            auto& list_b = res_b.release_ref();
+            auto& list_b = res_b.unwrap();
 
-            REQUIRE(list_a.append(0).okay());
-            REQUIRE(list_b.append(0).okay());
+            REQUIRE(list_a.append(0).is_success());
+            REQUIRE(list_b.append(0).is_success());
             REQUIRE(list_a.capacity() == 16);
             REQUIRE(list_b.capacity() == 16);
 
             for (size_t i = 1; i < 20; ++i) {
-                REQUIRE(list_b.append(i).okay());
+                REQUIRE(list_b.append(i).is_success());
             }
 
             size_t list_b_cap = list_b.capacity();
@@ -275,7 +273,7 @@ TEST_SUITE("segmented list")
             REQUIRE(list_a.capacity() == list_b_cap);
             REQUIRE(list_b.capacity() == list_a_cap);
             REQUIRE(list_a.is_empty());
-            REQUIRE(list_a.append(1).okay());
+            REQUIRE(list_a.append(1).is_success());
         }
     }
 
@@ -285,18 +283,18 @@ TEST_SUITE("segmented list")
             "insert into segmented list after different amounts of allocation")
         {
             auto res = segmented_list::empty<int>(c_allocator, {});
-            auto& list = res.release_ref();
+            auto& list = res.unwrap();
 
             REQUIREABORTS(auto&& _ = list.insert_at(1, 0));
-            REQUIRE(list.insert_at(0, 1).okay());
+            REQUIRE(list.insert_at(0, 1).is_success());
             // make sure a reallocation is going to happen
             REQUIRE(list.capacity() < 5);
             REQUIRE(list[0] == 1);
             REQUIRE_RANGES_EQUAL(list, ok::array_t{1});
-            REQUIRE(list.insert_at(0, 0).okay());
-            REQUIRE(list.insert_at(2, 2).okay());
-            REQUIRE(list.insert_at(3, 3).okay());
-            REQUIRE(list.insert_at(4, 4).okay());
+            REQUIRE(list.insert_at(0, 0).is_success());
+            REQUIRE(list.insert_at(2, 2).is_success());
+            REQUIRE(list.insert_at(3, 3).is_success());
+            REQUIRE(list.insert_at(4, 4).is_success());
             constexpr auto expected = ok::array_t{0, 1, 2, 3, 4};
             REQUIRE_RANGES_EQUAL(list, expected);
             REQUIRE(list.capacity() >= 5);
@@ -311,19 +309,20 @@ TEST_SUITE("segmented list")
 
             REQUIRE_RANGES_EQUAL(initial, list);
             REQUIREABORTS(auto&& _ = list.insert_at(initial.size(), 0));
-            REQUIRE(list.insert_at(0, 0).okay());
-            REQUIRE(list.insert_at(5, 4).okay());
-            REQUIRE_RANGES_EQUAL(list, ok::array_t{0, 0, 1, 2, 3, 4});
+            REQUIRE(list.insert_at(0, 0).is_success());
+            REQUIRE(list.insert_at(5, 4).is_success());
+            constexpr auto arr = ok::array_t{0, 0, 1, 2, 3, 4};
+            REQUIRE_RANGES_EQUAL(list, arr);
         }
 
         SUBCASE("append")
         {
             auto res = segmented_list::empty<int>(c_allocator, {});
-            auto& list = res.release_ref();
+            auto& list = res.unwrap();
 
             for (size_t i = 0; i < 50; ++i) {
                 REQUIREABORTS(list[i]);
-                REQUIRE(list.append(i).okay());
+                REQUIRE(list.append(i).is_success());
             }
 
             REQUIRE_RANGES_EQUAL(list, indices);

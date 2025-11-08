@@ -67,7 +67,8 @@ size_of_block_at(size_t idx) OKAYLIB_NOEXCEPT
 } // namespace detail
 } // namespace segmented_list
 
-template <typename T, typename backing_allocator_t> class segmented_list_t
+template <typename T, allocator_c backing_allocator_t = ok::allocator_t>
+class segmented_list_t
 {
   public:
     static_assert(!std::is_reference_v<T>,
@@ -116,16 +117,11 @@ template <typename T, typename backing_allocator_t> class segmented_list_t
         return *m.backing_allocator;
     }
 
-    template <typename incoming_allocator_t = ok::nonthreadsafe_allocator_t>
+    template <allocator_c incoming_allocator_t = ok::allocator_t>
     [[nodiscard]] constexpr alloc::result_t<slice<slice<const T>>>
     get_blocks(incoming_allocator_t& allocator) const& OKAYLIB_NOEXCEPT
     {
         using namespace segmented_list::detail;
-        static_assert(
-            detail::is_derived_from_c<incoming_allocator_t,
-                                      ok::nonthreadsafe_allocator_t>,
-            "First argument to segmented_list_t::get_blocks is not an "
-            "allocator.");
 
         if (this->is_empty()) {
             return make_null_slice<slice<const T>>();
@@ -266,14 +262,15 @@ template <typename T, typename backing_allocator_t> class segmented_list_t
 
         bytes_t& new_buffer_bytes = new_buffer_result.unwrap();
         defer free_new_buffer = [&] {
-            m.allocator->deallocate(new_buffer_bytes);
+            m.allocator->deallocate(
+                new_buffer_bytes.unchecked_address_of_first_item());
         };
 
         if (!m.blocklist) {
             auto blocklist_result = m.allocator->allocate(alloc::request_t{
                 .num_bytes = sizeof(blocklist_t) + (sizeof(T*) * m.size),
                 .alignment = alignof(blocklist_t),
-                .flags = alloc::flags::leave_nonzeroed,
+                .flags = alloc::realloc_flags::leave_nonzeroed,
             });
 
             if (!blocklist_result.is_success()) [[unlikely]] {
@@ -299,7 +296,7 @@ template <typename T, typename backing_allocator_t> class segmented_list_t
                         (sizeof(T*) * m.blocklist->capacity * 2),
                     .new_size_bytes = sizeof(blocklist_t) +
                                       (sizeof(T*) * m.blocklist->capacity + 1),
-                    .flags = alloc::flags::expand_back,
+                    .flags = alloc::realloc_flags::expand_back,
                 });
 
             if (!new_blocklist_result.is_success()) [[unlikely]] {
@@ -509,18 +506,18 @@ template <typename T, typename backing_allocator_t> class segmented_list_t
 
     /// Returns an error only if allocation to expand space for the new items
     /// errored.
-    template <typename other_range_t>
-    [[nodiscard]] constexpr status<alloc::error>
-    append_range(const other_range_t& range) OKAYLIB_NOEXCEPT
-    {
-        static_assert(
-            is_infallible_constructible_c<T, value_type_for<other_range_t>>,
-            "Cannot append the given range: the contents of the arraylist "
-            "cannot be constructed from the contents of the given range (at "
-            "least not without a potential error at each construction).");
-        static_assert(!detail::range_marked_infinite_c<other_range_t>,
-                      "Cannot append an infinite range.");
-    }
+    // template <typename other_range_t>
+    // [[nodiscard]] constexpr status<alloc::error>
+    // append_range(const other_range_t& range) OKAYLIB_NOEXCEPT
+    // {
+    //     static_assert(
+    //         is_infallible_constructible_c<T, value_type_for<other_range_t>>,
+    //         "Cannot append the given range: the contents of the arraylist "
+    //         "cannot be constructed from the contents of the given range (at "
+    //         "least not without a potential error at each construction).");
+    //     static_assert(!detail::range_marked_infinite_c<other_range_t>,
+    //                   "Cannot append an infinite range.");
+    // }
 
   private:
     struct blocklist_t
@@ -559,12 +556,10 @@ template <typename T, typename backing_allocator_t> class segmented_list_t
                     items[j].~T();
                     ++visited;
                 }
-                m.allocator->deallocate(reinterpret_as_bytes(items));
+                m.allocator->deallocate(
+                    items.unchecked_address_of_first_item());
             } else {
-                auto bytes = ok::raw_slice(
-                    *reinterpret_cast<uint8_t*>(m.blocklist->blocks[i]),
-                    size_of_block_at(i) * sizeof(T));
-                m.allocator->deallocate(bytes);
+                m.allocator->deallocate(m.blocklist->blocks[i]);
             }
         }
 
@@ -669,7 +664,7 @@ struct copy_items_from_range_t
         ok::segmented_list_t<value_type_for<const input_range_t&>,
                              std::remove_reference_t<backing_allocator_t>>;
 
-    template <typename backing_allocator_t, typename input_range_t>
+    template <allocator_c backing_allocator_t, typename input_range_t>
     [[nodiscard]] constexpr auto
     operator()(backing_allocator_t& allocator,
                const input_range_t& range) const OKAYLIB_NOEXCEPT
@@ -677,7 +672,7 @@ struct copy_items_from_range_t
         return ok::make(*this, allocator, range);
     }
 
-    template <typename backing_allocator_t,
+    template <allocator_c backing_allocator_t,
               ok::detail::producing_range_c input_range_t>
     [[nodiscard]] constexpr alloc::error
     make_into_uninit(ok::segmented_list_t<value_type_for<const input_range_t&>,
@@ -768,21 +763,24 @@ inline constexpr segmented_list::detail::copy_items_from_range_t
 
 } // namespace segmented_list
 
-template <typename T, typename backing_allocator_t>
+template <typename T, allocator_c backing_allocator_t>
 struct range_definition<ok::segmented_list_t<T, backing_allocator_t>>
 {
-    static inline constexpr bool is_arraylike = true;
+    // always consuming because T is always nonconst
+    static constexpr range_flags flags =
+        range_flags::sized | range_flags::arraylike | range_flags::consuming |
+        range_flags::producing;
 
     using range_t = ok::segmented_list_t<T, backing_allocator_t>;
     using value_type = T;
 
-    static constexpr value_type& get_ref(range_t& r, size_t c) OKAYLIB_NOEXCEPT
+    static constexpr value_type& get(range_t& r, size_t c) OKAYLIB_NOEXCEPT
     {
         return r[c];
     }
 
-    static constexpr const value_type& get_ref(const range_t& r,
-                                               size_t c) OKAYLIB_NOEXCEPT
+    static constexpr const value_type& get(const range_t& r,
+                                           size_t c) OKAYLIB_NOEXCEPT
     {
         return r[c];
     }
