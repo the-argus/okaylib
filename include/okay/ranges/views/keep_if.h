@@ -79,7 +79,7 @@ struct range_definition<detail::keep_if_view_t<input_range_t, predicate_t>>
     using cursor_t = cursor_type_for<range_t>;
 
   private:
-    static constexpr range_flags determine_flags() noexcept
+    static consteval range_flags determine_flags() noexcept
     {
         using flags = range_flags;
         flags f = flags::producing;

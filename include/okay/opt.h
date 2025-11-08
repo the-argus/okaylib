@@ -645,7 +645,7 @@ template <typename payload_t> struct range_definition<ok::opt<payload_t>>
   private:
     using opt_range_t = opt<payload_t>;
 
-    constexpr static range_flags determine_flags()
+    consteval static range_flags determine_flags()
     {
         range_flags initial = range_flags::sized | range_flags::arraylike |
                               range_flags::implements_set | range_flags::sized |

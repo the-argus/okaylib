@@ -225,7 +225,7 @@ struct range_definition<detail::zipped_view_t<ranges_t...>>
         return f;
     }
 
-    constexpr static range_flags determine_flags() noexcept
+    static consteval range_flags determine_flags() noexcept
     {
         using flags = range_flags;
         flags f = flags::producing;

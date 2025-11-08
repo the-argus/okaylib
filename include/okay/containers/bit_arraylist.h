@@ -433,7 +433,7 @@ class bit_arraylist_t
     }
 };
 
-template <allocator_c backing_allocator_t>
+template <typename backing_allocator_t>
 struct range_definition<bit_arraylist_t<backing_allocator_t>>
 {
     using bit_arraylist_t = bit_arraylist_t<backing_allocator_t>;

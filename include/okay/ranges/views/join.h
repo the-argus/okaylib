@@ -139,7 +139,7 @@ struct range_definition<detail::joined_view_t<input_range_t>>
     static_assert(!detail::range_marked_infinite_c<inner_range_t>,
                   "Cannot join infinite ranges.");
 
-    static constexpr range_flags determine_flags()
+    static consteval range_flags determine_flags()
     {
         constexpr auto parents_flags = range_def_for<inner_range_t>::flags;
         auto nosize_flags =

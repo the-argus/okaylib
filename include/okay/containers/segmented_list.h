@@ -111,12 +111,6 @@ class segmented_list_t
         return this->remove(this->size() - 1);
     }
 
-    [[nodiscard]] constexpr backing_allocator_t&
-    allocator() const OKAYLIB_NOEXCEPT
-    {
-        return *m.backing_allocator;
-    }
-
     template <allocator_c incoming_allocator_t = ok::allocator_t>
     [[nodiscard]] constexpr alloc::result_t<slice<slice<const T>>>
     get_blocks(incoming_allocator_t& allocator) const& OKAYLIB_NOEXCEPT
@@ -218,6 +212,7 @@ class segmented_list_t
         this->destroy();
         this->m = std::move(other.m);
         other.m.blocklist = nullptr;
+        return *this;
     }
 
     [[nodiscard]] constexpr status<alloc::error>
@@ -270,7 +265,7 @@ class segmented_list_t
             auto blocklist_result = m.allocator->allocate(alloc::request_t{
                 .num_bytes = sizeof(blocklist_t) + (sizeof(T*) * m.size),
                 .alignment = alignof(blocklist_t),
-                .flags = alloc::realloc_flags::leave_nonzeroed,
+                .leave_nonzeroed = true,
             });
 
             if (!blocklist_result.is_success()) [[unlikely]] {
@@ -563,10 +558,7 @@ class segmented_list_t
             }
         }
 
-        auto bytes = ok::raw_slice(m.blocklist,
-                                   sizeof(blocklist_t) +
-                                       (m.blocklist->capacity * sizeof(T*)));
-        m.allocator->deallocate(bytes);
+        m.allocator->deallocate(m.blocklist);
     }
 
     [[nodiscard]] constexpr T& unchecked_access(size_t index) & OKAYLIB_NOEXCEPT
@@ -628,7 +620,7 @@ template <typename T> struct empty_t
         ok::segmented_list_t<T,
                              ok::detail::remove_cvref_t<backing_allocator_t>>;
 
-    template <typename backing_allocator_t>
+    template <allocator_c backing_allocator_t>
     [[nodiscard]] constexpr auto
     operator()(backing_allocator_t& allocator,
                const empty_options_t& options) const OKAYLIB_NOEXCEPT
@@ -636,7 +628,7 @@ template <typename T> struct empty_t
         return ok::make(*this, allocator, options);
     }
 
-    template <typename backing_allocator_t>
+    template <allocator_c backing_allocator_t>
     [[nodiscard]] constexpr alloc::error
     make_into_uninit(ok::segmented_list_t<T, backing_allocator_t>& output,
                      backing_allocator_t& allocator,
@@ -710,7 +702,9 @@ struct copy_items_from_range_t
             return mainbuf_result.status();
 
         bytes_t& mainbuf = mainbuf_result.unwrap();
-        defer free_mainbuf([&] { allocator.deallocate(mainbuf); });
+        defer free_mainbuf([&] {
+            allocator.deallocate(mainbuf.unchecked_address_of_first_item());
+        });
 
         auto* blocklist = reinterpret_cast<blocklist_t*>(
             mainbuf.unchecked_address_of_first_item());
@@ -734,8 +728,8 @@ struct copy_items_from_range_t
         auto itembuf =
             ok::raw_slice(*static_cast<T*>(blocklist_end), num_initial_spots);
         // okaylib developer assert
-        __ok_assert(ok_memcontains(.inner = reinterpret_as_bytes(itembuf),
-                                   .outer = mainbuf),
+        __ok_assert(ok_memcontains(.outer = mainbuf,
+                                   .inner = reinterpret_as_bytes(itembuf)),
                     "Bad implementation of segmented list");
 
         size_t iter = 0;
@@ -763,7 +757,7 @@ inline constexpr segmented_list::detail::copy_items_from_range_t
 
 } // namespace segmented_list
 
-template <typename T, allocator_c backing_allocator_t>
+template <typename T, typename backing_allocator_t>
 struct range_definition<ok::segmented_list_t<T, backing_allocator_t>>
 {
     // always consuming because T is always nonconst

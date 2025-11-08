@@ -91,7 +91,7 @@ struct range_definition<detail::enumerated_view_t<input_range_t>>
           detail::enumerated_cursor_t<input_range_t>>
 {
   private:
-    static constexpr range_flags determine_flags() noexcept
+    static consteval range_flags determine_flags() noexcept
     {
         using flags = range_flags;
         flags f = flags::producing;

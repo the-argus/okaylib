@@ -22,6 +22,7 @@ const testing_flags = &[_][]const u8{
     // "-DOKAYLIB_ALLOCATORS_USE_RTTI",
     // "-DOKAYLIB_ALLOCATORS_DISABLE_TYPECHECKING",
     "-fno-rtti",
+    "-ftemplate-backtrace-limit=0",
     "-Werror",
     "-Wno-deprecated",
     "-DOKAYLIB_NOEXCEPT=", // allow exceptions in testing mode

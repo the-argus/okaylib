@@ -15,7 +15,7 @@ template <typename range_t, typename callable_t> struct transformed_view_t;
 
 struct transform_fn_t
 {
-    template <typename range_t, typename callable_t>
+    template <range_c range_t, typename callable_t>
     constexpr decltype(auto)
     operator()(range_t&& range, callable_t&& callable) const OKAYLIB_NOEXCEPT
     {
@@ -90,9 +90,9 @@ struct range_definition<detail::transformed_view_t<input_range_t, callable_t>>
     using transforming_callable_rettype = decltype(get_and_transform(
         std::declval<const transformed_t&>(), std::declval<const cursor_t&>()));
 
-    static constexpr range_flags determine_flags()
+    static consteval range_flags determine_flags()
     {
-        auto outflags = range_definition<range_t>::flags;
+        auto outflags = range_def_for<range_t>::flags;
         outflags |= range_flags::producing;
         outflags -= range_flags::consuming;
         outflags -= range_flags::implements_set;

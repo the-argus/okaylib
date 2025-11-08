@@ -238,7 +238,7 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
     using take_at_most_t = detail::take_at_most_view_t<input_range_t>;
 
   private:
-    static constexpr range_flags determine_flags()
+    static consteval range_flags determine_flags()
     {
         range_flags out = range_def_for<range_t>::flags;
         out -= range_flags::infinite;
