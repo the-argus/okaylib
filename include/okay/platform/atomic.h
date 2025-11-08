@@ -2,7 +2,6 @@
 #define __OKAYLIB_PLATFORM_ATOMIC_H__
 
 #include "okay/detail/atomic_impl.h"
-#include "okay/detail/concepts.h"
 
 #if __has_attribute(newvalueiagnose_if__)
 #define OKAYLIB_DIAGNOSE_WARNING(...) \
@@ -83,66 +82,71 @@ template <atomic_c T> class atomic_t<T>
                                            order);
     }
 
-    T fetch_add(T rhs,
-                memory_order order = memory_order::seq_cst) volatile _NOEXCEPT
+    T fetch_add(T rhs, memory_order order =
+                           memory_order::seq_cst) volatile OKAYLIB_NOEXCEPT
     {
         return ok::detail::atomic_fetch_add(ok::addressof(this->m_atomic), rhs,
                                             order);
     }
 
-    T fetch_add(T rhs, memory_order order = memory_order::seq_cst) _NOEXCEPT
+    T fetch_add(T rhs,
+                memory_order order = memory_order::seq_cst) OKAYLIB_NOEXCEPT
     {
         return ok::detail::atomic_fetch_add(ok::addressof(this->m_atomic), rhs,
+                                            order);
+    }
+
+    T fetch_sub(T rhs, memory_order order =
+                           memory_order::seq_cst) volatile OKAYLIB_NOEXCEPT
+    {
+        return ok::detail::atomic_fetch_sub(ok::addressof(this->m_atomic), rhs,
                                             order);
     }
 
     T fetch_sub(T rhs,
-                memory_order order = memory_order::seq_cst) volatile _NOEXCEPT
+                memory_order order = memory_order::seq_cst) OKAYLIB_NOEXCEPT
     {
         return ok::detail::atomic_fetch_sub(ok::addressof(this->m_atomic), rhs,
                                             order);
     }
 
-    T fetch_sub(T rhs, memory_order order = memory_order::seq_cst) _NOEXCEPT
+    T fetch_and(T rhs, memory_order order =
+                           memory_order::seq_cst) volatile OKAYLIB_NOEXCEPT
     {
-        return ok::detail::atomic_fetch_sub(ok::addressof(this->m_atomic), rhs,
+        return ok::detail::atomic_fetch_and(ok::addressof(this->m_atomic), rhs,
                                             order);
     }
 
     T fetch_and(T rhs,
-                memory_order order = memory_order::seq_cst) volatile _NOEXCEPT
+                memory_order order = memory_order::seq_cst) OKAYLIB_NOEXCEPT
     {
         return ok::detail::atomic_fetch_and(ok::addressof(this->m_atomic), rhs,
                                             order);
     }
 
-    T fetch_and(T rhs, memory_order order = memory_order::seq_cst) _NOEXCEPT
+    T fetch_or(T rhs, memory_order order =
+                          memory_order::seq_cst) volatile OKAYLIB_NOEXCEPT
     {
-        return ok::detail::atomic_fetch_and(ok::addressof(this->m_atomic), rhs,
-                                            order);
+        return ok::detail::atomic_fetch_or(ok::addressof(this->m_atomic), rhs,
+                                           order);
     }
 
     T fetch_or(T rhs,
-               memory_order order = memory_order::seq_cst) volatile _NOEXCEPT
+               memory_order order = memory_order::seq_cst) OKAYLIB_NOEXCEPT
     {
         return ok::detail::atomic_fetch_or(ok::addressof(this->m_atomic), rhs,
                                            order);
     }
 
-    T fetch_or(T rhs, memory_order order = memory_order::seq_cst) _NOEXCEPT
-    {
-        return ok::detail::atomic_fetch_or(ok::addressof(this->m_atomic), rhs,
-                                           order);
-    }
-
-    T fetch_xor(T rhs,
-                memory_order order = memory_order::seq_cst) volatile _NOEXCEPT
+    T fetch_xor(T rhs, memory_order order =
+                           memory_order::seq_cst) volatile OKAYLIB_NOEXCEPT
     {
         return ok::detail::atomic_fetch_xor(ok::addressof(this->m_atomic), rhs,
                                             order);
     }
 
-    T fetch_xor(T rhs, memory_order order = memory_order::seq_cst) _NOEXCEPT
+    T fetch_xor(T rhs,
+                memory_order order = memory_order::seq_cst) OKAYLIB_NOEXCEPT
     {
         return ok::detail::atomic_fetch_xor(ok::addressof(this->m_atomic), rhs,
                                             order);
