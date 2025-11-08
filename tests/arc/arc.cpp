@@ -17,46 +17,46 @@ TEST_SUITE("arc smart pointers")
         SUBCASE("factory function")
         {
             auto int_arc = ok::into_arc(1, c_allocator);
-            REQUIRE(int_arc.okay());
+            REQUIRE(int_arc.is_success());
         }
 
         SUBCASE("directly calling make::with")
         {
-            status<alloc::error> out_status;
+            auto out_status = status<alloc::error>::make_success();
             auto int_arc =
                 unique_rw_arc_t<int>::make::with(out_status, c_allocator);
-            REQUIRE(out_status.okay());
+            REQUIRE(out_status.is_success());
         }
 
         SUBCASE("move constructor")
         {
-            status<alloc::error> out_status;
+            auto out_status = status<alloc::error>::make_success();
             auto int_arc =
                 unique_rw_arc_t<int>::make::with(out_status, c_allocator);
-            REQUIRE(out_status.okay());
+            REQUIRE(out_status.is_success());
             auto int_arc_2 = std::move(int_arc);
             REQUIREABORTS(auto int_arc_3 = std::move(int_arc));
         }
 
         SUBCASE("move assignment")
         {
-            auto int_arc = ok::into_arc(1, c_allocator).release();
-            auto int_arc_2 = ok::into_arc(2, c_allocator).release();
+            auto int_arc = ok::into_arc(1, c_allocator).unwrap();
+            auto int_arc_2 = ok::into_arc(2, c_allocator).unwrap();
             int_arc_2 = std::move(int_arc);
             REQUIREABORTS(int_arc_2 = std::move(int_arc));
         }
 
         SUBCASE("conversion to generic allocator")
         {
-            unique_rw_arc_t<int> i = ok::into_arc(1, c_allocator).release();
+            unique_rw_arc_t<int> i = ok::into_arc(1, c_allocator).unwrap();
 
             REQUIRE(i.deref() == 1);
         }
 
         SUBCASE("const deref")
         {
-            auto int_arc = ok::into_arc(1, c_allocator).release();
-            const auto int_arc_2 = ok::into_arc(2, c_allocator).release();
+            auto int_arc = ok::into_arc(1, c_allocator).unwrap();
+            const auto int_arc_2 = ok::into_arc(2, c_allocator).unwrap();
             const auto int_arc_3 = std::move(int_arc);
             REQUIREABORTS(auto& _ = int_arc.deref());
 
@@ -69,8 +69,8 @@ TEST_SUITE("arc smart pointers")
 
         SUBCASE("nonconst deref")
         {
-            auto int_arc = ok::into_arc(1, c_allocator).release();
-            auto int_arc_2 = ok::into_arc(2, c_allocator).release();
+            auto int_arc = ok::into_arc(1, c_allocator).unwrap();
+            auto int_arc_2 = ok::into_arc(2, c_allocator).unwrap();
             auto int_arc_3 = std::move(int_arc);
             REQUIREABORTS(auto& _ = int_arc.deref());
 
@@ -83,8 +83,8 @@ TEST_SUITE("arc smart pointers")
 
         SUBCASE("demote to readonly")
         {
-            auto int_arc = ok::into_arc(1, c_allocator).release();
-            auto int_arc_2 = ok::into_arc(2, c_allocator).release();
+            auto int_arc = ok::into_arc(1, c_allocator).unwrap();
+            auto int_arc_2 = ok::into_arc(2, c_allocator).unwrap();
 
             auto const_arc = int_arc.demote_to_readonly();
             REQUIREABORTS(auto&& _ = int_arc.demote_to_readonly());
@@ -97,9 +97,9 @@ TEST_SUITE("arc smart pointers")
         SUBCASE("move construction and assignment")
         {
             auto int_arc =
-                ok::into_arc(1, c_allocator).release().demote_to_readonly();
+                ok::into_arc(1, c_allocator).unwrap().demote_to_readonly();
             auto int_arc_2 =
-                ok::into_arc(2, c_allocator).release().demote_to_readonly();
+                ok::into_arc(2, c_allocator).unwrap().demote_to_readonly();
 
             auto int_arc_3 = std::move(int_arc);
             int_arc_3 = std::move(int_arc_2);
@@ -110,7 +110,7 @@ TEST_SUITE("arc smart pointers")
         SUBCASE("conversion to generic allocator")
         {
             ro_arc_t<int> readonly_arc =
-                ok::into_arc(1, c_allocator).release().demote_to_readonly();
+                ok::into_arc(1, c_allocator).unwrap().demote_to_readonly();
 
             REQUIRE(readonly_arc.deref() == 1);
         }
@@ -118,9 +118,9 @@ TEST_SUITE("arc smart pointers")
         SUBCASE("duplicate and deref")
         {
             auto int_arc =
-                ok::into_arc(1, c_allocator).release().demote_to_readonly();
+                ok::into_arc(1, c_allocator).unwrap().demote_to_readonly();
             auto int_arc_2 =
-                ok::into_arc(2, c_allocator).release().demote_to_readonly();
+                ok::into_arc(2, c_allocator).unwrap().demote_to_readonly();
 
             {
                 auto int_arc_3 = int_arc.duplicate();
@@ -141,9 +141,9 @@ TEST_SUITE("arc smart pointers")
         SUBCASE("try_promote_and_consume_into_unique")
         {
             auto int_arc =
-                ok::into_arc(1, c_allocator).release().demote_to_readonly();
+                ok::into_arc(1, c_allocator).unwrap().demote_to_readonly();
             auto int_arc_2 =
-                ok::into_arc(2, c_allocator).release().demote_to_readonly();
+                ok::into_arc(2, c_allocator).unwrap().demote_to_readonly();
 
             auto duplicate_2 = int_arc_2.duplicate();
             auto promoted =
@@ -155,11 +155,11 @@ TEST_SUITE("arc smart pointers")
         SUBCASE("demote to weak")
         {
             auto int_arc = ok::into_arc(1, c_allocator)
-                               .release()
+                               .unwrap()
                                .demote_to_readonly()
                                .demote_to_weak();
             auto int_arc_2 = ok::into_arc(2, c_allocator)
-                                 .release()
+                                 .unwrap()
                                  .demote_to_readonly()
                                  .demote_to_weak();
         }
@@ -167,11 +167,11 @@ TEST_SUITE("arc smart pointers")
         SUBCASE("spawn weak arc")
         {
             auto original_arc =
-                ok::into_arc(1, c_allocator).release().demote_to_readonly();
+                ok::into_arc(1, c_allocator).unwrap().demote_to_readonly();
             auto weak_arc = original_arc.spawn_weak_arc();
             {
                 auto int_arc =
-                    ok::into_arc(1, c_allocator).release().demote_to_readonly();
+                    ok::into_arc(1, c_allocator).unwrap().demote_to_readonly();
 
                 weak_arc = int_arc.spawn_weak_arc();
 
@@ -188,9 +188,9 @@ TEST_SUITE("arc smart pointers")
         SUBCASE("move constructor and assignment")
         {
             auto int_arc =
-                ok::into_arc(1, c_allocator).release().demote_to_readonly();
+                ok::into_arc(1, c_allocator).unwrap().demote_to_readonly();
             auto int_arc_2 =
-                ok::into_arc(2, c_allocator).release().demote_to_readonly();
+                ok::into_arc(2, c_allocator).unwrap().demote_to_readonly();
 
             auto int_weak = int_arc.duplicate().demote_to_weak();
             auto int_weak_2 = int_arc_2.duplicate().demote_to_weak();
@@ -204,7 +204,7 @@ TEST_SUITE("arc smart pointers")
         SUBCASE("conversion to generic allocator")
         {
             ro_arc_t<int> strong_ref =
-                ok::into_arc(1, c_allocator).release().demote_to_readonly();
+                ok::into_arc(1, c_allocator).unwrap().demote_to_readonly();
             weak_arc_t<int> weak_ref = strong_ref.spawn_weak_arc();
 
             REQUIRE(weak_ref.try_spawn_readonly().ref_or_panic().deref() == 1);
@@ -213,9 +213,9 @@ TEST_SUITE("arc smart pointers")
         SUBCASE("duplicate")
         {
             auto int_arc =
-                ok::into_arc(1, c_allocator).release().demote_to_readonly();
+                ok::into_arc(1, c_allocator).unwrap().demote_to_readonly();
             auto int_arc_2 =
-                ok::into_arc(2, c_allocator).release().demote_to_readonly();
+                ok::into_arc(2, c_allocator).unwrap().demote_to_readonly();
             ok::array_t arcs = {
                 int_arc.duplicate().demote_to_weak(),
                 int_arc_2.duplicate().demote_to_weak(),
@@ -229,8 +229,8 @@ TEST_SUITE("arc smart pointers")
         SUBCASE("spawn readonly arc")
         {
             auto shared_arc =
-                ok::into_arc(1, c_allocator).release().demote_to_readonly();
-            auto unique_arc = ok::into_arc(2, c_allocator).release();
+                ok::into_arc(1, c_allocator).unwrap().demote_to_readonly();
+            auto unique_arc = ok::into_arc(2, c_allocator).unwrap();
 
             auto weak_to_shared = shared_arc.spawn_weak_arc();
             auto weak_to_unique = unique_arc.spawn_weak_arc();
@@ -244,15 +244,15 @@ TEST_SUITE("arc smart pointers")
     {
         SUBCASE("move construction and assignment, converting constructors")
         {
-            variant_arc_t arc = into_arc(1, c_allocator).release();
+            variant_arc_t arc = into_arc(1, c_allocator).unwrap();
             arc =
                 arc.try_convert_and_consume_into_readonly_arc().ref_or_panic();
             variant_arc_t arc2 =
-                into_arc(2, c_allocator).release().demote_to_readonly();
+                into_arc(2, c_allocator).unwrap().demote_to_readonly();
             // spawn weak reference and then immediately destroy object.
             // just testing constructor weak -> variant
             variant_arc_t weak =
-                into_arc(3, c_allocator).release().spawn_weak_arc();
+                into_arc(3, c_allocator).unwrap().spawn_weak_arc();
             REQUIRE(!weak.try_deref());
 
             auto arc3 = std::move(arc2);
@@ -263,13 +263,13 @@ TEST_SUITE("arc smart pointers")
         SUBCASE("conversion to generic allocator")
         {
             variant_arc_t<int, c_allocator_t> arc =
-                into_arc(1, c_allocator).release();
+                into_arc(1, c_allocator).unwrap();
             variant_arc_t arc2 =
-                into_arc(2, c_allocator).release().demote_to_readonly();
+                into_arc(2, c_allocator).unwrap().demote_to_readonly();
             static_assert(std::is_same_v<decltype(arc2),
                                          variant_arc_t<int, c_allocator_t>>);
             variant_arc_t weak =
-                into_arc(3, c_allocator).release().spawn_weak_arc();
+                into_arc(3, c_allocator).unwrap().spawn_weak_arc();
             static_assert(std::is_same_v<decltype(weak),
                                          variant_arc_t<int, c_allocator_t>>);
 
@@ -293,27 +293,27 @@ TEST_SUITE("arc smart pointers")
 
         SUBCASE("ownership_mode and converting constructors set right mode")
         {
-            variant_arc_t arc = into_arc(1, c_allocator).release();
+            variant_arc_t arc = into_arc(1, c_allocator).unwrap();
             REQUIRE(arc.ownership_mode() == arc_ownership::unique_rw);
             arc = arc.try_consume_into_contained_unique_arc()
                       .ref_or_panic()
                       .demote_to_readonly();
             REQUIRE(arc.ownership_mode() == arc_ownership::shared_ro);
             variant_arc_t arc2 =
-                into_arc(2, c_allocator).release().demote_to_readonly();
+                into_arc(2, c_allocator).unwrap().demote_to_readonly();
             REQUIRE(arc2.ownership_mode() == arc_ownership::shared_ro);
             variant_arc_t weak =
-                into_arc(3, c_allocator).release().spawn_weak_arc();
+                into_arc(3, c_allocator).unwrap().spawn_weak_arc();
             REQUIRE(weak.ownership_mode() == arc_ownership::weak);
         }
 
         SUBCASE("spawn weak arc")
         {
-            variant_arc_t unique = into_arc(1, c_allocator).release();
+            variant_arc_t unique = into_arc(1, c_allocator).unwrap();
             variant_arc_t shared =
-                into_arc(2, c_allocator).release().demote_to_readonly();
+                into_arc(2, c_allocator).unwrap().demote_to_readonly();
             variant_arc_t weak =
-                into_arc(3, c_allocator).release().spawn_weak_arc();
+                into_arc(3, c_allocator).unwrap().spawn_weak_arc();
 
             auto weakref_to_unique = unique.spawn_weak_arc();
             auto weakref_to_shared = shared.spawn_weak_arc();
@@ -325,11 +325,11 @@ TEST_SUITE("arc smart pointers")
 
         SUBCASE("try duplicate")
         {
-            variant_arc_t unique = into_arc(1, c_allocator).release();
+            variant_arc_t unique = into_arc(1, c_allocator).unwrap();
             variant_arc_t shared =
-                into_arc(2, c_allocator).release().demote_to_readonly();
+                into_arc(2, c_allocator).unwrap().demote_to_readonly();
             variant_arc_t weak =
-                into_arc(3, c_allocator).release().spawn_weak_arc();
+                into_arc(3, c_allocator).unwrap().spawn_weak_arc();
 
             REQUIRE(!unique.try_duplicate());
             REQUIRE(shared.try_duplicate());
@@ -344,11 +344,11 @@ TEST_SUITE("arc smart pointers")
 
         SUBCASE("try deref")
         {
-            variant_arc_t unique = into_arc(1, c_allocator).release();
+            variant_arc_t unique = into_arc(1, c_allocator).unwrap();
             variant_arc_t shared =
-                into_arc(2, c_allocator).release().demote_to_readonly();
+                into_arc(2, c_allocator).unwrap().demote_to_readonly();
             variant_arc_t weak =
-                into_arc(3, c_allocator).release().spawn_weak_arc();
+                into_arc(3, c_allocator).unwrap().spawn_weak_arc();
             variant_arc_t weak2 = shared.spawn_weak_arc();
 
             REQUIRE(unique.try_deref());
@@ -364,11 +364,11 @@ TEST_SUITE("arc smart pointers")
 
         SUBCASE("try consume into contained")
         {
-            variant_arc_t unique = into_arc(1, c_allocator).release();
+            variant_arc_t unique = into_arc(1, c_allocator).unwrap();
             variant_arc_t shared =
-                into_arc(2, c_allocator).release().demote_to_readonly();
+                into_arc(2, c_allocator).unwrap().demote_to_readonly();
             variant_arc_t weak =
-                into_arc(3, c_allocator).release().spawn_weak_arc();
+                into_arc(3, c_allocator).unwrap().spawn_weak_arc();
             variant_arc_t weak2 = shared.spawn_weak_arc();
 
             REQUIRE(!unique.try_consume_into_contained_weak_arc());
@@ -392,11 +392,11 @@ TEST_SUITE("arc smart pointers")
 
         SUBCASE("try convert and consume")
         {
-            variant_arc_t unique = into_arc(1, c_allocator).release();
+            variant_arc_t unique = into_arc(1, c_allocator).unwrap();
             variant_arc_t shared =
-                into_arc(2, c_allocator).release().demote_to_readonly();
+                into_arc(2, c_allocator).unwrap().demote_to_readonly();
             variant_arc_t weak =
-                into_arc(3, c_allocator).release().spawn_weak_arc();
+                into_arc(3, c_allocator).unwrap().spawn_weak_arc();
             variant_arc_t weak2 = shared.spawn_weak_arc();
 
             {

@@ -118,8 +118,7 @@ struct unique_rw_arc_t
         // is zero, so we can rule out the possibility of any weak refs
         // existing)
         if (m_payload->weak_refcount.fetch_sub(1) == 1) {
-            m_payload->allocator->deallocate(
-                reinterpret_as_bytes(slice_from_one(*m_payload)));
+            m_payload->allocator->deallocate(m_payload);
         }
     }
 
@@ -389,8 +388,7 @@ struct weak_arc_t
         if (m_payload->weak_refcount.fetch_sub(1) == 1) {
             __ok_internal_assert(m_payload->strong_refcount.load() == 0);
             // if weak just hit zero, then there also must be no strong refcount
-            m_payload->allocator->deallocate(
-                reinterpret_as_bytes(slice_from_one(*m_payload)));
+            m_payload->allocator->deallocate(m_payload);
         }
     }
 
@@ -406,9 +404,8 @@ struct weak_arc_t
 };
 
 template <typename T, allocator_c allocator_impl_t>
-[[nodiscard]] constexpr auto
-ro_arc_t<T, allocator_impl_t>::demote_to_weak() OKAYLIB_NOEXCEPT
-    -> weak_arc_t<T, allocator_impl_t>
+[[nodiscard]] constexpr auto ro_arc_t<T, allocator_impl_t>::demote_to_weak()
+    OKAYLIB_NOEXCEPT -> weak_arc_t<T, allocator_impl_t>
 {
     // okay to add to weak because we have some in strong
     m_payload->weak_refcount.fetch_add(1);
@@ -575,7 +572,7 @@ struct variant_arc_t
             return nullopt;
         }
         unique_rw_arc_t actual(m_payload);
-        auto& deref = actual.deref();
+        T& deref = actual.deref();
         actual.m_payload = nullptr;
         return deref;
     }
@@ -588,15 +585,17 @@ struct variant_arc_t
         switch (ownership_mode()) {
         case arc_ownership::unique_rw: {
             unique_rw_arc_t actual(m_payload);
-            auto& deref = actual.deref();
+            T& deref = actual.deref();
             actual.m_payload = nullptr;
             return deref;
         }
         case arc_ownership::shared_ro: {
             ro_arc_t actual(m_payload);
-            auto& deref = actual.deref();
+            const T& deref = actual.deref();
             actual.m_payload = nullptr;
-            return deref;
+            // addressof here- converting from a const& to an opt<const&> is not
+            // allowed without explicitly taking the address at the call site
+            return ok::addressof(deref);
         }
         default:
             return nullopt;
@@ -790,8 +789,9 @@ struct unique_rw_arc_t<T, allocator_impl_t>::make
         payload.strong_refcount = detail::lock_bit;
         payload.weak_refcount = 1;
         payload.allocator = ok::addressof(allocator);
-        new (ok::addressof(payload.object))
-            T(std::forward<decltype(constructor_args)>(constructor_args)...);
+        ok::stdc::construct_at(
+            ok::addressof(payload.object),
+            std::forward<decltype(constructor_args)>(constructor_args)...);
 
         out_status = alloc::error::success;
 

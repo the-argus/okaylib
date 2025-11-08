@@ -24,7 +24,7 @@ struct nullopt_t
 
 inline constexpr nullopt_t nullopt{};
 
-template <typename payload_t, typename = void> class opt;
+template <typename payload_t> class opt;
 
 namespace detail {
 enum class opt_impl_type
@@ -54,7 +54,7 @@ inline constexpr bool assigns_from_opt =
     std::is_assignable_v<target_t&, opt<opt_payload_t>&&>;
 } // namespace detail
 
-template <typename payload_t, typename> class opt
+template <typename payload_t> class opt
 {
   public:
     // type constraints
@@ -75,7 +75,7 @@ template <typename payload_t, typename> class opt
         detail::opt_impl_type::object;
 
     // friends with all other types of opts
-    template <typename T, typename> friend class opt;
+    template <typename T> friend class opt;
 
     template <typename T>
     inline static constexpr bool not_self =
@@ -542,8 +542,7 @@ template <typename payload_t, typename> class opt
 };
 
 // template specialization for lvalue references
-template <typename payload_t>
-class opt<payload_t, std::enable_if_t<stdc::is_reference_c<payload_t>>>
+template <stdc::is_reference_c payload_t> class opt<payload_t>
 {
   public:
     using pointer_t = std::remove_reference_t<payload_t>;
@@ -565,6 +564,14 @@ class opt<payload_t, std::enable_if_t<stdc::is_reference_c<payload_t>>>
         : m_pointer(ok::addressof(p))
     {
     }
+
+    // NOTE: if this constructor is deleted, explicitly use ok::addressof() or
+    // the & operator to convert from a pointer instead. This is in place to
+    // make it slightly harder to accidentally return const references to things
+    // from the stack.
+    constexpr opt(pointer_t& p)
+        requires ok::is_const_c<pointer_t>
+    = delete;
 
     // implicit conversion if references are implicitly convertible
     template <typename other_t>
