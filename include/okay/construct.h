@@ -49,7 +49,7 @@ template <typename T> struct make_into_uninitialized_fn_t
                 "Unable to find a constructor call for the given arguments.");
 
             static_assert(
-                analysis::has_inplace || std::is_move_constructible_v<T>,
+                analysis::has_inplace || stdc::is_move_constructible_v<T>,
                 "Attempt to call make_into_uninitialized but there is no known "
                 "way to construct a T into an uninitialized spot of memory.");
 
