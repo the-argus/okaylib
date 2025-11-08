@@ -177,8 +177,8 @@ class arraylist_t
             } else {
                 __ok_internal_assert(this->size() != 0);
                 // move last item into uninitialized memory
-                new (m.items + this->size())
-                    T(std::move(m.items[this->size() - 1]));
+                ok::stdc::construct_at(m.items + this->size(),
+                                       std::move(m.items[this->size() - 1]));
 
                 // move the rest of the items on top of each other
                 for (size_t i = this->size() - 1; i > idx; --i) {
@@ -644,7 +644,7 @@ class arraylist_t
                 } else {
                     for (size_t i = 0; i < m.size; ++i) {
                         T& src_item = src[i];
-                        new (dest + i) T(std::move(src_item));
+                        ok::stdc::construct_at(dest + i, std::move(src_item));
                         if constexpr (!std::is_trivially_destructible_v<T>) {
                             src_item.~T();
                         }
@@ -765,12 +765,14 @@ template <typename T> struct spots_preallocated_t
             reinterpret_cast<T*>(bytes.unchecked_address_of_first_item());
         const size_t num_bytes_allocated = bytes.size();
 
-        new (ok::addressof(output)) output_t(typename output_t::members_t{
-            .items = start,
-            .capacity = num_bytes_allocated / sizeof(T),
-            .size = 0,
-            .backing_allocator = ok::addressof(allocator),
-        });
+        ok::stdc::construct_at(
+            ok::addressof(output),
+            typename output_t::members_t{
+                .items = start,
+                .capacity = num_bytes_allocated / sizeof(T),
+                .size = 0,
+                .backing_allocator = ok::addressof(allocator),
+            });
         return alloc::error::success;
     }
 };
@@ -831,16 +833,19 @@ struct copy_items_from_range_t
         size_t i = 0;
         for (auto cursor = ok::begin(range); ok::is_inbounds(range, cursor);
              ok::increment(range, cursor)) {
-            new (memory + i) T(ok::range_get_best(range, cursor));
+            ok::stdc::construct_at(memory + i,
+                                   ok::range_get_best(range, cursor));
             ++i;
         }
 
-        new (ok::addressof(output)) output_t(typename output_t::members_t{
-            .items = reinterpret_cast<T*>(memory),
-            .capacity = bytes_allocated / sizeof(T),
-            .size = num_items,
-            .backing_allocator = ok::addressof(allocator),
-        });
+        ok::stdc::construct_at(
+            ok::addressof(output),
+            typename output_t::members_t{
+                .items = reinterpret_cast<T*>(memory),
+                .capacity = bytes_allocated / sizeof(T),
+                .size = num_items,
+                .backing_allocator = ok::addressof(allocator),
+            });
 
         return alloc::error::success;
     };
