@@ -479,8 +479,7 @@ class segmented_list_t
         if (this->size() == this->capacity()) {
             // realloc
         }
-        // okaylib developer assert
-        __ok_assert(this->capacity() > this->size(), "bad realloc?");
+        __ok_internal_assert(this->capacity() > this->size());
 
         T& new_item = this->unchecked_access(this->size());
 
@@ -727,10 +726,9 @@ struct copy_items_from_range_t
 
         auto itembuf =
             ok::raw_slice(*static_cast<T*>(blocklist_end), num_initial_spots);
-        // okaylib developer assert
-        __ok_assert(ok_memcontains(.outer = mainbuf,
-                                   .inner = reinterpret_as_bytes(itembuf)),
-                    "Bad implementation of segmented list");
+        __ok_internal_assert(
+            ok_memcontains(.outer = mainbuf,
+                           .inner = reinterpret_as_bytes(itembuf)));
 
         size_t iter = 0;
         for (size_t i = 0; i < num_initial_blocks; ++i) {

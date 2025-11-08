@@ -80,9 +80,7 @@ template <typename item_t> struct arcpool_freestack_t
     constexpr void unlock(item_t* new_top)
     {
         top.store(uint64_t(new_top), ok::memory_order::release);
-        // developer assert
-        __ok_assert((uint64_t(new_top) & freestack_locked_bit) == 0,
-                    "Didn't unlock freestack, unaligned ptr?");
+        __ok_internal_assert((uint64_t(new_top) & freestack_locked_bit) == 0);
     }
 
     constexpr void push(item_t* item) noexcept
@@ -103,9 +101,8 @@ template <typename item_t> struct arcpool_freestack_t
             // pop an item off
             auto* item = static_cast<item_t*>(prev_front);
             auto* new_front = static_cast<item_t*>(item->counters.next);
-            // developer assert
-            __ok_assert((uint64_t(new_front) & freestack_locked_bit) == 0,
-                        "misaligned addr");
+            __ok_internal_assert((uint64_t(new_front) & freestack_locked_bit) ==
+                                 0);
             --size;
             // unlock the freestack, it is now pointing at the next item and
             // we have exclusive access to this one
@@ -261,9 +258,7 @@ template <typename T, allocator_c allocator_impl_t> class arcpool_t
 
             m_root = initial_buffer;
             m_back = ok::addressof(m_root->item_buffer);
-            // developer assert
-            __ok_assert(m_root->freestack.size == 0,
-                        "bad initialization of freestack");
+            __ok_internal_assert(m_root->freestack.size == 0);
             auto&& ignored_garbage = m_root->freestack.lock();
             m_root->freestack.size = starting_root_length;
             m_root->freestack.unlock(m_root->item_buffer.items);
@@ -396,10 +391,7 @@ template <typename T, allocator_c allocator_impl_t> class arcpool_t
         item_t* item = this->m_root->freestack->pop();
 
         if (!item) {
-            // developer assert
-            __ok_assert(
-                m_root->freestack.size == 0,
-                "pop() should only fail when no items are left in freelist");
+            __ok_internal_assert(m_root->freestack.size == 0);
 
             if (auto status = this->alloc_more(); !ok::is_success(status)) {
                 if constexpr (ok::stdc::is_void_v<status_type>) {
@@ -410,13 +402,10 @@ template <typename T, allocator_c allocator_impl_t> class arcpool_t
                 }
             }
 
-            // developer assert
-            __ok_assert(m_root->freestack.size,
-                        "alloc_more should add more items to freelist");
+            __ok_internal_assert(m_root->freestack.size);
 
             item = m_root->freestack.pop();
-            // developer assert
-            __ok_assert(item, "");
+            __ok_internal_assert(item);
         }
 
         item->counters.increment_generation(ok::memory_order::release);
@@ -475,9 +464,7 @@ template <typename T, allocator_c allocator_impl_t> class arcpool_t
         if (!m_root)
             return;
 
-        // developer assert
-        __ok_assert(m_allocator,
-                    "if arcpool has root it should have allocator");
+        __ok_internal_assert(m_allocator);
 
         item_buffer_t* iter = m_root->item_buffer.next;
 
