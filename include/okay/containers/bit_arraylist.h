@@ -3,6 +3,7 @@
 
 #include "okay/allocators/allocator.h"
 #include "okay/ranges/ranges.h"
+#include "okay/stdmem.h"
 
 namespace ok {
 namespace bit_arraylist {
@@ -14,14 +15,9 @@ struct copy_booleans_from_range_t;
 struct bit_string_t;
 } // namespace detail
 } // namespace bit_arraylist
-template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
+template <allocator_c backing_allocator_t = ok::allocator_t>
+class bit_arraylist_t
 {
-    static_assert(std::is_class_v<backing_allocator_t>,
-                  "Do not pass a non-class type (reference, array, pointer) in "
-                  "place of an allocator");
-    static_assert(
-        detail::is_derived_from_v<backing_allocator_t, ok::allocator_t>,
-        "Invalid type given as allocator to bit_arraylist_t.");
     struct members_t
     {
         size_t num_bits;
@@ -32,7 +28,8 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
     constexpr void destroy() OKAYLIB_NOEXCEPT
     {
         if (m.allocation.size() != 0) {
-            m.allocator->deallocate(m.allocation);
+            m.allocator->deallocate(
+                m.allocation.unchecked_address_of_first_item());
         }
     }
 
@@ -41,7 +38,7 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
     friend struct ok::bit_arraylist::detail::copy_booleans_from_range_t;
     friend struct ok::bit_arraylist::detail::bit_string_t;
 
-    template <typename other_allocator_t> friend class ok::bit_arraylist_t;
+    template <allocator_c other_allocator_t> friend class ok::bit_arraylist_t;
 
     bit_arraylist_t() = delete;
 
@@ -67,9 +64,9 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
     // allow upcasting to ok::allocator_t if you explicitly construct with
     // upcast_tag
     template <typename other_allocator_t,
-              std::enable_if_t<is_convertible_to_c<other_allocator_t*,
-                                                     backing_allocator_t*>,
-                               bool> = true>
+              std::enable_if_t<
+                  is_convertible_to_c<other_allocator_t*, backing_allocator_t*>,
+                  bool> = true>
     constexpr bit_arraylist_t(const bit_arraylist::upcast_tag&,
                               bit_arraylist_t<other_allocator_t>&& other)
         : m(members_t{
@@ -186,17 +183,17 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
     {
         if (m.allocation.size() == 0) {
             auto status = this->first_allocation();
-            if (!status.okay()) [[unlikely]] {
+            if (!status.is_success()) [[unlikely]] {
                 return status;
             }
         } else if (this->size_bytes() == this->capacity_bytes()) {
             auto status = reallocate(1, m.allocation.size() * 2);
-            if (!status.okay()) [[unlikely]] {
+            if (!status.is_success()) [[unlikely]] {
                 return status;
             }
         }
         __ok_internal_assert(this->size_bytes() < this->capacity_bytes());
-        return alloc::error::okay;
+        return alloc::error::success;
     }
 
     [[nodiscard]] constexpr status<alloc::error>
@@ -206,8 +203,8 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
             __ok_abort("insert_at into bit_arraylist out of bounds");
         }
         __ok_internal_assert(this->capacity_bytes() >= this->size_bytes());
-        if (auto status = this->ensure_additional_capacity(); !status.okay())
-            [[unlikely]] {
+        if (auto status = this->ensure_additional_capacity();
+            !status.is_success()) [[unlikely]] {
             return status;
         }
         constexpr uint8_t carry_in_mask = 0b001;
@@ -267,7 +264,7 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
         __ok_internal_assert(!carry);
         ++m.num_bits;
 
-        return alloc::error::okay;
+        return alloc::error::success;
     }
 
     [[nodiscard]] constexpr status<alloc::error>
@@ -403,13 +400,13 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
                 .alignment = 1,
             });
 
-        if (!result.okay()) [[unlikely]] {
-            return result.err();
+        if (!result.is_success()) [[unlikely]] {
+            return result.status();
         }
 
-        m.allocation = result.release_ref();
+        m.allocation = result.unwrap();
 
-        return alloc::error::okay;
+        return alloc::error::success;
     }
 
     [[nodiscard]] constexpr status<alloc::error>
@@ -423,45 +420,53 @@ template <typename backing_allocator_t = ok::allocator_t> class bit_arraylist_t
             .preferred_size_bytes = bytes_preferred == 0
                                         ? 0
                                         : m.allocation.size() + bytes_preferred,
-            .flags = flags::expand_back,
+            .flags = realloc_flags::expand_back,
         });
 
-        if (!res.okay()) [[unlikely]] {
-            return res.err();
+        if (!res.is_success()) [[unlikely]] {
+            return res.status();
         }
 
-        m.allocation = res.release_ref();
+        m.allocation = res.unwrap();
 
-        return alloc::error::okay;
+        return alloc::error::success;
     }
 };
 
-template <typename backing_allocator_t>
+template <allocator_c backing_allocator_t>
 struct range_definition<bit_arraylist_t<backing_allocator_t>>
 {
     using bit_arraylist_t = bit_arraylist_t<backing_allocator_t>;
-    static constexpr size_t begin(const bit_arraylist_t&) OKAYLIB_NOEXCEPT
-    {
-        return 0;
-    }
-    static constexpr bool is_inbounds(const bit_arraylist_t& bs,
-                                      size_t cursor) OKAYLIB_NOEXCEPT
-    {
-        return cursor < bs.size_bits();
-    }
+
+    using value_type = ok::bit;
+
+    static constexpr range_flags flags =
+        range_flags::sized | range_flags::arraylike | range_flags::consuming |
+        range_flags::producing | range_flags::implements_set;
+
+    // static constexpr size_t begin(const bit_arraylist_t&) OKAYLIB_NOEXCEPT
+    // {
+    //     return 0;
+    // }
+
+    // static constexpr bool is_inbounds(const bit_arraylist_t& bs,
+    //                                   size_t cursor) OKAYLIB_NOEXCEPT
+    // {
+    //     return cursor < bs.size_bits();
+    // }
 
     static constexpr size_t size(const bit_arraylist_t& bs) OKAYLIB_NOEXCEPT
     {
         return bs.size_bits();
     }
 
-    static constexpr ok::bit get(const bit_arraylist_t& range, size_t cursor)
+    static constexpr value_type get(const bit_arraylist_t& range, size_t cursor)
     {
         return range.get_bit(cursor);
     }
 
     static constexpr void set(bit_arraylist_t& range, size_t cursor,
-                              ok::bit value)
+                              value_type value)
     {
         return range.set_bit(cursor, value);
     }
@@ -475,21 +480,18 @@ struct bit_string_t
     using associated_type =
         bit_arraylist_t<::ok::detail::remove_cvref_t<allocator_t>>;
 
-    template <typename backing_allocator_t, size_t N>
+    template <allocator_c backing_allocator_t, size_t N>
     [[nodiscard]] constexpr auto
     operator()(backing_allocator_t& allocator,
                const char (&literal)[N]) const OKAYLIB_NOEXCEPT
     {
-        static_assert(
-            ok::detail::is_derived_from_v<backing_allocator_t, ok::allocator_t>,
-            "Type given as first argument to bit_string constructor does not "
-            "appear to be an allocator.");
         static_assert(N > 1, "bit_string_t doesn't accept empty strings.");
         return ok::make(*this, allocator, literal);
     }
 
-    template <typename backing_allocator_t, size_t N>
-    [[nodiscard]] constexpr std::enable_if_t<(N > 1), status<alloc::error>>
+    template <allocator_c backing_allocator_t, size_t N>
+        requires(N > 1)
+    [[nodiscard]] constexpr alloc::error
     make_into_uninit(bit_arraylist_t<backing_allocator_t>& uninit,
                      backing_allocator_t& allocator,
                      const char (&literal)[N]) const OKAYLIB_NOEXCEPT
@@ -498,8 +500,8 @@ struct bit_string_t
 
         uninit.m.allocator = ok::addressof(allocator);
         const auto status = uninit.first_allocation(N - 1);
-        if (!status.okay()) [[unlikely]] {
-            return status;
+        if (!status.is_success()) [[unlikely]] {
+            return status.as_enum();
         }
 
         uninit.m.num_bits = N - 1;
@@ -508,7 +510,7 @@ struct bit_string_t
             uninit.set_bit(i, ok::bit(literal[i] == '1'));
         }
 
-        return alloc::error::okay;
+        return alloc::error::success;
     }
 };
 struct preallocated_and_zeroed_t
@@ -523,7 +525,7 @@ struct preallocated_and_zeroed_t
     using associated_type =
         bit_arraylist_t<::ok::detail::remove_cvref_t<allocator_t>>;
 
-    template <typename backing_allocator_t>
+    template <allocator_c backing_allocator_t>
     [[nodiscard]] constexpr auto
     operator()(backing_allocator_t& allocator,
                const options_t& options) const OKAYLIB_NOEXCEPT
@@ -531,8 +533,8 @@ struct preallocated_and_zeroed_t
         return ok::make(*this, allocator, options);
     }
 
-    template <typename backing_allocator_t>
-    [[nodiscard]] constexpr status<alloc::error>
+    template <allocator_c backing_allocator_t>
+    [[nodiscard]] constexpr alloc::error
     make_into_uninit(bit_arraylist_t<backing_allocator_t>& uninit,
                      backing_allocator_t& allocator,
                      const options_t& options) const OKAYLIB_NOEXCEPT
@@ -544,20 +546,20 @@ struct preallocated_and_zeroed_t
 
         if (total_bits == 0) {
             new (ok::addressof(uninit)) type(allocator);
-            return alloc::error::okay;
+            return alloc::error::success;
         }
 
         uninit.m.allocator = ok::addressof(allocator);
 
         auto status = uninit.first_allocation(total_bits);
-        if (!status.okay()) [[unlikely]] {
+        if (!status.is_success()) [[unlikely]] {
             return status;
         }
 
         // last piece that needs to be initialized
         uninit.m.num_bits = options.num_initial_bits;
 
-        return alloc::error::okay;
+        return alloc::error::success;
     }
 };
 
@@ -567,31 +569,26 @@ struct copy_booleans_from_range_t
     using associated_type =
         bit_arraylist_t<std::remove_reference_t<backing_allocator_t>>;
 
-    template <typename backing_allocator_t, typename input_range_t>
+    template <allocator_c backing_allocator_t,
+              ok::detail::producing_range_c input_range_t>
     [[nodiscard]] constexpr auto
     operator()(backing_allocator_t& allocator,
                const input_range_t& range) const OKAYLIB_NOEXCEPT
     {
-        static_assert(::ok::detail::is_derived_from_v<backing_allocator_t,
-                                                      ok::allocator_t>,
-                      "Invalid allocator passed to copy_booleans_from_range");
-        static_assert(::ok::detail::is_producing_range_v<input_range_t>,
-                      "Non-range object passed to second argument of "
-                      "copy_booleans_from_range.");
         return ok::make(*this, allocator, range);
     };
 
-    template <typename backing_allocator_t, typename input_range_t>
-    [[nodiscard]] constexpr status<alloc::error>
+    template <typename backing_allocator_t, range_c input_range_t>
+    [[nodiscard]] constexpr alloc::error
     make_into_uninit(bit_arraylist_t<backing_allocator_t>& uninit,
                      backing_allocator_t& allocator,
                      const input_range_t& range) const OKAYLIB_NOEXCEPT
     {
-        static_assert(ok::detail::range_impls_size_v<input_range_t>,
+        static_assert(ok::detail::range_impls_size_c<input_range_t>,
                       "Size of range unknown, refusing to use its items in "
                       "bit_arraylist::copy_booleans_from_range constructor.");
         static_assert(
-            is_std_constructible_v<bool, value_type_for<input_range_t>>,
+            is_std_constructible_c<bool, value_type_for<input_range_t>>,
             "The range given to bit_arraylist::copy_booleans_from_range does "
             "not return something which can be converted to a boolean.");
 
@@ -603,9 +600,8 @@ struct copy_booleans_from_range_t
                                    preallocated_and_zeroed_t::options_t{
                                        .additional_capacity_in_bits = size,
                                    });
-        if (!result.okay()) [[unlikely]] {
-            return result.err();
-        }
+        if (!ok::is_success(result)) [[unlikely]]
+            return result;
 
         __ok_internal_assert(uninit.m.allocation.size() * 8 >= size);
 
@@ -614,12 +610,12 @@ struct copy_booleans_from_range_t
         size_t count = 0;
         for (auto c = ok::begin(range); ok::is_inbounds(range, c);
              ok::increment(range, c)) {
-            uninit.items().set_bit(
-                count, ok::bit(bool(iter_get_temporary_ref(range, c))));
+            uninit.items().set_bit(count,
+                                   ok::bit(bool(range_get_best(range, c))));
             ++count;
         }
 
-        return alloc::error::okay;
+        return alloc::error::success;
     }
 };
 } // namespace detail

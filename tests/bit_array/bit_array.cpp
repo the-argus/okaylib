@@ -11,16 +11,16 @@ using namespace ok;
 template <size_t bits> void print_bit_array(const bit_array_t<bits>& bs)
 {
     for (size_t i = 0; i < bs.size_bits(); ++i) {
-        fmt::print("{}", bs.get_bit(i) ? "1" : "0");
+        printf("%s", bs.get_bit(i) ? "1" : "0");
     }
-    fmt::print("\n");
+    printf("\n");
 }
 
 // cant take a slice of rvalue
 static_assert(
     !is_convertible_to_c<bit_arraylist_t<c_allocator_t>&&, bit_slice_t>);
-static_assert(!is_convertible_to_c<bit_arraylist_t<c_allocator_t>&&,
-                                     const_bit_slice_t>);
+static_assert(
+    !is_convertible_to_c<bit_arraylist_t<c_allocator_t>&&, const_bit_slice_t>);
 // cant convert const to nonconst
 static_assert(
     !is_convertible_to_c<const bit_arraylist_t<c_allocator_t>&, bit_slice_t>);
@@ -37,7 +37,7 @@ TEST_SUITE("bit_array containers")
         SUBCASE("bit_array zeroed")
         {
             bit_array_t bs = bit_array::zeroed<16>();
-            fmt::print("zeroed: ");
+            printf("zeroed: ");
             print_bit_array(bs);
 
             // clang-format off
@@ -59,7 +59,7 @@ TEST_SUITE("bit_array containers")
         SUBCASE("bit_array all on")
         {
             bit_array_t bs = bit_array::all_bits_on<16>();
-            fmt::print("all on: ");
+            printf("all on: ");
             print_bit_array(bs);
 
             // clang-format off
@@ -76,7 +76,7 @@ TEST_SUITE("bit_array containers")
         {
             // cant really test anything about this one
             bit_array_t<16> bs = bit_array::undefined<16>();
-            fmt::print("undefined: ");
+            printf("undefined: ");
             print_bit_array(bs);
         }
 
@@ -84,7 +84,7 @@ TEST_SUITE("bit_array containers")
         {
             bit_array_t bs = bit_array::bit_string("0101");
             static_assert(bs.size_bits() == 4);
-            fmt::print("bit string: ");
+            printf("bit string: ");
             print_bit_array(bs);
             REQUIRE(ranges_equal(bs, ok::array_t{false, true, false, true}));
         }

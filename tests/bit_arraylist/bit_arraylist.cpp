@@ -6,7 +6,6 @@
 #include "okay/containers/bit_arraylist.h"
 #include "okay/ranges/algorithm.h"
 #include "okay/ranges/for_each.h"
-#include "okay/ranges/views/all.h"
 #include "okay/ranges/views/take_at_most.h"
 #include "okay/ranges/views/transform.h"
 
@@ -15,16 +14,16 @@ using namespace ok;
 void print_bit_arraylist(const bit_arraylist_t<ok::allocator_t>& bs)
 {
     for (size_t i = 0; i < bs.size_bits(); ++i) {
-        fmt::print("{}", bs.get_bit(i) ? "1" : "0");
+        printf("%s", bs.get_bit(i) ? "1" : "0");
     }
-    fmt::print("\n");
+    printf("\n");
 }
 
 // cant take a slice of rvalue
 static_assert(
     !is_convertible_to_c<bit_arraylist_t<c_allocator_t>&&, bit_slice_t>);
-static_assert(!is_convertible_to_c<bit_arraylist_t<c_allocator_t>&&,
-                                     const_bit_slice_t>);
+static_assert(
+    !is_convertible_to_c<bit_arraylist_t<c_allocator_t>&&, const_bit_slice_t>);
 // cant convert const to nonconst
 static_assert(
     !is_convertible_to_c<const bit_arraylist_t<c_allocator_t>&, bit_slice_t>);
@@ -79,10 +78,9 @@ TEST_SUITE("bit_arraylist_t")
         SUBCASE("can implicitly convert dynamic bit_array into bit_slice_t")
         {
             constexpr auto gets_slice = [](const_bit_slice_t bs) {
-                bs | ok::for_each([](ok::bit item) {
-                    fmt::print("{}", item ? "0" : "1");
-                });
-                fmt::print("\n");
+                bs | ok::for_each(
+                         [](ok::bit item) { printf("%s", item ? "0" : "1"); });
+                printf("\n");
             };
 
             bit_arraylist_t dbs(c_allocator);
@@ -95,12 +93,12 @@ TEST_SUITE("bit_arraylist_t")
             array_t bools = {true, false, true, true};
             bit_arraylist_t copied =
                 bit_arraylist::copy_booleans_from_range(c_allocator, bools)
-                    .release();
+                    .unwrap();
 
             bit_arraylist_t copied2 =
                 bit_arraylist::copy_booleans_from_range(
                     c_allocator, bit_array::bit_string("010011011"))
-                    .release();
+                    .unwrap();
 
             REQUIRE_RANGES_EQUAL(copied2, bit_array::bit_string("010011011"));
             REQUIRE_RANGES_EQUAL(bools, copied);
@@ -115,12 +113,16 @@ TEST_SUITE("bit_arraylist_t")
                                           .num_initial_bits = 100,
                                           .additional_capacity_in_bits = 500,
                                       })
-                                      .release();
+                                      .unwrap();
             REQUIRE(dbs.size_bits() == 100);
             REQUIRE(dbs.capacity_bits() >= 600);
 
-            const auto all_zeroed = all([](ok::bit a) { return a == false; });
-            const auto all_ones = all([](ok::bit a) { return a == true; });
+            const auto all_zeroed = [](const auto& rng) {
+                return ok::all_of(rng, [](ok::bit a) { return a == false; });
+            };
+            const auto all_ones = [](const auto& rng) {
+                return ok::all_of(rng, [](ok::bit a) { return a == true; });
+            };
             bool good = all_zeroed(dbs);
             REQUIRE(good);
 
@@ -137,14 +139,14 @@ TEST_SUITE("bit_arraylist_t")
                                           .num_initial_bits = 100,
                                           .additional_capacity_in_bits = 500,
                                       })
-                                      .release();
+                                      .unwrap();
             bit_arraylist_t dbs2 = bit_arraylist::preallocated_and_zeroed(
                                        c_allocator,
                                        {
                                            .num_initial_bits = 100,
                                            .additional_capacity_in_bits = 500,
                                        })
-                                       .release();
+                                       .unwrap();
 
             REQUIRE(dbs.memcompare_with(dbs2));
 
@@ -165,7 +167,7 @@ TEST_SUITE("bit_arraylist_t")
             const char literal[] = "1010101011";
 
             bit_arraylist_t dbs2 =
-                bit_arraylist::bit_string(c_allocator, literal).release();
+                bit_arraylist::bit_string(c_allocator, literal).unwrap();
 
             REQUIRE_RANGES_EQUAL(dbs2, bit_array::bit_string(literal));
             // take_at_most is here to skip null terminator
@@ -179,27 +181,27 @@ TEST_SUITE("bit_arraylist_t")
         {
             bit_arraylist_t dbs(c_allocator);
             REQUIREABORTS(auto&& out_of_range = dbs.insert_at(1, bit::on()));
-            REQUIRE(dbs.insert_at(0, bit::on()).okay());
+            REQUIRE(dbs.insert_at(0, bit::on()).is_success());
             constexpr auto bs = bit_array::bit_string("1");
             REQUIRE_RANGES_EQUAL(dbs, bs);
 
-            REQUIRE(dbs.insert_at(1, bit::off()).okay());
+            REQUIRE(dbs.insert_at(1, bit::off()).is_success());
             REQUIRE(ranges_equal(dbs, bit_array::bit_string("10")));
-            REQUIRE(dbs.insert_at(2, bit::on()).okay());
+            REQUIRE(dbs.insert_at(2, bit::on()).is_success());
             REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("101"));
-            REQUIRE(dbs.insert_at(3, bit::off()).okay());
+            REQUIRE(dbs.insert_at(3, bit::off()).is_success());
             REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("1010"));
-            REQUIRE(dbs.insert_at(4, bit::on()).okay());
+            REQUIRE(dbs.insert_at(4, bit::on()).is_success());
             REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("10101"));
-            REQUIRE(dbs.insert_at(5, bit::off()).okay());
+            REQUIRE(dbs.insert_at(5, bit::off()).is_success());
             REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("101010"));
-            REQUIRE(dbs.insert_at(6, bit::on()).okay());
+            REQUIRE(dbs.insert_at(6, bit::on()).is_success());
             REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("1010101"));
-            REQUIRE(dbs.insert_at(7, bit::off()).okay());
+            REQUIRE(dbs.insert_at(7, bit::off()).is_success());
             REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("10101010"));
-            REQUIRE(dbs.insert_at(8, bit::on()).okay());
+            REQUIRE(dbs.insert_at(8, bit::on()).is_success());
             REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("101010101"));
-            REQUIRE(dbs.insert_at(9, bit::off()).okay());
+            REQUIRE(dbs.insert_at(9, bit::off()).is_success());
             REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("1010101010"));
         }
 
@@ -208,13 +210,13 @@ TEST_SUITE("bit_arraylist_t")
             constexpr auto preinit = bit_array::bit_string("01010011");
             bit_arraylist_t dbs =
                 bit_arraylist::copy_booleans_from_range(c_allocator, preinit)
-                    .release();
+                    .unwrap();
 
             REQUIRE(dbs.size_bits() == preinit.size_bits());
 
             {
                 auto&& res = dbs.insert_at(0, bit::on());
-                REQUIRE(res.okay());
+                REQUIRE(res.is_success());
             }
 
             constexpr auto after_insert = bit_array::bit_string("101010011");
@@ -227,22 +229,22 @@ TEST_SUITE("bit_arraylist_t")
             bit_arraylist_t dbs =
                 bit_arraylist::copy_booleans_from_range(
                     c_allocator, bit_array::bit_string("01010001"))
-                    .release();
+                    .unwrap();
 
-            REQUIRE(dbs.insert_at(6, bit::on()).okay());
+            REQUIRE(dbs.insert_at(6, bit::on()).is_success());
             REQUIRE_RANGES_EQUAL(bit_array::bit_string("010100101"), dbs);
 
             constexpr auto bs =
                 bit_array::bit_string("0101010101010101010101010101010100"
                                       "101010101010010101010100101");
             dbs = bit_arraylist::copy_booleans_from_range(c_allocator, bs)
-                      .release();
+                      .unwrap();
 
             REQUIRE(bs.size_bits() == dbs.size_bits());
 
             {
                 auto&& res = dbs.insert_at(20, bit::on());
-                REQUIRE(res.okay());
+                REQUIRE(res.is_success());
             }
 
             REQUIRE_RANGES_EQUAL(
@@ -255,7 +257,7 @@ TEST_SUITE("bit_arraylist_t")
         SUBCASE("remove item from bit arraylist which has not reallocated")
         {
             auto ba =
-                bit_arraylist::bit_string(c_allocator, "001000101").release();
+                bit_arraylist::bit_string(c_allocator, "001000101").unwrap();
 
             REQUIRE(ba.remove(2));
 
@@ -265,7 +267,7 @@ TEST_SUITE("bit_arraylist_t")
         SUBCASE("remove item from bit arraylist which has reallocated")
         {
             auto ba =
-                bit_arraylist::bit_string(c_allocator, "001000101").release();
+                bit_arraylist::bit_string(c_allocator, "001000101").unwrap();
 
             ba.increase_capacity_by(400);
 
@@ -277,7 +279,7 @@ TEST_SUITE("bit_arraylist_t")
         SUBCASE("remove out of bounds aborts")
         {
             auto ba =
-                bit_arraylist::bit_string(c_allocator, "001000101").release();
+                bit_arraylist::bit_string(c_allocator, "001000101").unwrap();
 
             REQUIREABORTS(ba.remove(ba.size_bits()));
 
