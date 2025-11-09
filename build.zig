@@ -23,6 +23,8 @@ const testing_flags = &[_][]const u8{
     // "-DOKAYLIB_ALLOCATORS_DISABLE_TYPECHECKING",
     "-fno-rtti",
     "-ftemplate-backtrace-limit=0",
+    // we may want to use side effects (such as counting number of moves + copies etc) in constructors
+    "-fno-elide-constructors",
     "-Werror",
     "-Wno-deprecated",
     "-DOKAYLIB_NOEXCEPT=", // allow exceptions in testing mode
