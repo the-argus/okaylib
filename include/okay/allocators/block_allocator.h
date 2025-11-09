@@ -118,6 +118,8 @@ class block_allocator_t : public ok::allocator_t
 
     block_allocator_t& operator=(block_allocator_t&& other) OKAYLIB_NOEXCEPT
     {
+        if (&other == this) [[unlikely]]
+            return;
         destroy();
         m = other.m;
         other.m.free_head = nullptr; // not really necessary
