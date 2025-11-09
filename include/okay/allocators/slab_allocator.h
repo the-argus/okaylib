@@ -88,6 +88,7 @@ slab_allocator_t<allocator_impl_t, num_blocksizes>::impl_allocate(
                 // try the next allocator
                 continue;
             }
+            __ok_internal_assert(!ok::is_success(result) || allocator.contains(result.unwrap()));
             return result;
         }
     }

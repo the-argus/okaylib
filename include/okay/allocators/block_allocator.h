@@ -75,7 +75,7 @@ class block_allocator_t : public ok::allocator_t
     {
     }
 
-    inline void grow() OKAYLIB_NOEXCEPT;
+    inline alloc::error grow() OKAYLIB_NOEXCEPT;
 
   public:
     static constexpr alloc::feature_flags type_features =
@@ -175,26 +175,29 @@ block_allocator_t(const block_allocator::fixed_buffer_options_t& static_buffer)
     -> block_allocator_t<ok::allocator_t>;
 
 template <allocator_c allocator_impl_t>
-inline void block_allocator_t<allocator_impl_t>::grow() OKAYLIB_NOEXCEPT
+inline alloc::error block_allocator_t<allocator_impl_t>::grow() OKAYLIB_NOEXCEPT
 {
     __ok_internal_assert(!m.free_head);
     if (!m.backing)
-        return;
+        // consider no allocator == no memory
+        return alloc::error::oom;
 
     alloc::result_t<bytes_t> reallocation =
         m.backing->reallocate(alloc::reallocate_request_t{
             .memory = m.memory,
             .new_size_bytes = m.memory.size() + m.blocksize,
             .preferred_size_bytes = m.memory.size() * 2,
+            .alignment = m.minimum_alignment,
             .flags = alloc::realloc_flags::in_place_orelse_fail |
                      alloc::realloc_flags::leave_nonzeroed,
         });
 
-    if (!reallocation.is_success()) [[unlikely]] {
-        return;
-    }
+    if (!ok::is_success(reallocation)) [[unlikely]]
+        return reallocation.status();
 
     bytes_t& newmem = reallocation.unwrap();
+    __ok_internal_assert(newmem.unchecked_address_of_first_item() ==
+                         m.memory.unchecked_address_of_first_item());
     // there may be extra space at the end
     const size_t padding = m.memory.size() % m.blocksize;
     uint8_t* const first_new_byte =
@@ -207,6 +210,7 @@ inline void block_allocator_t<allocator_impl_t>::grow() OKAYLIB_NOEXCEPT
             m.free_head);
 
     __ok_internal_assert(m.free_head);
+    return ok::make_success<alloc::error>();
 }
 
 template <allocator_c allocator_impl_t>
@@ -214,12 +218,10 @@ template <allocator_c allocator_impl_t>
 block_allocator_t<allocator_impl_t>::impl_allocate(
     const alloc::request_t& request) OKAYLIB_NOEXCEPT
 {
-    if (!m.free_head) [[unlikely]] {
-        grow();
-        if (!m.free_head) [[unlikely]] {
-            return alloc::error::oom;
-        }
-    }
+    if (!m.free_head) [[unlikely]]
+        if (auto err = grow(); !ok::is_success(err)) [[unlikely]]
+            return err;
+    __ok_internal_assert(m.free_head);
 
     if (request.num_bytes > m.blocksize ||
         request.alignment > m.minimum_alignment) [[unlikely]] {
@@ -229,6 +231,7 @@ block_allocator_t<allocator_impl_t>::impl_allocate(
     bytes_t output_memory = raw_slice(*reinterpret_cast<uint8_t*>(std::exchange(
                                           m.free_head, m.free_head->prev)),
                                       m.blocksize);
+    __ok_internal_assert(this->contains(output_memory));
 
     if (!request.leave_nonzeroed) {
         ok::memfill(output_memory, 0);
@@ -253,9 +256,16 @@ inline void block_allocator_t<allocator_impl_t>::impl_deallocate(void* memory)
                 "Attempt to free bytes from block allocator which do not all "
                 "belong to that allocator");
 
-    memory = (void*)((uint64_t(memory) / m.blocksize) * m.blocksize);
+    // "align" memory to blocksize, relative to the start of our memory block.
+    // aligning it to our minimum align or to our blocksize will not work- the
+    // minimum align may be much smaller than blocksize.
+    const auto memstart = uint64_t(m.memory.unchecked_address_of_first_item());
+    const auto alignedmemory =
+        (void*)((((uint64_t(memory) - memstart) / m.blocksize) * m.blocksize) +
+                memstart);
+    __ok_internal_assert(this->contains(alignedmemory));
 
-    auto* const free_block = reinterpret_cast<free_block_t*>(memory);
+    auto* const free_block = reinterpret_cast<free_block_t*>(alignedmemory);
     free_block->prev = std::exchange(m.free_head, free_block);
 }
 
@@ -339,7 +349,8 @@ struct alloc_initial_buf_t
 
         bytes_t& allocation = result.unwrap();
 
-        new (ok::addressof(uninit))
+        ok::stdc::construct_at(
+            ok::addressof(uninit),
             block_allocator_t(typename block_allocator_t::members_t{
                 .memory = allocation,
                 .blocksize = actual_blocksize,
@@ -348,7 +359,7 @@ struct alloc_initial_buf_t
                     free_everything_in_block_allocator_buffer<free_block_t>(
                         allocation, actual_blocksize),
                 .backing = ok::addressof(allocator),
-            });
+            }));
 
         __ok_usage_error(uninit.m.free_head,
                          "Created block allocator without enough memory, it "
