@@ -142,6 +142,7 @@ const test_source_files = &[_][]const u8{
     "reverse/reverse.cpp",
     "opt/opt.cpp",
     "res/res.cpp",
+    "reserving_page_allocator/reserving_page_allocator.cpp",
     "slice/slice.cpp",
     "status/status.cpp",
     "stdmem/stdmem.cpp",

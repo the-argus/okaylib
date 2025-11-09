@@ -1,7 +1,6 @@
 #include "test_header.h"
 // test header must be first
 #include "okay/allocators/reserving_page_allocator.h"
-#include "okay/containers/array.h"
 
 using namespace ok;
 
@@ -32,7 +31,7 @@ TEST_SUITE("reserving page allocator")
                 .alignment = mmap::get_page_size() * 2,
             });
 
-            REQUIRE(!res.okay());
+            REQUIRE(!res.is_success());
         }
 
         SUBCASE("can allocate different sizes around a page")
@@ -61,11 +60,11 @@ TEST_SUITE("reserving page allocator")
                 .num_bytes = (page_size * 2) + 1,
             });
 
-            REQUIRE(res.okay());
-            REQUIRE(res2.okay());
-            REQUIRE(res3.okay());
-            REQUIRE(res4.okay());
-            REQUIRE(!res5.okay());
+            REQUIRE(res.is_success());
+            REQUIRE(res2.is_success());
+            REQUIRE(res3.is_success());
+            REQUIRE(res4.is_success());
+            REQUIRE(!res5.is_success());
         }
     }
 }
