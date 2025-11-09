@@ -266,6 +266,8 @@ template <typename T, typename allocator_impl_t = ok::allocator_t> struct owned
 
     constexpr owned& operator=(owned&& other)
     {
+        if (&other == this)
+            return *this;
         destroy();
         m_allocation = std::exchange(other.m_allocation, nullptr);
         m_allocator = other.m_allocator;
