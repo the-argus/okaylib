@@ -282,7 +282,12 @@ template <typename T, typename allocator_impl_t = ok::allocator_t> struct owned
     constexpr ~owned() { destroy(); }
 
   private:
-    constexpr void destroy() noexcept { m_allocator->deallocate(m_allocation); }
+    constexpr void destroy() noexcept
+    {
+        if (m_allocation) [[likely]] {
+            m_allocator->deallocate(m_allocation);
+        }
+    }
 
     constexpr owned(T& allocation, allocator_impl_t& allocator) noexcept
         : m_allocation(ok::addressof(allocation)),
