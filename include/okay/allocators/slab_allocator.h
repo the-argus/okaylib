@@ -29,10 +29,7 @@ template <allocator_c allocator_impl_t, size_t num_blocksizes>
 class slab_allocator_t : public ok::allocator_t
 {
   private:
-    struct members_t
-    {
-        array_t<block_allocator_t<allocator_impl_t>, num_blocksizes> allocators;
-    } m;
+    array_t<block_allocator_t<allocator_impl_t>, num_blocksizes> m_allocators;
 
   public:
     static constexpr alloc::feature_flags type_features =
@@ -83,7 +80,7 @@ slab_allocator_t<allocator_impl_t, num_blocksizes>::impl_allocate(
     const alloc::request_t& request) OKAYLIB_NOEXCEPT
 {
     for (size_t i = 0; i < num_blocksizes; ++i) {
-        auto& allocator = m.allocators[i];
+        auto& allocator = m_allocators[i];
         if (allocator.block_size() >= request.num_bytes &&
             allocator.block_align() >= request.alignment) {
             alloc::result_t<bytes_t> result = allocator.allocate(request);
@@ -103,7 +100,7 @@ inline void
 slab_allocator_t<allocator_impl_t, num_blocksizes>::clear() OKAYLIB_NOEXCEPT
 {
     for (size_t i = 0; i < num_blocksizes; ++i) {
-        m.allocators[i].clear();
+        m_allocators[i].clear();
     }
 }
 
@@ -112,7 +109,7 @@ inline void slab_allocator_t<allocator_impl_t, num_blocksizes>::impl_deallocate(
     void* memory) OKAYLIB_NOEXCEPT
 {
     for (size_t i = 0; i < num_blocksizes; ++i) {
-        auto& allocator = m.allocators[i];
+        auto& allocator = m_allocators[i];
         if (allocator.contains(slice_from_one(*(uint8_t*)memory))) {
             allocator.deallocate(memory);
             return;
@@ -130,7 +127,7 @@ slab_allocator_t<allocator_impl_t, num_blocksizes>::impl_reallocate(
 {
     if (request.flags & alloc::realloc_flags::in_place_orelse_fail) {
         for (size_t i = 0; i < num_blocksizes; ++i) {
-            auto& allocator = m.allocators[i];
+            auto& allocator = m_allocators[i];
             if (allocator.contains(request.memory)) {
                 return allocator.reallocate(request);
             }
@@ -141,7 +138,7 @@ slab_allocator_t<allocator_impl_t, num_blocksizes>::impl_reallocate(
         block_allocator_t<allocator_impl_t>* oomed_allocator = nullptr;
         for (size_t i = 0; i < num_blocksizes; ++i) {
             block_allocator_t<allocator_impl_t>* allocator =
-                ok::addressof(m.allocators[i]);
+                ok::addressof(m_allocators[i]);
 
             if (allocator->contains(request.memory)) {
                 alloc::result_t<bytes_t> result =
@@ -222,9 +219,9 @@ struct with_blocks_t
         for (size_t i = 0; i < options.available_blocksizes.size(); ++i) {
             const blocks_description_t& desc = options.available_blocksizes[i];
 
-            status<alloc::error> status =
+            alloc::error status =
                 block_allocator::alloc_initial_buf.make_into_uninit(
-                    uninit.m.allocators[i], allocator,
+                    uninit.m_allocators[i], allocator,
                     block_allocator::alloc_initial_buf_options_t{
                         .num_initial_spots =
                             options.num_initial_blocks_per_blocksize,
@@ -235,12 +232,12 @@ struct with_blocks_t
             // since a simple status is returned and we dont construct any
             // owning references of any kind, we have to manually call
             // destruction on partially initialized blocks
-            if (!status.is_success()) [[unlikely]] {
+            if (!ok::is_success(status)) [[unlikely]] {
                 for (int64_t j = i - 1; j >= 0; --j) {
-                    uninit.m.allocators[j]
+                    uninit.m_allocators[j]
                         .~block_allocator_t<allocator_impl_t>();
                 }
-                return status.as_enum();
+                return status;
             }
         }
 
