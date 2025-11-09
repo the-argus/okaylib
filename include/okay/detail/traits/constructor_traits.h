@@ -136,11 +136,12 @@ template <typename... args_t> struct constructor_analysis
                       "simply use ok::make to return a res<...> on the stack.");
     };
 
-    template <typename constructor_t, typename = void>
+    template <typename constructor_t>
     struct inner : public bad_construction_analysis
     {};
 
     template <typename constructor_t>
+        requires(!ok::is_void_c<typename associated_type<constructor_t>::type>)
     struct inner<constructor_t> : public std::true_type
     {
         using associated_type = typename associated_type<constructor_t>::type;
