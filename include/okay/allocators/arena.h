@@ -128,6 +128,8 @@ template <allocator_c allocator_impl_t>
 inline arena_t<allocator_impl_t>&
 arena_t<allocator_impl_t>::operator=(arena_t&& other) OKAYLIB_NOEXCEPT
 {
+    if (&other == this) [[unlikely]]
+        return;
     destroy();
     m_memory = other.m_memory;
     m_available_memory = other.m_available_memory;
