@@ -102,7 +102,10 @@ template <typename T, size_t num_items> struct zeroed_array_t
                   "zeroed_array_t");
 
     // no aggregate initialization for zeroed array, it's always zeroed
-    constexpr zeroed_array_t() noexcept { ok::memfill(ok::slice(*this), 0); }
+    constexpr zeroed_array_t() noexcept
+    {
+        ok::memfill(ok::slice(__m_items), 0);
+    }
 
     __ok_internal_array_impl
 };
