@@ -415,21 +415,22 @@ class arena_allocator_restore_scope_interface_t
     virtual void restore_scope(void* handle) OKAYLIB_NOEXCEPT = 0;
 };
 
-class allocator_t : virtual public memory_resource_t
+class allocator_t : public memory_resource_t
 {
   public:
-    [[nodiscard]] alloc::feature_flags features() const OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr alloc::feature_flags
+    features() const OKAYLIB_NOEXCEPT
     {
         return impl_features();
     }
 
-    void deallocate(void* memory) OKAYLIB_NOEXCEPT
+    constexpr void deallocate(void* memory) OKAYLIB_NOEXCEPT
     {
         if (memory) [[likely]]
             impl_deallocate(memory);
     }
 
-    [[nodiscard]] alloc::result_t<bytes_t>
+    [[nodiscard]] constexpr alloc::result_t<bytes_t>
     reallocate(const alloc::reallocate_request_t& options) OKAYLIB_NOEXCEPT
     {
         if (!options.is_valid()) [[unlikely]] {
@@ -439,7 +440,7 @@ class allocator_t : virtual public memory_resource_t
         return impl_reallocate(options);
     }
 
-    [[nodiscard]] alloc::result_t<alloc::reallocation_extended_t>
+    [[nodiscard]] constexpr alloc::result_t<alloc::reallocation_extended_t>
     reallocate_extended(const alloc::reallocate_extended_request_t& options)
         OKAYLIB_NOEXCEPT
     {
@@ -451,7 +452,8 @@ class allocator_t : virtual public memory_resource_t
     }
 
     template <typename T = detail::deduced_t, typename... args_t>
-    [[nodiscard]] decltype(auto) make(args_t&&... args) OKAYLIB_NOEXCEPT;
+    [[nodiscard]] constexpr decltype(auto)
+    make(args_t&&... args) OKAYLIB_NOEXCEPT;
 
   protected:
     [[nodiscard]] virtual alloc::feature_flags
@@ -625,7 +627,7 @@ constexpr void destroy_and_free(allocator_impl_t& ally,
 }
 
 template <typename T, typename... args_t>
-[[nodiscard]] decltype(auto)
+[[nodiscard]] constexpr decltype(auto)
 ok::allocator_t::make(args_t&&... args) OKAYLIB_NOEXCEPT
 {
     using analysis = decltype(detail::analyze_construction<args_t...>());

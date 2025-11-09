@@ -10,7 +10,11 @@ TEST_SUITE("arena allocator")
     TEST_CASE("allocator tests")
     {
         ok::zeroed_array_t<u8, 10000> bytes;
-        arena_t arena(bytes);
-        run_allocator_tests_static_and_dynamic_dispatch(arena);
+        run_allocator_tests_static_and_dynamic_dispatch(
+            [&] { return ok::opt<arena_t<>>(ok::in_place, bytes); });
+        run_allocator_tests_static_and_dynamic_dispatch([&] {
+            ok::memfill(bytes.items(), 0);
+            return ok::opt<arena_t<>>(ok::in_place, bytes);
+        });
     }
 }

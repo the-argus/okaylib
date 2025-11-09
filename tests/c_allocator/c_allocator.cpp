@@ -9,7 +9,10 @@ TEST_SUITE("c_allocator")
 {
     TEST_CASE("allocator tests")
     {
-        c_allocator_t allocator;
-        run_allocator_tests_static_and_dynamic_dispatch(allocator);
+        run_allocator_tests_static_and_dynamic_dispatch([&] {
+            auto out = ok::opt<c_allocator_t>();
+            out.emplace();
+            return out;
+        });
     }
 }

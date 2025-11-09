@@ -11,11 +11,15 @@ TEST_SUITE("block allocator")
     TEST_CASE("allocator tests")
     {
         c_allocator_t backing;
-        block_allocator_t blocks = block_allocator::alloc_initial_buf(
-                                       backing, {.num_initial_spots = 1024,
-                                                 .num_bytes_per_block = 64,
-                                                 .minimum_alignment = 16})
-                                       .unwrap();
-        run_allocator_tests_static_and_dynamic_dispatch(blocks);
+        run_allocator_tests_static_and_dynamic_dispatch([&] {
+            auto block = block_allocator::alloc_initial_buf(
+                backing, {
+                             .num_initial_spots = 1024,
+                             .num_bytes_per_block = 64,
+                             .minimum_alignment = 16,
+                         });
+            return ok::opt<block_allocator_t<ok::c_allocator_t>>(
+                std::move(block.unwrap()));
+        });
     }
 }
