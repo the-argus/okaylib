@@ -640,7 +640,7 @@ template <typename T> struct empty_t
             .blocklist = nullptr,
             // when blocklist is nullptr, "size" actually means size of initial
             // blocklist allocation
-            .size = log2_uint_ceil(ok::min(1UL, options.expected_max_capacity)),
+            .size = log2_uint_ceil(ok::max(1UL, options.expected_max_capacity)),
             .allocator = ok::addressof(allocator),
         };
 
