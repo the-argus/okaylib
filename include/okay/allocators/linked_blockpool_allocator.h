@@ -29,7 +29,7 @@ class linked_blockpool_allocator_t : public ok::allocator_t
     operator=(linked_blockpool_allocator_t&& other) OKAYLIB_NOEXCEPT
     {
         if (&other == this) [[unlikely]]
-            return;
+            return *this;
         destroy();
         m = other.m;
         other.m.backing = nullptr;
