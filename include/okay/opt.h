@@ -98,6 +98,8 @@ template <typename payload_t> class opt
     }
 
   public:
+    using value_type = payload_t;
+
     constexpr opt() OKAYLIB_NOEXCEPT : m_has_value(false) {}
     constexpr opt(nullopt_t) OKAYLIB_NOEXCEPT : m_has_value(false) {}
 
