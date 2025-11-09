@@ -134,6 +134,7 @@ template <typename payload_t> class opt
         } else {
             this->reset();
         }
+        return *this;
     }
 
     constexpr opt(const opt& other)
@@ -173,6 +174,7 @@ template <typename payload_t> class opt
         } else {
             this->reset();
         }
+        return *this;
     }
 
     // constructors which perform conversion of incoming type
