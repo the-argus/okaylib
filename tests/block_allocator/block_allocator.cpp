@@ -1,3 +1,6 @@
+// making stacktraces every time an error is thrown is crazy slow, especially
+// for this test which overallocates
+#define OKAYLIB_TESTING_BACKTRACE_DISABLE_FOR_RES_AND_STATUS
 #include "test_header.h"
 // test header must be first
 #include "allocator_tests.h"

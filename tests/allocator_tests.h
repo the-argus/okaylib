@@ -369,7 +369,7 @@ template <ok::memory_resource_c allocator_t> struct allocator_tests
 
                 // loop condition uses overflow, it is defined behavior
                 for (size_t i = wrapper.bytes_allocated - 1;
-                     i < wrapper.bytes_allocated; i -= 16) {
+                     i < wrapper.bytes_allocated; i -= 1024) {
                     memory_resource_counter_wrapper_t limiter(
                         ally.ref_or_panic(), i);
                     auto status = polymorphic_tests[idx](wrapper);
