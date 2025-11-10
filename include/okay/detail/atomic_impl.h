@@ -299,8 +299,11 @@ constexpr T atomic_fetch_sub(atomic_base<T>* a, T delta,
                              memory_order order) noexcept
 {
     if constexpr (stdc::is_constant_evaluated()) {
-        const auto out = a->value;
-        a->value -= delta;
+        // NOTE: no clue why, but -= operator here is not constant evaluated,
+        // gives "subexpression not valid in constant expression". All the other
+        // *= operators are fine.
+        const T out = a->value;
+        a->value = (out - delta);
         return out;
     } else {
         return __c11_atomic_fetch_sub(
