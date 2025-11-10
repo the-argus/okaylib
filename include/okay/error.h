@@ -26,6 +26,13 @@ template <status_enum_c enum_t> class status
   private:
     enum_t m_status;
 
+#if defined(OKAYLIB_TESTING_BACKTRACE)
+  public:
+    detail_testing::owned_stack_trace_t stacktrace;
+
+  private:
+#endif
+
   public:
     using enum_type = enum_t;
 
@@ -47,6 +54,11 @@ template <status_enum_c enum_t> class status
     constexpr status(enum_t failure) OKAYLIB_NOEXCEPT { m_status = failure; }
 
     constexpr operator enum_t() noexcept { return m_status; }
+
+    constexpr bool operator==(const enum_t& enum_rep) const OKAYLIB_NOEXCEPT
+    {
+        return m_status == enum_rep;
+    }
 
     // must explicitly initialize status with enum value
     status() = delete;
@@ -111,6 +123,13 @@ __OK_RES_REQUIRES_CLAUSE class res<
                   "Res does not support void as template arguments.");
     detail::uninitialized_storage_t<success_t> m_success;
     status_t m_status;
+
+#if defined(OKAYLIB_TESTING_BACKTRACE)
+  public:
+    detail_testing::owned_stack_trace_t stacktrace;
+
+  private:
+#endif
 
     template <typename... args_t>
     constexpr void emplace_nodestroy(args_t&&... args) OKAYLIB_NOEXCEPT
@@ -243,28 +262,42 @@ __OK_RES_REQUIRES_CLAUSE class res<
     }
 
     constexpr res(status_t&& status) OKAYLIB_NOEXCEPT
+        requires status_object_c<status_t>
         : m_status(std::move(status))
     {
-        bool other_is_success;
-        if constexpr (status_object_c<status_t>)
-            other_is_success = status.is_success();
-        else
-            other_is_success = status == status_t::success;
-        if (other_is_success) [[unlikely]]
+        if (m_status.is_success()) [[unlikely]]
             __ok_abort("Attempt to construct an ok::res with no success value "
                        "but a status that says there is one.");
     }
 
     constexpr res(const status_t& status) OKAYLIB_NOEXCEPT
-        requires stdc::is_copy_constructible_v<status_t>
+        requires status_object_c<status_t> &&
+                 stdc::is_copy_constructible_v<status_t>
         : m_status(status)
     {
-        bool other_is_success;
-        if constexpr (status_object_c<status_t>)
-            other_is_success = status.is_success();
-        else
-            other_is_success = status == status_t::success;
-        if (other_is_success) [[unlikely]]
+        if (m_status.is_success()) [[unlikely]]
+            __ok_abort("Attempt to construct an ok::res with no success value "
+                       "but a status that says there is one.");
+    }
+
+    constexpr res(const ok::status<status_t>& status) OKAYLIB_NOEXCEPT
+        requires status_enum_c<status_t>
+        : m_status(status.as_enum())
+#if defined(OKAYLIB_TESTING_BACKTRACE)
+          ,
+          stacktrace(status.stacktrace)
+#endif
+    {
+        if (m_status == status_t::success) [[unlikely]]
+            __ok_abort("Attempt to construct an ok::res with no success value "
+                       "but a status that says there is one.");
+    }
+
+    constexpr res(const status_t& status) OKAYLIB_NOEXCEPT
+        requires status_enum_c<status_t>
+        : m_status(status)
+    {
+        if (m_status == status_t::success) [[unlikely]]
             __ok_abort("Attempt to construct an ok::res with no success value "
                        "but a status that says there is one.");
     }
@@ -426,13 +459,41 @@ __OK_RES_REQUIRES_CLAUSE class res<
     }
 
     [[nodiscard]] constexpr const status_t& status() const& OKAYLIB_NOEXCEPT
+        requires status_object_c<status_t>
     {
         return m_status;
     }
 
     [[nodiscard]] constexpr status_t&& status() && OKAYLIB_NOEXCEPT
+            requires status_object_c<status_t>
     {
         return std::move(m_status);
+    }
+
+    [[nodiscard]] constexpr ok::status<status_t>
+    status() const& OKAYLIB_NOEXCEPT
+        requires status_enum_c<status_t>
+    {
+#if defined(OKAYLIB_TESTING_BACKTRACE)
+        ok::status<status_t> out(m_status);
+        out.stacktrace = this->stacktrace;
+        return out;
+#else
+        return m_status;
+#endif
+    }
+
+    [[nodiscard]] constexpr ok::status<status_t>
+    status() const&& OKAYLIB_NOEXCEPT
+        requires status_enum_c<status_t>
+    {
+#if defined(OKAYLIB_TESTING_BACKTRACE)
+        ok::status<status_t> out(m_status);
+        out.stacktrace = this->stacktrace;
+        return out;
+#else
+        return m_status;
+#endif
     }
 
     [[nodiscard]] constexpr opt<success_t&> to_opt() & OKAYLIB_NOEXCEPT
@@ -649,20 +710,43 @@ __OK_RES_REQUIRES_CLAUSE class res<
     value_type* m_success;
     status_t m_status;
 
+#if defined(OKAYLIB_TESTING_BACKTRACE)
+  public:
+    detail_testing::owned_stack_trace_t stacktrace;
+
+  private:
+#endif
+
   public:
     constexpr res(const res& other) noexcept = default;
     constexpr res& operator=(const res& other) noexcept = default;
     constexpr res(res&& other) noexcept = default;
     constexpr res& operator=(res&& other) noexcept = default;
 
-    constexpr res(status_t status) OKAYLIB_NOEXCEPT : m_status(status)
+    constexpr res(const status_t& status) OKAYLIB_NOEXCEPT
+        requires ok::status_enum_c<status_t>
+        : m_status(status)
     {
-        bool other_is_success;
-        if constexpr (status_object_c<status_t>)
-            other_is_success = status.is_success();
-        else
-            other_is_success = status == status_t::success;
-        if (other_is_success) [[unlikely]]
+        if (status == status_t::success) [[unlikely]]
+            __ok_abort("Attempt to construct an ok::res with no success value "
+                       "but a status that says there is one.");
+    }
+
+    constexpr res(const status_t& status) OKAYLIB_NOEXCEPT
+        requires ok::status_object_c<status_t> &&
+                 ok::stdc::is_copy_constructible_v<status_t>
+        : m_status(status)
+    {
+        if (status.is_success()) [[unlikely]]
+            __ok_abort("Attempt to construct an ok::res with no success value "
+                       "but a status that says there is one.");
+    }
+
+    constexpr res(status_t&& status) OKAYLIB_NOEXCEPT
+        requires ok::status_object_c<status_t>
+        : m_status(std::move(status))
+    {
+        if (m_status.is_success()) [[unlikely]]
             __ok_abort("Attempt to construct an ok::res with no success value "
                        "but a status that says there is one.");
     }

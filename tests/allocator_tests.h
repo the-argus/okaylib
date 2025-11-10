@@ -337,7 +337,7 @@ template <ok::memory_resource_c allocator_t> struct allocator_tests
 
             // static dispatch
             auto static_status = test_functions[idx](ally.ref_or_panic());
-            REQUIRE(ok::is_success(static_status));
+            OKAYLIB_REQUIRE_RES_WITH_BACKTRACE(static_status);
 
             // dynamic dispatch, depends on mode
             switch (mode) {
