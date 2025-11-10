@@ -807,7 +807,7 @@ into_arc(T&& item, allocator_impl_t& allocator) OKAYLIB_NOEXCEPT
     auto out = unique_rw_arc_t<T, allocator_impl_t>::make::with(
         out_status, allocator, std::forward<T>(item));
     if (!out_status.is_success()) {
-        return out_status.as_enum();
+        return out_status;
     }
     return out;
 }

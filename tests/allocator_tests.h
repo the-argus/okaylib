@@ -379,7 +379,7 @@ template <ok::memory_resource_c allocator_t> struct allocator_tests
                     // tests the failstate
                     const bool only_ooms =
                         ok::is_success(status) ||
-                        status.as_enum() == ok::alloc::error::oom;
+                        status == ok::alloc::error::oom;
                     REQUIRE(only_ooms);
                     REQUIRE(limiter.bytes_allocated <= i);
                 }

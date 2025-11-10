@@ -258,7 +258,7 @@ linked_blockpool_allocator_t<allocator_impl_t>::impl_allocate(
     if (!free) [[unlikely]] {
         const auto memstatus = this->alloc_new_blockpool();
         if (!memstatus.is_success()) [[unlikely]] {
-            return memstatus.as_enum();
+            return memstatus;
         }
     }
 
