@@ -1,3 +1,6 @@
+// disable backtraces which change the size of statuses, so then static_assert
+// that the statis is the same size as the enum fails
+#undef OKAYLIB_TESTING_BACKTRACE
 #include "test_header.h"
 // test header must be first
 #include "okay/anystatus.h"

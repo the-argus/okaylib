@@ -1,3 +1,7 @@
+// disable backtraces, which change the properties of types (for example, stack
+// traces are not trivially copyable, so they break the trivially_copyable
+// static asserts below)
+#undef OKAYLIB_TESTING_BACKTRACE
 #include "test_header.h"
 // test header must be first
 #include "okay/error.h"

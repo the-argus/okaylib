@@ -280,8 +280,9 @@ __OK_RES_REQUIRES_CLAUSE class res<
                        "but a status that says there is one.");
     }
 
-    constexpr res(const ok::status<status_t>& status) OKAYLIB_NOEXCEPT
-        requires status_enum_c<status_t>
+    template <typename T>
+    constexpr res(const T& status) OKAYLIB_NOEXCEPT
+        requires same_as_c<T, ok::status<status_t>> && status_enum_c<status_t>
         : m_status(status.as_enum())
 #if defined(OKAYLIB_TESTING_BACKTRACE)
           ,
@@ -470,8 +471,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
         return std::move(m_status);
     }
 
-    [[nodiscard]] constexpr ok::status<status_t>
-    status() const& OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr auto status() const& OKAYLIB_NOEXCEPT
         requires status_enum_c<status_t>
     {
 #if defined(OKAYLIB_TESTING_BACKTRACE)
@@ -479,12 +479,11 @@ __OK_RES_REQUIRES_CLAUSE class res<
         out.stacktrace = this->stacktrace;
         return out;
 #else
-        return m_status;
+        return ok::status<status_t>(m_status);
 #endif
     }
 
-    [[nodiscard]] constexpr ok::status<status_t>
-    status() const&& OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr auto status() const&& OKAYLIB_NOEXCEPT
         requires status_enum_c<status_t>
     {
 #if defined(OKAYLIB_TESTING_BACKTRACE)
@@ -492,7 +491,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
         out.stacktrace = this->stacktrace;
         return out;
 #else
-        return m_status;
+        return ok::status<status_t>(m_status);
 #endif
     }
 
