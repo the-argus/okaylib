@@ -32,9 +32,11 @@ struct owned_stack_trace_t
     {
         payload->refcount.store(1);
 
+#ifndef OKAYLIB_TESTING_BACKTRACE_DISABLE_FOR_RES_AND_STATUS
         if (!ok::stdc::is_constant_evaluated()) {
             payload->st = get_stack_trace();
         }
+#endif
     }
 
   private:
