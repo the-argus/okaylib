@@ -43,118 +43,126 @@ template <atomic_c T> class atomic_t<T>
     mutable ok::detail::atomic_base<T> m_atomic;
 
   public:
-    T load(memory_order order = memory_order::seq_cst) const volatile noexcept
+    constexpr T load(memory_order order = memory_order::seq_cst) const
+        volatile noexcept OKAYLIB_CHECK_LOAD_MEMORY_ORDER(order)
+    {
+        return ok::detail::atomic_load(ok::addressof(m_atomic), order);
+    }
+
+    constexpr T load(memory_order order = memory_order::seq_cst) const noexcept
         OKAYLIB_CHECK_LOAD_MEMORY_ORDER(order)
     {
         return ok::detail::atomic_load(ok::addressof(m_atomic), order);
     }
 
-    T load(memory_order order = memory_order::seq_cst) const noexcept
-        OKAYLIB_CHECK_LOAD_MEMORY_ORDER(order)
-    {
-        return ok::detail::atomic_load(ok::addressof(m_atomic), order);
-    }
-
-    void store(T newvalue,
-               memory_order order = ok::memory_order::seq_cst) volatile noexcept
+    constexpr void
+    store(T newvalue,
+          memory_order order = ok::memory_order::seq_cst) volatile noexcept
         OKAYLIB_CHECK_STORE_MEMORY_ORDER(order)
     {
         ok::detail::atomic_store(ok::addressof(m_atomic), newvalue, order);
     }
 
-    void store(T newvalue,
-               memory_order order = ok::memory_order::seq_cst) noexcept
+    constexpr void
+    store(T newvalue, memory_order order = ok::memory_order::seq_cst) noexcept
         OKAYLIB_CHECK_STORE_MEMORY_ORDER(order)
     {
         ok::detail::atomic_store(ok::addressof(m_atomic), newvalue, order);
     }
 
-    T exchange(T newvalue,
-               memory_order order = memory_order::seq_cst) volatile noexcept
+    constexpr T
+    exchange(T newvalue,
+             memory_order order = memory_order::seq_cst) volatile noexcept
     {
         return ok::detail::atomic_exchange(ok::addressof(m_atomic), newvalue,
                                            order);
     }
 
-    T exchange(T newvalue, memory_order order = memory_order::seq_cst) noexcept
+    constexpr T exchange(T newvalue,
+                         memory_order order = memory_order::seq_cst) noexcept
     {
         return ok::detail::atomic_exchange(ok::addressof(m_atomic), newvalue,
                                            order);
     }
 
-    T fetch_add(T rhs, memory_order order =
-                           memory_order::seq_cst) volatile OKAYLIB_NOEXCEPT
+    constexpr T fetch_add(
+        T rhs,
+        memory_order order = memory_order::seq_cst) volatile OKAYLIB_NOEXCEPT
     {
         return ok::detail::atomic_fetch_add(ok::addressof(this->m_atomic), rhs,
                                             order);
     }
 
-    T fetch_add(T rhs,
-                memory_order order = memory_order::seq_cst) OKAYLIB_NOEXCEPT
+    constexpr T fetch_add(T rhs, memory_order order = memory_order::seq_cst)
+        OKAYLIB_NOEXCEPT
     {
         return ok::detail::atomic_fetch_add(ok::addressof(this->m_atomic), rhs,
                                             order);
     }
 
-    T fetch_sub(T rhs, memory_order order =
-                           memory_order::seq_cst) volatile OKAYLIB_NOEXCEPT
+    constexpr T fetch_sub(
+        T rhs,
+        memory_order order = memory_order::seq_cst) volatile OKAYLIB_NOEXCEPT
     {
         return ok::detail::atomic_fetch_sub(ok::addressof(this->m_atomic), rhs,
                                             order);
     }
 
-    T fetch_sub(T rhs,
-                memory_order order = memory_order::seq_cst) OKAYLIB_NOEXCEPT
+    constexpr T fetch_sub(T rhs, memory_order order = memory_order::seq_cst)
+        OKAYLIB_NOEXCEPT
     {
         return ok::detail::atomic_fetch_sub(ok::addressof(this->m_atomic), rhs,
                                             order);
     }
 
-    T fetch_and(T rhs, memory_order order =
-                           memory_order::seq_cst) volatile OKAYLIB_NOEXCEPT
+    constexpr T fetch_and(
+        T rhs,
+        memory_order order = memory_order::seq_cst) volatile OKAYLIB_NOEXCEPT
     {
         return ok::detail::atomic_fetch_and(ok::addressof(this->m_atomic), rhs,
                                             order);
     }
 
-    T fetch_and(T rhs,
-                memory_order order = memory_order::seq_cst) OKAYLIB_NOEXCEPT
+    constexpr T fetch_and(T rhs, memory_order order = memory_order::seq_cst)
+        OKAYLIB_NOEXCEPT
     {
         return ok::detail::atomic_fetch_and(ok::addressof(this->m_atomic), rhs,
                                             order);
     }
 
-    T fetch_or(T rhs, memory_order order =
-                          memory_order::seq_cst) volatile OKAYLIB_NOEXCEPT
+    constexpr T fetch_or(
+        T rhs,
+        memory_order order = memory_order::seq_cst) volatile OKAYLIB_NOEXCEPT
     {
         return ok::detail::atomic_fetch_or(ok::addressof(this->m_atomic), rhs,
                                            order);
     }
 
-    T fetch_or(T rhs,
-               memory_order order = memory_order::seq_cst) OKAYLIB_NOEXCEPT
+    constexpr T
+    fetch_or(T rhs, memory_order order = memory_order::seq_cst) OKAYLIB_NOEXCEPT
     {
         return ok::detail::atomic_fetch_or(ok::addressof(this->m_atomic), rhs,
                                            order);
     }
 
-    T fetch_xor(T rhs, memory_order order =
-                           memory_order::seq_cst) volatile OKAYLIB_NOEXCEPT
+    constexpr T fetch_xor(
+        T rhs,
+        memory_order order = memory_order::seq_cst) volatile OKAYLIB_NOEXCEPT
     {
         return ok::detail::atomic_fetch_xor(ok::addressof(this->m_atomic), rhs,
                                             order);
     }
 
-    T fetch_xor(T rhs,
-                memory_order order = memory_order::seq_cst) OKAYLIB_NOEXCEPT
+    constexpr T fetch_xor(T rhs, memory_order order = memory_order::seq_cst)
+        OKAYLIB_NOEXCEPT
     {
         return ok::detail::atomic_fetch_xor(ok::addressof(this->m_atomic), rhs,
                                             order);
     }
 
-    bool compare_exchange_weak(T& expected, T newvalue,
-                               memory_order success_order,
-                               memory_order failure_order) volatile noexcept
+    constexpr bool
+    compare_exchange_weak(T& expected, T newvalue, memory_order success_order,
+                          memory_order failure_order) volatile noexcept
         OKAYLIB_CHECK_EXCHANGE_MEMORY_ORDER(success_order, failure_order)
     {
         return ok::detail::atomic_compare_exchange_weak(
@@ -162,9 +170,9 @@ template <atomic_c T> class atomic_t<T>
             success_order, failure_order);
     }
 
-    bool compare_exchange_weak(T& expected, T newvalue,
-                               memory_order success_order,
-                               memory_order failure_order) noexcept
+    constexpr bool compare_exchange_weak(T& expected, T newvalue,
+                                         memory_order success_order,
+                                         memory_order failure_order) noexcept
         OKAYLIB_CHECK_EXCHANGE_MEMORY_ORDER(success_order, failure_order)
     {
         return ok::detail::atomic_compare_exchange_weak(
@@ -172,9 +180,9 @@ template <atomic_c T> class atomic_t<T>
             success_order, failure_order);
     }
 
-    bool compare_exchange_strong(T& expected, T newvalue,
-                                 memory_order success_order,
-                                 memory_order failure_order) volatile noexcept
+    constexpr bool
+    compare_exchange_strong(T& expected, T newvalue, memory_order success_order,
+                            memory_order failure_order) volatile noexcept
         OKAYLIB_CHECK_EXCHANGE_MEMORY_ORDER(success_order, failure_order)
     {
         return ok::detail::atomic_compare_exchange_strong(
@@ -182,9 +190,9 @@ template <atomic_c T> class atomic_t<T>
             success_order, failure_order);
     }
 
-    bool compare_exchange_strong(T& expected, T newvalue,
-                                 memory_order success_order,
-                                 memory_order failure_order) noexcept
+    constexpr bool compare_exchange_strong(T& expected, T newvalue,
+                                           memory_order success_order,
+                                           memory_order failure_order) noexcept
         OKAYLIB_CHECK_EXCHANGE_MEMORY_ORDER(success_order, failure_order)
     {
         return ok::detail::atomic_compare_exchange_strong(
@@ -192,7 +200,7 @@ template <atomic_c T> class atomic_t<T>
             success_order, failure_order);
     }
 
-    bool compare_exchange_weak(
+    constexpr bool compare_exchange_weak(
         T& expected, T newvalue,
         memory_order order = memory_order::seq_cst) volatile noexcept
     {
@@ -201,7 +209,7 @@ template <atomic_c T> class atomic_t<T>
                                                         newvalue, order, order);
     }
 
-    bool
+    constexpr bool
     compare_exchange_weak(T& expected, T newvalue,
                           memory_order order = memory_order::seq_cst) noexcept
     {
@@ -210,7 +218,7 @@ template <atomic_c T> class atomic_t<T>
                                                         newvalue, order, order);
     }
 
-    bool compare_exchange_strong(
+    constexpr bool compare_exchange_strong(
         T& expected, T newvalue,
         memory_order order = memory_order::seq_cst) volatile noexcept
     {
@@ -219,7 +227,7 @@ template <atomic_c T> class atomic_t<T>
             order);
     }
 
-    bool
+    constexpr bool
     compare_exchange_strong(T& expected, T newvalue,
                             memory_order order = memory_order::seq_cst) noexcept
     {

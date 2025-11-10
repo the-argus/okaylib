@@ -4,6 +4,7 @@
 #include "okay/detail/addressof.h"
 #include "okay/detail/compiler_config.h"
 #include "okay/detail/type_traits.h"
+#include "okay/detail/utility.h"
 
 // TODO: msvc, sorry
 
@@ -35,7 +36,7 @@ using memory_order_underlying_t =
 template <typename T> struct atomic_base
 {
     // NOTE: unlike std atomics, default constructor zeroes value
-    constexpr atomic_base() noexcept : value({}) {}
+    constexpr atomic_base() noexcept : value(0) {}
     constexpr explicit atomic_base(T v) noexcept : value(v) {}
 
     __extension__ _Atomic(T) value;
@@ -60,21 +61,31 @@ static_assert(ok::stdc::is_same_v<ok::stdc::underlying_type_t<memory_order>,
 namespace detail {
 inline void atomic_thread_fence(memory_order order) noexcept
 {
-    __c11_atomic_thread_fence(static_cast<memory_order_underlying_t>(order));
+    if constexpr (!ok::stdc::is_constant_evaluated()) {
+        __c11_atomic_thread_fence(
+            static_cast<memory_order_underlying_t>(order));
+    }
 }
 
 inline void atomic_signal_fence(memory_order order) noexcept
 {
-    __c11_atomic_signal_fence(static_cast<memory_order_underlying_t>(order));
+    if constexpr (!ok::stdc::is_constant_evaluated()) {
+        __c11_atomic_signal_fence(
+            static_cast<memory_order_underlying_t>(order));
+    }
 }
 
 template <class T> void atomic_init(atomic_base<T> volatile* a, T val) noexcept
 {
     __c11_atomic_init(ok::addressof(a->value), val);
 }
-template <class T> void atomic_init(atomic_base<T>* a, T val) noexcept
+template <class T> constexpr void atomic_init(atomic_base<T>* a, T val) noexcept
 {
-    __c11_atomic_init(ok::addressof(a->value), val);
+    if constexpr (ok::stdc::is_constant_evaluated()) {
+        a->value = val;
+    } else {
+        __c11_atomic_init(ok::addressof(a->value), val);
+    }
 }
 
 template <class T>
@@ -85,10 +96,15 @@ void atomic_store(atomic_base<T> volatile* a, T val,
                        static_cast<memory_order_underlying_t>(order));
 }
 template <class T>
-void atomic_store(atomic_base<T>* a, T val, memory_order order) noexcept
+constexpr void atomic_store(atomic_base<T>* a, T val,
+                            memory_order order) noexcept
 {
-    __c11_atomic_store(ok::addressof(a->value), val,
-                       static_cast<memory_order_underlying_t>(order));
+    if constexpr (stdc::is_constant_evaluated()) {
+        a->value = val;
+    } else {
+        __c11_atomic_store(ok::addressof(a->value), val,
+                           static_cast<memory_order_underlying_t>(order));
+    }
 }
 
 template <class T>
@@ -99,11 +115,15 @@ T atomic_load(atomic_base<T> const volatile* a, memory_order order) noexcept
                              static_cast<memory_order_underlying_t>(order));
 }
 template <class T>
-T atomic_load(atomic_base<T> const* a, memory_order order) noexcept
+constexpr T atomic_load(atomic_base<T> const* a, memory_order order) noexcept
 {
-    using ptr_type = ok::stdc::remove_const_t<decltype(a->value)>*;
-    return __c11_atomic_load(const_cast<ptr_type>(ok::addressof(a->value)),
-                             static_cast<memory_order_underlying_t>(order));
+    if constexpr (stdc::is_constant_evaluated()) {
+        return a->value;
+    } else {
+        using ptr_type = ok::stdc::remove_const_t<decltype(a->value)>*;
+        return __c11_atomic_load(const_cast<ptr_type>(ok::addressof(a->value)),
+                                 static_cast<memory_order_underlying_t>(order));
+    }
 }
 
 template <class T>
@@ -115,12 +135,17 @@ void atomic_load_inplace(atomic_base<T> const volatile* a, T* dest,
                               static_cast<memory_order_underlying_t>(order));
 }
 template <class T>
-void atomic_load_inplace(atomic_base<T> const* a, T* dest,
-                         memory_order order) noexcept
+constexpr void atomic_load_inplace(atomic_base<T> const* a, T* dest,
+                                   memory_order order) noexcept
 {
-    using ptr_type = ok::stdc::remove_const_t<decltype(a->value)>*;
-    *dest = __c11_atomic_load(const_cast<ptr_type>(ok::addressof(a->value)),
+    if constexpr (stdc::is_constant_evaluated()) {
+        *dest = a->value;
+    } else {
+        using ptr_type = ok::stdc::remove_const_t<decltype(a->value)>*;
+        *dest =
+            __c11_atomic_load(const_cast<ptr_type>(ok::addressof(a->value)),
                               static_cast<memory_order_underlying_t>(order));
+    }
 }
 
 template <class T>
@@ -131,13 +156,21 @@ T atomic_exchange(atomic_base<T> volatile* a, T value,
                                  static_cast<memory_order_underlying_t>(order));
 }
 template <class T>
-T atomic_exchange(atomic_base<T>* a, T value, memory_order order) noexcept
+constexpr T atomic_exchange(atomic_base<T>* a, T value,
+                            memory_order order) noexcept
 {
-    return __c11_atomic_exchange(ok::addressof(a->value), value,
-                                 static_cast<memory_order_underlying_t>(order));
+    if constexpr (stdc::is_constant_evaluated()) {
+        const auto out = a->value;
+        a->value = value;
+        return out;
+    } else {
+        return __c11_atomic_exchange(
+            ok::addressof(a->value), value,
+            static_cast<memory_order_underlying_t>(order));
+    }
 }
 
-inline constexpr memory_order to_failure_order(memory_order order)
+constexpr memory_order to_failure_order(memory_order order)
 {
     return order == memory_order::release
                ? memory_order::relaxed
@@ -156,14 +189,24 @@ bool atomic_compare_exchange_strong(atomic_base<T> volatile* a, T* expected,
         static_cast<memory_order_underlying_t>(to_failure_order(failure)));
 }
 template <class T>
-bool atomic_compare_exchange_strong(atomic_base<T>* a, T* expected, T value,
-                                    memory_order success,
-                                    memory_order failure) noexcept
+constexpr bool atomic_compare_exchange_strong(atomic_base<T>* a, T* expected,
+                                              T value, memory_order success,
+                                              memory_order failure) noexcept
 {
-    return __c11_atomic_compare_exchange_strong(
-        ok::addressof(a->value), expected, value,
-        static_cast<memory_order_underlying_t>(success),
-        static_cast<memory_order_underlying_t>(to_failure_order(failure)));
+    if constexpr (stdc::is_constant_evaluated()) {
+        if (a->value == *expected) {
+            a->value = value;
+            return true;
+        } else {
+            *expected = a->value;
+            return false;
+        }
+    } else {
+        return __c11_atomic_compare_exchange_strong(
+            ok::addressof(a->value), expected, value,
+            static_cast<memory_order_underlying_t>(success),
+            static_cast<memory_order_underlying_t>(to_failure_order(failure)));
+    }
 }
 
 template <class T>
@@ -177,14 +220,24 @@ bool atomic_compare_exchange_weak(atomic_base<T> volatile* a, T* expected,
         static_cast<memory_order_underlying_t>(to_failure_order(failure)));
 }
 template <class T>
-bool atomic_compare_exchange_weak(atomic_base<T>* a, T* expected, T value,
-                                  memory_order success,
-                                  memory_order failure) noexcept
+constexpr bool atomic_compare_exchange_weak(atomic_base<T>* a, T* expected,
+                                            T value, memory_order success,
+                                            memory_order failure) noexcept
 {
-    return __c11_atomic_compare_exchange_weak(
-        ok::addressof(a->value), expected, value,
-        static_cast<memory_order_underlying_t>(success),
-        static_cast<memory_order_underlying_t>(to_failure_order(failure)));
+    if constexpr (stdc::is_constant_evaluated()) {
+        if (a->value == *expected) {
+            a->value = value;
+            return true;
+        } else {
+            *expected = a->value;
+            return false;
+        }
+    } else {
+        return __c11_atomic_compare_exchange_weak(
+            ok::addressof(a->value), expected, value,
+            static_cast<memory_order_underlying_t>(success),
+            static_cast<memory_order_underlying_t>(to_failure_order(failure)));
+    }
 }
 
 template <class T>
@@ -196,11 +249,18 @@ T atomic_fetch_add(atomic_base<T> volatile* a, T delta,
         static_cast<memory_order_underlying_t>(order));
 }
 template <class T>
-T atomic_fetch_add(atomic_base<T>* a, T delta, memory_order order) noexcept
+constexpr T atomic_fetch_add(atomic_base<T>* a, T delta,
+                             memory_order order) noexcept
 {
-    return __c11_atomic_fetch_add(
-        ok::addressof(a->value), delta,
-        static_cast<memory_order_underlying_t>(order));
+    if constexpr (stdc::is_constant_evaluated()) {
+        const auto out = a->value;
+        a->value += delta;
+        return out;
+    } else {
+        return __c11_atomic_fetch_add(
+            ok::addressof(a->value), delta,
+            static_cast<memory_order_underlying_t>(order));
+    }
 }
 
 template <class T>
@@ -212,12 +272,18 @@ T* atomic_fetch_add(atomic_base<T*> volatile* a, ptrdiff_t delta,
         static_cast<memory_order_underlying_t>(order));
 }
 template <class T>
-T* atomic_fetch_add(atomic_base<T*>* a, ptrdiff_t delta,
-                    memory_order order) noexcept
+constexpr T* atomic_fetch_add(atomic_base<T*>* a, ptrdiff_t delta,
+                              memory_order order) noexcept
 {
-    return __c11_atomic_fetch_add(
-        ok::addressof(a->value), delta,
-        static_cast<memory_order_underlying_t>(order));
+    if constexpr (stdc::is_constant_evaluated()) {
+        const auto out = a->value;
+        a->value += delta;
+        return out;
+    } else {
+        return __c11_atomic_fetch_add(
+            ok::addressof(a->value), delta,
+            static_cast<memory_order_underlying_t>(order));
+    }
 }
 
 template <class T>
@@ -229,11 +295,18 @@ T atomic_fetch_sub(atomic_base<T> volatile* a, T delta,
         static_cast<memory_order_underlying_t>(order));
 }
 template <class T>
-T atomic_fetch_sub(atomic_base<T>* a, T delta, memory_order order) noexcept
+constexpr T atomic_fetch_sub(atomic_base<T>* a, T delta,
+                             memory_order order) noexcept
 {
-    return __c11_atomic_fetch_sub(
-        ok::addressof(a->value), delta,
-        static_cast<memory_order_underlying_t>(order));
+    if constexpr (stdc::is_constant_evaluated()) {
+        const auto out = a->value;
+        a->value -= delta;
+        return out;
+    } else {
+        return __c11_atomic_fetch_sub(
+            ok::addressof(a->value), delta,
+            static_cast<memory_order_underlying_t>(order));
+    }
 }
 template <class T>
 T* atomic_fetch_sub(atomic_base<T*> volatile* a, ptrdiff_t delta,
@@ -244,12 +317,18 @@ T* atomic_fetch_sub(atomic_base<T*> volatile* a, ptrdiff_t delta,
         static_cast<memory_order_underlying_t>(order));
 }
 template <class T>
-T* atomic_fetch_sub(atomic_base<T*>* a, ptrdiff_t delta,
-                    memory_order order) noexcept
+constexpr T* atomic_fetch_sub(atomic_base<T*>* a, ptrdiff_t delta,
+                              memory_order order) noexcept
 {
-    return __c11_atomic_fetch_sub(
-        ok::addressof(a->value), delta,
-        static_cast<memory_order_underlying_t>(order));
+    if constexpr (stdc::is_constant_evaluated()) {
+        const auto out = a->value;
+        a->value -= delta;
+        return out;
+    } else {
+        return __c11_atomic_fetch_sub(
+            ok::addressof(a->value), delta,
+            static_cast<memory_order_underlying_t>(order));
+    }
 }
 
 template <class T>
@@ -261,11 +340,18 @@ T atomic_fetch_and(atomic_base<T> volatile* a, T pattern,
         static_cast<memory_order_underlying_t>(order));
 }
 template <class T>
-T atomic_fetch_and(atomic_base<T>* a, T pattern, memory_order order) noexcept
+constexpr T atomic_fetch_and(atomic_base<T>* a, T pattern,
+                             memory_order order) noexcept
 {
-    return __c11_atomic_fetch_and(
-        ok::addressof(a->value), pattern,
-        static_cast<memory_order_underlying_t>(order));
+    if constexpr (stdc::is_constant_evaluated()) {
+        const auto out = a->value;
+        a->value &= pattern;
+        return out;
+    } else {
+        return __c11_atomic_fetch_and(
+            ok::addressof(a->value), pattern,
+            static_cast<memory_order_underlying_t>(order));
+    }
 }
 
 template <class T>
@@ -276,10 +362,18 @@ T atomic_fetch_or(atomic_base<T> volatile* a, T pattern,
                                  static_cast<memory_order_underlying_t>(order));
 }
 template <class T>
-T atomic_fetch_or(atomic_base<T>* a, T pattern, memory_order order) noexcept
+constexpr T atomic_fetch_or(atomic_base<T>* a, T pattern,
+                            memory_order order) noexcept
 {
-    return __c11_atomic_fetch_or(ok::addressof(a->value), pattern,
-                                 static_cast<memory_order_underlying_t>(order));
+    if constexpr (stdc::is_constant_evaluated()) {
+        const auto out = a->value;
+        a->value |= pattern;
+        return out;
+    } else {
+        return __c11_atomic_fetch_or(
+            ok::addressof(a->value), pattern,
+            static_cast<memory_order_underlying_t>(order));
+    }
 }
 
 template <class T>
@@ -291,11 +385,18 @@ T atomic_fetch_xor(atomic_base<T> volatile* a, T pattern,
         static_cast<memory_order_underlying_t>(order));
 }
 template <class T>
-T atomic_fetch_xor(atomic_base<T>* a, T pattern, memory_order order) noexcept
+constexpr T atomic_fetch_xor(atomic_base<T>* a, T pattern,
+                             memory_order order) noexcept
 {
-    return __c11_atomic_fetch_xor(
-        ok::addressof(a->value), pattern,
-        static_cast<memory_order_underlying_t>(order));
+    if constexpr (stdc::is_constant_evaluated()) {
+        const auto out = a->value;
+        a->value ^= pattern;
+        return out;
+    } else {
+        return __c11_atomic_fetch_xor(
+            ok::addressof(a->value), pattern,
+            static_cast<memory_order_underlying_t>(order));
+    }
 }
 } // namespace detail
 

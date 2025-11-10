@@ -61,6 +61,17 @@ struct conjunction<B1, Bn...>
     : stdc::conditional_t<static_cast<bool>(B1::value), conjunction<Bn...>, B1>
 {};
 
+[[nodiscard]] constexpr bool is_constant_evaluated() noexcept
+{
+#if defined(OKAYLIB_COMPAT_STRATEGY_STD)
+    return ::std::is_constant_evaluated();
+#elif defined(OKAYLIB_COMPAT_STRATEGY_NO_STD)
+    return __builtin_is_constant_evaluated();
+#elif defined(OKAYLIB_COMPAT_STRATEGY_PURE_CPP)
+    return false;
+#endif
+}
+
 } // namespace ok::stdc
 
 #endif
