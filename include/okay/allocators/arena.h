@@ -176,7 +176,6 @@ arena_t<allocator_impl_t>::impl_allocate(const alloc::request_t& request)
         return error::oom;
     }
     uint8_t* const aligned_start = static_cast<uint8_t*>(aligned_start_voidptr);
-    const size_t allocated_size = request.num_bytes;
 
     const size_t amount_moved_to_be_aligned =
         aligned_start - m_available_memory.unchecked_address_of_first_item();
@@ -184,7 +183,7 @@ arena_t<allocator_impl_t>::impl_allocate(const alloc::request_t& request)
     __ok_internal_assert(request.num_bytes <= space_remaining_after_alignment);
 
     const size_t start_index =
-        (aligned_start + allocated_size) -
+        (aligned_start + request.num_bytes - 1) -
         m_available_memory.unchecked_address_of_first_item();
 
     m_available_memory = m_available_memory.subslice({
@@ -193,9 +192,9 @@ arena_t<allocator_impl_t>::impl_allocate(const alloc::request_t& request)
     });
 
     if (!request.leave_nonzeroed) {
-        std::memset(aligned_start, 0, allocated_size);
+        std::memset(aligned_start, 0, request.num_bytes);
     }
-    return raw_slice(*aligned_start, allocated_size);
+    return raw_slice(*aligned_start, request.num_bytes);
 }
 
 template <allocator_c allocator_impl_t>
