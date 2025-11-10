@@ -2,6 +2,7 @@
 #define __OKAYLIB_ALLOCATORS_RESERVING_reserving_page_allocator_H__
 
 #include "okay/allocators/allocator.h"
+#include "okay/math/math.h"
 #include "okay/math/rounding.h"
 #include "okay/platform/memory_map.h"
 #include <cstring>
@@ -47,12 +48,34 @@ class reserving_page_allocator_t : public allocator_t
             __ok_assert(false, "unable to get page size on this platform");
             return alloc::error::platform_failure;
         }
-        if (request.alignment > page_size) [[unlikely]] {
+
+        // reservation allocator only supports alignments that are powers of two
+        if (two_to_the_power_of(log2_uint(request.alignment)) !=
+            request.alignment) [[unlikely]] {
             return alloc::error::unsupported;
+        }
+
+        // part of only supporting alignments that are powers of two is the
+        // assumption that page size is also a large power of two
+        if (page_size % request.alignment != 0) [[unlikely]] {
+            return alloc::error::oom;
         }
 
         const size_t total_bytes =
             runtime_round_up_to_multiple_of(page_size, request.num_bytes);
+
+        const size_t total_pages = total_bytes / page_size;
+
+        // if you try to allocate more than the number of reserved pages, this
+        // basically behaves as a page allocator and reallocation will do a
+        // syscall and probably fail
+        if (total_pages >= m_pages_reserved) {
+            mmap::map_result_t result = mmap::alloc_pages(nullptr, total_pages);
+            if (result.code != 0) [[unlikely]]
+                return alloc::error::oom;
+            return ok::raw_slice(*static_cast<uint8_t*>(result.data),
+                                 result.bytes);
+        }
 
         mmap::map_result_t reservation_result =
             mmap::reserve_pages(nullptr, m_pages_reserved);
