@@ -1,4 +1,3 @@
-#include "okay/ranges/views/transform.h"
 #include "test_header.h"
 // test header must be first
 #include "okay/macros/foreach.h"
@@ -7,6 +6,7 @@
 #include "okay/ranges/views/reverse.h"
 #include "okay/ranges/views/std_for.h"
 #include "okay/ranges/views/take_at_most.h"
+#include "okay/ranges/views/transform.h"
 #include <array>
 
 using namespace ok;
