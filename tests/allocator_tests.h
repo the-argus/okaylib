@@ -349,13 +349,13 @@ template <ok::memory_resource_c allocator_t> struct allocator_tests
                                   allocator_t, ok::memory_resource_t>) {
                     auto status = allocator_tests<ok::memory_resource_t>::
                         test_functions[idx](ally.ref_or_panic());
-                    REQUIRE(ok::is_success(status));
+                    OKAYLIB_REQUIRE_RES_WITH_BACKTRACE(status);
                 } else if constexpr (ok::detail::is_derived_from_c<
                                          allocator_t, ok::allocator_t>) {
                     auto status =
                         allocator_tests<ok::allocator_t>::test_functions[idx](
                             ally.ref_or_panic());
-                    REQUIRE(ok::is_success(status));
+                    OKAYLIB_REQUIRE_RES_WITH_BACKTRACE(status);
                 }
                 break;
             case allocator_test_mode::recreate_each_test_and_check_oom: {
@@ -365,7 +365,7 @@ template <ok::memory_resource_c allocator_t> struct allocator_tests
                 // so it always supports polymorphism.
                 memory_resource_counter_wrapper_t wrapper(ally.ref_or_panic());
                 auto status = polymorphic_tests[idx](wrapper);
-                REQUIRE(ok::is_success(status));
+                OKAYLIB_REQUIRE_RES_WITH_BACKTRACE(status);
 
                 // loop condition uses overflow, it is defined behavior
                 for (size_t i = wrapper.bytes_allocated - 1;
@@ -377,9 +377,8 @@ template <ok::memory_resource_c allocator_t> struct allocator_tests
                     // as we decrease the amount of bytes that can be allocated,
                     // it is okay to OOM as long as there is a graceful return.
                     // tests the failstate
-                    const bool only_ooms =
-                        ok::is_success(status) ||
-                        status == ok::alloc::error::oom;
+                    const bool only_ooms = ok::is_success(status) ||
+                                           status == ok::alloc::error::oom;
                     REQUIRE(only_ooms);
                     REQUIRE(limiter.bytes_allocated <= i);
                 }

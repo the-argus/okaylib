@@ -131,13 +131,13 @@ class _abort_exception : std::exception
 #if defined(OKAYLIB_TESTING_BACKTRACE)
 #define OKAYLIB_REQUIRE_RES_WITH_BACKTRACE(arg) \
     {                                           \
-        if (!arg.is_success()) {                \
+        if (!ok::is_success(arg)) {             \
             arg.stacktrace.print();             \
-            REQUIRE(arg.is_success());          \
+            REQUIRE(ok::is_success(arg));       \
         }                                       \
     }
 #else
-#define OKAYLIB_REQUIRE_RES_WITH_BACKTRACE(arg)
+#define OKAYLIB_REQUIRE_RES_WITH_BACKTRACE(arg) REQUIRE(ok::is_success(arg))
 #endif
 
 #if defined(OKAYLIB_TESTING_BACKTRACE)
