@@ -147,7 +147,8 @@ inline map_result_t alloc_pages(void* address_hint, size_t num_pages)
     return res;
 #else
     map_result_t res;
-    res.data = ::mmap(address_hint, size, PROT_READ | PROT_WRITE, 0, -1, 0);
+    res.data = ::mmap(address_hint, size, PROT_READ | PROT_WRITE,
+                      MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
     res.bytes = size;
     res.code = 0;
 
