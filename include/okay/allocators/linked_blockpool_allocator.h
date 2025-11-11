@@ -182,6 +182,12 @@ class linked_blockpool_allocator_t : public ok::allocator_t
         return ok_memcontains(.outer = pool.as_slice(m.blocksize),
                               .inner = bytes);
     }
+
+    bool pool_contains(const pool_t& pool, const void* memory) const
+    {
+        return ok_memcontains(.outer = pool.as_slice(m.blocksize),
+                              .inner = slice_from_one(*(const uint8_t*)memory));
+    }
 };
 
 template <allocator_c allocator_impl_t>
@@ -277,33 +283,32 @@ template <allocator_c allocator_impl_t>
 inline void linked_blockpool_allocator_t<allocator_impl_t>::impl_deallocate(
     void* memory) OKAYLIB_NOEXCEPT
 {
-#ifndef NDEBUG
-#define __ok_memory_within_linked_blockpool_check(voidptr)                  \
-    pool_t* iter = m.last_pool;                                             \
-    bool found = false;                                                     \
-    while (iter) {                                                          \
-        if (pool_contains(*iter, ok::raw_slice(*(uint8_t*)voidptr, 1UL))) { \
-            found = true;                                                   \
-            break;                                                          \
-        }                                                                   \
-        iter = iter->prev;                                                  \
-    }                                                                       \
-    if (!found) {                                                           \
-        __ok_abort(                                                         \
-            "Attempt to operate on some bytes with a "                      \
-            "linked_blockpool_allocator but the bytes were not fully "      \
-            "contained within a memory pool belonging to that allocator."); \
+    // do a linear search through all pools, looking for the one that contains
+    // the freed memory
+    pool_t* iter = m.last_pool;
+    bool found = false;
+    while (iter) {
+        if (pool_contains(*iter, memory)) {
+            found = true;
+            break;
+        }
+        iter = iter->prev;
     }
-#else
-#define __ok_bytes_within_linked_blockpool_check(bytes_sym)
-#endif
+    __ok_assert(found,
+                "Attempt to operate on some bytes with a "
+                "linked_blockpool_allocator but the bytes were not fully "
+                "contained within a memory pool belonging to that allocator.");
+    if (!found) [[unlikely]]
+        // just leak if you mess this up in release mode
+        return;
 
-    // "align" memory (round it down to the start of the nearest block)
-    memory = (void*)((uintptr_t(memory) / m.blocksize) * m.blocksize);
-
-    {
-        __ok_memory_within_linked_blockpool_check(memory);
-    }
+    // "align" memory to blocksize, relative to the start of our memory block.
+    // aligning it to our minimum align or to our blocksize will not work- the
+    // minimum align may be much smaller than blocksize.
+    const auto memstart = uint64_t(iter->blocks_start());
+    const auto alignedmemory =
+        (void*)((((uint64_t(memory) - memstart) / m.blocksize) * m.blocksize) +
+                memstart);
 
     free_block_t* new_free = reinterpret_cast<free_block_t*>(memory);
     ok::mark_bytes_freed_if_debugging(
@@ -317,9 +322,22 @@ template <allocator_c allocator_impl_t>
 linked_blockpool_allocator_t<allocator_impl_t>::impl_reallocate(
     const alloc::reallocate_request_t& request) OKAYLIB_NOEXCEPT
 {
-    __ok_memory_within_linked_blockpool_check(
-        request.memory.unchecked_address_of_first_item());
-#undef __ok_bytes_within_linked_blockpool_check
+#ifndef NDEBUG
+    pool_t* iter = m.last_pool;
+    bool found = false;
+    while (iter) {
+        if (pool_contains(*iter,
+                          request.memory.unchecked_address_of_first_item())) {
+            found = true;
+            break;
+        }
+        iter = iter->prev;
+    }
+    __ok_assert(found,
+                "Attempt to operate on some bytes with a "
+                "linked_blockpool_allocator but the bytes were not fully "
+                "contained within a memory pool belonging to that allocator.");
+#endif
     __ok_assert(uintptr_t(request.memory.unchecked_address_of_first_item()) %
                         m.minimum_alignment ==
                     0,
@@ -429,14 +447,16 @@ struct start_with_one_pool_t
 
         using return_type = linked_blockpool_allocator_t<allocator_impl_t>;
         using M = typename linked_blockpool_allocator_t<allocator_impl_t>::M;
-        new (ok::addressof(uninit)) return_type(M{
-            .last_pool = pool,
-            .blocksize = actual_blocksize,
-            .minimum_alignment = actual_minimum_alignment,
-            .backing = ok::addressof(allocator),
-            .free_head = free_list_iter,
-            .growth_factor = options.pool_growth_factor,
-        });
+        ok::stdc::construct_at(
+            ok::addressof(uninit),
+            return_type(M{
+                .last_pool = pool,
+                .blocksize = actual_blocksize,
+                .minimum_alignment = actual_minimum_alignment,
+                .backing = ok::addressof(allocator),
+                .free_head = free_list_iter,
+                .growth_factor = options.pool_growth_factor,
+            }));
 
         return alloc::error::success;
     }
