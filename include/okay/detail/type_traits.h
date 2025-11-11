@@ -461,8 +461,8 @@ template <typename from_t, typename to_t> struct is_convertible_impl
     static auto test_convert(...) -> stdc::false_type;
 
     template <typename f_t, typename t_t>
-    static auto test(int)
-        -> decltype(test_convert<t_t, f_t>(stdc::declval<f_t>()));
+    static auto
+    test(int) -> decltype(test_convert<t_t, f_t>(stdc::declval<f_t>()));
 
     template <typename f_t, typename t_t> static stdc::false_type test(...);
 
@@ -718,8 +718,8 @@ template <typename> struct is_member_object_pointer_impl : public false_type
 {};
 
 template <typename T, typename member_t>
-    requires is_function<T>::value
-struct is_member_object_pointer_impl<T member_t::*> : public true_type
+struct is_member_object_pointer_impl<T member_t::*>
+    : public stdc::integral_constant<bool, !is_function<T>::value>
 {};
 
 template <typename> struct is_member_function_pointer_impl : public false_type

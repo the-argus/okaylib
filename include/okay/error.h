@@ -3,14 +3,13 @@
 
 #include "okay/detail/abort.h"
 #include "okay/detail/addressof.h"
+#include "okay/detail/invoke.h"
 #include "okay/detail/memory.h"
 #include "okay/detail/noexcept.h"
 #include "okay/detail/template_util/uninitialized_storage.h"
 #include "okay/detail/traits/cloneable.h"
 #include "okay/detail/traits/error_traits.h"
 #include "okay/opt.h"
-
-#include <type_traits>
 
 #if defined(OKAYLIB_USE_FMT)
 #include "okay/ctti/ctti.h"
@@ -69,38 +68,6 @@ template <status_enum_c enum_t> class status
 };
 
 namespace detail {
-template <typename callable_t, typename success_t, typename status_t>
-concept and_then_callable = requires(callable_t c) {
-    requires detail::is_instance_c<decltype(c(std::declval<success_t>())), res>;
-    requires std::is_same_v<
-        typename decltype(c(std::declval<success_t>()))::status_type, status_t>;
-};
-template <typename callable_t, typename status_t>
-concept and_then_callable_noargs = requires(callable_t c) {
-    requires detail::is_instance_c<decltype(c()), res>;
-    requires std::is_same_v<typename decltype(c())::status_type, status_t>;
-};
-template <typename callable_t, typename status_t>
-concept convert_error_callable = requires(callable_t c) {
-    requires status_object_c<decltype(c(std::declval<status_t>()))> ||
-                 status_enum_c<decltype(c(std::declval<status_t>()))>;
-};
-template <typename callable_t>
-concept convert_error_callable_noargs = requires(callable_t c) {
-    requires status_object_c<decltype(c())> || status_enum_c<decltype(c())>;
-};
-template <typename callable_t, typename success_t, typename status_t>
-concept transform_callable = requires(callable_t c) {
-    // it is valid to form res with the returned type and the same error type
-    requires !std::is_void_v<
-        res<decltype(c(std::declval<success_t>())), status_t>>;
-};
-template <typename callable_t, typename status_t>
-concept transform_callable_noargs = requires(callable_t c) {
-    // it is valid to form res with the returned type and the same error type
-    requires !std::is_void_v<res<decltype(c()), status_t>>;
-};
-
 template <typename T, typename E> struct res_accessor_t
 {
     static constexpr res<T, E> construct_uninitialized_res() noexcept;
@@ -117,9 +84,9 @@ template <typename T, typename E> struct res_accessor_t
 
 template <typename success_t, status_type_c status_t>
 __OK_RES_REQUIRES_CLAUSE class res<
-    success_t, status_t, std::enable_if_t<!stdc::is_reference_c<success_t>>>
+    success_t, status_t, stdc::enable_if_t<!stdc::is_reference_c<success_t>>>
 {
-    static_assert(!std::is_void_v<success_t> && !std::is_void_v<status_t>,
+    static_assert(!stdc::is_void_v<success_t> && !stdc::is_void_v<status_t>,
                   "Res does not support void as template arguments.");
     detail::uninitialized_storage_t<success_t> m_success;
     status_t m_status;
@@ -135,7 +102,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
     constexpr void emplace_nodestroy(args_t&&... args) OKAYLIB_NOEXCEPT
     {
         ok::stdc::construct_at(ok::addressof(m_success.value),
-                               std::forward<args_t>(args)...);
+                               stdc::forward<args_t>(args)...);
     }
 
     // called internally in detail::res_accessor_t  and then in construct.h
@@ -152,40 +119,40 @@ __OK_RES_REQUIRES_CLAUSE class res<
     // use compiler generated copy/move if one is present in the
     // uninitialized_storage_t (meaning the success_t is trivialy)
     constexpr res(const res& other) OKAYLIB_NOEXCEPT
-        requires(std::is_copy_constructible_v<decltype(m_success)>)
+        requires(stdc::is_copy_constructible_v<decltype(m_success)>)
     = default;
     constexpr res& operator=(const res& other) OKAYLIB_NOEXCEPT
-        requires(std::is_copy_assignable_v<decltype(m_success)>)
+        requires(stdc::is_copy_assignable_v<decltype(m_success)>)
     = default;
     constexpr res(res&& other) OKAYLIB_NOEXCEPT
-        requires std::is_move_constructible_v<decltype(m_success)>
+        requires stdc::is_move_constructible_v<decltype(m_success)>
     = default;
     constexpr res& operator=(res&& other) OKAYLIB_NOEXCEPT
-        requires std::is_move_assignable_v<decltype(m_success)>
+        requires stdc::is_move_assignable_v<decltype(m_success)>
     = default;
 
     constexpr res(res&& other) OKAYLIB_NOEXCEPT
-        requires(!std::is_move_constructible_v<decltype(m_success)> &&
-                 std::is_move_constructible_v<success_t>)
-        : m_status(std::move(other.m_status))
+        requires(!stdc::is_move_constructible_v<decltype(m_success)> &&
+                 stdc::is_move_constructible_v<success_t>)
+        : m_status(stdc::move(other.m_status))
     {
         if (other.is_success()) {
-            this->emplace_nodestroy(std::move(other.unwrap_unchecked()));
+            this->emplace_nodestroy(stdc::move(other.unwrap_unchecked()));
         }
     }
     constexpr res& operator=(res&& other) OKAYLIB_NOEXCEPT
-        requires(!std::is_move_assignable_v<decltype(m_success)> &&
-                 std::is_move_assignable_v<success_t> &&
-                 std::is_move_constructible_v<success_t>)
+        requires(!stdc::is_move_assignable_v<decltype(m_success)> &&
+                 stdc::is_move_assignable_v<success_t> &&
+                 stdc::is_move_constructible_v<success_t>)
     {
         if (other.is_success()) {
             if (this->is_success()) {
-                this->unwrap_unchecked() = std::move(other.unwrap_unchecked());
+                this->unwrap_unchecked() = stdc::move(other.unwrap_unchecked());
             } else {
-                this->emplace_nodestroy(std::move(other.unwrap_unchecked()));
+                this->emplace_nodestroy(stdc::move(other.unwrap_unchecked()));
             }
         }
-        m_status = std::move(other.m_status);
+        m_status = stdc::move(other.m_status);
         return *this;
     }
 
@@ -215,10 +182,10 @@ __OK_RES_REQUIRES_CLAUSE class res<
         requires(is_convertible_to_c<other_success_t &&, success_t> &&
                  is_convertible_to_c<other_status_t &&, status_t>)
     constexpr res(res<other_success_t, other_status_t>&& other)
-        : m_status(std::move(other.status()))
+        : m_status(stdc::move(other.status()))
     {
         if (other->is_success()) {
-            this->emplace_nodestroy(std::move(other.unwrap_unchecked()));
+            this->emplace_nodestroy(stdc::move(other.unwrap_unchecked()));
         }
     }
 
@@ -254,16 +221,16 @@ __OK_RES_REQUIRES_CLAUSE class res<
                  (!is_convertible_to_c<other_status_t &&, status_t> ||
                   !is_convertible_to_c<other_success_t &&, success_t>))
     explicit constexpr res(res<other_success_t, other_status_t>&& other)
-        : m_status(std::move(other.status()))
+        : m_status(stdc::move(other.status()))
     {
         if (other->is_success()) {
-            this->emplace_nodestroy(std::move(other.unwrap_unchecked()));
+            this->emplace_nodestroy(stdc::move(other.unwrap_unchecked()));
         }
     }
 
     constexpr res(status_t&& status) OKAYLIB_NOEXCEPT
         requires status_object_c<status_t>
-        : m_status(std::move(status))
+        : m_status(stdc::move(status))
     {
         if (m_status.is_success()) [[unlikely]]
             __ok_abort("Attempt to construct an ok::res with no success value "
@@ -304,7 +271,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
     }
 
     constexpr res(const success_t& success) OKAYLIB_NOEXCEPT
-        requires std::is_copy_constructible_v<success_t>
+        requires stdc::is_copy_constructible_v<success_t>
         : m_status(
               ok::make_success<status_t>("Success value was copied into res")),
           m_success(ok::in_place, success)
@@ -312,10 +279,10 @@ __OK_RES_REQUIRES_CLAUSE class res<
     }
 
     constexpr res(success_t&& success) OKAYLIB_NOEXCEPT
-        requires std::is_move_constructible_v<success_t>
+        requires stdc::is_move_constructible_v<success_t>
         : m_status(
               ok::make_success<status_t>("Success value was moved into res")),
-          m_success(ok::in_place, std::move(success))
+          m_success(ok::in_place, stdc::move(success))
     {
     }
 
@@ -324,7 +291,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
     constexpr res(ok::in_place_t, args_t&&... args) OKAYLIB_NOEXCEPT
         : m_status(ok::make_success<status_t>(
               "Success value was emplaced into res")),
-          m_success(ok::in_place, std::forward<args_t>(args)...)
+          m_success(ok::in_place, stdc::forward<args_t>(args)...)
     {
     }
     // converting constructor
@@ -334,7 +301,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
                  !is_convertible_to_c<decltype(incoming), success_t>)
         : m_status(ok::make_success<status_t>(
               "Success value was copied (explicitly) into res")),
-          m_success(ok::in_place, std::forward<incoming_t>(incoming))
+          m_success(ok::in_place, stdc::forward<incoming_t>(incoming))
     {
     }
     template <typename incoming_t>
@@ -342,7 +309,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
         requires is_convertible_to_c<decltype(incoming), success_t>
         : m_status(ok::make_success<status_t>(
               "Success value was moved (explicitly) into res")),
-          m_success(ok::in_place, std::forward<incoming_t>(incoming))
+          m_success(ok::in_place, stdc::forward<incoming_t>(incoming))
     {
     }
 
@@ -355,10 +322,10 @@ __OK_RES_REQUIRES_CLAUSE class res<
             auto cloned = ok::try_clone(this->unwrap_unchecked());
             if (cloned.is_success()) {
                 return res<res, try_clone_status_t<success_t>>(
-                    ok::in_place, std::move(cloned.unwrap_unchecked()));
+                    ok::in_place, stdc::move(cloned.unwrap_unchecked()));
             } else {
                 return res<res, try_clone_status_t<success_t>>(
-                    std::move(cloned.status()));
+                    stdc::move(cloned.status()));
             }
         } else {
             return res<res, try_clone_status_t<success_t>>(
@@ -384,13 +351,13 @@ __OK_RES_REQUIRES_CLAUSE class res<
         using ret_type = try_clone_status_t<success_t>;
         const auto set_other_status = [this, dest] {
             // clone our status and move it into the other's status
-            if constexpr (std::is_move_assignable_v<status_t>) {
-                dest.m_status = std::move(ok::clone(this->status()));
+            if constexpr (stdc::is_move_assignable_v<status_t>) {
+                dest.m_status = stdc::move(ok::clone(this->status()));
             } else {
                 // emulate move assignment with destruction and construction
                 dest.m_status.~status_t();
                 ok::stdc::construct_at(ok::addressof(dest.m_status),
-                                       std::move(ok::clone(this->status())));
+                                       stdc::move(ok::clone(this->status())));
             }
         };
 
@@ -403,7 +370,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
             } else {
                 auto res = ok::try_clone(this->unwrap_unchecked());
                 if (res.is_success()) {
-                    dest.emplace_nodestroy(std::move(res.unwrap_unchecked()));
+                    dest.emplace_nodestroy(stdc::move(res.unwrap_unchecked()));
                 }
                 return ret_type(res.status());
             }
@@ -440,13 +407,13 @@ __OK_RES_REQUIRES_CLAUSE class res<
         }
 
         // clone our status and move it into the other's status
-        if constexpr (std::is_move_assignable_v<status_t>) {
-            dest.m_status = std::move(ok::clone(this->status()));
+        if constexpr (stdc::is_move_assignable_v<status_t>) {
+            dest.m_status = stdc::move(ok::clone(this->status()));
         } else {
             // emulate move assignment with destruction and construction
             dest.m_status.~status_t();
             ok::stdc::construct_at(ok::addressof(dest.m_status),
-                                   std::move(ok::clone(this->status())));
+                                   stdc::move(ok::clone(this->status())));
         }
     }
 
@@ -468,7 +435,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
     [[nodiscard]] constexpr status_t&& status() && OKAYLIB_NOEXCEPT
             requires status_object_c<status_t>
     {
-        return std::move(m_status);
+        return stdc::move(m_status);
     }
 
     [[nodiscard]] constexpr auto status() const& OKAYLIB_NOEXCEPT
@@ -517,7 +484,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
         if (!this->is_success())
             return nullopt;
 
-        return std::move(this->unwrap_unchecked());
+        return stdc::move(this->unwrap_unchecked());
     }
 
     [[nodiscard]] constexpr success_t& unwrap() & OKAYLIB_NOEXCEPT
@@ -544,7 +511,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
             __ok_abort(
                 "Attempt to unwrap success value of a res which is error.");
 
-        return std::move(this->unwrap_unchecked());
+        return stdc::move(this->unwrap_unchecked());
     }
 
     /// Unsafe access into res, potentially accessing uninitialized memory
@@ -569,7 +536,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
     [[nodiscard]] constexpr success_t&& unwrap_unchecked() && OKAYLIB_NOEXCEPT
     {
         __ok_assert(this->is_success(), "Bad access to result.");
-        return std::move(this->m_success.value);
+        return stdc::move(this->m_success.value);
     }
 
     /// Move-construct the success value out of the res, or return an
@@ -577,10 +544,10 @@ __OK_RES_REQUIRES_CLAUSE class res<
     /// res, because doing this leaves the success value in a moved-out state.
     [[nodiscard]] constexpr success_t unwrap_or(success_t alternative) &&
         OKAYLIB_NOEXCEPT
-            requires(std::is_move_constructible_v<success_t>)
+            requires(stdc::is_move_constructible_v<success_t>)
     {
         if (this->is_success()) {
-            return std::move(this->unwrap_unchecked());
+            return stdc::move(this->unwrap_unchecked());
         } else {
             return alternative;
         }
@@ -590,7 +557,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
     /// this res is a failure.
     [[nodiscard]] constexpr success_t
     copy_or(const success_t& alternative) const OKAYLIB_NOEXCEPT
-        requires(std::is_copy_constructible_v<success_t>)
+        requires(stdc::is_copy_constructible_v<success_t>)
     {
         if (this->is_success()) {
             return this->unwrap_unchecked();
@@ -599,93 +566,96 @@ __OK_RES_REQUIRES_CLAUSE class res<
         }
     }
 
-    template <detail::and_then_callable<success_t&&, status_t> callable_t>
-        [[nodiscard]] constexpr auto and_then(callable_t&& c) &&
+    /// Keeps the same success value but changes the status, if it is an error.
+    template <typename callable_t>
+        [[nodiscard]] constexpr auto transform_error(callable_t&& c) &&
         OKAYLIB_NOEXCEPT
-            requires std::is_move_constructible_v<status_t>
+            requires stdc::is_move_constructible_v<success_t> && requires {
+                requires !stdc::is_void_v<decltype(ok::invoke(
+                    std::forward<callable_t>(c), stdc::move(this->status())))>;
+            }
     {
-        using rettype = decltype(c(this->unwrap_unchecked()));
-        if (this->is_success()) {
-            return c(std::move(this->unwrap_unchecked()));
-        } else {
-            return rettype(std::move(this->status()));
-        }
-    }
-
-    template <detail::and_then_callable_noargs<status_t&&> callable_t>
-        [[nodiscard]] constexpr auto and_then(callable_t&& c) &&
-        OKAYLIB_NOEXCEPT
-            requires std::is_move_constructible_v<status_t>
-    {
-        using rettype = decltype(c());
-        if (this->is_success()) {
-            return c();
-        } else {
-            return rettype(std::move(this->status()));
-        }
-    }
-
-    template <detail::convert_error_callable<status_t&&> callable_t>
-        [[nodiscard]] constexpr auto convert_error(callable_t&& c) &&
-        OKAYLIB_NOEXCEPT
-            requires std::is_move_constructible_v<success_t>
-    {
-        using new_status = decltype(c(std::move(this->status())));
+        using new_status =
+            decltype(stdc::forward<callable_t>(c)(stdc::move(this->status())));
         if (this->is_success()) {
             return res<success_t, new_status>(
-                std::move(this->unwrap_unchecked()));
+                stdc::move(this->unwrap_unchecked()));
         } else {
-            return res<success_t, new_status>(c(std::move(this->status())));
-        }
-    }
-
-    template <detail::convert_error_callable_noargs callable_t>
-        [[nodiscard]] constexpr auto convert_error(callable_t&& c) &&
-        OKAYLIB_NOEXCEPT
-            requires std::is_move_constructible_v<success_t>
-    {
-        using new_status = decltype(c());
-        if (this->is_success()) {
             return res<success_t, new_status>(
-                std::move(this->unwrap_unchecked()));
-        } else {
-            return res<success_t, new_status>(c());
+                stdc::forward<callable_t>(c)(stdc::move(this->status())));
         }
     }
 
-    template <detail::transform_callable<success_t&&, status_t> callable_t>
-        [[nodiscard]] constexpr auto transform(callable_t&& c) &&
+    /// Keeps the same error but changes the success value, if it exists.
+    template <typename callable_t>
+        [[nodiscard]] constexpr auto transform_value(callable_t&& c) &&
         OKAYLIB_NOEXCEPT
-            requires std::is_move_constructible_v<success_t>
+            requires stdc::is_move_constructible_v<success_t> && (requires {
+                         requires !stdc::is_void_v<decltype(ok::invoke(
+                             std::forward<callable_t>(c),
+                             stdc::move(this->unwrap())))>;
+                     })
     {
-        using new_success = decltype(c(std::move(this->unwrap_unchecked())));
+        using new_success = decltype(ok::invoke(stdc::forward<callable_t>(c),
+                                                stdc::move(this->unwrap())));
         if (this->is_success()) {
             return res<new_success, status_t>(
-                c(std::move(this->unwrap_unchecked())));
+                ok::invoke(stdc::forward<callable_t>(c),
+                           stdc::move(this->unwrap_unchecked())));
         } else {
-            return res<new_success, status_t>(std::move(this->status()));
+            return res<new_success, status_t>(stdc::move(this->status()));
         }
     }
 
-    template <detail::transform_callable_noargs<status_t> callable_t>
-        [[nodiscard]] constexpr auto transform(callable_t&& c) &&
-        OKAYLIB_NOEXCEPT
-            requires std::is_move_constructible_v<success_t>
+    /// Create a new result which may be a (reference into/getter result from) a
+    /// particular member of the success value from this existing one, or an
+    /// error if this is an error.
+    template <typename callable_t>
+    [[nodiscard]] constexpr auto
+    transform_value(callable_t&& c) const& OKAYLIB_NOEXCEPT
+        requires stdc::is_copy_constructible_v<status_t> && requires {
+            requires !stdc::is_void_v<decltype(ok::invoke(
+                std::forward<callable_t>(c), this->unwrap()))>;
+        } || requires {
+            // version for member functions which take `this` by pointer
+            requires !stdc::is_void_v<decltype(ok::invoke(
+                std::forward<callable_t>(c), ok::addressof(this->unwrap())))>;
+        }
     {
-        using new_success = decltype(c());
-        if (this->is_success()) {
-            return res<new_success, status_t>(c());
+        constexpr bool accepts_reference = requires {
+            requires !stdc::is_void_v<decltype(ok::invoke(
+                std::forward<callable_t>(c), this->unwrap()))>;
+        };
+
+        if constexpr (accepts_reference) {
+            using new_success = decltype(ok::invoke(std::forward<callable_t>(c),
+                                                    this->unwrap()));
+            if (this->is_success()) {
+                return res<new_success, status_t>(ok::invoke(
+                    stdc::forward<callable_t>(c), this->unwrap_unchecked()));
+            } else {
+                return res<new_success, status_t>(this->status());
+            }
         } else {
-            return res<new_success, status_t>(std::move(this->status()));
+            using new_success = decltype(ok::invoke(
+                std::forward<callable_t>(c), ok::addressof(this->unwrap())));
+            // pointer to member function, need to take address
+            if (this->is_success()) {
+                return res<new_success, status_t>(
+                    ok::invoke(stdc::forward<callable_t>(c),
+                               ok::addressof(this->unwrap_unchecked())));
+            } else {
+                return res<new_success, status_t>(this->status());
+            }
         }
     }
 
     ~res()
-        requires(std::is_trivially_destructible_v<success_t>)
+        requires(stdc::is_trivially_destructible_v<success_t>)
     = default;
 
     ~res()
-        requires(!std::is_trivially_destructible_v<success_t>)
+        requires(!stdc::is_trivially_destructible_v<success_t>)
     {
         if (this->is_success()) {
             m_success.value.~success_t();
@@ -699,12 +669,12 @@ __OK_RES_REQUIRES_CLAUSE class res<
 
 template <typename success_t, status_type_c status_t>
 __OK_RES_REQUIRES_CLAUSE class res<
-    success_t, status_t, std::enable_if_t<stdc::is_reference_c<success_t>>>
+    success_t, status_t, stdc::enable_if_t<stdc::is_reference_c<success_t>>>
 {
-    static_assert(!std::is_void_v<status_t>,
+    static_assert(!stdc::is_void_v<status_t>,
                   "Res does not support void as template arguments.");
 
-    using value_type = std::remove_reference_t<success_t>;
+    using value_type = stdc::remove_reference_t<success_t>;
 
     value_type* m_success;
     status_t m_status;
@@ -743,7 +713,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
 
     constexpr res(status_t&& status) OKAYLIB_NOEXCEPT
         requires ok::status_object_c<status_t>
-        : m_status(std::move(status))
+        : m_status(stdc::move(status))
     {
         if (m_status.is_success()) [[unlikely]]
             __ok_abort("Attempt to construct an ok::res with no success value "
@@ -772,7 +742,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
 
     [[nodiscard]] constexpr status_t&& status() && OKAYLIB_NOEXCEPT
     {
-        return std::move(m_status);
+        return stdc::move(m_status);
     }
 
     [[nodiscard]] constexpr opt<success_t> to_opt() const OKAYLIB_NOEXCEPT
@@ -826,7 +796,7 @@ res_accessor_t<T, E>::emplace_error_nodestroy(res<T, E>& res,
                                               args_t&&... args) noexcept
 {
     ok::stdc::construct_at(ok::addressof(res.m_status),
-                           std::forward<args_t>(args)...);
+                           stdc::forward<args_t>(args)...);
 }
 
 template <typename T, typename E>
@@ -864,7 +834,7 @@ template <ok::status_enum enum_t> struct fmt::formatter<ok::status<enum_t>>
             } else {
                 return fmt::format_to(
                     ctx.out(), "{:s}::{}", ok::ctti::nameof<enum_t>(),
-                    std::underlying_type_t<enum_t>(status.as_enum()));
+                    stdc::underlying_type_t<enum_t>(status.as_enum()));
             }
         }
     }
@@ -891,7 +861,7 @@ struct fmt::formatter<ok::res<success_t, status_t>>
         if (result.is_success()) {
             if constexpr (stdc::is_reference_c<success_t>) {
                 if constexpr (fmt::is_formattable<
-                                  std::remove_reference_t<success_t>>::value) {
+                                  stdc::remove_reference_t<success_t>>::value) {
                     return fmt::format_to(ctx.out(), "res<{} &>",
                                           result.unwrap_unchecked());
                 } else {
@@ -907,7 +877,7 @@ struct fmt::formatter<ok::res<success_t, status_t>>
             if constexpr (fmt::is_formattable<status_t>::value) {
                 return fmt::format_to(ctx.out(), "{}", result.status());
             } else if constexpr (ok::status_enum<status_t>) {
-                using enum_int_t = std::underlying_type_t<status_t>;
+                using enum_int_t = stdc::underlying_type_t<status_t>;
                 return fmt::format_to(ctx.out(), "[FAILURE, CODE {}]",
                                       enum_int_t(result.status()));
             } else {
