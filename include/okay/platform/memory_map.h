@@ -92,8 +92,12 @@ inline map_result_t reserve_pages(void* address_hint, size_t num_pages)
 
 /// Takes a pointer to a set of memory pages which you want to make
 /// readable and writable by your process, specifically ones allocated by
-/// mm_reserve_pages().
-/// Returns 0 on success, otherwise an errcode.
+/// mm_reserve_pages(). It is platform dependent behavior what happens if you
+/// try to change the protection on pages *not* mapped with mm_reserve_pages(),
+/// and in some cases you may see a success code when calling commit_pages on
+/// pages not allocated with mm_reserve_pages(). Therefore it is up to the
+/// caller to ensure that does not happen. Returns 0 on success, otherwise an
+/// errcode.
 inline int64_t commit_pages(void* address, size_t num_pages)
 {
     if (!address) {

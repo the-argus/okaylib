@@ -10,11 +10,17 @@
 namespace ok {
 
 /// Similar to page_allocator_t, except it reserves a (configurable, but
-/// constant) number of pages for each allocation. Reallocating will almost
-/// always be able to be done in-place. This allocator behaves as though you
-/// always passed the in_place_orelse_fail flag.
-/// Freeing a subslice of the original allocation with this allocator is
-/// defined behavior, unlike page_allocator_t.
+/// constant per allocator) number of pages for each allocation. Reallocating
+/// will almost always be able to be done in-place. This allocator behaves as
+/// though you always passed the in_place_orelse_fail flag.
+///
+/// It is undefined behavior to free or reallocate memory that is not a pointer
+/// to the start of an allocation made with a reserving_page_allocator_t.
+///
+/// If you try to shrink the allocation without passing the flag
+/// realloc_flags::shrink_back, you may get a failure when in fact the
+/// allocation has remained valid. Generally just avoid shrinking, this
+/// allocator can't support it anyways.
 class reserving_page_allocator_t : public allocator_t
 {
   public:
@@ -154,6 +160,12 @@ class reserving_page_allocator_t : public allocator_t
         const size_t num_bytes =
             runtime_round_up_to_multiple_of(page_size, actual_size_bytes);
         const size_t num_pages = num_bytes / page_size;
+
+        // it is undefined behavior to try to commit memory which was not
+        // reserved. So if someone tries to commit memory bigger than what
+        // we can guarantee was reserved, we just fail.
+        if (num_pages > m_pages_reserved) [[unlikely]]
+            return alloc::error::oom;
 
         int64_t code = mmap::commit_pages(
             request.memory.unchecked_address_of_first_item(), num_pages);
