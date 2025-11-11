@@ -112,7 +112,7 @@ class segmented_list_t
     }
 
     template <allocator_c incoming_allocator_t = ok::allocator_t>
-    [[nodiscard]] constexpr alloc::result_t<slice<slice<const T>>>
+    [[nodiscard]] constexpr alloc::result_t<slice<const slice<const T>>>
     get_blocks(incoming_allocator_t& allocator) const& OKAYLIB_NOEXCEPT
     {
         using namespace segmented_list::detail;
@@ -146,7 +146,7 @@ class segmented_list_t
 
         // initialize the slices in `blocks` to point to all the blocks
         {
-            size_t block_size = two_to_the_power_of(m.initial_size_exponent);
+            size_t block_size = 1;
 
             for (size_t i = 0; i < blocks.size(); ++i) {
                 slice<const T>& uninit = blocks.unchecked_access(i);
@@ -164,13 +164,11 @@ class segmented_list_t
     }
 
     template <typename incoming_allocator_t = ok::allocator_t>
-        [[nodiscard]] constexpr alloc::result_t<slice<slice<T>>>
+        [[nodiscard]] constexpr alloc::result_t<slice<const slice<T>>>
         get_blocks(incoming_allocator_t& allocator) & OKAYLIB_NOEXCEPT
     {
-        //  HACK: this is to reduce code duplication for now but it might be
-        //  causing unecessary copies in and out of results
         if (this->is_empty()) {
-            return make_null_slice<slice<T>>();
+            return make_null_slice<slice<const slice<T>>>();
         }
 
         auto result =
@@ -179,9 +177,9 @@ class segmented_list_t
             return result.status();
         }
 
-        slice<slice<const T>>& blocks = result.unwrap();
+        slice<const slice<const T>>& blocks = result.unwrap();
 
-        return raw_slice(*reinterpret_cast<slice<T>*>(
+        return raw_slice(*reinterpret_cast<const slice<T>*>(
                              blocks.unchecked_address_of_first_item()),
                          blocks.size());
     }
@@ -236,82 +234,15 @@ class segmented_list_t
         const size_t capacity = this->capacity();
         __ok_internal_assert(size <= capacity);
 
-        if (size != capacity) {
-            return alloc::error::success;
-        }
-
-        const size_t bytes_needed =
-            (m.blocklist ? size_of_block_at(m.blocklist->num_blocks)
-                         : two_to_the_power_of(m.initial_size_exponent)) *
-            sizeof(T);
-
-        auto new_buffer_result = m.allocator->allocate(alloc::request_t{
-            .num_bytes = bytes_needed,
-            .alignment = alignof(T),
-            .leave_nonzeroed = true,
-        });
-
-        if (!new_buffer_result.is_success()) [[unlikely]] {
-            return new_buffer_result.status();
-        }
-
-        bytes_t& new_buffer_bytes = new_buffer_result.unwrap();
-        defer free_new_buffer = [&] {
-            m.allocator->deallocate(
-                new_buffer_bytes.unchecked_address_of_first_item());
-        };
-
-        if (!m.blocklist) {
-            auto blocklist_result = m.allocator->allocate(alloc::request_t{
-                .num_bytes = sizeof(blocklist_t) + (sizeof(T*) * m.size),
-                .alignment = alignof(blocklist_t),
-                .leave_nonzeroed = true,
-            });
-
-            if (!blocklist_result.is_success()) [[unlikely]] {
-                return blocklist_result.status();
+        // TODO: we can predict how many blocks we need here and allocate them
+        // in 1-2 allocations (an extra one may be needed to reallocate the
+        // blocklist as well)
+        while (size + additional_allocated_spots > capacity) {
+            if (auto status = this->new_block(); !ok::is_success(status))
+                [[unlikely]] {
+                return status;
             }
-
-            bytes_t& blocklist_bytes = blocklist_result.unwrap();
-            m.blocklist = reinterpret_cast<blocklist_t*>(
-                blocklist_bytes.unchecked_address_of_first_item());
-
-            m.blocklist->num_blocks = 0;
-            m.blocklist->capacity =
-                (blocklist_bytes.size() - sizeof(blocklist_t)) / sizeof(T*);
-            // m.size used to encode initial number of block pointers to
-            // allocate, now it actually stores number of items in this
-            // segmented list
-            m.size = 0;
-        } else if (m.blocklist->capacity <= m.blocklist->num_blocks) {
-            auto new_blocklist_result =
-                m.allocator->reallocate(alloc::reallocate_request_t{
-                    .preferred_size_bytes =
-                        sizeof(blocklist_t) +
-                        (sizeof(T*) * m.blocklist->capacity * 2),
-                    .new_size_bytes = sizeof(blocklist_t) +
-                                      (sizeof(T*) * m.blocklist->capacity + 1),
-                    .flags = alloc::realloc_flags::expand_back,
-                });
-
-            if (!new_blocklist_result.is_success()) [[unlikely]] {
-                return new_blocklist_result.status();
-            }
-
-            bytes_t& blocklist_bytes = new_blocklist_result.unwrap();
-            m.blocklist = reinterpret_cast<blocklist_t*>(
-                blocklist_bytes.unchecked_address_of_first_item());
-            m.blocklist->capacity =
-                (blocklist_bytes.size() - sizeof(blocklist_t)) / sizeof(T*);
         }
-
-        __ok_internal_assert(m.blocklist->capacity > m.blocklist->num_blocks);
-
-        free_new_buffer.cancel();
-
-        m.blocklist->blocks[m.blocklist->num_blocks] = reinterpret_cast<T*>(
-            new_buffer_bytes.unchecked_address_of_first_item());
-        m.blocklist->num_blocks++;
 
         return alloc::error::success;
     }
@@ -474,17 +405,50 @@ class segmented_list_t
     [[nodiscard]] constexpr ok::alloc::result_t<T&>
     insert_at(const size_t idx, args_t&&... args) OKAYLIB_NOEXCEPT
     {
-        __ok_assert(idx < this->size() || idx == 0,
+        __ok_assert(idx <= this->size(),
                     "out of bounds access in segmented_list_t<T>::insert_at");
         if (this->size() == this->capacity()) {
-            // realloc
+            if (ok::status status =
+                    ensure_additional_blocklist_capacity_is_at_least_one();
+                !status.is_success()) [[unlikely]] {
+                return status;
+            }
+            __ok_internal_assert(m.blocklist && (m.blocklist->capacity >
+                                                 m.blocklist->num_blocks));
+
+            if (auto status = this->new_block(); !status.is_success()) {
+                [[unlikely]] return status;
+            }
         }
         __ok_internal_assert(this->capacity() > this->size());
 
-        T& new_item = this->unchecked_access(this->size());
+        if (idx == this->size()) {
+            // append to end
+            T& new_item = this->unchecked_access(this->size());
 
-        ok::make_into_uninitialized<T>(new_item,
-                                       ok::stdc::forward<args_t>(args)...);
+            ok::make_into_uninitialized<T>(new_item,
+                                           ok::stdc::forward<args_t>(args)...);
+        } else {
+            // TODO: use memmove here for trivially copyable types
+
+            T* existing_item = nullptr;
+            // using integer overflow on purpose in this loop, to stay unsigned
+            for (size_t i = this->size() - 1; i < this->size(); --i) {
+                existing_item = ok::addressof(this->unchecked_access(idx));
+                T& nonexisting_item = this->unchecked_access(idx + 1);
+                stdc::construct_at(ok::addressof(nonexisting_item),
+                                   std::move(*existing_item));
+            }
+
+            __ok_internal_assert(existing_item);
+            __ok_internal_assert(existing_item ==
+                                 ok::addressof(this->unchecked_access(idx)));
+
+            // the last "existing" item no longer exists as we moved everything
+            // down by one
+            ok::make_into_uninitialized<T>(*existing_item,
+                                           ok::stdc::forward<args_t>(args)...);
+        }
 
         ++m.size;
 
@@ -558,6 +522,97 @@ class segmented_list_t
         }
 
         m.allocator->deallocate(m.blocklist);
+    }
+
+    [[nodiscard]] constexpr status<alloc::error> new_block() OKAYLIB_NOEXCEPT
+    {
+        using namespace segmented_list::detail;
+        const size_t bytes_needed =
+            (m.blocklist ? size_of_block_at(m.blocklist->num_blocks) : 1) *
+            sizeof(T);
+
+        auto new_buffer_result = m.allocator->allocate(alloc::request_t{
+            .num_bytes = bytes_needed,
+            .alignment = alignof(T),
+            .leave_nonzeroed = true,
+        });
+
+        if (!new_buffer_result.is_success()) [[unlikely]]
+            return new_buffer_result.status();
+
+        bytes_t& new_buffer_bytes = new_buffer_result.unwrap();
+        defer free_new_buffer = [&] {
+            m.allocator->deallocate(
+                new_buffer_bytes.unchecked_address_of_first_item());
+        };
+
+        ok::status blocklist_status =
+            ensure_additional_blocklist_capacity_is_at_least_one();
+        if (!ok::is_success(blocklist_status)) [[unlikely]]
+            return blocklist_status;
+
+        __ok_internal_assert(m.blocklist &&
+                             m.blocklist->capacity > m.blocklist->num_blocks);
+
+        free_new_buffer.cancel();
+
+        m.blocklist->blocks[m.blocklist->num_blocks] = reinterpret_cast<T*>(
+            new_buffer_bytes.unchecked_address_of_first_item());
+        m.blocklist->num_blocks++;
+
+        return alloc::error::success;
+    }
+
+    /// Reallocates the blocklist to have space for at least one more block
+    [[nodiscard]] constexpr status<alloc::error>
+    ensure_additional_blocklist_capacity_is_at_least_one() OKAYLIB_NOEXCEPT
+    {
+        if (!m.blocklist) {
+            auto blocklist_result = m.allocator->allocate(alloc::request_t{
+                .num_bytes = sizeof(blocklist_t) + (sizeof(T*) * m.size),
+                .alignment = alignof(blocklist_t),
+                .leave_nonzeroed = true,
+            });
+
+            if (!blocklist_result.is_success()) [[unlikely]]
+                return blocklist_result.status();
+
+            bytes_t& blocklist_bytes = blocklist_result.unwrap();
+            m.blocklist = reinterpret_cast<blocklist_t*>(
+                blocklist_bytes.unchecked_address_of_first_item());
+
+            m.blocklist->num_blocks = 0;
+            m.blocklist->capacity =
+                (blocklist_bytes.size() - sizeof(blocklist_t)) / sizeof(T*);
+            // m.size used to encode initial number of block pointers to
+            // allocate, now it actually stores number of items in this
+            // segmented list
+            m.size = 0;
+        } else if (m.blocklist->capacity <= m.blocklist->num_blocks) {
+            auto new_blocklist_result =
+                m.allocator->reallocate(alloc::reallocate_request_t{
+                    .memory = ok::raw_slice<uint8_t>(
+                        *reinterpret_cast<uint8_t*>(m.blocklist),
+                        (m.blocklist->capacity * sizeof(T*)) +
+                            sizeof(blocklist_t)),
+                    .new_size_bytes = sizeof(blocklist_t) +
+                                      (sizeof(T*) * m.blocklist->capacity + 1),
+                    .preferred_size_bytes =
+                        sizeof(blocklist_t) +
+                        (sizeof(T*) * m.blocklist->capacity * 2),
+                    .flags = alloc::realloc_flags::expand_back,
+                });
+
+            if (!new_blocklist_result.is_success()) [[unlikely]]
+                return new_blocklist_result.status();
+
+            bytes_t& blocklist_bytes = new_blocklist_result.unwrap();
+            m.blocklist = reinterpret_cast<blocklist_t*>(
+                blocklist_bytes.unchecked_address_of_first_item());
+            m.blocklist->capacity =
+                (blocklist_bytes.size() - sizeof(blocklist_t)) / sizeof(T*);
+        }
+        return alloc::error::success;
     }
 
     [[nodiscard]] constexpr T& unchecked_access(size_t index) & OKAYLIB_NOEXCEPT
