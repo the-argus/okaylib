@@ -247,9 +247,13 @@ __OK_RES_REQUIRES_CLAUSE class res<
                        "but a status that says there is one.");
     }
 
+    // NOTE: this is a template to defer instantiating ok::status<status_t>
+    // until the `requires` clause, otherwise that will cause a compilation
+    // error if the status is not a status enum.
     template <typename T>
     constexpr res(const T& status) OKAYLIB_NOEXCEPT
-        requires same_as_c<T, ok::status<status_t>> && status_enum_c<status_t>
+        requires ok::same_as_c<ok::status<status_t>, T> &&
+                     status_enum_c<status_t>
         : m_status(status.as_enum())
 #if defined(OKAYLIB_TESTING_BACKTRACE)
           ,
@@ -702,8 +706,8 @@ __OK_RES_REQUIRES_CLAUSE class res<
     }
 
     constexpr res(const status_t& status) OKAYLIB_NOEXCEPT
-        requires ok::status_object_c<status_t> &&
-                 ok::stdc::is_copy_constructible_v<status_t>
+        requires(!ok::status_enum_c<status_t> &&
+                 ok::stdc::is_copy_constructible_v<status_t>)
         : m_status(status)
     {
         if (status.is_success()) [[unlikely]]
@@ -718,6 +722,60 @@ __OK_RES_REQUIRES_CLAUSE class res<
         if (m_status.is_success()) [[unlikely]]
             __ok_abort("Attempt to construct an ok::res with no success value "
                        "but a status that says there is one.");
+    }
+
+    // NOTE: this is a template to defer instantiating ok::status<status_t>
+    // until the `requires` clause, otherwise that will cause a compilation
+    // error if the status is not a status enum.
+    template <typename T>
+    constexpr res(const T& status) OKAYLIB_NOEXCEPT
+        requires ok::same_as_c<ok::status<status_t>, T> &&
+                     status_enum_c<status_t>
+        : m_status(status.as_enum())
+#if defined(OKAYLIB_TESTING_BACKTRACE)
+          ,
+          stacktrace(status.stacktrace)
+#endif
+    {
+        if (m_status == status_t::success) [[unlikely]]
+            __ok_abort("Attempt to construct an ok::res with no success value "
+                       "but a status that says there is one.");
+    }
+
+    [[nodiscard]] constexpr const status_t& status() const& OKAYLIB_NOEXCEPT
+        requires status_object_c<status_t>
+    {
+        return m_status;
+    }
+
+    [[nodiscard]] constexpr status_t&& status() && OKAYLIB_NOEXCEPT
+            requires status_object_c<status_t>
+    {
+        return stdc::move(m_status);
+    }
+
+    [[nodiscard]] constexpr auto status() const& OKAYLIB_NOEXCEPT
+        requires status_enum_c<status_t>
+    {
+#if defined(OKAYLIB_TESTING_BACKTRACE)
+        ok::status<status_t> out(m_status);
+        out.stacktrace = this->stacktrace;
+        return out;
+#else
+        return ok::status<status_t>(m_status);
+#endif
+    }
+
+    [[nodiscard]] constexpr auto status() const&& OKAYLIB_NOEXCEPT
+        requires status_enum_c<status_t>
+    {
+#if defined(OKAYLIB_TESTING_BACKTRACE)
+        ok::status<status_t> out(m_status);
+        out.stacktrace = this->stacktrace;
+        return out;
+#else
+        return ok::status<status_t>(m_status);
+#endif
     }
 
     constexpr res(success_t success) OKAYLIB_NOEXCEPT
