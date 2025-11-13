@@ -35,6 +35,9 @@
 
               # code coverage (llvm-profdata)
               llvmPackages.bintools-unwrapped
+
+              # code coverage which doesn't require source introspection
+              kcov
             ])
             ++ pkgs.lib.optionals (system != flake-utils.lib.system.aarch64-darwin) (with pkgs; [
               gdb
