@@ -32,11 +32,18 @@
 
               # backtraces
               libbfd
+
+              # code coverage (llvm-profdata)
+              llvmPackages.bintools-unwrapped
             ])
             ++ pkgs.lib.optionals (system != flake-utils.lib.system.aarch64-darwin) (with pkgs; [
               gdb
               valgrind
             ]);
+
+          shellHook = ''
+            export LLVM_PROFILE_FILE="$(pwd)/%Nm-%b.profraw"
+          '';
         };
 
       formatter = pkgs.alejandra;

@@ -34,6 +34,11 @@ const testing_flags = &[_][]const u8{
     "-DFMT_HEADER_ONLY",
 };
 
+const coverage_flags = &[_][]const u8{
+    "-fprofile-instr-generate",
+    "-fcoverage-mapping",
+};
+
 const testing_backtrace_flags = &[_][]const u8{
     "-DOKAYLIB_TESTING_BACKTRACE",
     "-DBACKWARD_HAS_UNWIND=1",
@@ -179,6 +184,9 @@ pub fn build(b: *std.Build) !void {
     const optimize = b.standardOptimizeOption(.{});
 
     const use_backtrace = b.option(bool, "use_backtrace", "use backtrace library to get nice stack traces from tests") orelse true;
+    const build_coverage = b.option(bool, "build_coverage", "pass llvm code coverage generation flags") orelse false;
+
+    const use_lld: ?bool = if (use_backtrace) false else if (build_coverage) true else null;
 
     var flags = std.ArrayList([]const u8){};
     defer flags.deinit(b.allocator);
@@ -203,6 +211,10 @@ pub fn build(b: *std.Build) !void {
     const fmt_include_path = b.pathJoin(&.{ fmt.builder.install_path, "include" });
     try flags.append(b.allocator, b.fmt("-I{s}", .{fmt_include_path}));
 
+    if (build_coverage) {
+        try flags.appendSlice(b.allocator, coverage_flags);
+    }
+
     const flags_owned = flags.toOwnedSlice(b.allocator) catch @panic("OOM");
 
     const test_backtraces_lib = b.addLibrary(.{
@@ -212,7 +224,7 @@ pub fn build(b: *std.Build) !void {
         }),
         .linkage = .static,
         .name = "test_backtraces_source_files",
-        .use_lld = false,
+        .use_lld = use_lld,
     });
 
     if (use_backtrace) {
@@ -222,8 +234,8 @@ pub fn build(b: *std.Build) !void {
         });
         // backtraces
         test_backtraces_lib.linkSystemLibrary("bfd");
+        test_backtraces_lib.linkLibCpp();
     }
-    test_backtraces_lib.linkLibCpp();
 
     for (test_source_files) |source_file| {
         var test_exe = b.addExecutable(.{
@@ -232,7 +244,7 @@ pub fn build(b: *std.Build) !void {
                 .target = target,
                 .optimize = optimize,
             }),
-            .use_lld = false,
+            .use_lld = use_lld,
         });
         test_exe.addCSourceFile(.{
             .file = b.path(b.pathJoin(&.{ "tests", source_file })),
