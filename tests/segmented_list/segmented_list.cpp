@@ -56,11 +56,21 @@ TEST_SUITE("segmented list")
         SUBCASE("copy items from range constructor")
         {
             constexpr auto rng = bit_array::bit_string("10101");
+
             segmented_list_t bools =
                 segmented_list::copy_items_from_range(
-                    c_allocator,
-                    rng | transform([](ok::bit b) { return bool(b); }))
+                    c_allocator, rng | transform(&ok::bit::operator bool))
                     .unwrap();
+
+            REQUIRE(ok::size(bools) == ok::size(rng));
+
+            printf("bool 0: %s\n", bools[0] ? "true" : "false");
+            printf("bool 1: %s\n", bools[1] ? "true" : "false");
+            printf("bool 2: %s\n", bools[2] ? "true" : "false");
+            printf("bool 3: %s\n", bools[3] ? "true" : "false");
+            printf("bool 4: %s\n", bools[4] ? "true" : "false");
+            REQUIREABORTS(auto&& _ = bools[5]);
+
             REQUIRE_RANGES_EQUAL(rng, bools);
         }
     }

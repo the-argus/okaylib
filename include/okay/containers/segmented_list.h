@@ -19,51 +19,56 @@ namespace segmented_list {
 namespace detail {
 template <typename T> struct empty_t;
 struct copy_items_from_range_t;
-[[nodiscard]] static constexpr size_t
+[[nodiscard]] constexpr size_t
 num_blocks_needed_for_spots(size_t num_spots) noexcept
 {
     return log2_uint_ceil(num_spots + 1);
 }
 
-static_assert(num_blocks_needed_for_spots(1) == 1);
-static_assert(num_blocks_needed_for_spots(2) == 2);
-static_assert(num_blocks_needed_for_spots(3) == 2);
-static_assert(num_blocks_needed_for_spots(4) == 3);
-static_assert(num_blocks_needed_for_spots(5) == 3);
-static_assert(num_blocks_needed_for_spots(6) == 3);
-static_assert(num_blocks_needed_for_spots(7) == 3);
-static_assert(num_blocks_needed_for_spots(8) == 4);
-
-[[nodiscard]] static constexpr size_t
+[[nodiscard]] constexpr size_t
 get_num_spots_for_blocks(const size_t num_blocks) noexcept
 {
     return two_to_the_power_of(num_blocks) - 1;
 }
 
+/// Returns a tuple of the index of the block this item belongs to in the
+/// blocklist, and the sub-index of that item within the block (its
+/// offset within the block)
+[[nodiscard]] constexpr ok::tuple<size_t, size_t>
+get_block_index_and_offset(const size_t idx) noexcept
+{
+    const auto blockidx = log2_uint(idx + 1);
+    return ok::tuple{blockidx, idx - (two_to_the_power_of(blockidx) - 1)};
+}
+
+[[nodiscard]] constexpr size_t size_of_block_at(size_t idx) OKAYLIB_NOEXCEPT
+{
+    return two_to_the_power_of(idx);
+}
+
+static_assert(size_of_block_at(0) == 1);
+static_assert(size_of_block_at(1) == 2);
+static_assert(size_of_block_at(2) == 4);
+static_assert(num_blocks_needed_for_spots(0) == 0);
+static_assert(num_blocks_needed_for_spots(1) == 1);
+static_assert(num_blocks_needed_for_spots(2) == 2);
+static_assert(num_blocks_needed_for_spots(3) == 2);
+static_assert(num_blocks_needed_for_spots(4) == 3);
+static_assert(num_blocks_needed_for_spots(7) == 3);
+static_assert(num_blocks_needed_for_spots(8) == 4);
 static_assert(get_num_spots_for_blocks(0) == 0);
 static_assert(get_num_spots_for_blocks(1) == 1);
 static_assert(get_num_spots_for_blocks(2) == 3);
 static_assert(get_num_spots_for_blocks(3) == 7);
 static_assert(get_num_spots_for_blocks(4) == 15);
-static_assert(get_num_spots_for_blocks(5) == 31);
-
-/// Returns a tuple of the index of the block this item belongs to in the
-/// blocklist, and the sub-index of that item within the block (ie. its
-/// offset within the block)
-[[nodiscard]] static constexpr ok::tuple<size_t, size_t>
-get_block_index_and_offset(const size_t idx) noexcept
-{
-    const size_t blocks_needed = num_blocks_needed_for_spots(idx + 1);
-    return ok::make_tuple(blocks_needed,
-                          get_num_spots_for_blocks(blocks_needed) - idx);
-}
-
-[[nodiscard]] constexpr static size_t
-size_of_block_at(size_t idx) OKAYLIB_NOEXCEPT
-{
-    return two_to_the_power_of(idx);
-}
-
+static_assert(get_block_index_and_offset(0) == ok::tuple{0, 0});
+static_assert(get_block_index_and_offset(1) == ok::tuple{1, 0});
+static_assert(get_block_index_and_offset(2) == ok::tuple{1, 1});
+static_assert(get_block_index_and_offset(3) == ok::tuple{2, 0});
+static_assert(get_block_index_and_offset(4) == ok::tuple{2, 1});
+static_assert(get_block_index_and_offset(5) == ok::tuple{2, 2});
+static_assert(get_block_index_and_offset(6) == ok::tuple{2, 3});
+static_assert(get_block_index_and_offset(7) == ok::tuple{3, 0});
 } // namespace detail
 } // namespace segmented_list
 
@@ -405,6 +410,17 @@ class segmented_list_t
     [[nodiscard]] constexpr ok::alloc::result_t<T&>
     insert_at(const size_t idx, args_t&&... args) OKAYLIB_NOEXCEPT
     {
+        if (!m.blocklist) [[unlikely]] {
+            if (ok::status status = initialize_blocklist();
+                !status.is_success()) [[unlikely]] {
+                return status;
+            }
+            if (ok::status status = new_block(); !status.is_success())
+                [[unlikely]] {
+                return status;
+            }
+        }
+        __ok_internal_assert(m.blocklist);
         __ok_assert(idx <= this->size(),
                     "out of bounds access in segmented_list_t<T>::insert_at");
         if (this->size() == this->capacity()) {
@@ -428,6 +444,8 @@ class segmented_list_t
 
             ok::make_into_uninitialized<T>(new_item,
                                            ok::stdc::forward<args_t>(args)...);
+            ++m.size;
+            return new_item;
         } else {
             // TODO: use memmove here for trivially copyable types
 
@@ -448,11 +466,9 @@ class segmented_list_t
             // down by one
             ok::make_into_uninitialized<T>(*existing_item,
                                            ok::stdc::forward<args_t>(args)...);
+            ++m.size;
+            return *existing_item;
         }
-
-        ++m.size;
-
-        return alloc::error::success;
     }
 
     template <typename... args_t>
@@ -563,31 +579,41 @@ class segmented_list_t
         return alloc::error::success;
     }
 
+    [[nodiscard]] constexpr status<alloc::error>
+    initialize_blocklist() OKAYLIB_NOEXCEPT
+    {
+        __ok_internal_assert(!m.blocklist);
+        auto blocklist_result = m.allocator->allocate(alloc::request_t{
+            .num_bytes = sizeof(blocklist_t) + (sizeof(T*) * m.size),
+            .alignment = alignof(blocklist_t),
+            .leave_nonzeroed = true,
+        });
+
+        if (!blocklist_result.is_success()) [[unlikely]]
+            return blocklist_result.status();
+
+        bytes_t& blocklist_bytes = blocklist_result.unwrap();
+        m.blocklist = reinterpret_cast<blocklist_t*>(
+            blocklist_bytes.unchecked_address_of_first_item());
+
+        m.blocklist->num_blocks = 0;
+        m.blocklist->capacity =
+            (blocklist_bytes.size() - sizeof(blocklist_t)) / sizeof(T*);
+        // m.size used to encode initial number of block pointers to
+        // allocate, now it actually stores number of items in this
+        // segmented list
+        m.size = 0;
+        return alloc::error::success;
+    }
+
     /// Reallocates the blocklist to have space for at least one more block
     [[nodiscard]] constexpr status<alloc::error>
     ensure_additional_blocklist_capacity_is_at_least_one() OKAYLIB_NOEXCEPT
     {
         if (!m.blocklist) {
-            auto blocklist_result = m.allocator->allocate(alloc::request_t{
-                .num_bytes = sizeof(blocklist_t) + (sizeof(T*) * m.size),
-                .alignment = alignof(blocklist_t),
-                .leave_nonzeroed = true,
-            });
-
-            if (!blocklist_result.is_success()) [[unlikely]]
-                return blocklist_result.status();
-
-            bytes_t& blocklist_bytes = blocklist_result.unwrap();
-            m.blocklist = reinterpret_cast<blocklist_t*>(
-                blocklist_bytes.unchecked_address_of_first_item());
-
-            m.blocklist->num_blocks = 0;
-            m.blocklist->capacity =
-                (blocklist_bytes.size() - sizeof(blocklist_t)) / sizeof(T*);
-            // m.size used to encode initial number of block pointers to
-            // allocate, now it actually stores number of items in this
-            // segmented list
-            m.size = 0;
+            if (ok::status status = initialize_blocklist();
+                !status.is_success()) [[unlikely]]
+                return status;
         } else if (m.blocklist->capacity <= m.blocklist->num_blocks) {
             auto new_blocklist_result =
                 m.allocator->reallocate(alloc::reallocate_request_t{
@@ -695,7 +721,7 @@ template <typename T> struct empty_t
             .blocklist = nullptr,
             // when blocklist is nullptr, "size" actually means size of initial
             // blocklist allocation
-            .size = log2_uint_ceil(ok::max(1UL, options.expected_max_capacity)),
+            .size = log2_uint_ceil(ok::max(2UL, options.expected_max_capacity)),
             .allocator = ok::addressof(allocator),
         };
 

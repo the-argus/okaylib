@@ -20,17 +20,18 @@ struct transform_fn_t
     operator()(range_t&& range, callable_t&& callable) const OKAYLIB_NOEXCEPT
     {
         using T = detail::remove_cvref_t<range_t>;
-        static_assert(ok::is_std_invocable_c<const callable_t&,
-                                             decltype(ok::range_get_best(
-                                                 range, ok::begin(range)))>,
+
+        using item_t = decltype(ok::range_get_best(range, ok::begin(range)));
+        static_assert(ok::is_std_invocable_c<const callable_t&, item_t>,
                       "Given transformation function and given range do not "
                       "match up: there is no way to call a const reference to "
                       "the given callable with the result of range_get_best(). "
                       "Make sure the callable is not marked `mutable`.");
-        static_assert(!ok::is_void_c<decltype(callable(
-                          ok::range_get_best(range, ok::begin(range))))>,
+        static_assert(!ok::is_void_c<decltype(ok::invoke(
+                          callable, stdc::declval<item_t>()))>,
                       "Object given as callable accepts the correct arguments, "
                       "but always returns void.");
+
         return transformed_view_t<decltype(range), callable_t>{
             std::forward<range_t>(range), std::forward<callable_t>(callable)};
     }
@@ -81,8 +82,10 @@ struct range_definition<detail::transformed_view_t<input_range_t, callable_t>>
     get_and_transform(T& t, const cursor_t& cursor) OKAYLIB_NOEXCEPT
     {
         using inner_def = detail::range_definition_inner_t<range_t>;
-        return t.transformer_callable()(ok::range_get_best(
-            t.template get_view_reference<T, range_t>(), cursor));
+        return ok::invoke(
+            t.transformer_callable(),
+            ok::range_get_best(t.template get_view_reference<T, range_t>(),
+                               cursor));
     }
 
     // NOTE: we only allow callables whose operator() are marked const, no need
