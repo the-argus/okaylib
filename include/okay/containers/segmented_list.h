@@ -116,79 +116,6 @@ class segmented_list_t
         return this->remove(this->size() - 1);
     }
 
-    template <allocator_c incoming_allocator_t = ok::allocator_t>
-    [[nodiscard]] constexpr alloc::result_t<slice<const slice<const T>>>
-    get_blocks(incoming_allocator_t& allocator) const& OKAYLIB_NOEXCEPT
-    {
-        using namespace segmented_list::detail;
-
-        if (this->is_empty()) {
-            return make_null_slice<slice<const T>>();
-        }
-
-        const size_t num_blocks_in_use =
-            num_blocks_needed_for_spots(this->size());
-
-        const size_t bytes_needed = sizeof(slice<const T>) * num_blocks_in_use;
-        alloc::result_t<bytes_t> alloc_result =
-            allocator.allocate(alloc::request_t{
-                .num_bytes = bytes_needed,
-                .alignment = alignof(slice<const T>),
-                .leave_nonzeroed = true,
-            });
-
-        if (!alloc_result.is_success()) [[unlikely]] {
-            return alloc_result.status();
-        }
-
-        slice<slice<const T>> blocks = reinterpret_bytes_as<slice<const T>>(
-            alloc_result.unwrap().subslice({.length = bytes_needed}));
-
-        __ok_internal_assert(get_num_spots_for_blocks(num_blocks_in_use) >=
-                             this->size());
-        const size_t extra_spots =
-            get_num_spots_for_blocks(num_blocks_in_use) - this->size();
-
-        // initialize the slices in `blocks` to point to all the blocks
-        {
-            size_t block_size = 1;
-
-            for (size_t i = 0; i < blocks.size(); ++i) {
-                slice<const T>& uninit = blocks.unchecked_access(i);
-                new (&uninit)
-                    slice<const T>(raw_slice(*m.get_block(i), block_size));
-                block_size *= 2;
-            }
-        }
-
-        // chop off the last `extra_spots` of the last block
-        blocks.last() = blocks.last().subslice(
-            {.length = blocks.last().size() - extra_spots});
-
-        return blocks;
-    }
-
-    template <typename incoming_allocator_t = ok::allocator_t>
-        [[nodiscard]] constexpr alloc::result_t<slice<const slice<T>>>
-        get_blocks(incoming_allocator_t& allocator) & OKAYLIB_NOEXCEPT
-    {
-        if (this->is_empty()) {
-            return make_null_slice<slice<const slice<T>>>();
-        }
-
-        auto result =
-            static_cast<const segmented_list_t*>(this)->get_blocks(allocator);
-        if (!result.is_success()) [[unlikely]] {
-            return result.status();
-        }
-
-        slice<const slice<const T>>& blocks = result.unwrap();
-
-        return raw_slice(*reinterpret_cast<const slice<T>*>(
-                             blocks.unchecked_address_of_first_item()),
-                         blocks.size());
-    }
-
     [[nodiscard]] constexpr const T&
     operator[](size_t index) const& OKAYLIB_NOEXCEPT
     {
@@ -287,11 +214,11 @@ class segmented_list_t
                        "remove()");
         }
 
-        T* removal_target = ok::addressof(this->unchecked_access(idx));
-        T out = std::move(*removal_target);
+        T& removal_target = this->unchecked_access(idx);
+        T out = std::move(removal_target);
         defer decr_size([this] { m.size--; });
 
-        // early out if youre popping the last item
+        // early out if you're popping the last item
         if (idx == this->size() - 1) {
             if constexpr (!std::is_trivially_destructible_v<T>) {
                 removal_target->~T();
@@ -299,60 +226,21 @@ class segmented_list_t
             return out;
         }
 
-        auto [block_idx, item_offset_in_block] =
-            get_block_index_and_offset(idx);
-
-        auto [_, end_idx_in_block] =
-            get_block_index_and_offset(this->size() - 1);
-
-        const size_t blocks_in_use = num_blocks_needed_for_spots(this->size());
-        // use memmove
-        slice<T> block = make_null_slice<T>();
-        for (size_t i = block_idx; i < blocks_in_use; ++i) {
-            {
-                slice<T> newblock =
-                    this->get_block_slice(i).drop(item_offset_in_block);
-
-                // if the previous block points to something, we need to
-                // copy our first item back into its last item
-                if (!block.is_empty()) {
-                    if constexpr (std::is_trivially_copyable_v<T>) {
-                        std::memcpy(block.unchecked_address_of_first_item(),
-                                    newblock.unchecked_address_of_first_item(),
-                                    sizeof(T));
-                    } else {
-                        // call move assignment, it was moved out of but is
-                        // still in a valid state
-                        block.unchecked_access(block.size() - 1) =
-                            std::move(newblock.first());
-                    }
-                }
-
-                block = newblock;
-            }
-            // if we are on the last block, do not perform a memmove of
-            // any of the uninitialized memory at the end of the block.
-            if (i == blocks_in_use - 1) {
-                block = block.subslice({.length = end_idx_in_block + 1});
-            }
-            // move everything above the item by 1 down into the item.
-            if constexpr (std::is_trivially_copyable_v<T>) {
-                ok_memmove(.to = block, .from = block.drop(1));
-            } else {
-                for (size_t i = 0; i < block.size() - 1; ++i) {
-                    block.unchecked_access(i) =
-                        std::move(block.unchecked_access(i) + 1);
-                }
-            }
-            // there should only be item offset first time around the loop
-            item_offset_in_block = 0;
+        // simple loop through all elements, moving them towards the start of
+        // the list, one at a time
+        size_t i = idx;
+        for (size_t cap = size() - 1; i < cap; ++i) {
+            T& moved_out = this->unchecked_access(i);
+            T& still_occupied = this->unchecked_access(i + 1);
+            moved_out = std::move(still_occupied);
         }
 
-        if (!std::is_trivially_destructible_v<T>) {
-            // take what was previously the last item (now has been moved out
-            // of) and destroy it
-            block.unchecked_access(end_idx_in_block).~T();
+        // clear out the last item, it is in a moved-from state
+        if constexpr (!stdc::is_trivially_destructible_v<T>) {
+            this->unchecked_access(i).~T();
         }
+
+        return out;
     }
 
     constexpr T remove_and_swap_last(size_t idx) OKAYLIB_NOEXCEPT
@@ -450,10 +338,9 @@ class segmented_list_t
             // TODO: use memmove here for trivially copyable types
 
             T* existing_item = nullptr;
-            // using integer overflow on purpose in this loop, to stay unsigned
-            for (size_t i = this->size() - 1; i < this->size(); --i) {
-                existing_item = ok::addressof(this->unchecked_access(idx));
-                T& nonexisting_item = this->unchecked_access(idx + 1);
+            for (size_t i = this->size(); i > idx; --i) {
+                existing_item = ok::addressof(this->unchecked_access(i - 1));
+                T& nonexisting_item = this->unchecked_access(i);
                 stdc::construct_at(ok::addressof(nonexisting_item),
                                    std::move(*existing_item));
             }
