@@ -1,11 +1,12 @@
-#include "okay/ranges/indices.h"
 #include "test_header.h"
 // test header must be first
 #include "okay/allocators/c_allocator.h"
 #include "okay/containers/array.h"
 #include "okay/containers/bit_array.h"
 #include "okay/containers/segmented_list.h"
+#include "okay/ranges/indices.h"
 #include "okay/ranges/views/transform.h"
+#include "testing_types.h"
 
 using namespace ok;
 
@@ -336,31 +337,171 @@ TEST_SUITE("segmented list")
         }
     }
 
-    TEST_CASE("get_blocks")
+    TEST_CASE("clear() calls destructors")
     {
-        SUBCASE("const") {}
-        SUBCASE("nonconst") {}
+        counter_type::reset_counters();
+
+        segmented_list_t list =
+            segmented_list::empty<counter_type>(c_allocator, {}).unwrap();
+
+        for (int i = 0; i < 5; ++i) {
+            REQUIRE(list.append().is_success());
+        }
+
+        REQUIRE(list.size() == 5);
+        REQUIRE(counter_type::counters.default_constructs == 5);
+        REQUIRE(counter_type::counters.destructs == 0);
+
+        list.clear();
+
+        REQUIRE(list.size() == 0);
+        REQUIRE(counter_type::counters.default_constructs == 5);
+        REQUIRE(counter_type::counters.destructs == 5);
     }
 
-    TEST_CASE("clear() calls destructors") {}
+    TEST_CASE("being move-assigned over calls destructors")
+    {
+        counter_type::reset_counters();
 
-    TEST_CASE("being move-assigned over calls destructors") {}
+        segmented_list_t list_a =
+            segmented_list::empty<counter_type>(c_allocator, {}).unwrap();
+        segmented_list_t list_b =
+            segmented_list::empty<counter_type>(c_allocator, {}).unwrap();
+
+        REQUIRE(list_a.append().is_success());
+        REQUIRE(list_a.append().is_success());
+        REQUIRE(list_b.append().is_success());
+        REQUIRE(counter_type::counters.default_constructs == 3);
+        REQUIRE(counter_type::counters.destructs == 0);
+        REQUIRE(counter_type::counters.copy_assigns == 0);
+        REQUIRE(counter_type::counters.move_assigns == 0);
+        REQUIRE(counter_type::counters.copy_constructs == 0);
+        REQUIRE(counter_type::counters.move_constructs == 0);
+
+        list_b = std::move(list_a);
+
+        REQUIRE(counter_type::counters.default_constructs == 3);
+        // one object was destroyed, the others were not moved at all as the
+        // buffer was just traded
+        REQUIRE(counter_type::counters.destructs == 1);
+        REQUIRE(counter_type::counters.copy_assigns == 0);
+        REQUIRE(counter_type::counters.move_assigns == 0);
+        REQUIRE(counter_type::counters.copy_constructs == 0);
+        REQUIRE(counter_type::counters.move_constructs == 0);
+    }
 
     TEST_CASE("remove calls move constructor then destructor") {}
 
-    TEST_CASE("resize() calls destructors") {}
+    TEST_CASE("pop_last()")
+    {
+        segmented_list_t list =
+            segmented_list::empty<int>(c_allocator, {}).unwrap();
+        REQUIRE(!list.pop_last().has_value()); // pop empty
+        REQUIRE(list.append(10).is_success());
+        REQUIRE(list.append(20).is_success());
+        REQUIRE(list.append(30).is_success());
+        REQUIRE(list.pop_last().ref_or_panic() == 30);
+        REQUIRE(list.size() == 2);
+        REQUIRE(list.last() == 20);
+        REQUIRE(list.pop_last().ref_or_panic() == 20);
+        REQUIRE(list.pop_last().ref_or_panic() == 10);
+        REQUIRE(list.size() == 0);
+        REQUIRE(!list.pop_last().has_value());
+    }
 
-    TEST_CASE("pop_last()") {}
+    TEST_CASE("remove()")
+    {
+        segmented_list_t list =
+            segmented_list::empty<int>(c_allocator, {}).unwrap();
 
-    TEST_CASE("remove()") {}
+        for (int i = 0; i < 7; ++i) { // creates blocks sized 1, 2, 4
+            REQUIRE(list.append(i).is_success());
+        }
 
-    TEST_CASE("remove_and_swap_last()") {}
+        // remove from the middle of a block
+        REQUIRE(list.remove(4) == 4);
+        REQUIRE(list.size() == 6);
+        constexpr ok::maybe_undefined_array_t four_removed{0, 1, 2, 3, 5, 6};
+        REQUIRE_RANGES_EQUAL(list, four_removed);
 
-    TEST_CASE("last()") {}
+        // test remove from the first item of a block (cross-block shift)
+        REQUIRE(list.remove(1) == 1);
+        constexpr ok::maybe_undefined_array_t one_and_four_removed{0, 2, 3, 5,
+                                                                   6};
+        REQUIRE_RANGES_EQUAL(list, one_and_four_removed);
 
-    TEST_CASE("first()") {}
+        REQUIRE(list.remove(0) == 0);
+        constexpr ok::maybe_undefined_array_t zero_one_and_four_removed{2, 3, 5,
+                                                                        6};
+        REQUIRE_RANGES_EQUAL(list, zero_one_and_four_removed);
+    }
 
-    TEST_CASE("increase_capacity_by_at_least()") {}
+    TEST_CASE("remove_and_swap_last()")
+    {
+        segmented_list_t list =
+            segmented_list::empty<int>(c_allocator, {}).unwrap();
 
-    TEST_CASE("append_range") {}
+        for (int i = 0; i < 7; ++i) {
+            REQUIRE(list.append(i).is_success());
+        }
+
+        REQUIRE(list.remove_and_swap_last(1) == 1);
+        // {0, 6, 2, 3, 4, 5}
+        REQUIRE(list.size() == 6);
+        REQUIRE(list[1] == 6);
+        REQUIRE(list.last() == 5);
+
+        REQUIRE(list.remove_and_swap_last(0) == 0);
+        // {5, 6, 2, 3, 4}
+        REQUIRE(list.size() == 5);
+        REQUIRE(list[0] == 5);
+        REQUIRE(list.last() == 4);
+    }
+
+    TEST_CASE("last()")
+    {
+        segmented_list_t list =
+            segmented_list::empty<int>(c_allocator, {}).unwrap();
+        REQUIREABORTS(list.last());
+
+        REQUIRE(list.append(10).is_success());
+        REQUIRE(list.last() == 10);
+        list.last() = 20;
+        REQUIRE(list.last() == 20);
+        REQUIRE(list[0] == 20);
+    }
+
+    TEST_CASE("first()")
+    {
+        segmented_list_t list =
+            segmented_list::empty<int>(c_allocator, {}).unwrap();
+        REQUIREABORTS(list.first());
+
+        REQUIRE(list.append(10).is_success());
+        REQUIRE(list.first() == 10);
+        list.first() = 5;
+        REQUIRE(list.first() == 5);
+        REQUIRE(list[0] == 5);
+    }
+
+    TEST_CASE("ensure_total_capacity_is_at_least()")
+    {
+        auto res = segmented_list::empty<int>(c_allocator, {});
+        auto& list = res.unwrap();
+
+        REQUIRE(list.ensure_total_capacity_is_at_least(0).is_success());
+
+        // needs 3 blocks for 7 spots: 1, 2, 4
+        REQUIRE(list.ensure_total_capacity_is_at_least(5).is_success());
+        REQUIRE(list.capacity() == 7);
+        REQUIRE(list.size() == 0);
+
+        REQUIRE(list.append(0).is_success()); // size 1, cap 7
+        REQUIRE(list.ensure_total_capacity_is_at_least(1).is_success());
+        REQUIRE(list.capacity() == 7);
+
+        // needs 4 blocks for 15 spots: 1, 2, 4, 8
+        REQUIRE(list.ensure_total_capacity_is_at_least(10).is_success());
+        REQUIRE(list.capacity() == 15);
+    }
 }

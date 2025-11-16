@@ -1,6 +1,7 @@
 #include "test_header.h"
 // test header must be first
 #include "okay/tuple.h"
+#include "testing_types.h"
 #include <tuple>
 #include <type_traits>
 
@@ -66,40 +67,6 @@ static_assert(
     !std::is_trivially_move_constructible_v<ok::tuple<noncopy_t, int, int>>);
 static_assert(
     !std::is_trivially_move_assignable_v<ok::tuple<noncopy_t, int, int>>);
-
-struct special_member_counters_t
-{
-    size_t copy_constructs;
-    size_t move_constructs;
-    size_t default_constructs;
-    size_t destructs;
-    size_t copy_assigns;
-    size_t move_assigns;
-
-    bool operator==(const special_member_counters_t&) const = default;
-};
-
-struct counter_type
-{
-    static special_member_counters_t counters;
-
-    inline static void reset_counters() { counters = {}; }
-
-    inline counter_type() { counters.default_constructs += 1; }
-    inline counter_type(const counter_type&) { counters.copy_constructs += 1; }
-    inline counter_type(counter_type&&) { counters.move_constructs += 1; }
-    inline ~counter_type() { counters.destructs += 1; }
-    inline counter_type& operator=(const counter_type&)
-    {
-        counters.copy_assigns += 1;
-        return *this;
-    }
-    inline counter_type& operator=(counter_type&&)
-    {
-        counters.move_assigns += 1;
-        return *this;
-    }
-};
 
 struct eql_counter_type
 {

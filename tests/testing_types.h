@@ -177,6 +177,42 @@ class fifty_items_unknown_size_no_pre_increment_t
 class fifty_items_bidir_no_pre_decrement_t
 {};
 
+struct special_member_counters_t
+{
+    size_t copy_constructs;
+    size_t move_constructs;
+    size_t default_constructs;
+    size_t destructs;
+    size_t copy_assigns;
+    size_t move_assigns;
+
+    bool operator==(const special_member_counters_t&) const = default;
+};
+
+struct counter_type
+{
+    static special_member_counters_t counters;
+
+    inline static void reset_counters() { counters = {}; }
+
+    inline counter_type() { counters.default_constructs += 1; }
+    inline counter_type(const counter_type&) { counters.copy_constructs += 1; }
+    inline counter_type(counter_type&&) { counters.move_constructs += 1; }
+    inline ~counter_type() { counters.destructs += 1; }
+    inline counter_type& operator=(const counter_type&)
+    {
+        counters.copy_assigns += 1;
+        return *this;
+    }
+    inline counter_type& operator=(counter_type&&)
+    {
+        counters.move_assigns += 1;
+        return *this;
+    }
+};
+
+inline special_member_counters_t counter_type::counters{};
+
 // implement range trait for example_range_cstyle
 namespace ok {
 template <> struct range_definition<example_range_cstyle>
