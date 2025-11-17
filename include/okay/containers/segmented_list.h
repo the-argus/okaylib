@@ -362,7 +362,7 @@ class segmented_list_t
     [[nodiscard]] constexpr ok::alloc::result_t<T&>
     append(args_t&&... args) OKAYLIB_NOEXCEPT
     {
-        return insert_at(0, ok::stdc::forward<args_t>(args)...);
+        return insert_at(this->size(), ok::stdc::forward<args_t>(args)...);
     }
 
     /// Returns an error only if allocation to expand space for the new items
