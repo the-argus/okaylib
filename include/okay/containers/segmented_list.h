@@ -576,6 +576,10 @@ namespace segmented_list {
 struct empty_options_t
 {
     size_t expected_max_capacity = 0;
+    // if true, the empty constructor will make all the allocations necessary
+    // to hold up to expected_max_capacity elements. If false, it only allocates
+    // enough for the blocklist.
+    bool should_preallocate = false;
 };
 
 namespace detail {
@@ -604,13 +608,31 @@ template <typename T> struct empty_t
         using M =
             typename ok::segmented_list_t<T, backing_allocator_t>::members_t;
 
+        // expected_max_capacity + 1 because 4 expected -> log2_uint_ceil(4) ==
+        // 2, but 2 blocks only gives us 3. log2_uint_ceil(16) == 4, but 4
+        // blocks only gives us 15 spots.
+        const size_t blocks_needed =
+            log2_uint_ceil(ok::max(2UL, options.expected_max_capacity + 1));
+
         output.m = M{
             .blocklist = nullptr,
             // when blocklist is nullptr, "size" actually means size of initial
             // blocklist allocation
-            .size = log2_uint_ceil(ok::max(2UL, options.expected_max_capacity)),
+            .size = blocks_needed,
             .allocator = ok::addressof(allocator),
         };
+
+        if (options.should_preallocate) {
+            for (size_t i = 0; i < blocks_needed; ++i) {
+                ok::status status = output.new_block();
+                if (!ok::is_success(status)) {
+                    // a failed call to new_block leaves the list in a valid
+                    // state, so just early return, having not gotten all the
+                    // spots. maybe we got some of them!
+                    return status.as_enum();
+                }
+            }
+        }
 
         return alloc::error::success;
     };
@@ -709,6 +731,13 @@ struct copy_items_from_range_t
             .size = 0,
             .allocator = ok::addressof(allocator),
         };
+
+        for (auto c = ok::begin(range); ok::is_inbounds(range, c);
+             ok::increment(range, c)) {
+            auto stat =
+                output.insert_at(output.size(), ok::range_get_best(range, c));
+            __ok_internal_assert(ok::is_success(stat));
+        }
 
         free_mainbuf.cancel();
         return alloc::error::success;

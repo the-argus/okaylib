@@ -1,5 +1,6 @@
 #include "test_header.h"
 // test header must be first
+#include "okay/allocators/arena.h"
 #include "okay/allocators/c_allocator.h"
 #include "okay/containers/array.h"
 #include "okay/containers/bit_array.h"
@@ -112,17 +113,32 @@ TEST_SUITE("segmented list")
             REQUIRE(list_a.size() == 0);
         }
 
+        SUBCASE("non-preallocating constructor always succeeds")
+        {
+            OKAYLIB_REQUIRE_RES_WITH_BACKTRACE(segmented_list::empty<int>(
+                c_allocator, {.expected_max_capacity = 1000000000000000UL}));
+
+            // make an arena that is too small to fit anything
+            uint8_t bytes[2];
+            arena_t arena(bytes);
+            arena_compat_wrapper_t arena_wrapped(arena);
+
+            OKAYLIB_REQUIRE_RES_WITH_BACKTRACE(segmented_list::empty<int>(
+                arena_wrapped, {.expected_max_capacity = 1000000000000000UL}));
+        }
+
         SUBCASE("move construct first_allocation segmented lists")
         {
-            auto res_a = segmented_list::empty<int>(
-                c_allocator, {
-                                 .expected_max_capacity = 4,
-                             });
+            constexpr segmented_list::empty_options_t options{
+                .expected_max_capacity = 4,
+                .should_preallocate = true,
+            };
+            auto res_a = segmented_list::empty<int>(c_allocator, options);
             auto& list_a = res_a.unwrap();
             REQUIRE(list_a.append(0).is_success());
 
             size_t original_capacity = list_a.capacity();
-            REQUIRE(original_capacity == 4);
+            REQUIRE(original_capacity >= 4);
             REQUIRE(list_a.size() == 1);
             segmented_list_t list_b(std::move(list_a));
 
@@ -137,21 +153,23 @@ TEST_SUITE("segmented list")
 
         SUBCASE("move construct reallocated segmented lists")
         {
-            auto res_a = segmented_list::empty<int>(
-                c_allocator, {
-                                 .expected_max_capacity = 4,
-                             });
+            constexpr segmented_list::empty_options_t options{
+                .expected_max_capacity = 4,
+                .should_preallocate = true,
+            };
+            auto res_a = segmented_list::empty<int>(c_allocator, options);
             auto& list_a = res_a.unwrap();
             REQUIRE(list_a.append(0).is_success());
-            REQUIRE(list_a.capacity() == 4);
+            REQUIRE(list_a.capacity() >= 4);
             REQUIRE(list_a.append(1).is_success());
             REQUIRE(list_a.append(2).is_success());
             REQUIRE(list_a.append(3).is_success());
             REQUIRE(list_a.append(4).is_success());
 
             size_t original_capacity = list_a.capacity();
-            REQUIRE(original_capacity == 12); // added 2^2 + 2^3
-            REQUIRE(list_a.size() == 1);
+            // 1 -> 3 -> 7, so 7 is smallest number that fits 5 items
+            REQUIRE(original_capacity == 7);
+            REQUIRE(list_a.size() == 5);
             segmented_list_t list_b(std::move(list_a));
 
             // original list still in valid state
