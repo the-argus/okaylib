@@ -1,3 +1,5 @@
+#include "okay/ranges/views/enumerate.h"
+#include "okay/ranges/views/std_for.h"
 #include "test_header.h"
 // test header must be first
 #include "okay/allocators/arena.h"
@@ -166,6 +168,9 @@ TEST_SUITE("segmented list")
             REQUIRE(list_a.append(3).is_success());
             REQUIRE(list_a.append(4).is_success());
 
+            constexpr ok::maybe_undefined_array_t expected_state{0, 1, 2, 3, 4};
+            REQUIRE_RANGES_EQUAL(list_a, expected_state);
+
             size_t original_capacity = list_a.capacity();
             // 1 -> 3 -> 7, so 7 is smallest number that fits 5 items
             REQUIRE(original_capacity == 7);
@@ -178,6 +183,8 @@ TEST_SUITE("segmented list")
 
             REQUIRE(list_b.capacity() == original_capacity);
             REQUIRE(list_b.size() == 5);
+            for (auto [item, index] : list_b | ok::enumerate | ok::std_for)
+                printf("list_b[%zu]: %d\n", index, item);
             REQUIRE(list_b[0] == 0);
             REQUIRE(list_b[1] == 1);
             REQUIRE(list_b[2] == 2);
@@ -213,7 +220,8 @@ TEST_SUITE("segmented list")
                 segmented_list::copy_items_from_range(c_allocator, initial);
             auto& list_b = res_b.unwrap();
 
-            REQUIRE(list_b.capacity() == 8);
+            // six items and possible capacities are 1, 3, 7, 15...
+            REQUIRE(list_b.capacity() == 7);
             REQUIRE_RANGES_EQUAL(list_b, initial);
 
             REQUIRE(list_a.append(0).is_success());
@@ -222,7 +230,7 @@ TEST_SUITE("segmented list")
             list_a = std::move(list_b);
 
             REQUIRE(list_a.size() == initial.size());
-            REQUIRE(list_a.capacity() == 8);
+            REQUIRE(list_a.capacity() == 7);
 
             // std::move capacity retaining optimization is implemented
             REQUIRE(list_b.capacity() > 0);
@@ -232,14 +240,10 @@ TEST_SUITE("segmented list")
         SUBCASE("move assign first_allocation segmented lists")
         {
             auto res_a = segmented_list::empty<int>(
-                c_allocator, {
-                                 .expected_max_capacity = 16,
-                             });
+                c_allocator, {.expected_max_capacity = 16});
             auto& list_a = res_a.unwrap();
             auto res_b = segmented_list::empty<int>(
-                c_allocator, {
-                                 .expected_max_capacity = 16,
-                             });
+                c_allocator, {.expected_max_capacity = 16});
             auto& list_b = res_b.unwrap();
 
             REQUIRE(list_a.append(0).is_success());
