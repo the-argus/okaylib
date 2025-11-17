@@ -137,9 +137,12 @@ class segmented_list_t
         other.m.blocklist = nullptr;
     }
 
-    constexpr segmented_list_t& operator=(segmented_list_t&& other) noexcept
+    constexpr segmented_list_t&
+    operator=(segmented_list_t&& other) OKAYLIB_NOEXCEPT
     {
-        this->destroy();
+        __ok_assert(other.m.allocator == m.allocator,
+                    "attempt to move assign a container that does not shared "
+                    "an allocator with the other container.");
         std::swap(this->m, other.m);
         other.clear();
         return *this;
