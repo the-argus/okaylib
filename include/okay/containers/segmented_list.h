@@ -140,8 +140,8 @@ class segmented_list_t
     constexpr segmented_list_t& operator=(segmented_list_t&& other) noexcept
     {
         this->destroy();
-        this->m = std::move(other.m);
-        other.m.blocklist = nullptr;
+        std::swap(this->m, other.m);
+        other.clear();
         return *this;
     }
 
