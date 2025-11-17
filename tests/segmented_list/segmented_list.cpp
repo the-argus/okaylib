@@ -239,17 +239,19 @@ TEST_SUITE("segmented list")
 
         SUBCASE("move assign first_allocation segmented lists")
         {
-            auto res_a = segmented_list::empty<int>(
-                c_allocator, {.expected_max_capacity = 16});
-            auto& list_a = res_a.unwrap();
-            auto res_b = segmented_list::empty<int>(
-                c_allocator, {.expected_max_capacity = 16});
-            auto& list_b = res_b.unwrap();
+            constexpr segmented_list::empty_options_t options{
+                .expected_max_capacity = 15,
+                .should_preallocate = true,
+            };
+            segmented_list_t list_a =
+                segmented_list::empty<int>(c_allocator, options).unwrap();
+            segmented_list_t list_b =
+                segmented_list::empty<int>(c_allocator, options).unwrap();
 
             REQUIRE(list_a.append(0).is_success());
             REQUIRE(list_b.append(0).is_success());
-            REQUIRE(list_a.capacity() == 16);
-            REQUIRE(list_b.capacity() == 16);
+            REQUIRE(list_a.capacity() == 15);
+            REQUIRE(list_b.capacity() == 15);
 
             for (size_t i = 1; i < 20; ++i) {
                 REQUIRE(list_b.append(i).is_success());
@@ -272,16 +274,14 @@ TEST_SUITE("segmented list")
         // at the move assignment.
         SUBCASE("move assign reallocated segmented lists")
         {
-            auto res_a = segmented_list::empty<int>(
-                c_allocator, {
-                                 .expected_max_capacity = 16,
-                             });
-            auto& list_a = res_a.unwrap();
-            auto res_b = segmented_list::empty<int>(
-                c_allocator, {
-                                 .expected_max_capacity = 16,
-                             });
-            auto& list_b = res_b.unwrap();
+            constexpr segmented_list::empty_options_t options{
+                .expected_max_capacity = 16,
+                .should_preallocate = true,
+            };
+            auto list_a =
+                segmented_list::empty<int>(c_allocator, options).unwrap();
+            auto list_b =
+                segmented_list::empty<int>(c_allocator, options).unwrap();
 
             REQUIRE(list_a.append(0).is_success());
             REQUIRE(list_b.append(0).is_success());
@@ -338,7 +338,7 @@ TEST_SUITE("segmented list")
                     .unwrap();
 
             REQUIRE_RANGES_EQUAL(initial, list);
-            REQUIREABORTS(auto&& _ = list.insert_at(initial.size(), 0));
+            REQUIREABORTS(auto&& _ = list.insert_at(initial.size() + 1, 0));
             REQUIRE(list.insert_at(0, 0).is_success());
             REQUIRE(list.insert_at(5, 4).is_success());
             constexpr auto arr = ok::maybe_undefined_array_t{0, 0, 1, 2, 3, 4};
