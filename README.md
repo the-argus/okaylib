@@ -102,7 +102,8 @@ Size of `alist`: 0
 - [x] "result" type: optional with enum error value. like `std::expected`, kind of
 - [x] "opt" type: optional but supports reference types with rebinding assignment
 - [x] opt and result are constexpr + trivial, if their payloads are
-- [x] slice type: like span but not nullable
+- [x] slice type: like span but not default constructible as null/empty, and
+      bounds-checked by default
 - [x] defer statement
 - [x] stdmem: functions for checking if slices are overlapping, contained
       within, etc
