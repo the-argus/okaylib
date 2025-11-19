@@ -144,6 +144,12 @@ class anystatus_t
         return !m_status || m_status->is_success();
     }
 
+    constexpr void or_panic() const OKAYLIB_NOEXCEPT
+    {
+        if (!is_success()) [[unlikely]]
+            std::abort();
+    }
+
     template <typename T>
         requires detail::is_derived_from_c<T, abstract_status_t>
     explicit constexpr anystatus_t(T* error) : m_status(error)

@@ -51,6 +51,9 @@ concept status_object_c =
 
         // a status object must have an `is_success()` member function
         { t.is_success() } -> ok::same_as_c<bool>;
+
+        // a status object must have a .or_panic() member function
+        { t.or_panic() } -> ok::is_void_c;
     };
 
 template <typename T>

@@ -40,6 +40,12 @@ template <status_enum_c enum_t> class status
         return m_status == enum_t::success;
     }
 
+    constexpr void or_panic() const OKAYLIB_NOEXCEPT
+    {
+        if (!is_success()) [[unlikely]]
+            std::abort();
+    }
+
     [[nodiscard]] constexpr enum_t as_enum() const OKAYLIB_NOEXCEPT
     {
         return m_status;
@@ -428,6 +434,12 @@ __OK_RES_REQUIRES_CLAUSE class res<
         } else {
             return m_status.is_success();
         }
+    }
+
+    constexpr void or_panic() const OKAYLIB_NOEXCEPT
+    {
+        if (!is_success()) [[unlikely]]
+            std::abort();
     }
 
     [[nodiscard]] constexpr const status_t& status() const& OKAYLIB_NOEXCEPT
