@@ -97,6 +97,8 @@ Size of `alist`: 0
 - [x] `<compare>` replacement
 - [x] compile time `nameof` function, which gets a `const char*` of the string
       display name of the type.
+- [ ] compile time reflection on the field types and names of POD structs
+- [ ] compile time reflection on the names of enum variants, string <-> enum conversion
 - [x] "result" type: optional with enum error value. like `std::expected`, kind of
 - [x] "opt" type: optional but supports reference types with rebinding assignment
 - [x] opt and result are constexpr + trivial, if their payloads are
