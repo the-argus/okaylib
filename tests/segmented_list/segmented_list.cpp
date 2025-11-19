@@ -275,7 +275,7 @@ TEST_SUITE("segmented list")
         SUBCASE("move assign reallocated segmented lists")
         {
             constexpr segmented_list::empty_options_t options{
-                .expected_max_capacity = 16,
+                .expected_max_capacity = 15,
                 .should_preallocate = true,
             };
             auto list_a =
@@ -285,8 +285,8 @@ TEST_SUITE("segmented list")
 
             REQUIRE(list_a.append(0).is_success());
             REQUIRE(list_b.append(0).is_success());
-            REQUIRE(list_a.capacity() == 16);
-            REQUIRE(list_b.capacity() == 16);
+            REQUIRE(list_a.capacity() == 15);
+            REQUIRE(list_b.capacity() == 15);
 
             for (size_t i = 1; i < 20; ++i) {
                 REQUIRE(list_b.append(i).is_success());
