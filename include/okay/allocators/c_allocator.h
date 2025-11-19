@@ -59,6 +59,10 @@ c_allocator_t::impl_allocate(const alloc::request_t& request) OKAYLIB_NOEXCEPT
 #endif
 
     uint8_t* const mem = static_cast<uint8_t*>(::malloc(nbytes));
+
+    if (!mem) [[unlikely]]
+        return alloc::error::oom;
+
     assert(!mem || ((uintptr_t)mem % request.alignment) == 0);
 
     auto out = ok::raw_slice(*mem, nbytes);
