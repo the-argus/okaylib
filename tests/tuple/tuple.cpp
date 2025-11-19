@@ -88,8 +88,6 @@ struct eql_counter_type
 };
 size_t eql_counter_type::comparisons = 0;
 
-special_member_counters_t counter_type::counters = {};
-
 TEST_SUITE("tuple")
 {
     TEST_CASE("construct tuple")
