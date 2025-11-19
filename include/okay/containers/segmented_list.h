@@ -172,7 +172,7 @@ class segmented_list_t
         // TODO: we can predict how many blocks we need here and allocate them
         // in 1-2 allocations (an extra one may be needed to reallocate the
         // blocklist as well)
-        while (size + additional_allocated_spots > capacity) {
+        while (size + additional_allocated_spots > this->capacity()) {
             if (auto status = this->new_block(); !ok::is_success(status))
                 [[unlikely]] {
                 return status;
