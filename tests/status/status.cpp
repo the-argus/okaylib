@@ -31,9 +31,8 @@ class ExamplePolymorphicStatus : public ok::abstract_status_t
   public:
     [[nodiscard]] void* try_cast_to(uint64_t typehash) noexcept override
     {
-        return ok::ctti::typehash<ExamplePolymorphicStatus>() == typehash
-                   ? this
-                   : nullptr;
+        return ok::typehash<ExamplePolymorphicStatus>() == typehash ? this
+                                                                    : nullptr;
     }
 
     [[nodiscard]] bool is_success() const noexcept override { return success; }

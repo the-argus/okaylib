@@ -6,20 +6,35 @@
 namespace ok {
 
 namespace detail {
+[[nodiscard]] constexpr ascii_view remove_struct(const ascii_view& type_name)
+{
+    return type_name.trim_front().remove_prefix("struct").trim_front();
+}
+[[nodiscard]] constexpr ascii_view remove_class(const ascii_view& type_name)
+{
+    return type_name.trim_front().remove_prefix("class").trim_front();
+}
+[[nodiscard]] constexpr ascii_view
+remove_typename_prefix(const ascii_view& type_name)
+{
+    return remove_struct(remove_class(type_name));
+}
+[[nodiscard]] constexpr ascii_view
+ascii_view_pad(const ascii_view& str, size_t begin_offset, size_t end_offset)
+{
+    return str.substring(begin_offset, str.size() - end_offset);
+}
 
 template <typename T>
-inline constexpr cstring nameof_inner =
-    filter_typename_prefix(pretty_function::type<T>().pad(
-        OKAYLIB_REFLECTION_TYPE_PRETTY_FUNCTION_LEFT,
-        OKAYLIB_REFLECTION_TYPE_PRETTY_FUNCTION_RIGHT));
+inline constexpr ascii_view nameof_inner = remove_typename_prefix(
+    ascii_view_pad(pretty_function::type<T>(),
+                   OKAYLIB_REFLECTION_TYPE_PRETTY_FUNCTION_LEFT,
+                   OKAYLIB_REFLECTION_TYPE_PRETTY_FUNCTION_RIGHT));
 } // namespace detail
 
-/// Get a c-style null terminated string (not necessarily unique) identifier for
-/// a given type
-template <typename T> constexpr char* nameof()
+template <typename T> constexpr ascii_view nameof()
 {
-    constexpr auto cstr = detail::nameof_inner<T>;
-    return cstr.data();
+    return detail::nameof_inner<T>;
 }
 
 } // namespace ok
