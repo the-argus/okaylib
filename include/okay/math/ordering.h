@@ -11,11 +11,7 @@
 #include <fmt/core.h>
 #endif
 
-#if defined(OKAYLIB_COMPAT_STRATEGY_STD)
-#include <compare>
-#elif defined(OKAYLIB_COMPAT_STRATEGY_NO_STD)
-#include "okay/detail/compare.h"
-#elif defined(OKAYLIB_COMPAT_STRATEGY_PURE_CPP)
+#if !defined(OKAYLIB_COMPAT_STRATEGY_STD)
 #include "okay/detail/compare.h"
 #endif
 

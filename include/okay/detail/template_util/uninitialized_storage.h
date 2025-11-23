@@ -6,7 +6,6 @@
 #include "okay/detail/template_util/empty.h"
 #include "okay/detail/traits/constructor_traits.h"
 #include "okay/detail/utility.h"
-#include <type_traits>
 
 /*
  * uninitialized_storage_t<T> is a template over a union. The type will inherit
@@ -50,7 +49,7 @@ template <typename inner_input_contained_t> union uninitialized_storage_t
     }
 
     constexpr ~uninitialized_storage_t()
-        requires(!std::is_trivially_destructible_v<inner_input_contained_t>)
+        requires(!ok::stdc::is_trivially_destructible_v<inner_input_contained_t>)
     {
     }
 

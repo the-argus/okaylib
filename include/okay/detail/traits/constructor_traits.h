@@ -4,14 +4,13 @@
 #include "okay/detail/traits/error_traits.h"
 #include "okay/detail/traits/is_instance.h"
 #include "okay/detail/traits/special_member_traits.h"
-#include <type_traits>
 
 namespace ok {
 template <status_enum_c enum_t> class status;
 }
 
 namespace ok::detail {
-struct bad_construction_analysis : public std::false_type
+struct bad_construction_analysis : public ok::false_type
 {
     constexpr static bool has_inplace = false;
     constexpr static bool has_rvo = false;
@@ -19,7 +18,7 @@ struct bad_construction_analysis : public std::false_type
     using associated_type = void;
 };
 
-struct stdstyle_construction_analysis : public std::true_type
+struct stdstyle_construction_analysis : public ok::true_type
 {
     constexpr static bool has_inplace = true;
     constexpr static bool has_rvo = false;
@@ -30,18 +29,18 @@ struct stdstyle_construction_analysis : public std::true_type
 template <typename... args_t> struct constructor_analysis
 {
     template <typename constructor_t, typename = void>
-    struct make_fn_analysis : public std::false_type
+    struct make_fn_analysis : public ok::false_type
     {
         using return_type = void;
     };
     template <typename constructor_t>
     struct make_fn_analysis<
         constructor_t,
-        std::void_t<decltype(std::declval<const constructor_t&>().make(
-            std::declval<args_t>()...))>> : public std::true_type
+        stdc::void_t<decltype(stdc::declval<const constructor_t&>().make(
+            stdc::declval<args_t>()...))>> : public stdc::true_type
     {
-        using return_type = decltype(std::declval<const constructor_t&>().make(
-            std::declval<args_t>()...));
+        using return_type = decltype(stdc::declval<const constructor_t&>().make(
+            stdc::declval<args_t>()...));
 
         static_assert(!status_object_c<return_type>,
                       "Do not return a status or res from a make() function- "
@@ -50,42 +49,42 @@ template <typename... args_t> struct constructor_analysis
     };
 
     template <typename T, typename constructor_t, typename = void>
-    struct has_nonconst_make_into_uninit : public std::false_type
+    struct has_nonconst_make_into_uninit : public ok::false_type
     {};
     template <typename T, typename constructor_t>
     struct has_nonconst_make_into_uninit<
         T, constructor_t,
-        std::void_t<decltype(std::declval<constructor_t&>().make_into_uninit(
-            std::declval<T&>(), std::declval<args_t>()...))>>
-        : public std::true_type
+        stdc::void_t<decltype(stdc::declval<constructor_t&>().make_into_uninit(
+            stdc::declval<T&>(), stdc::declval<args_t>()...))>>
+        : public ok::true_type
     {};
 
     template <typename T, typename constructor_t, typename = void>
-    struct has_nonconst_make : public std::false_type
+    struct has_nonconst_make : public ok::false_type
     {};
     template <typename T, typename constructor_t>
     struct has_nonconst_make<
         T, constructor_t,
-        std::void_t<decltype(std::declval<constructor_t&>().make(
-            std::declval<args_t>()...))>> : public std::true_type
+        stdc::void_t<decltype(stdc::declval<constructor_t&>().make(
+            stdc::declval<args_t>()...))>> : public ok::true_type
     {};
 
     template <typename T, typename constructor_t, typename = void>
-    struct make_into_uninit_fn_analysis : public std::false_type
+    struct make_into_uninit_fn_analysis : public ok::false_type
     {
         using return_type = void;
     };
     template <typename T, typename constructor_t>
     struct make_into_uninit_fn_analysis<
         T, constructor_t,
-        std::void_t<
-            decltype(std::declval<const constructor_t&>().make_into_uninit(
-                std::declval<T&>(), std::declval<args_t>()...))>>
-        : public std::true_type
+        stdc::void_t<
+            decltype(stdc::declval<const constructor_t&>().make_into_uninit(
+                stdc::declval<T&>(), stdc::declval<args_t>()...))>>
+        : public ok::true_type
     {
         using return_type =
-            decltype(std::declval<const constructor_t&>().make_into_uninit(
-                std::declval<T&>(), std::declval<args_t>()...));
+            decltype(stdc::declval<const constructor_t&>().make_into_uninit(
+                stdc::declval<T&>(), stdc::declval<args_t>()...));
         static_assert(ok::stdc::is_void_v<return_type> ||
                           status_type_c<return_type>,
                       "Return type from make_into_uninit() should be void (if "
@@ -100,7 +99,7 @@ template <typename... args_t> struct constructor_analysis
     };
 
     template <typename constructor_t, typename = void>
-    struct associated_type_by_explicit_decl : public std::false_type
+    struct associated_type_by_explicit_decl : public ok::false_type
     {
         using type = void;
     };
@@ -108,26 +107,23 @@ template <typename... args_t> struct constructor_analysis
     template <typename constructor_t>
     struct associated_type_by_explicit_decl<
         constructor_t,
-        std::void_t<
+        stdc::void_t<
             typename constructor_t::template associated_type<args_t...>>>
-        : public std::true_type
+        : public ok::true_type
     {
         using type =
             typename constructor_t::template associated_type<args_t...>;
     };
 
-    template <typename constructor_t, typename = void>
+    template <typename constructor_t>
     struct associated_type
         : public associated_type_by_explicit_decl<constructor_t>
     {};
 
     template <typename constructor_t>
-    struct associated_type<
-        constructor_t,
-        std::enable_if_t<
-            make_fn_analysis<constructor_t>::value &&
-            !associated_type_by_explicit_decl<constructor_t>::value>>
-        : public std::true_type
+        requires(make_fn_analysis<constructor_t>::value &&
+                 !associated_type_by_explicit_decl<constructor_t>::value)
+    struct associated_type<constructor_t> : public ok::true_type
     {
         using type = typename make_fn_analysis<constructor_t>::return_type;
         static_assert(!status_object_c<type>,
@@ -142,7 +138,7 @@ template <typename... args_t> struct constructor_analysis
 
     template <typename constructor_t>
         requires(!ok::is_void_c<typename associated_type<constructor_t>::type>)
-    struct inner<constructor_t> : public std::true_type
+    struct inner<constructor_t> : public ok::true_type
     {
         using associated_type = typename associated_type<constructor_t>::type;
 
@@ -169,7 +165,7 @@ template <typename... args_t> struct constructor_analysis
                 associated_type, constructor_t>::return_type>;
 
         static_assert(can_fail || !has_inplace ||
-                          std::is_void_v<typename make_into_uninit_fn_analysis<
+                          stdc::is_void_v<typename make_into_uninit_fn_analysis<
                               associated_type, constructor_t>::return_type>,
                       "For a non-failing in-place constructor, the return type "
                       "should be void.");
@@ -184,7 +180,7 @@ template <typename... args_t> auto analyze_construction()
         constexpr auto split = [](auto&& constructor, auto&&... args) ->
             typename constructor_analysis<decltype(args)...>::template inner<
                 remove_cvref_t<decltype(constructor)>> { return {}; };
-        using out_t = decltype(split(std::declval<args_t>()...));
+        using out_t = decltype(split(stdc::declval<args_t>()...));
         return out_t{};
     }
 }
@@ -195,7 +191,7 @@ template <typename T, typename... args_t>
 concept is_infallible_constructible_c = requires {
     requires(decltype(detail::analyze_construction<args_t...>())::value &&
              !decltype(detail::analyze_construction<args_t...>())::can_fail &&
-             std::is_same_v<
+             stdc::is_same_v<
                  T, typename decltype(detail::analyze_construction<
                                       args_t...>())::associated_type>) ||
                 is_std_constructible_c<T, args_t...>;
@@ -205,9 +201,9 @@ template <typename T, typename... args_t>
 concept is_fallible_constructible_c = requires {
     requires decltype(detail::analyze_construction<args_t...>())::value;
     requires decltype(detail::analyze_construction<args_t...>())::can_fail;
-    requires std::is_same_v<T,
-                            typename decltype(detail::analyze_construction<
-                                              args_t...>())::associated_type>;
+    requires stdc::is_same_v<T,
+                             typename decltype(detail::analyze_construction<
+                                               args_t...>())::associated_type>;
 };
 
 template <typename T, typename... args_t>

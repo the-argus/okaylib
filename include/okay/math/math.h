@@ -2,16 +2,14 @@
 #define __OKAYLIB_MATH_H__
 
 #include "okay/detail/ok_assert.h"
-#include <type_traits>
+#include "okay/detail/type_traits.h"
 
 namespace ok {
 
 template <typename int_t>
+    requires stdc::is_integral_v<int_t>
 [[nodiscard]] constexpr bool is_power_of_two(int_t number) noexcept
 {
-    static_assert(
-        std::is_integral_v<int_t>,
-        "Attempt to call is_power_of_two with a type which is not an integer.");
     if (number <= 0) [[unlikely]] {
         return false;
     }
@@ -20,12 +18,10 @@ template <typename int_t>
 
 /// Version of is_power_of_two which just asserts that the number is greater
 /// than zero and avoids a check in release mode.
-template <typename uint_t>
-[[nodiscard]] constexpr bool positive_is_power_of_two(uint_t number) noexcept
+template <typename int_t>
+    requires stdc::is_integral_v<int_t>
+[[nodiscard]] constexpr bool positive_is_power_of_two(int_t number) noexcept
 {
-    static_assert(
-        std::is_integral_v<uint_t>,
-        "Attempt to call is_power_of_two with a type which is not an integer.");
     __ok_assert(number > 0,
                 "Attempt to call positive_is_power_of_two with non-positive "
                 "value, which incorrectly returns true.");
@@ -33,11 +29,9 @@ template <typename uint_t>
 }
 
 template <typename T>
+    requires stdc::is_unsigned_v<T>
 [[nodiscard]] constexpr T log2_uint(T number) OKAYLIB_NOEXCEPT
 {
-    static_assert(
-        std::is_unsigned_v<T>,
-        "Attempt to call log2_int with a non-(unsigned integer) type.");
     __ok_assert(number != 0, "Attempt to call log2_uint with zero.");
     // TODO: do this and detect x86 and ARM. ARM has clz instruction
     // uint32_t y;
@@ -51,6 +45,7 @@ template <typename T>
 }
 
 template <typename T>
+    requires stdc::is_unsigned_v<T>
 [[nodiscard]] constexpr T log2_uint_ceil(T number) OKAYLIB_NOEXCEPT
 {
     const T log2 = ok::log2_uint(number);

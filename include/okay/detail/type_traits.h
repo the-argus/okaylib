@@ -178,6 +178,23 @@ template <typename T> struct remove_reference<T&&>
 template <typename T>
 using remove_reference_t = typename remove_reference<T>::type;
 
+namespace detail {
+template <typename T, typename> struct remove_pointer_helper
+{
+    using type = T;
+};
+
+template <typename T, typename U> struct remove_pointer_helper<T, U*>
+{
+    using type = U;
+};
+} // namespace detail
+template <typename T>
+struct remove_pointer : public detail::remove_pointer_helper<T, remove_cv_t<T>>
+{};
+
+template <typename T> using remove_pointer_t = typename remove_pointer<T>::type;
+
 template <typename T> struct add_pointer
 {
     using type = typename remove_reference<T>::type*;
@@ -371,6 +388,10 @@ using is_enum = integral_constant<bool, ok::detail::intrinsic::is_enum<T>>;
 template <typename T>
 using is_aggregate =
     integral_constant<bool, ok::detail::intrinsic::is_aggregate<T>>;
+template <typename base_t, typename derived_t>
+using is_base_of =
+    integral_constant<bool,
+                      ok::detail::intrinsic::is_base_of<base_t, derived_t>>;
 
 namespace detail {
 void scoped_enum_conversion_test(...);
@@ -880,6 +901,25 @@ struct is_scalar
                     is_member_pointer<T>{} || is_null_pointer<T>{}>
 {};
 
+namespace detail {
+template <typename T, bool = is_arithmetic<T>::value>
+struct is_signed_helper : public false_type
+{};
+
+template <typename T>
+struct is_signed_helper<T, true> : public integral_constant<bool, T(-1) < T(0)>
+{};
+} // namespace detail
+
+template <typename T>
+struct is_signed : public detail::is_signed_helper<T>::type
+{};
+
+template <typename T>
+struct is_unsigned : public integral_constant<bool, is_arithmetic<T>::value &&
+                                                        (!is_signed<T>::value)>
+{};
+
 template <typename T> struct remove_all_extents
 {
     using type = T;
@@ -998,7 +1038,12 @@ concept is_nonconst_reference_c =
 template <typename from_t, typename to_t>
 concept convertible_to_c = ok::stdc::is_convertible<from_t, to_t>::value;
 
-template <typename T> inline constexpr bool is_scalar_v = is_scalar<T>{};
+template <typename T> inline constexpr bool is_scalar_v = is_scalar<T>::value;
+
+template <typename T> inline constexpr bool is_signed_v = is_signed<T>::value;
+
+template <typename T>
+inline constexpr bool is_unsigned_v = is_unsigned<T>::value;
 
 template <typename T>
 inline constexpr bool is_null_pointer_v = is_null_pointer<T>{};
@@ -1014,8 +1059,7 @@ inline constexpr bool is_member_object_pointer_v =
     is_member_object_pointer<T>{};
 template <typename T>
 inline constexpr bool is_member_pointer_v = is_member_pointer<T>{};
-template <typename T>
-inline constexpr bool is_pointer_v = is_member_object_pointer<T>{};
+template <typename T> inline constexpr bool is_pointer_v = is_pointer<T>{};
 
 template <typename T>
 inline constexpr bool is_floating_point_v = is_floating_point<T>{};
@@ -1116,6 +1160,12 @@ inline constexpr bool is_rvalue_reference_v = is_rvalue_reference<T>::value;
 template <typename T, typename U>
 inline constexpr bool is_same_v = is_same<T, U>::value;
 
+template <typename T>
+inline constexpr bool is_aggregate_v = stdc::is_aggregate<T>::value;
+
+template <typename base_t, typename derived_t>
+inline constexpr bool is_base_of_v = stdc::is_base_of<base_t, derived_t>::value;
+
 template <typename T> inline constexpr bool is_enum_v = stdc::is_enum<T>::value;
 template <typename T>
 inline constexpr bool is_scoped_enum_v = stdc::is_scoped_enum<T>::value;
@@ -1123,13 +1173,15 @@ inline constexpr bool is_scoped_enum_v = stdc::is_scoped_enum<T>::value;
 template <typename T>
 using underlying_type_t = ::ok::detail::intrinsic::underlying_type_t<T>;
 
+template <typename T, typename other_t>
+concept same_as = requires { requires is_same_v<T, other_t>; };
 } // namespace ok::stdc
 
 namespace ok {
 template <typename T> using remove_cvref_t = stdc::remove_cvref_t<T>;
 
 template <typename T, typename other_t>
-concept same_as_c = requires { requires stdc::is_same_v<T, other_t>; };
+concept same_as_c = stdc::same_as<T, other_t>;
 
 template <typename T>
 concept is_void_c = requires { requires stdc::is_void_v<T>; };

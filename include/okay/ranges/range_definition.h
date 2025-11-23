@@ -45,19 +45,19 @@ enum class range_strict_flags
 constexpr range_flags operator|(range_flags a, range_flags b)
 {
     using flags = range_flags;
-    return static_cast<flags>(static_cast<std::underlying_type_t<flags>>(a) |
-                              static_cast<std::underlying_type_t<flags>>(b));
+    return static_cast<flags>(static_cast<stdc::underlying_type_t<flags>>(a) |
+                              static_cast<stdc::underlying_type_t<flags>>(b));
 }
 
 /// Removes all flags in b from a
 constexpr range_flags operator-(range_flags a, range_flags b)
 {
     using flags = range_flags;
-    const auto shared_flags = static_cast<std::underlying_type_t<flags>>(a) &
-                              static_cast<std::underlying_type_t<flags>>(b);
+    const auto shared_flags = static_cast<stdc::underlying_type_t<flags>>(a) &
+                              static_cast<stdc::underlying_type_t<flags>>(b);
     // only leave on ones that were exclusively on in `a`
     return static_cast<flags>(shared_flags ^
-                              static_cast<std::underlying_type_t<flags>>(a));
+                              static_cast<stdc::underlying_type_t<flags>>(a));
 }
 
 constexpr range_flags& operator|=(range_flags& a, range_flags b)
@@ -75,16 +75,16 @@ constexpr range_flags& operator-=(range_flags& a, range_flags b)
 constexpr bool operator&(range_flags a, range_flags b)
 {
     using flags = range_flags;
-    return static_cast<std::underlying_type_t<flags>>(a) &
-           static_cast<std::underlying_type_t<flags>>(b);
+    return static_cast<stdc::underlying_type_t<flags>>(a) &
+           static_cast<stdc::underlying_type_t<flags>>(b);
 }
 
 constexpr range_strict_flags operator|(range_strict_flags a,
                                        range_strict_flags b)
 {
     using flags = range_strict_flags;
-    return static_cast<flags>(static_cast<std::underlying_type_t<flags>>(a) |
-                              static_cast<std::underlying_type_t<flags>>(b));
+    return static_cast<flags>(static_cast<stdc::underlying_type_t<flags>>(a) |
+                              static_cast<stdc::underlying_type_t<flags>>(b));
 }
 
 /// Removes all flags in b from a
@@ -92,10 +92,10 @@ constexpr range_strict_flags operator-(range_strict_flags a,
                                        range_strict_flags b)
 {
     using flags = range_strict_flags;
-    const auto added = static_cast<std::underlying_type_t<flags>>(a) |
-                       static_cast<std::underlying_type_t<flags>>(b);
+    const auto added = static_cast<stdc::underlying_type_t<flags>>(a) |
+                       static_cast<stdc::underlying_type_t<flags>>(b);
     return static_cast<flags>(added ^
-                              static_cast<std::underlying_type_t<flags>>(b));
+                              static_cast<stdc::underlying_type_t<flags>>(b));
 }
 
 constexpr range_strict_flags& operator|=(range_strict_flags& a,
@@ -115,8 +115,8 @@ constexpr range_strict_flags& operator-=(range_strict_flags& a,
 constexpr bool operator&(range_strict_flags a, range_strict_flags b)
 {
     using flags = range_strict_flags;
-    return static_cast<std::underlying_type_t<flags>>(a) &
-           static_cast<std::underlying_type_t<flags>>(b);
+    return static_cast<stdc::underlying_type_t<flags>>(a) &
+           static_cast<stdc::underlying_type_t<flags>>(b);
 }
 
 constexpr bool range_strict_flags_validate(range_flags rflags,
@@ -159,7 +159,7 @@ struct inherited_range_type : public ok::false_type
     using type = void;
 };
 template <typename T>
-struct inherited_range_type<T, std::void_t<typename T::inherited_range_type>>
+struct inherited_range_type<T, stdc::void_t<typename T::inherited_range_type>>
     : public ok::true_type
 {
     using type = typename T::inherited_range_type;

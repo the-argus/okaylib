@@ -1,7 +1,7 @@
 #ifndef __OKAYLIB_DETAIL_TRAITS_SPECIAL_MEMBER_TRAITS_H__
 #define __OKAYLIB_DETAIL_TRAITS_SPECIAL_MEMBER_TRAITS_H__
 
-#include <type_traits>
+#include "okay/detail/type_traits.h"
 
 namespace ok {
 template <typename T, typename... args_t>

@@ -135,7 +135,7 @@ template <size_t num_bits> class bit_array_t
 
     constexpr void set_all_bits(ok::bit value) OKAYLIB_NOEXCEPT
     {
-        std::memset(bytes, value ? char(-1) : char(0), num_bytes);
+        ::memset(bytes, value ? char(-1) : char(0), num_bytes);
     }
 
     constexpr void set_bit(size_t idx, ok::bit value) OKAYLIB_NOEXCEPT
@@ -203,7 +203,7 @@ struct bit_string_t
 {
     template <typename c_array_ref, typename... args_t>
     using associated_type = bit_array_t<ok::detail::c_array_length_t<
-        std::remove_reference_t<c_array_ref>>::value>;
+        stdc::remove_reference_t<c_array_ref>>::value>;
 
     template <size_t N>
     [[nodiscard]] constexpr auto

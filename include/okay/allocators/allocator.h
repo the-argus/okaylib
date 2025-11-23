@@ -5,13 +5,12 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <type_traits>
-#include <utility> // for std::forward
 
 // pulls in res, then slice and opt
 #include "okay/construct.h"
 #include "okay/detail/template_util/c_array_length.h"
 #include "okay/detail/template_util/c_array_value_type.h"
+#include "okay/detail/type_traits.h"
 #include "okay/math/ordering.h"
 #include "okay/slice.h"
 #include "okay/tuple.h"
@@ -81,30 +80,30 @@ enum class feature_flags : uint16_t
 constexpr realloc_flags operator|(realloc_flags a, realloc_flags b)
 {
     using flags = realloc_flags;
-    return static_cast<flags>(static_cast<std::underlying_type_t<flags>>(a) |
-                              static_cast<std::underlying_type_t<flags>>(b));
+    return static_cast<flags>(static_cast<stdc::underlying_type_t<flags>>(a) |
+                              static_cast<stdc::underlying_type_t<flags>>(b));
 }
 
 constexpr feature_flags operator|(feature_flags a, feature_flags b)
 {
     using flags = feature_flags;
-    return static_cast<flags>(static_cast<std::underlying_type_t<flags>>(a) |
-                              static_cast<std::underlying_type_t<flags>>(b));
+    return static_cast<flags>(static_cast<stdc::underlying_type_t<flags>>(a) |
+                              static_cast<stdc::underlying_type_t<flags>>(b));
 }
 
 /// Check if two sets of flags have anything in common.
 constexpr bool operator&(realloc_flags a, realloc_flags b)
 {
     using flags = realloc_flags;
-    return static_cast<std::underlying_type_t<flags>>(a) &
-           static_cast<std::underlying_type_t<flags>>(b);
+    return static_cast<stdc::underlying_type_t<flags>>(a) &
+           static_cast<stdc::underlying_type_t<flags>>(b);
 }
 
 constexpr bool operator&(feature_flags a, feature_flags b)
 {
     using flags = feature_flags;
-    return static_cast<std::underlying_type_t<flags>>(a) &
-           static_cast<std::underlying_type_t<flags>>(b);
+    return static_cast<stdc::underlying_type_t<flags>>(a) &
+           static_cast<stdc::underlying_type_t<flags>>(b);
 }
 
 struct request_t
@@ -259,7 +258,7 @@ template <typename T, typename allocator_impl_t = ok::allocator_t> struct owned
     owned& operator=(const owned&) = delete;
 
     constexpr owned(owned&& other)
-        : m_allocation(std::exchange(other.m_allocation, nullptr)),
+        : m_allocation(stdc::exchange(other.m_allocation, nullptr)),
           m_allocator(other.m_allocator)
     {
     }
@@ -269,14 +268,14 @@ template <typename T, typename allocator_impl_t = ok::allocator_t> struct owned
         if (&other == this)
             return *this;
         destroy();
-        m_allocation = std::exchange(other.m_allocation, nullptr);
+        m_allocation = stdc::exchange(other.m_allocation, nullptr);
         m_allocator = other.m_allocator;
     }
 
     [[nodiscard]] constexpr T& release()
     {
         __ok_assert(m_allocation, "attempt to release null owned<T>");
-        return *static_cast<T*>(std::exchange(m_allocation, nullptr));
+        return *static_cast<T*>(stdc::exchange(m_allocation, nullptr));
     }
 
     constexpr ~owned() { destroy(); }
@@ -329,23 +328,23 @@ class memory_resource_t
         using analysis = decltype(detail::analyze_construction<args_t...>());
         using deduced = typename analysis::associated_type;
         constexpr bool is_constructed_type_deduced =
-            std::is_same_v<T, detail::deduced_t>;
+            stdc::is_same_v<T, detail::deduced_t>;
         static_assert(
             // either analysis found an associated_type, or we were given one
             // explicitly
-            !std::is_void_v<deduced> || !is_constructed_type_deduced,
+            !stdc::is_void_v<deduced> || !is_constructed_type_deduced,
             "Type deduction failed for the given allocator.make() call. You "
             "may "
             "need to provide the type explicitly, e.g. "
             "`allocator.make<int>(0)`");
         using actual_t =
-            std::conditional_t<is_constructed_type_deduced, deduced, T>;
+            stdc::conditional_t<is_constructed_type_deduced, deduced, T>;
 
         using return_type = alloc::result_t<actual_t&>;
 
         static_assert(
-            !std::is_void_v<actual_t> &&
-                !std::is_same_v<actual_t, detail::deduced_t>,
+            !stdc::is_void_v<actual_t> &&
+                !stdc::is_same_v<actual_t, detail::deduced_t>,
             "Unable to deduce the type you're trying to make with this "
             "allocator. The arguments to the constructor may be invalid, "
             "or you may just need to specify the returned type when "
@@ -371,7 +370,7 @@ class memory_resource_t
 
         actual_t* made = reinterpret_cast<actual_t*>(object_start);
         ok::make_into_uninitialized<actual_t>(*made,
-                                              std::forward<args_t>(args)...);
+                                              stdc::forward<args_t>(args)...);
         return return_type(*made);
     }
 
@@ -611,18 +610,18 @@ constexpr void destroy_and_free(allocator_impl_t& ally,
     static_assert(is_std_destructible_c<T>,
                   "The destructor you're trying to call with ok::free is "
                   "not " __ok_msg_nothrow "destructible");
+    static_assert(!stdc::is_array_v<T> ||
+                      is_std_destructible_c<
+                          stdc::remove_reference_t<decltype(object[0])>>,
+                  "The destructor of items within the given array are "
+                  "not " __ok_msg_nothrow " destructible.");
     static_assert(
-        !std::is_array_v<T> ||
-            is_std_destructible_c<std::remove_reference_t<decltype(object[0])>>,
-        "The destructor of items within the given array are "
-        "not " __ok_msg_nothrow " destructible.");
-    static_assert(
-        !std::is_pointer_v<T>,
+        !stdc::is_pointer_v<T>,
         "Reference to pointer passed to ok::free(). This is a potential "
         "indication of array decay. Call allocator.deallocate() directly if "
         "this is actually a pointer.");
 
-    if constexpr (!std::is_array_v<std::remove_reference_t<T>>) {
+    if constexpr (!stdc::is_array_v<stdc::remove_reference_t<T>>) {
         object.~T();
     } else {
         using VT = detail::c_array_value_type<T>;
@@ -640,18 +639,18 @@ ok::allocator_t::make(args_t&&... args) OKAYLIB_NOEXCEPT
     using analysis = decltype(detail::analyze_construction<args_t...>());
     using deduced = typename analysis::associated_type;
     constexpr bool is_constructed_type_deduced =
-        std::is_same_v<T, detail::deduced_t>;
+        stdc::is_same_v<T, detail::deduced_t>;
     static_assert(
         // either analysis found an associated_type, or we were given one
         // explicitly
-        !std::is_void_v<deduced> || !is_constructed_type_deduced,
+        !stdc::is_void_v<deduced> || !is_constructed_type_deduced,
         "Type deduction failed for the given allocator.make() call. You may "
         "need to provide the type explicitly, e.g. `allocator.make<int>(0)`");
     using actual_t =
-        std::conditional_t<is_constructed_type_deduced, deduced, T>;
+        stdc::conditional_t<is_constructed_type_deduced, deduced, T>;
 
-    static_assert(!std::is_void_v<actual_t> &&
-                      !std::is_same_v<actual_t, detail::deduced_t>,
+    static_assert(!stdc::is_void_v<actual_t> &&
+                      !stdc::is_same_v<actual_t, detail::deduced_t>,
                   "Unable to deduce the type you're trying to make with this "
                   "allocator. The arguments to the constructor may be invalid, "
                   "or you may just need to specify the returned type when "
@@ -665,8 +664,9 @@ ok::allocator_t::make(args_t&&... args) OKAYLIB_NOEXCEPT
 
     using initialization_return_type =
         decltype(make_into_uninitialized<actual_t>(
-            std::declval<actual_t&>(), std::forward<args_t>(args)...));
-    constexpr bool returns_status = !std::is_void_v<initialization_return_type>;
+            stdc::declval<actual_t&>(), stdc::forward<args_t>(args)...));
+    constexpr bool returns_status =
+        !stdc::is_void_v<initialization_return_type>;
 
     if (!allocation_result.is_success()) [[unlikely]] {
         if constexpr (returns_status) {
@@ -696,13 +696,14 @@ ok::allocator_t::make(args_t&&... args) OKAYLIB_NOEXCEPT
 
     if constexpr (returns_status) {
         auto result = make_into_uninitialized<actual_t>(
-            *made, std::forward<args_t>(args)...);
+            *made, stdc::forward<args_t>(args)...);
         static_assert(detail::is_instance_c<decltype(result), status>);
         return res<alloc::owned<actual_t>,
                    typename decltype(result)::enum_type>(
             alloc::owned<actual_t>(*made, *this));
     } else {
-        make_into_uninitialized<actual_t>(*made, std::forward<args_t>(args)...);
+        make_into_uninitialized<actual_t>(*made,
+                                          stdc::forward<args_t>(args)...);
         return alloc::result_t<alloc::owned<actual_t>>(
             alloc::owned<actual_t>(*made, *this));
     }

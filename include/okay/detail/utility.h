@@ -61,6 +61,14 @@ struct conjunction<B1, Bn...>
     : stdc::conditional_t<static_cast<bool>(B1::value), conjunction<Bn...>, B1>
 {};
 
+template <typename T, typename U = T>
+[[nodiscard]] constexpr decltype(auto) exchange(T& item, U&& newvalue)
+{
+    T old_value = stdc::move(item);
+    item = stdc::forward<U>(newvalue);
+    return old_value;
+}
+
 [[nodiscard]] constexpr bool is_constant_evaluated() noexcept
 {
 #if defined(OKAYLIB_COMPAT_STRATEGY_STD)

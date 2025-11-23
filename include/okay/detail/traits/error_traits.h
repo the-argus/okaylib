@@ -4,7 +4,6 @@
 #include "okay/detail/traits/is_derived_from.h"
 #include "okay/detail/traits/special_member_traits.h"
 #include "okay/detail/type_traits.h"
-#include <concepts>
 
 namespace ok {
 class abstract_status_t;
