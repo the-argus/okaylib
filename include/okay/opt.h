@@ -241,7 +241,7 @@ template <typename payload_t> class opt
 
     template <typename T>
         requires(is_convertible_to_c<const T&, payload_t>)
-    constexpr opt(const opt<T>& other) : m_has_value(other.m_has_value)
+    constexpr opt(const opt<T>& other) : m_has_value(other.has_value())
     {
         if (other.has_value())
             this->emplace_nodestroy(other.ref_unchecked());
@@ -249,7 +249,7 @@ template <typename payload_t> class opt
 
     template <typename T>
         requires(is_convertible_to_c<T&, payload_t>)
-    constexpr opt(opt<T>& other) : m_has_value(other.m_has_value)
+    constexpr opt(opt<T>& other) : m_has_value(other.has_value())
     {
         if (other.has_value())
             this->emplace_nodestroy(other.ref_unchecked());
@@ -257,7 +257,7 @@ template <typename payload_t> class opt
 
     template <typename T>
         requires(is_convertible_to_c<T &&, payload_t>)
-    constexpr opt(opt<T>&& other) : m_has_value(other.m_has_value)
+    constexpr opt(opt<T>&& other) : m_has_value(other.has_value())
     {
         if (other.has_value())
             this->emplace_nodestroy(stdc::move(other.ref_unchecked()));
@@ -266,7 +266,7 @@ template <typename payload_t> class opt
     template <typename T>
         requires(is_std_constructible_c<payload_t, const T&> &&
                  !is_convertible_to_c<const T&, payload_t>)
-    explicit constexpr opt(const opt<T>& other) : m_has_value(other.m_has_value)
+    explicit constexpr opt(const opt<T>& other) : m_has_value(other.has_value())
     {
         if (other.has_value())
             this->emplace_nodestroy(other.ref_unchecked());
@@ -275,7 +275,7 @@ template <typename payload_t> class opt
     template <typename T>
         requires(is_std_constructible_c<payload_t, T&> &&
                  !is_convertible_to_c<T&, payload_t>)
-    explicit constexpr opt(opt<T>& other) : m_has_value(other.m_has_value)
+    explicit constexpr opt(opt<T>& other) : m_has_value(other.has_value())
     {
         if (other.has_value())
             this->emplace_nodestroy(other.ref_unchecked());
@@ -284,7 +284,7 @@ template <typename payload_t> class opt
     template <typename T>
         requires(is_std_constructible_c<payload_t, T &&> &&
                  !is_convertible_to_c<T &&, payload_t>)
-    explicit constexpr opt(opt<T>&& other) : m_has_value(other.m_has_value)
+    explicit constexpr opt(opt<T>&& other) : m_has_value(other.has_value())
     {
         if (other.has_value())
             this->emplace_nodestroy(stdc::move(other.ref_unchecked()));
