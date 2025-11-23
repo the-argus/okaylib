@@ -10,7 +10,6 @@
 #include "okay/detail/traits/cloneable.h"
 #include "okay/detail/traits/error_traits.h"
 #include "okay/opt.h"
-#include "okay/reflection/nameof.h"
 
 #if defined(OKAYLIB_USE_FMT)
 #include <fmt/core.h>

@@ -30,8 +30,6 @@ const testing_flags = &[_][]const u8{
     "-DOKAYLIB_NOEXCEPT=", // allow exceptions in testing mode
 
     "-DOKAYLIB_TESTING",
-    // "-DOKAYLIB_USE_FMT",
-    "-DFMT_HEADER_ONLY",
 };
 
 const coverage_flags = &[_][]const u8{
@@ -207,10 +205,6 @@ pub fn build(b: *std.Build) !void {
         .install_subdir = "",
     });
 
-    const fmt = b.dependency("fmt", .{});
-    const fmt_include_path = b.pathJoin(&.{ fmt.builder.install_path, "include" });
-    try flags.append(b.allocator, b.fmt("-I{s}", .{fmt_include_path}));
-
     if (build_coverage) {
         try flags.appendSlice(b.allocator, coverage_flags);
     }
@@ -259,7 +253,6 @@ pub fn build(b: *std.Build) !void {
             test_exe.linkLibrary(test_backtraces_lib);
         }
 
-        test_exe.step.dependOn(fmt.builder.getInstallStep());
         try tests.append(b.allocator, test_exe);
     }
 
