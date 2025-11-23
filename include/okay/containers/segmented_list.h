@@ -591,8 +591,7 @@ template <typename T> struct empty_t
 
     template <typename backing_allocator_t, typename...>
     using associated_type =
-        ok::segmented_list_t<T,
-                             ok::detail::remove_cvref_t<backing_allocator_t>>;
+        ok::segmented_list_t<T, ok::remove_cvref_t<backing_allocator_t>>;
 
     template <allocator_c backing_allocator_t>
     [[nodiscard]] constexpr auto

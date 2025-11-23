@@ -559,7 +559,7 @@ template <typename T> struct with_capacity_t
 {
     template <typename backing_allocator_t, typename...>
     using associated_type =
-        ok::arcpool_t<T, ok::detail::remove_cvref_t<backing_allocator_t>>;
+        ok::arcpool_t<T, ok::remove_cvref_t<backing_allocator_t>>;
 
     template <typename backing_allocator_t>
     [[nodiscard]] constexpr auto

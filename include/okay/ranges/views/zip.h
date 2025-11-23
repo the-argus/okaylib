@@ -461,7 +461,7 @@ template <typename... ranges_t>
 struct fmt::formatter<
     ok::detail::zipped_view_t<ranges_t...>,
     std::enable_if_t<(... && fmt::is_formattable<
-                                 ok::detail::remove_cvref_t<ranges_t>>::value)>>
+                                 ok::remove_cvref_t<ranges_t>>::value)>>
 {
     using formatted_type_t = ok::detail::zipped_view_t<ranges_t...>;
 

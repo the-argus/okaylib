@@ -5,7 +5,6 @@
 #include "okay/detail/concepts.h"
 #include "okay/detail/template_util/c_array_length.h"
 #include "okay/detail/template_util/c_array_value_type.h"
-#include "okay/detail/template_util/remove_cvref.h"
 #include "okay/detail/traits/is_derived_from.h"
 #include "okay/detail/traits/is_instance.h"
 #include "okay/detail/traits/is_std_container.h"
@@ -865,11 +864,11 @@ struct size_fn_t
 
 // specialization for c-style arrays
 template <typename input_range_t>
-    requires std::is_array_v<detail::remove_cvref_t<input_range_t>>
+    requires std::is_array_v<remove_cvref_t<input_range_t>>
 struct range_definition<input_range_t>
 {
   private:
-    using range_t = detail::remove_cvref_t<input_range_t>;
+    using range_t = remove_cvref_t<input_range_t>;
 
   public:
     // a c array can never have a const value type
@@ -911,20 +910,18 @@ template <typename viewed_t> class slice;
 template <typename input_range_t>
     requires(
         // not array
-        !stdc::is_array_v<detail::remove_cvref_t<input_range_t>> &&
+        !stdc::is_array_v<remove_cvref_t<input_range_t>> &&
         // not specified to inherit some other range definition
-        !has_inherited_range_type_v<detail::remove_cvref_t<input_range_t>> &&
+        !has_inherited_range_type_v<remove_cvref_t<input_range_t>> &&
         // provides size_t .size() method and pointer data() method
-        detail::std_arraylike_container<
-            detail::remove_cvref_t<input_range_t>> &&
-        stdc::is_same_v<
-            typename detail::remove_cvref_t<input_range_t>::value_type&,
-            decltype(std::declval<detail::remove_cvref_t<input_range_t>&>()
-                         [std::declval<size_t>()])>)
+        detail::std_arraylike_container<remove_cvref_t<input_range_t>> &&
+        stdc::is_same_v<typename remove_cvref_t<input_range_t>::value_type&,
+                        decltype(std::declval<remove_cvref_t<input_range_t>&>()
+                                     [std::declval<size_t>()])>)
 struct range_definition<input_range_t>
 {
   private:
-    using range_t = detail::remove_cvref_t<input_range_t>;
+    using range_t = remove_cvref_t<input_range_t>;
     static constexpr range_flags universal_flags =
         range_flags::arraylike | range_flags::sized | range_flags::producing;
 

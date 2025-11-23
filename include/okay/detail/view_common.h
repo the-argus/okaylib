@@ -220,8 +220,7 @@ template <typename input_range_t> class ref_view
 {
   private:
     using range_t = stdc::remove_reference_t<input_range_t>;
-    static_assert(
-        !std::is_same_v<detail::remove_cvref_t<input_range_t>, ref_view>);
+    static_assert(!std::is_same_v<remove_cvref_t<input_range_t>, ref_view>);
     range_t* m_range;
 
     // not defined

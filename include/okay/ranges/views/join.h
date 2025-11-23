@@ -50,9 +50,9 @@ template <typename input_outer_range_t, typename input_inner_range_t>
 struct joined_cursor_t
 {
   private:
-    using outer_range_t = detail::remove_cvref_t<input_outer_range_t>;
+    using outer_range_t = remove_cvref_t<input_outer_range_t>;
     using inner_range_t = value_type_for<outer_range_t>;
-    static_assert(std::is_same_v<detail::remove_cvref_t<input_inner_range_t>,
+    static_assert(std::is_same_v<remove_cvref_t<input_inner_range_t>,
                                  inner_range_t>,
                   "something broken with join view implementation");
     using outer_cursor_t = cursor_type_for<outer_range_t>;
@@ -134,7 +134,7 @@ template <typename input_range_t>
 struct range_definition<detail::joined_view_t<input_range_t>>
 {
   private:
-    using outer_range_t = detail::remove_cvref_t<input_range_t>;
+    using outer_range_t = remove_cvref_t<input_range_t>;
     using inner_range_t = value_type_for<outer_range_t>;
     static_assert(!detail::range_marked_infinite_c<inner_range_t>,
                   "Cannot join infinite ranges.");
@@ -337,7 +337,7 @@ struct fmt::formatter<ok::detail::joined_view_t<range_t>>
 {
     using formatted_type_t = ok::detail::joined_view_t<range_t>;
     static_assert(
-        fmt::is_formattable<ok::detail::remove_cvref_t<range_t>>::value,
+        fmt::is_formattable<ok::remove_cvref_t<range_t>>::value,
         "Attempt to format joined_view_t whose inner range is not "
         "formattable.");
 

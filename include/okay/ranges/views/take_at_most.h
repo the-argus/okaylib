@@ -27,7 +27,7 @@ struct take_at_most_fn_t
 template <typename input_parent_range_t>
 struct take_at_most_cursor_t
     : public cursor_wrapper_t<take_at_most_cursor_t<input_parent_range_t>,
-                              detail::remove_cvref_t<input_parent_range_t>>
+                              remove_cvref_t<input_parent_range_t>>
 {
   private:
     using parent_range_t = std::remove_reference_t<input_parent_range_t>;
@@ -80,7 +80,7 @@ template <typename range_t>
 struct take_at_most_view_t : public underlying_view_type<range_t>::type
 {
   private:
-    using cursor_t = take_at_most_cursor_t<detail::remove_cvref_t<range_t>>;
+    using cursor_t = take_at_most_cursor_t<remove_cvref_t<range_t>>;
     size_t m_amount;
 
   public:
@@ -119,10 +119,10 @@ template <typename input_range_t> struct sized_take_at_most_range_t
 // to track number of items consumed
 template <typename input_range_t>
 using take_at_most_cursor_optimized_t = std::conditional_t<
-    random_access_range_c<detail::remove_cvref_t<input_range_t>> &&
-        !detail::range_marked_finite_c<detail::remove_cvref_t<input_range_t>> &&
-        range_can_offset_c<detail::remove_cvref_t<input_range_t>>,
-    cursor_type_for<detail::remove_cvref_t<input_range_t>>,
+    random_access_range_c<remove_cvref_t<input_range_t>> &&
+        !detail::range_marked_finite_c<remove_cvref_t<input_range_t>> &&
+        range_can_offset_c<remove_cvref_t<input_range_t>>,
+    cursor_type_for<remove_cvref_t<input_range_t>>,
     take_at_most_cursor_t<input_range_t>>;
 
 } // namespace detail
@@ -132,12 +132,12 @@ template <typename input_range_t>
 struct range_definition<detail::take_at_most_view_t<input_range_t>>
     : public detail::propagate_all_range_definition_functions_with_conversion_t<
           detail::take_at_most_view_t<input_range_t>,
-          detail::remove_cvref_t<input_range_t>,
+          remove_cvref_t<input_range_t>,
           detail::take_at_most_cursor_optimized_t<input_range_t>>
 {
     static constexpr bool is_view = true;
 
-    using range_t = detail::remove_cvref_t<input_range_t>;
+    using range_t = remove_cvref_t<input_range_t>;
     using take_at_most_t = detail::take_at_most_view_t<input_range_t>;
     using cursor_t = detail::take_at_most_cursor_optimized_t<input_range_t>;
 
@@ -229,12 +229,12 @@ template <typename input_range_t>
 struct range_definition<detail::take_at_most_view_t<input_range_t>>
     : public detail::propagate_all_range_definition_functions_with_conversion_t<
           detail::take_at_most_view_t<input_range_t>,
-          detail::remove_cvref_t<input_range_t>,
+          remove_cvref_t<input_range_t>,
           detail::take_at_most_cursor_optimized_t<input_range_t>>
 {
     static constexpr bool is_view = true;
 
-    using range_t = detail::remove_cvref_t<input_range_t>;
+    using range_t = remove_cvref_t<input_range_t>;
     using take_at_most_t = detail::take_at_most_view_t<input_range_t>;
 
   private:
@@ -274,7 +274,7 @@ struct fmt::formatter<ok::detail::take_at_most_view_t<range_t>>
 {
     using formatted_type_t = ok::detail::take_at_most_view_t<range_t>;
     static_assert(
-        fmt::is_formattable<ok::detail::remove_cvref_t<range_t>>::value,
+        fmt::is_formattable<ok::remove_cvref_t<range_t>>::value,
         "Attempt to format take_at_most_view_t whose inner range is not "
         "formattable.");
 

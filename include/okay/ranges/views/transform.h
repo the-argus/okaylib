@@ -19,7 +19,7 @@ struct transform_fn_t
     constexpr decltype(auto)
     operator()(range_t&& range, callable_t&& callable) const OKAYLIB_NOEXCEPT
     {
-        using T = detail::remove_cvref_t<range_t>;
+        using T = remove_cvref_t<range_t>;
 
         using item_t = decltype(ok::range_get_best(range, ok::begin(range)));
         static_assert(ok::is_std_invocable_c<const callable_t&, item_t>,
@@ -69,8 +69,8 @@ template <typename input_range_t, typename callable_t>
 struct range_definition<detail::transformed_view_t<input_range_t, callable_t>>
     : public detail::propagate_all_range_definition_functions_with_conversion_t<
           detail::transformed_view_t<input_range_t, callable_t>,
-          detail::remove_cvref_t<input_range_t>,
-          cursor_type_for<detail::remove_cvref_t<input_range_t>>>
+          remove_cvref_t<input_range_t>,
+          cursor_type_for<remove_cvref_t<input_range_t>>>
 {
   private:
     using range_t = std::remove_reference_t<input_range_t>;
@@ -147,7 +147,7 @@ template <typename range_t, typename callable_t>
 struct fmt::formatter<ok::detail::transformed_view_t<range_t, callable_t>>
 {
     static_assert(
-        fmt::is_formattable<ok::detail::remove_cvref_t<range_t>>::value,
+        fmt::is_formattable<ok::remove_cvref_t<range_t>>::value,
         "Attempt to format transformed_view_t whose inner range is not "
         "formattable.");
 

@@ -107,11 +107,11 @@ struct reversed_view_t : public underlying_view_type<range_t>::type
 
 template <typename input_range_t>
     requires(!detail::range_marked_arraylike_c<
-             detail::remove_cvref_t<input_range_t>>)
+             remove_cvref_t<input_range_t>>)
 struct range_definition<detail::reversed_view_t<input_range_t>>
     : public detail::propagate_all_range_definition_functions_with_conversion_t<
           detail::reversed_view_t<input_range_t>,
-          detail::remove_cvref_t<input_range_t>,
+          remove_cvref_t<input_range_t>,
           detail::reversed_cursor_t<input_range_t>>
 {
     static constexpr bool is_view = true;
@@ -144,13 +144,13 @@ struct range_definition<detail::reversed_view_t<input_range_t>>
 // and sets
 template <typename input_range_t>
     requires detail::range_marked_arraylike_c<
-        detail::remove_cvref_t<input_range_t>>
+        remove_cvref_t<input_range_t>>
 struct range_definition<detail::reversed_view_t<input_range_t>>
     : public detail::propagate_all_range_definition_functions_with_conversion_t<
           detail::reversed_view_t<input_range_t>,
-          detail::remove_cvref_t<input_range_t>, size_t>
+          remove_cvref_t<input_range_t>, size_t>
 {
-    using range_t = detail::remove_cvref_t<input_range_t>;
+    using range_t = remove_cvref_t<input_range_t>;
     using reversed_t = detail::reversed_view_t<input_range_t>;
 
     using value_type = value_type_for<range_t>;
@@ -213,7 +213,7 @@ struct fmt::formatter<ok::detail::reversed_view_t<range_t>>
 {
     using formatted_type_t = ok::detail::reversed_view_t<range_t>;
     static_assert(
-        fmt::is_formattable<ok::detail::remove_cvref_t<range_t>>::value,
+        fmt::is_formattable<ok::remove_cvref_t<range_t>>::value,
         "Attempt to format reversed_view_t whose inner range type is not "
         "formattable.");
 

@@ -85,7 +85,6 @@ const okaylib_headers = &[_][]const u8{
     "detail/template_util/empty.h",
     "detail/template_util/first_type_in_pack.h",
     "detail/template_util/is_all_same.h",
-    "detail/template_util/remove_cvref.h",
     "detail/template_util/uninitialized_storage.h",
 
     "detail/traits/is_std_container.h",

@@ -737,7 +737,7 @@ template <typename T> struct spots_preallocated_t
 {
     template <typename backing_allocator_t, typename...>
     using associated_type =
-        ok::arraylist_t<T, ok::detail::remove_cvref_t<backing_allocator_t>>;
+        ok::arraylist_t<T, ok::remove_cvref_t<backing_allocator_t>>;
 
     template <typename backing_allocator_t>
     [[nodiscard]] constexpr auto
@@ -786,7 +786,7 @@ struct copy_items_from_range_t
     template <typename backing_allocator_t, typename input_range_t>
     using associated_type =
         ok::arraylist_t<value_type_for<input_range_t>,
-                        ok::detail::remove_cvref_t<backing_allocator_t>>;
+                        ok::remove_cvref_t<backing_allocator_t>>;
 
     template <typename backing_allocator_t, typename input_range_t>
     [[nodiscard]] constexpr auto

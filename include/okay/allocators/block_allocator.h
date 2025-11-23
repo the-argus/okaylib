@@ -314,7 +314,7 @@ struct alloc_initial_buf_t
 {
     template <typename allocator_impl_t_cref, typename...>
     using associated_type =
-        block_allocator_t<ok::detail::remove_cvref_t<allocator_impl_t_cref>>;
+        block_allocator_t<ok::remove_cvref_t<allocator_impl_t_cref>>;
 
     template <allocator_c allocator_impl_t>
     [[nodiscard]] constexpr auto operator()(

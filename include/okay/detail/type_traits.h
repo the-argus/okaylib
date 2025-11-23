@@ -24,6 +24,8 @@ namespace ok::detail::intrinsic {
 template <typename T> inline constexpr bool is_empty = std::is_empty_v<T>;
 template <typename T> inline constexpr bool is_final = std::is_final_v<T>;
 template <typename T> inline constexpr bool is_enum = std::is_enum_v<T>;
+template <typename T>
+inline constexpr bool is_aggregate = std::is_aggregate_v<T>;
 template <typename T> using underlying_type_t = std::underlying_type_t<T>;
 template <typename T> using remove_const_t = std::remove_const_t<T>;
 template <typename base_t, typename derived_t>
@@ -47,9 +49,9 @@ template <typename T>
 struct is_final : public ok::stdc::integral_constant<bool, __is_final(T)>
 {};
 
-#if __has_builtin(__remove_const)
+// #if __has_builtin(__remove_const)
 template <typename T> using remove_const_t = __remove_const(T);
-#endif
+// #endif
 
 template <typename T>
 struct is_enum : public ok::stdc::integral_constant<bool, __is_enum(T)>
@@ -65,6 +67,7 @@ struct is_base_of
 template <typename T> inline constexpr bool is_empty = __is_empty(T);
 template <typename T> inline constexpr bool is_final = __is_final(T);
 template <typename T> inline constexpr bool is_enum = __is_enum(T);
+template <typename T> inline constexpr bool is_aggregate = __is_aggregate(T);
 template <typename base_t, typename derived_t>
 inline constexpr bool is_base_of = __is_base_of(base_t, derived_t);
 
@@ -83,18 +86,12 @@ inline constexpr bool is_base_of = __is_base_of(base_t, derived_t);
 // if using pure C++, you cannot detect if a type is final or empty, so they
 // always return false.
 namespace ok::detail::intrinsic {
-template <typename T>
-struct is_empty : public ok::stdc::integral_constant<bool, false>
-{};
-template <typename T>
-struct is_final : public ok::stdc::integral_constant<bool, false>
-{};
-template <typename T>
-struct is_enum : public ok::stdc::integral_constant<bool, false>
-{};
+template <typename T> inline constexpr bool is_empty = false;
+template <typename T> inline constexpr bool is_final = false;
+template <typename T> inline constexpr bool is_enum = false;
+template <typename T> inline constexpr bool is_aggregate = false;
 template <typename base_t, typename derived_t>
-struct is_base_of : public ok::stdc::integral_constant<bool, false>
-{};
+inline constexpr bool is_base_of = false;
 
 template <typename T> struct remove_const
 {
@@ -347,12 +344,22 @@ template <typename T> struct is_reference<T&> : public true_type
 template <typename T> struct is_reference<T&&> : public true_type
 {};
 
+template <typename T> struct remove_cvref
+{
+    using type = typename remove_cv<remove_reference_t<T>>::type;
+};
+
+template <typename T> using remove_cvref_t = typename remove_cvref<T>::type;
+
 template <typename T>
 using is_empty = integral_constant<bool, ok::detail::intrinsic::is_empty<T>>;
 template <typename T>
 using is_final = integral_constant<bool, ok::detail::intrinsic::is_final<T>>;
 template <typename T>
 using is_enum = integral_constant<bool, ok::detail::intrinsic::is_enum<T>>;
+template <typename T>
+using is_aggregate =
+    integral_constant<bool, ok::detail::intrinsic::is_aggregate<T>>;
 
 template <bool B, typename T, typename F> struct conditional
 {
@@ -1091,6 +1098,8 @@ using underlying_type_t = ::ok::detail::intrinsic::underlying_type_t<T>;
 } // namespace ok::stdc
 
 namespace ok {
+template <typename T> using remove_cvref_t = stdc::remove_cvref_t<T>;
+
 template <typename T, typename other_t>
 concept same_as_c = requires { requires stdc::is_same_v<T, other_t>; };
 

@@ -67,8 +67,8 @@ template <typename input_range_t, typename predicate_t>
 struct range_definition<detail::keep_if_view_t<input_range_t, predicate_t>>
     : public detail::propagate_all_range_definition_functions_with_conversion_t<
           detail::keep_if_view_t<input_range_t, predicate_t>,
-          detail::remove_cvref_t<input_range_t>,
-          cursor_type_for<detail::remove_cvref_t<input_range_t>>>
+          remove_cvref_t<input_range_t>,
+          cursor_type_for<remove_cvref_t<input_range_t>>>
 {
     static constexpr bool is_view = true;
 
@@ -162,7 +162,7 @@ struct fmt::formatter<ok::detail::keep_if_view_t<range_t, callable_t>>
 {
     using formatted_type_t = ok::detail::keep_if_view_t<range_t, callable_t>;
     static_assert(
-        fmt::is_formattable<ok::detail::remove_cvref_t<range_t>>::value,
+        fmt::is_formattable<ok::remove_cvref_t<range_t>>::value,
         "Attempt to format keep_if_view_t whose inner range type is not "
         "formattable.");
 

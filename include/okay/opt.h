@@ -79,10 +79,10 @@ template <typename payload_t> class opt
 
     template <typename T>
     inline static constexpr bool not_self =
-        !std::is_same_v<opt, detail::remove_cvref_t<T>>;
+        !std::is_same_v<opt, remove_cvref_t<T>>;
     template <typename T>
     inline static constexpr bool not_tag =
-        !std::is_same_v<ok::in_place_t, detail::remove_cvref_t<T>>;
+        !std::is_same_v<ok::in_place_t, remove_cvref_t<T>>;
 
     detail::uninitialized_storage_t<payload_t> m_payload;
     bool m_has_value;
@@ -581,7 +581,7 @@ template <stdc::is_reference_c payload_t> class opt<payload_t>
     template <typename other_t>
     constexpr opt(const opt<other_t>& other) OKAYLIB_NOEXCEPT
         requires(is_convertible_to_c<other_t, payload_t> &&
-                 !std::is_same_v<detail::remove_cvref_t<other_t>, opt>)
+                 !std::is_same_v<remove_cvref_t<other_t>, opt>)
         : m_pointer(other.as_ptr())
     {
     }

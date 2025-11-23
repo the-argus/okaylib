@@ -206,7 +206,7 @@ class std_for_view : public detail::underlying_view_type<T>::type
     {
         auto& ref =
             this->template get_view_reference<std_for_view,
-                                              detail::remove_cvref_t<T>>();
+                                              remove_cvref_t<T>>();
         return correct_iterator_t(ref, ok::begin(ref));
     }
 
@@ -219,7 +219,7 @@ class std_for_view : public detail::underlying_view_type<T>::type
     {
         auto& ref =
             this->template get_view_reference<std_for_view,
-                                              detail::remove_cvref_t<T>>();
+                                              remove_cvref_t<T>>();
         return const_iterator(ref, ok::begin(ref));
     }
 

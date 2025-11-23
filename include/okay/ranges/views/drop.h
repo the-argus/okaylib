@@ -33,7 +33,7 @@ struct drop_fn_t
 template <typename input_parent_range_t>
 struct drop_cursor_bidir_t
     : public cursor_wrapper_t<drop_cursor_bidir_t<input_parent_range_t>,
-                              detail::remove_cvref_t<input_parent_range_t>>
+                              remove_cvref_t<input_parent_range_t>>
 {
   private:
     using range_t = std::remove_reference_t<input_parent_range_t>;
@@ -78,16 +78,16 @@ struct drop_cursor_bidir_t
 
 template <typename input_range_t>
 using drop_cursor_t = std::conditional_t<
-    bidirectional_range_c<detail::remove_cvref_t<input_range_t>> &&
-        !random_access_range_c<detail::remove_cvref_t<input_range_t>>,
+    bidirectional_range_c<remove_cvref_t<input_range_t>> &&
+        !random_access_range_c<remove_cvref_t<input_range_t>>,
     drop_cursor_bidir_t<input_range_t>,
-    cursor_type_for<detail::remove_cvref_t<input_range_t>>>;
+    cursor_type_for<remove_cvref_t<input_range_t>>>;
 
 template <typename input_range_t>
 struct drop_view_t : public underlying_view_type<input_range_t>::type
 {
   private:
-    using range_t = detail::remove_cvref_t<input_range_t>;
+    using range_t = remove_cvref_t<input_range_t>;
     size_t m_amount;
 
   public:
@@ -126,14 +126,14 @@ struct range_definition<detail::drop_view_t<input_range_t>>
           detail::drop_cursor_t<input_range_t>>
 {
   private:
-    using range_t = detail::remove_cvref_t<input_range_t>;
+    using range_t = remove_cvref_t<input_range_t>;
     using drop_t = detail::drop_view_t<input_range_t>;
     using cursor_t = detail::drop_cursor_t<input_range_t>;
 
     static consteval range_flags determine_flags()
     {
         const auto parent_flags =
-            range_definition<detail::remove_cvref_t<range_t>>::flags;
+            range_definition<remove_cvref_t<range_t>>::flags;
         // TODO: support arraylike ranges being drop viewed, it should just be a
         // subtraction from all the indices and the size
         range_flags initial = parent_flags - range_flags::arraylike;
@@ -165,7 +165,7 @@ struct range_definition<detail::drop_view_t<input_range_t>>
         requires detail::range_can_size_c<range_t>
     {
         const auto& parent_ref = i.template get_view_reference<
-            drop_t, detail::remove_cvref_t<input_range_t>>();
+            drop_t, remove_cvref_t<input_range_t>>();
 
         // should not to overflow thanks to the cap in drop_view_t
         // constructor
@@ -241,7 +241,7 @@ struct fmt::formatter<ok::detail::drop_view_t<range_t>>
 {
     using formatted_type_t = ok::detail::drop_view_t<range_t>;
     static_assert(
-        fmt::is_formattable<ok::detail::remove_cvref_t<range_t>>::value,
+        fmt::is_formattable<ok::remove_cvref_t<range_t>>::value,
         "Attempt to format drop_view_t whose inner range type is not "
         "formattable.");
 

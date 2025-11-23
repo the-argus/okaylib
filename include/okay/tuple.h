@@ -3,7 +3,6 @@
 
 #include "okay/detail/invoke.h"
 #include "okay/detail/no_unique_addr.h"
-#include "okay/detail/template_util/remove_cvref.h"
 #include "okay/detail/type_traits.h"
 #include "okay/detail/utility.h"
 #include <cstddef>
@@ -252,7 +251,7 @@ class tuple : public detail::tuple_impl_t<0, elements_t...>
     template <typename other_t> static constexpr bool valid_args()
     {
         return sizeof...(elements_t) == 1 &&
-               !stdc::is_same_v<tuple, ok::detail::remove_cvref_t<other_t>>;
+               !stdc::is_same_v<tuple, ok::remove_cvref_t<other_t>>;
     }
 
     // check if multiple arguments are valid constructor arguments
@@ -695,6 +694,8 @@ constexpr decltype(auto) apply(callable_t&& c, tuple_t&& tuple)
         stdc::make_index_sequence<
             std::tuple_size<std::decay_t<tuple_t>>::value>{});
 }
+
+template <class... T> constexpr tuple<T&...> tie(T&... t) { return {t...}; }
 } // namespace ok
 
 #endif

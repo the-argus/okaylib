@@ -466,8 +466,7 @@ namespace detail {
 struct bit_string_t
 {
     template <typename allocator_t, typename...>
-    using associated_type =
-        bit_arraylist_t<::ok::detail::remove_cvref_t<allocator_t>>;
+    using associated_type = bit_arraylist_t<::ok::remove_cvref_t<allocator_t>>;
 
     template <allocator_c backing_allocator_t, size_t N>
     [[nodiscard]] constexpr auto
@@ -511,8 +510,7 @@ struct preallocated_and_zeroed_t
     };
 
     template <typename allocator_t, typename...>
-    using associated_type =
-        bit_arraylist_t<::ok::detail::remove_cvref_t<allocator_t>>;
+    using associated_type = bit_arraylist_t<::ok::remove_cvref_t<allocator_t>>;
 
     template <allocator_c backing_allocator_t>
     [[nodiscard]] constexpr auto

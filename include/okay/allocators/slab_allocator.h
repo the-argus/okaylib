@@ -88,7 +88,8 @@ slab_allocator_t<allocator_impl_t, num_blocksizes>::impl_allocate(
                 // try the next allocator
                 continue;
             }
-            __ok_internal_assert(!ok::is_success(result) || allocator.contains(result.unwrap()));
+            __ok_internal_assert(!ok::is_success(result) ||
+                                 allocator.contains(result.unwrap()));
             return result;
         }
     }
@@ -199,8 +200,8 @@ struct with_blocks_t
     template <typename allocator_impl_t_c_ref, typename options_ref,
               typename...>
     using associated_type =
-        slab_allocator_t<detail::remove_cvref_t<allocator_impl_t_c_ref>,
-                         detail::remove_cvref_t<options_ref>::num_blocksizes>;
+        slab_allocator_t<remove_cvref_t<allocator_impl_t_c_ref>,
+                         remove_cvref_t<options_ref>::num_blocksizes>;
 
     template <allocator_c allocator_impl_t, size_t num_blocksizes>
     [[nodiscard]] constexpr auto

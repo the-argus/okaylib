@@ -183,7 +183,7 @@ template <typename... args_t> auto analyze_construction()
     } else {
         constexpr auto split = [](auto&& constructor, auto&&... args) ->
             typename constructor_analysis<decltype(args)...>::template inner<
-                detail::remove_cvref_t<decltype(constructor)>> { return {}; };
+                remove_cvref_t<decltype(constructor)>> { return {}; };
         using out_t = decltype(split(std::declval<args_t>()...));
         return out_t{};
     }

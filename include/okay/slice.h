@@ -4,7 +4,6 @@
 #include "okay/detail/abort.h"
 #include "okay/detail/addressof.h"
 #include "okay/detail/noexcept.h"
-#include "okay/detail/template_util/remove_cvref.h"
 #include "okay/detail/template_util/uninitialized_storage.h"
 #include "okay/detail/traits/is_instance.h"
 #include "okay/detail/traits/is_std_container.h"
@@ -299,10 +298,10 @@ using conditionally_const_t = std::conditional_t<is_const, const T, T>;
 
 template <typename T>
 slice(T) -> slice<std::enable_if_t<
-             detail::std_arraylike_container<detail::remove_cvref_t<T>>,
+             detail::std_arraylike_container<remove_cvref_t<T>>,
              detail::conditionally_const_t<
-                 detail::remove_cvref_t<decltype(*std::declval<T>().data())>,
-                 is_const_c<typename detail::remove_cvref_t<T>::value_type>>>>;
+                 remove_cvref_t<decltype(*std::declval<T>().data())>,
+                 is_const_c<typename remove_cvref_t<T>::value_type>>>>;
 
 using bytes_t = slice<uint8_t>;
 

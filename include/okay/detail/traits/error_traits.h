@@ -1,7 +1,6 @@
 #ifndef __OKAYLIB_DETAIL_TRAITS_ERROR_TRAITS_H__
 #define __OKAYLIB_DETAIL_TRAITS_ERROR_TRAITS_H__
 
-#include "okay/detail/template_util/remove_cvref.h"
 #include "okay/detail/traits/is_derived_from.h"
 #include "okay/detail/traits/special_member_traits.h"
 #include "okay/detail/type_traits.h"
@@ -67,13 +66,13 @@ concept status_enum_c = requires(T t) {
 template <typename T>
 concept status_type_c = status_enum_c<T> || status_object_c<T>;
 
-#define __OK_RES_REQUIRES_CLAUSE                                       \
-    requires(!stdc::is_same_v<ok::detail::remove_cvref_t<success_t>,   \
-                              ok::detail::remove_cvref_t<status_t>> && \
-             !is_convertible_to_c<success_t, status_t> &&              \
-             !is_convertible_to_c<status_t, success_t> &&              \
-             !stdc::is_rvalue_reference_v<success_t> &&                \
-             !stdc::is_array_v<success_t> &&                           \
+#define __OK_RES_REQUIRES_CLAUSE                               \
+    requires(!stdc::is_same_v<ok::remove_cvref_t<success_t>,   \
+                              ok::remove_cvref_t<status_t>> && \
+             !is_convertible_to_c<success_t, status_t> &&      \
+             !is_convertible_to_c<status_t, success_t> &&      \
+             !stdc::is_rvalue_reference_v<success_t> &&        \
+             !stdc::is_array_v<success_t> &&                   \
              ok::detail::is_nonthrowing_c<success_t>)
 
 template <typename success_t, status_type_c status_t, typename = void>
