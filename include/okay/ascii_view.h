@@ -60,12 +60,23 @@ class ascii_view
         : m_str(begin), m_length(static_cast<size_t>(end - begin))
     {
     }
+    // from_raw constructor
+    constexpr ascii_view(const char* begin, size_t len)
+        : m_str(begin), m_length(len)
+    {
+    }
 
   public:
     // be std container-like, so we automatically get to be a range
     using value_type = char;
 
     constexpr ascii_view() = default;
+
+    [[nodiscard]] constexpr static ascii_view from_raw(const char* chars,
+                                                       size_t length)
+    {
+        return {chars, length};
+    }
 
     template <size_t N>
         requires(N > 0)
@@ -93,6 +104,11 @@ class ascii_view
     [[nodiscard]] constexpr size_t size() const { return m_length; }
     [[nodiscard]] constexpr bool is_empty() const { return m_length == 0; }
 
+    [[nodiscard]] constexpr size_t index_of_back() const
+    {
+        return is_empty() ? 0 : size() - 1;
+    }
+
     [[nodiscard]] constexpr const char&
     operator[](size_t i) const OKAYLIB_NOEXCEPT
     {
@@ -104,15 +120,14 @@ class ascii_view
     }
 
     [[nodiscard]] constexpr ascii_view
-    substring(size_t begin, size_t end) const OKAYLIB_NOEXCEPT
+    substring(size_t begin, size_t end = -1) const OKAYLIB_NOEXCEPT
     {
+        if (end > size()) [[unlikely]]
+            end = size();
         if (!ok::stdc::is_constant_evaluated()) {
-            if (begin >= size()) [[unlikely]]
-                __ok_abort("Out of bounds access in ok::ascii_view::substring");
-            if (end >= size()) [[unlikely]]
-                __ok_abort("Out of bounds access in ok::ascii_view::substring");
             if (end <= begin) [[unlikely]]
                 __ok_abort("Out of bounds access in ok::ascii_view::substring");
+            __ok_internal_assert(begin < size());
         }
         return ascii_view(m_str + begin, m_str + end);
     }
@@ -195,9 +210,30 @@ class ascii_view
             if (needle[needle_index] == (*this)[i]) {
                 ++needle_index;
                 if (needle_index == needle.size())
-                    return i;
+                    return (i + 1) - needle.size();
             } else {
                 needle_index = 0;
+            }
+        }
+
+        return alternative;
+    }
+
+    [[nodiscard]] constexpr size_t reverse_find_or(const ascii_view& needle,
+                                                   size_t alternative) const
+    {
+        if (needle.is_empty())
+            return index_of_back();
+
+        size_t needle_index = needle.index_of_back();
+
+        for (size_t i = index_of_back(); i < this->size(); --i) {
+            if (needle[needle_index] == (*this)[i]) {
+                --needle_index;
+                if (needle_index >= needle.size()) // overflow happened (safe)
+                    return i;
+            } else {
+                needle_index = needle.index_of_back();
             }
         }
 

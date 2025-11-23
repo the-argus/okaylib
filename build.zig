@@ -170,6 +170,7 @@ const test_source_files = &[_][]const u8{
     "bit_array/bit_array.cpp",
     "bit_arraylist/bit_arraylist.cpp",
     "segmented_list/segmented_list.cpp",
+    "reflection/reflection.cpp",
 };
 
 const tests_backtrace_source_files = &[_][]const u8{

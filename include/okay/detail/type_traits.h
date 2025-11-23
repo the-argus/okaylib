@@ -120,6 +120,17 @@ namespace ok::stdc {
 template <typename T>
 using remove_const_t = ok::detail::intrinsic::remove_const_t<T>;
 
+template <typename T> struct remove_volatile
+{
+    using type = T;
+};
+template <typename T> struct remove_volatile<T volatile>
+{
+    using type = T;
+};
+template <typename T>
+using remove_volatile_t = typename remove_volatile<T>::type;
+
 template <typename T> struct remove_cv
 {
     using type = T;
@@ -360,6 +371,18 @@ using is_enum = integral_constant<bool, ok::detail::intrinsic::is_enum<T>>;
 template <typename T>
 using is_aggregate =
     integral_constant<bool, ok::detail::intrinsic::is_aggregate<T>>;
+
+namespace detail {
+void scoped_enum_conversion_test(...);
+void scoped_enum_conversion_test(int) = delete;
+
+template <class E>
+concept is_scoped_enum_impl =
+    is_enum<E>::value && requires { scoped_enum_conversion_test(E{}); };
+} // namespace detail
+
+template <typename T>
+using is_scoped_enum = integral_constant<bool, detail::is_scoped_enum_impl<T>>;
 
 template <bool B, typename T, typename F> struct conditional
 {
@@ -972,6 +995,9 @@ template <typename T>
 concept is_nonconst_reference_c =
     is_reference<T>::value && !is_const_c<remove_reference_t<T>>;
 
+template <typename from_t, typename to_t>
+concept convertible_to_c = ok::stdc::is_convertible<from_t, to_t>::value;
+
 template <typename T> inline constexpr bool is_scalar_v = is_scalar<T>{};
 
 template <typename T>
@@ -1091,6 +1117,8 @@ template <typename T, typename U>
 inline constexpr bool is_same_v = is_same<T, U>::value;
 
 template <typename T> inline constexpr bool is_enum_v = stdc::is_enum<T>::value;
+template <typename T>
+inline constexpr bool is_scoped_enum_v = stdc::is_scoped_enum<T>::value;
 
 template <typename T>
 using underlying_type_t = ::ok::detail::intrinsic::underlying_type_t<T>;
