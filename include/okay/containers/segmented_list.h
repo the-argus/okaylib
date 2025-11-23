@@ -516,7 +516,6 @@ class segmented_list_t
                     .preferred_size_bytes =
                         sizeof(blocklist_t) +
                         (sizeof(T*) * m.blocklist->capacity * 2),
-                    .flags = alloc::realloc_flags::expand_back,
                 });
 
             if (!new_blocklist_result.is_success()) [[unlikely]]

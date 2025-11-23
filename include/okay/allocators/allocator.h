@@ -511,7 +511,6 @@ namespace alloc {
 struct potentially_in_place_reallocation_t
 {
     bytes_t memory;
-    size_t bytes_offset_front;
     bool was_in_place;
 };
 
@@ -532,8 +531,7 @@ reallocate_in_place_orelse_keep_old_nocopy(
     if (reallocation_res.is_success()) {
         auto& reallocation = reallocation_res.unwrap();
         return potentially_in_place_reallocation_t{
-            .memory = reallocation.memory,
-            .bytes_offset_front = reallocation.bytes_offset_front,
+            .memory = reallocation,
             .was_in_place = true,
         };
     }
@@ -544,7 +542,7 @@ reallocate_in_place_orelse_keep_old_nocopy(
     });
 
     if (!res.is_success()) [[unlikely]]
-        return res;
+        return res.status();
 
     return potentially_in_place_reallocation_t{
         .memory = res.unwrap(),

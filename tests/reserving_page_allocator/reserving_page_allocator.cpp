@@ -96,8 +96,7 @@ TEST_SUITE("reserving page allocator")
             const auto smallmem_reallocate_res = ally.reallocate({
                 .memory = smallmem,
                 .new_size_bytes = 2 * page_size,
-                .flags = alloc::realloc_flags::expand_back |
-                         alloc::realloc_flags::in_place_orelse_fail,
+                .flags = alloc::realloc_flags::in_place_orelse_fail,
             });
             smallmem =
                 OKAYLIB_REQUIRE_RES_WITH_BACKTRACE(smallmem_reallocate_res);
@@ -105,8 +104,7 @@ TEST_SUITE("reserving page allocator")
             const auto bigmem_reallocate_res = ally.reallocate({
                 .memory = smallmem,
                 .new_size_bytes = 3 * page_size,
-                .flags = alloc::realloc_flags::expand_back |
-                         alloc::realloc_flags::in_place_orelse_fail,
+                .flags = alloc::realloc_flags::in_place_orelse_fail,
             });
 
             REQUIRE(!bigmem_reallocate_res.is_success());

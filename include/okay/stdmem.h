@@ -143,7 +143,7 @@ template <typename T>
 memmove(const ok::memcopy_options_t<T>& options) OKAYLIB_NOEXCEPT
 {
     static_assert(
-        stdc::is_trivially_copyable_v<T>,
+        ok::stdc::is_trivially_copyable_v<T>,
         "Refusing to invoke ok::memmove on a non-trivially copyable type.");
 
     if (options.from.is_empty()) {

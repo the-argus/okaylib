@@ -35,6 +35,8 @@ inline constexpr bool is_base_of = std::is_base_of_v<base_t, derived_t>;
     std::is_trivially_constructible_v<__VA_ARGS__>
 #define __ok_is_trivially_assignable(from, to) \
     std::is_trivially_assignable_v<from, to>
+template <typename T>
+inline constexpr bool is_trivially_copyable = std::is_trivially_copyable_v<T>;
 } // namespace ok::detail::intrinsic
 
 #elif defined(OKAYLIB_COMPAT_STRATEGY_NO_STD)
@@ -79,6 +81,9 @@ inline constexpr bool is_base_of = __is_base_of(base_t, derived_t);
 
 #define __ok_is_trivially_assignable(from, to) \
     __is_trivially_assignable(from, to)
+
+template <typename T>
+inline constexpr bool is_trivially_copyable = __is_trivially_copyable(T);
 } // namespace ok::detail::intrinsic
 
 #elif defined(OKAYLIB_COMPAT_STRATEGY_PURE_CPP)
@@ -112,6 +117,8 @@ template <typename T> using underlying_type_t = void;
 #define __ok_has_trivial_constructor(...) false
 
 #define __ok_is_trivially_assignable(from, to) false
+
+template <typename T> inline constexpr bool is_trivially_copyable = false;
 } // namespace ok::detail::intrinsic
 
 #endif
@@ -449,7 +456,7 @@ template <typename T, typename... args_t> struct is_constructible_impl
     // is the other `struct inner` specialization below
     template <typename U, typename = void> struct inner
     {
-        static_assert(!is_reference<U>{}, "bad template specialization");
+        static_assert(!is_reference<U>::value, "bad template specialization");
         template <typename V, typename = void>
         struct inner_again : public stdc::false_type
         {};
@@ -464,7 +471,7 @@ template <typename T, typename... args_t> struct is_constructible_impl
     // implementation if the type is a reference is that its only going to be
     // true if the construction argument is a single identical reference, or
     // a reference to a derived class
-    template <typename U> struct inner<U, enable_if_t<is_reference<U>{}>>
+    template <typename U> struct inner<U, enable_if_t<is_reference<U>::value>>
     {
         template <typename... inner_args_t> struct inner_again
         {
@@ -589,6 +596,21 @@ template <typename T, typename... args_t>
 struct is_trivially_constructible
     : public stdc::integral_constant<bool,
                                      __ok_has_trivial_constructor(T, args_t...)>
+{
+    static_assert(
+        stdc::detail::is_complete_or_unbounded(
+            stdc::detail::type_identity<T>{}),
+        "template argument must be a complete class or an unbounded array");
+};
+
+template <typename T>
+struct is_trivially_default_constructible : public is_trivially_constructible<T>
+{};
+
+template <typename T, typename... args_t>
+struct is_trivially_copyable
+    : public stdc::integral_constant<
+          bool, ok::detail::intrinsic::is_trivially_copyable<T>>
 {
     static_assert(
         stdc::detail::is_complete_or_unbounded(
@@ -1038,6 +1060,9 @@ concept is_nonconst_reference_c =
 template <typename from_t, typename to_t>
 concept convertible_to_c = ok::stdc::is_convertible<from_t, to_t>::value;
 
+template <typename T>
+inline constexpr bool is_reference_v = is_reference<T>::value;
+
 template <typename T> inline constexpr bool is_scalar_v = is_scalar<T>::value;
 
 template <typename T> inline constexpr bool is_signed_v = is_signed<T>::value;
@@ -1123,6 +1148,13 @@ inline constexpr bool is_trivially_copy_assignable_v =
 template <typename T>
 inline constexpr bool is_trivially_move_assignable_v =
     is_trivially_move_assignable<T>::value;
+
+template <typename T>
+inline constexpr bool is_trivially_copyable_v = is_trivially_copyable<T>::value;
+
+template <typename T>
+inline constexpr bool is_trivially_default_constructible_v =
+    is_trivially_default_constructible<T>::value;
 
 template <typename T>
 inline constexpr bool is_nothrow_move_assignable_v =

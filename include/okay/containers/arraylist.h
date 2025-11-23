@@ -220,8 +220,8 @@ class arraylist_t
                 // supposed to be the cold path and it only invokes nonfailing
                 // operations so it should be fine to do this)
                 if constexpr (stdc::is_trivially_copyable_v<T>) {
-                    stdc::memmove(m.items + idx, m.items + idx + 1,
-                                  (this->size() - idx) * sizeof(T));
+                    ::memmove(m.items + idx, m.items + idx + 1,
+                              (this->size() - idx) * sizeof(T));
                 } else {
                     // this accesses spots[i + 1] but that is initialized
                     // at this point
@@ -283,8 +283,8 @@ class arraylist_t
 
         if constexpr (stdc::is_trivially_copyable_v<T>) {
             const size_t idxplusone = idx + 1;
-            stdc::memmove(m.items + idx, m.items + idxplusone,
-                          (this->size() - idxplusone) * sizeof(T));
+            ::memmove(m.items + idx, m.items + idxplusone,
+                      (this->size() - idxplusone) * sizeof(T));
         } else {
             for (size_t i = this->size() - 1; i > idx; --i) {
                 T& source = m.items[i];
@@ -354,8 +354,7 @@ class arraylist_t
                 .memory = bytes,
                 .new_size_bytes = size() * sizeof(T),
                 // flags besides in_place_orelse_fail not really necessary
-                .flags = alloc::realloc_flags::shrink_back |
-                         alloc::realloc_flags::in_place_orelse_fail |
+                .flags = alloc::realloc_flags::in_place_orelse_fail |
                          alloc::realloc_flags::leave_nonzeroed,
             });
 
@@ -366,8 +365,8 @@ class arraylist_t
         __ok_assert((void*)new_bytes.unchecked_address_of_first_item() ==
                         m.items,
                     "Backing allocator for arraylist did not reallocate "
-                    "properly, different memory returned but shrink_back and "
-                    "in_place_orelse_fail were passed.");
+                    "properly, different memory returned but "
+                    "in_place_orelse_fail was passed.");
         __ok_assert(
             new_bytes.size() == size() * sizeof(T),
             "Shrinking / rellocating did not return expected size exactly, "
@@ -610,9 +609,9 @@ class arraylist_t
                     reallocate_request_t{
                         .memory = reinterpret_as_bytes(
                             raw_slice(*m.items, this->capacity())),
-                        .required_bytes_back =
+                        .new_size_bytes =
                             this->items().size_bytes() + required_bytes,
-                        .preferred_bytes_back =
+                        .preferred_size_bytes =
                             this->items().size_bytes() + preferred_bytes,
                         .flags =
                             realloc_flags | realloc_flags::in_place_orelse_fail,
@@ -631,9 +630,6 @@ class arraylist_t
                                        .unchecked_address_of_first_item()),
                     "Reallocation was supposedly in-place, but returned a "
                     "different pointer.");
-                __ok_assert(reallocation.bytes_offset_front == 0,
-                            "No front reallocation was done in arraylist_t but "
-                            "some byte offset was given by allocator.");
 
                 m.capacity = reallocation.memory.size() / sizeof(T);
             } else {
@@ -807,13 +803,6 @@ struct copy_items_from_range_t
                       "using arraylist::copy_items_from_range constructor.");
         using T = value_type_for<const input_range_t&>;
         using output_t = arraylist_t<T, backing_allocator_t>;
-
-        // TODO: make this a warning
-        __ok_assert(allocator.features() &
-                        alloc::feature_flags::can_expand_back,
-                    "Allocator given to arraylist_t cannot expand_back, which"
-                    "will cause an error after appending some number of"
-                    "elements.");
 
         const size_t num_items = ok::size(range);
 

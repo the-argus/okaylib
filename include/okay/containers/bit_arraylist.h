@@ -417,7 +417,6 @@ class bit_arraylist_t
             .preferred_size_bytes = bytes_preferred == 0
                                         ? 0
                                         : m.allocation.size() + bytes_preferred,
-            .flags = realloc_flags::expand_back,
         });
 
         if (!res.is_success()) [[unlikely]] {

@@ -46,7 +46,7 @@ class arena_t : public ok::memory_resource_t
   private:
     struct destructor_list_node_t
     {
-        destructor_t destructors_and_object;
+        destructor_t destructor_and_object;
         opt<destructor_list_node_t&> prev = nullptr;
     };
 
@@ -81,6 +81,13 @@ class arena_compat_wrapper_t : public ok::allocator_t
     }
 
   protected:
+    alloc::feature_flags impl_features() const noexcept override
+    {
+        if (m_arena)
+            return m_arena->features();
+        return {};
+    }
+
     alloc::result_t<bytes_t>
     impl_allocate(const alloc::request_t& request) OKAYLIB_NOEXCEPT final
     {
@@ -168,12 +175,12 @@ inline void arena_t<allocator_impl_t>::destroy() OKAYLIB_NOEXCEPT
 template <allocator_c allocator_impl_t>
 inline void arena_t<allocator_impl_t>::call_all_destructors() OKAYLIB_NOEXCEPT
 {
-    opt<destructor_list_node_t> node = m_last_pushed_destructor;
+    opt<destructor_list_node_t&> node = m_last_pushed_destructor;
     while (node) {
-        destructor_t& destructor_and_object =
-            node.ref_or_panic().destructors_and_object;
-        destructor_and_object.destructor(destructor_and_object.object);
-        node = node.prev;
+        destructor_list_node_t& noderef = node.ref_or_panic();
+        noderef.destructor_and_object.destructor(
+            noderef.destructor_and_object.object);
+        node = noderef.prev;
     }
     m_last_pushed_destructor.reset();
 }
@@ -240,7 +247,7 @@ ok::status<alloc::error> arena_t<allocator_impl_t>::impl_arena_push_destructor(
 {
     res noderes = this->make_non_owning<destructor_list_node_t>(destructor);
     if (!ok::is_success(noderes)) [[unlikely]]
-        return noderes;
+        return noderes.status();
 
     destructor_list_node_t& node = noderes.unwrap();
 

@@ -21,7 +21,6 @@ struct ooming_allocator_t : ok::allocator_t
     ok::allocator_t* backing_actual = nullptr;
 
     static constexpr alloc::feature_flags type_features =
-        alloc::feature_flags::can_expand_back |
         alloc::feature_flags::can_reclaim;
 
     [[nodiscard]] inline alloc::result_t<bytes_t>
