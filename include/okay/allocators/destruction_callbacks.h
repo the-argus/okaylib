@@ -28,7 +28,7 @@ append_destruction_callback(T& allocator,
                             destruction_callback_entry_node_t*& current_head,
                             context_callback_t& callback)
 {
-    static_assert(std::is_base_of_v<ok::allocator_t, T>,
+    static_assert(stdc::is_base_of_v<ok::allocator_t, T>,
                   "Cannot append destruction callback to allocator which "
                   "does not inherit from allocator_t");
     auto result =

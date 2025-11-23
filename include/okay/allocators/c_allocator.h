@@ -128,15 +128,15 @@ c_allocator_t::realloc_inner(bytes_t memory, size_t new_size,
     if (expanding && zeroed) [[likely]] {
         // TODO: have way to turn this off based on platform guarantees
         // for zeroed memory?
-        std::memset(start_ptr + memory.size(), 0, new_size - memory.size());
+        ::memset(start_ptr + memory.size(), 0, new_size - memory.size());
     }
 
     return out;
 }
 
 [[nodiscard]] inline auto c_allocator_t::impl_reallocate_extended(
-    const alloc::reallocate_extended_request_t& options) OKAYLIB_NOEXCEPT
-    -> alloc::result_t<alloc::reallocation_extended_t>
+    const alloc::reallocate_extended_request_t& options)
+    OKAYLIB_NOEXCEPT -> alloc::result_t<alloc::reallocation_extended_t>
 {
     using namespace alloc;
 
@@ -187,10 +187,10 @@ c_allocator_t::realloc_inner(bytes_t memory, size_t new_size,
             size -= bytes_offset_back;
         }
 
-        std::memcpy(newmem,
-                    options.memory.unchecked_address_of_first_item() +
-                        bytes_offset_front,
-                    size);
+        ::memcpy(newmem,
+                 options.memory.unchecked_address_of_first_item() +
+                     bytes_offset_front,
+                 size);
     }
 
     ::free(options.memory.unchecked_address_of_first_item());

@@ -33,7 +33,7 @@ struct transform_fn_t
                       "but always returns void.");
 
         return transformed_view_t<decltype(range), callable_t>{
-            std::forward<range_t>(range), std::forward<callable_t>(callable)};
+            stdc::forward<range_t>(range), stdc::forward<callable_t>(callable)};
     }
 };
 
@@ -58,8 +58,8 @@ struct transformed_view_t : public underlying_view_type<range_t>::type
 
     constexpr transformed_view_t(range_t&& range,
                                  callable_t&& callable) OKAYLIB_NOEXCEPT
-        : m_transformer_callable(std::move(callable)),
-          underlying_view_type<range_t>::type(std::forward<range_t>(range))
+        : m_transformer_callable(stdc::move(callable)),
+          underlying_view_type<range_t>::type(stdc::forward<range_t>(range))
     {
     }
 };
@@ -73,7 +73,7 @@ struct range_definition<detail::transformed_view_t<input_range_t, callable_t>>
           cursor_type_for<remove_cvref_t<input_range_t>>>
 {
   private:
-    using range_t = std::remove_reference_t<input_range_t>;
+    using range_t = stdc::remove_reference_t<input_range_t>;
     using transformed_t = detail::transformed_view_t<input_range_t, callable_t>;
     using cursor_t = cursor_type_for<range_t>;
 
@@ -90,8 +90,9 @@ struct range_definition<detail::transformed_view_t<input_range_t, callable_t>>
 
     // NOTE: we only allow callables whose operator() are marked const, no need
     // to check return type when transformed_t is nonconst
-    using transforming_callable_rettype = decltype(get_and_transform(
-        std::declval<const transformed_t&>(), std::declval<const cursor_t&>()));
+    using transforming_callable_rettype =
+        decltype(get_and_transform(stdc::declval<const transformed_t&>(),
+                                   stdc::declval<const cursor_t&>()));
 
     static consteval range_flags determine_flags()
     {

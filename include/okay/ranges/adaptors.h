@@ -19,7 +19,7 @@ template <typename callable_t, typename... args_t> struct partial_called_t
     // for CTAD- construct tuple here instead of passing it into brace
     // initializer
     constexpr partial_called_t(callable_t& c, args_t&&... a)
-        : callable(c), args(std::move(a)...)
+        : callable(c), args(stdc::move(a)...)
     {
     }
 
@@ -27,7 +27,7 @@ template <typename callable_t, typename... args_t> struct partial_called_t
     constexpr auto operator()(range_t&& range) const&
     {
         auto forwarder = [this, &range](const args_t&... args) {
-            return callable(std::forward<range_t>(range), args...);
+            return callable(stdc::forward<range_t>(range), args...);
         };
         return ok::apply(forwarder, args);
     }
@@ -35,7 +35,7 @@ template <typename callable_t, typename... args_t> struct partial_called_t
     template <typename range_t> constexpr auto operator()(range_t&& range) &&
     {
         auto forwarder = [this, &range](args_t&... args) {
-            return callable(std::forward<range_t>(range), std::move(args)...);
+            return callable(stdc::forward<range_t>(range), stdc::move(args)...);
         };
         return ok::apply(forwarder, args);
     }
@@ -52,7 +52,7 @@ template <typename callable_t> struct range_adaptor_t
   public:
     range_adaptor_t() = default;
     range_adaptor_t(callable_t&& _callable)
-        : callable(std::forward<callable_t>(_callable))
+        : callable(stdc::forward<callable_t>(_callable))
     {
     }
 
@@ -61,11 +61,11 @@ template <typename callable_t> struct range_adaptor_t
     {
         if constexpr (is_std_invocable_c<callable_t, args_t...>) {
             // adaptor(range, args...)
-            return ok::invoke(callable, std::forward<args_t>(args)...);
+            return ok::invoke(callable, stdc::forward<args_t>(args)...);
         } else {
             // adaptor(args...)(range)
             return range_adaptor_closure_t(
-                partial_called_t(callable, std::move(args)...));
+                partial_called_t(callable, stdc::move(args)...));
         }
     }
 };
@@ -74,7 +74,7 @@ template <typename callable_t>
 struct range_adaptor_closure_t : range_adaptor_t<callable_t>
 {
     constexpr range_adaptor_closure_t(callable_t&& c) OKAYLIB_NOEXCEPT
-        : range_adaptor_t<callable_t>(std::forward<callable_t>(c))
+        : range_adaptor_t<callable_t>(stdc::forward<callable_t>(c))
     {
     }
 
@@ -84,7 +84,7 @@ struct range_adaptor_closure_t : range_adaptor_t<callable_t>
     template <range_c range_t>
     constexpr decltype(auto) operator()(range_t&& range) const OKAYLIB_NOEXCEPT
     {
-        return this->callable(std::forward<range_t>(range));
+        return this->callable(stdc::forward<range_t>(range));
     }
 
     // support for R | C to evaluate as C(R)
@@ -94,7 +94,7 @@ struct range_adaptor_closure_t : range_adaptor_t<callable_t>
     operator|(range_t&& range,
               const range_adaptor_closure_t& closure) OKAYLIB_NOEXCEPT
     {
-        return closure.callable(std::forward<range_t>(range));
+        return closure.callable(stdc::forward<range_t>(range));
     }
 
     // support for C | D to produce a new range_adaptor_closure_t
@@ -105,8 +105,8 @@ struct range_adaptor_closure_t : range_adaptor_t<callable_t>
               const range_adaptor_closure_t& rhs) OKAYLIB_NOEXCEPT
     {
         return range_adaptor_closure_t([lhs, rhs](auto&& r) {
-            return std::forward<std::remove_reference_t<decltype(r)>>(r) | lhs |
-                   rhs;
+            return stdc::forward<stdc::remove_reference_t<decltype(r)>>(r) |
+                   lhs | rhs;
         });
     }
 };

@@ -7,10 +7,10 @@
 #include "okay/detail/memory.h"
 #include "okay/detail/noexcept.h"
 #include "okay/detail/template_util/uninitialized_storage.h"
-#include "okay/reflection/nameof.h"
 #include "okay/detail/traits/cloneable.h"
 #include "okay/detail/traits/error_traits.h"
 #include "okay/opt.h"
+#include "okay/reflection/nameof.h"
 
 #if defined(OKAYLIB_USE_FMT)
 #include <fmt/core.h>
@@ -43,7 +43,7 @@ template <status_enum_c enum_t> class status
     constexpr void or_panic() const OKAYLIB_NOEXCEPT
     {
         if (!is_success()) [[unlikely]]
-            std::abort();
+            ::abort();
     }
 
     [[nodiscard]] constexpr enum_t as_enum() const OKAYLIB_NOEXCEPT
@@ -439,7 +439,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
     constexpr void or_panic() const OKAYLIB_NOEXCEPT
     {
         if (!is_success()) [[unlikely]]
-            std::abort();
+            ::abort();
     }
 
     [[nodiscard]] constexpr const status_t& status() const& OKAYLIB_NOEXCEPT
@@ -588,7 +588,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
         OKAYLIB_NOEXCEPT
             requires stdc::is_move_constructible_v<success_t> && requires {
                 requires !stdc::is_void_v<decltype(ok::invoke(
-                    std::forward<callable_t>(c), stdc::move(this->status())))>;
+                    stdc::forward<callable_t>(c), stdc::move(this->status())))>;
             }
     {
         using new_status =
@@ -608,7 +608,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
         OKAYLIB_NOEXCEPT
             requires stdc::is_move_constructible_v<success_t> && (requires {
                          requires !stdc::is_void_v<decltype(ok::invoke(
-                             std::forward<callable_t>(c),
+                             stdc::forward<callable_t>(c),
                              stdc::move(this->unwrap())))>;
                      })
     {
@@ -631,21 +631,21 @@ __OK_RES_REQUIRES_CLAUSE class res<
     transform_value(callable_t&& c) const& OKAYLIB_NOEXCEPT
         requires stdc::is_copy_constructible_v<status_t> && requires {
             requires !stdc::is_void_v<decltype(ok::invoke(
-                std::forward<callable_t>(c), this->unwrap()))>;
+                stdc::forward<callable_t>(c), this->unwrap()))>;
         } || requires {
             // version for member functions which take `this` by pointer
             requires !stdc::is_void_v<decltype(ok::invoke(
-                std::forward<callable_t>(c), ok::addressof(this->unwrap())))>;
+                stdc::forward<callable_t>(c), ok::addressof(this->unwrap())))>;
         }
     {
         constexpr bool accepts_reference = requires {
             requires !stdc::is_void_v<decltype(ok::invoke(
-                std::forward<callable_t>(c), this->unwrap()))>;
+                stdc::forward<callable_t>(c), this->unwrap()))>;
         };
 
         if constexpr (accepts_reference) {
-            using new_success = decltype(ok::invoke(std::forward<callable_t>(c),
-                                                    this->unwrap()));
+            using new_success = decltype(ok::invoke(
+                stdc::forward<callable_t>(c), this->unwrap()));
             if (this->is_success()) {
                 return res<new_success, status_t>(ok::invoke(
                     stdc::forward<callable_t>(c), this->unwrap_unchecked()));
@@ -654,7 +654,7 @@ __OK_RES_REQUIRES_CLAUSE class res<
             }
         } else {
             using new_success = decltype(ok::invoke(
-                std::forward<callable_t>(c), ok::addressof(this->unwrap())));
+                stdc::forward<callable_t>(c), ok::addressof(this->unwrap())));
             // pointer to member function, need to take address
             if (this->is_success()) {
                 return res<new_success, status_t>(

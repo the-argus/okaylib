@@ -11,10 +11,11 @@ template <bool reference> struct make_defer
     constexpr static auto call(callable_t&& callable) noexcept
     {
         if constexpr (reference) {
-            static_assert(!std::is_rvalue_reference_v<decltype(callable)>);
-            return defer<callable_t, true>(std::forward<callable_t>(callable));
+            static_assert(!stdc::is_rvalue_reference_v<decltype(callable)>);
+            return defer<callable_t, true>(stdc::forward<callable_t>(callable));
         } else {
-            return defer<callable_t, false>(std::forward<callable_t>(callable));
+            return defer<callable_t, false>(
+                stdc::forward<callable_t>(callable));
         }
     }
 };

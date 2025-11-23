@@ -48,7 +48,7 @@ class page_allocator_t : public allocator_t
         __ok_internal_assert(result.bytes >= total_bytes);
 
         if (!(request.leave_nonzeroed)) {
-            std::memset(result.data, 0, result.bytes);
+            ::memset(result.data, 0, result.bytes);
         }
 
         return ok::raw_slice(*static_cast<uint8_t*>(result.data), result.bytes);

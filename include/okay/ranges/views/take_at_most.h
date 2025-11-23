@@ -20,7 +20,7 @@ struct take_at_most_fn_t
                                         size_t amount) const OKAYLIB_NOEXCEPT
     {
         return take_at_most_view_t<decltype(range)>{
-            std::forward<range_t>(range), amount};
+            stdc::forward<range_t>(range), amount};
     }
 };
 
@@ -30,7 +30,7 @@ struct take_at_most_cursor_t
                               remove_cvref_t<input_parent_range_t>>
 {
   private:
-    using parent_range_t = std::remove_reference_t<input_parent_range_t>;
+    using parent_range_t = stdc::remove_reference_t<input_parent_range_t>;
     using parent_cursor_t = cursor_type_for<parent_range_t>;
     using wrapper_t =
         cursor_wrapper_t<take_at_most_cursor_t<input_parent_range_t>,
@@ -52,7 +52,7 @@ struct take_at_most_cursor_t
   public:
     explicit constexpr take_at_most_cursor_t(parent_cursor_t&& c)
         OKAYLIB_NOEXCEPT : m_consumed(0),
-                           wrapper_t(std::move(c))
+                           wrapper_t(stdc::move(c))
     {
     }
 
@@ -93,13 +93,13 @@ struct take_at_most_view_t : public underlying_view_type<range_t>::type
 
     constexpr take_at_most_view_t(range_t&& range,
                                   size_t amount) OKAYLIB_NOEXCEPT
-        : underlying_view_type<range_t>::type(std::forward<range_t>(range))
+        : underlying_view_type<range_t>::type(stdc::forward<range_t>(range))
     {
         if constexpr (detail::range_can_size_c<range_t>) {
             auto& parent_range =
                 this->template get_view_reference<take_at_most_view_t,
                                                   range_t>();
-            m_amount = std::min(ok::size(parent_range), amount);
+            m_amount = ok::min(ok::size(parent_range), amount);
         } else {
             m_amount = amount;
         }
@@ -118,7 +118,7 @@ template <typename input_range_t> struct sized_take_at_most_range_t
 // take_at_most_cursor_t but it is just the parent's cursor if there's no need
 // to track number of items consumed
 template <typename input_range_t>
-using take_at_most_cursor_optimized_t = std::conditional_t<
+using take_at_most_cursor_optimized_t = stdc::conditional_t<
     random_access_range_c<remove_cvref_t<input_range_t>> &&
         !detail::range_marked_finite_c<remove_cvref_t<input_range_t>> &&
         range_can_offset_c<remove_cvref_t<input_range_t>>,
@@ -142,7 +142,7 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
     using cursor_t = detail::take_at_most_cursor_optimized_t<input_range_t>;
 
     static constexpr bool uses_small_cursor_optimization =
-        std::is_same_v<cursor_t, cursor_type_for<range_t>>;
+        stdc::is_same_v<cursor_t, cursor_type_for<range_t>>;
 
     using value_type = value_type_for<range_t>;
 
@@ -179,7 +179,7 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
 
         if constexpr (random_access_range_c<range_t> &&
                       !detail::range_marked_finite_c<range_t>) {
-            static_assert(std::is_same_v<cursor_t, cursor_type_for<range_t>>,
+            static_assert(stdc::is_same_v<cursor_t, cursor_type_for<range_t>>,
                           "Cursor type has extra unneeded stuff in take() even "
                           "though it doesnt need it.");
             auto parent_begin = ok::begin(parent_ref);
@@ -254,7 +254,7 @@ struct range_definition<detail::take_at_most_view_t<input_range_t>>
 
     static constexpr bool is_ref_wrapper =
         !detail::range_impls_get_c<range_t> &&
-        std::is_lvalue_reference_v<input_range_t>;
+        stdc::is_lvalue_reference_v<input_range_t>;
 
     using value_type = value_type_for<range_t>;
 

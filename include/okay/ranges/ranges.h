@@ -29,11 +29,11 @@ namespace detail {
 
 template <typename T> struct range_definition_inner_meta_t
 {
-    static_assert(std::is_same_v<T, remove_cvref_t<T>>);
+    static_assert(stdc::is_same_v<T, remove_cvref_t<T>>);
     using inherited_id = typename inherited_range_type<T>::type;
-    using type =
-        std::conditional_t<has_inherited_range_type_v<T>,
-                           range_definition<inherited_id>, range_definition<T>>;
+    using type = stdc::conditional_t<has_inherited_range_type_v<T>,
+                                     range_definition<inherited_id>,
+                                     range_definition<T>>;
     static_assert(!has_inherited_range_type_v<T> ||
                       is_derived_from_c<T, inherited_id>,
                   "inherited_range_type is not a base class of the range "
@@ -176,10 +176,10 @@ concept range_marked_sized_c = requires() {
 };
 
 template <typename T>
-concept valid_range_cursor_c = std::is_object_v<T>;
+concept valid_range_cursor_c = is_object_c<T>;
 
 template <typename T>
-concept valid_range_value_type_c = std::is_object_v<T>;
+concept valid_range_value_type_c = is_object_c<T>;
 
 template <typename T, typename = void> struct range_begin_rettype_or_void
 {
@@ -187,17 +187,17 @@ template <typename T, typename = void> struct range_begin_rettype_or_void
 };
 template <typename T>
 struct range_begin_rettype_or_void<
-    T, std::void_t<decltype(range_definition_inner_t<T>::begin(
-           std::declval<const remove_cvref_t<T>&>()))>>
+    T, stdc::void_t<decltype(range_definition_inner_t<T>::begin(
+           stdc::declval<const remove_cvref_t<T>&>()))>>
 {
     using type = decltype(range_definition_inner_t<T>::begin(
-        std::declval<const remove_cvref_t<T>&>()));
+        stdc::declval<const remove_cvref_t<T>&>()));
 };
 
 template <typename T>
 using cursor_type_unchecked_for_t =
-    std::conditional_t<range_marked_arraylike_c<T>, size_t,
-                       typename range_begin_rettype_or_void<T>::type>;
+    stdc::conditional_t<range_marked_arraylike_c<T>, size_t,
+                        typename range_begin_rettype_or_void<T>::type>;
 
 template <typename T>
 concept range_impls_begin_c = requires {
@@ -546,8 +546,8 @@ template <range_c T> using range_def_for = detail::range_definition_inner_t<T>;
 
 template <range_c T>
 using cursor_type_for =
-    std::conditional_t<ok::detail::range_marked_arraylike_c<T>, size_t,
-                       typename detail::range_begin_rettype_or_void<T>::type>;
+    stdc::conditional_t<ok::detail::range_marked_arraylike_c<T>, size_t,
+                        typename detail::range_begin_rettype_or_void<T>::type>;
 
 namespace detail {
 
@@ -700,7 +700,7 @@ struct range_set_fn_t
             if constexpr (use_assignment) {
                 const auto applyer = [&ref](auto&& a) {
                     if constexpr (stdc::is_rvalue_reference_v<decltype(a)>) {
-                        ref = std::move(a);
+                        ref = stdc::move(a);
                     } else {
                         ref = a;
                     }
@@ -864,7 +864,7 @@ struct size_fn_t
 
 // specialization for c-style arrays
 template <typename input_range_t>
-    requires std::is_array_v<remove_cvref_t<input_range_t>>
+    requires stdc::is_array_v<remove_cvref_t<input_range_t>>
 struct range_definition<input_range_t>
 {
   private:
@@ -916,8 +916,8 @@ template <typename input_range_t>
         // provides size_t .size() method and pointer data() method
         detail::std_arraylike_container<remove_cvref_t<input_range_t>> &&
         stdc::is_same_v<typename remove_cvref_t<input_range_t>::value_type&,
-                        decltype(std::declval<remove_cvref_t<input_range_t>&>()
-                                     [std::declval<size_t>()])>)
+                        decltype(stdc::declval<remove_cvref_t<input_range_t>&>()
+                                     [stdc::declval<size_t>()])>)
 struct range_definition<input_range_t>
 {
   private:
@@ -939,9 +939,9 @@ struct range_definition<input_range_t>
     // dont enable mutable get_ref unless the index operator actually returns a
     // mutable reference (this applies for array<const T>)
     static constexpr value_type& get(range_t& i, size_t c) OKAYLIB_NOEXCEPT
-        requires std::is_same_v<
+        requires stdc::is_same_v<
             value_type&,
-            decltype(std::declval<range_t&>()[std::declval<size_t>()])>
+            decltype(stdc::declval<range_t&>()[stdc::declval<size_t>()])>
     {
         if (c >= i.size()) [[unlikely]] {
             __ok_abort("Out of bounds access into arraylike container.");

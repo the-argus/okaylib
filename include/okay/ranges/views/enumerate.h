@@ -19,7 +19,8 @@ struct enumerate_fn_t
     template <range_c range_t>
     constexpr decltype(auto) operator()(range_t&& range) const OKAYLIB_NOEXCEPT
     {
-        return enumerated_view_t<decltype(range)>{std::forward<range_t>(range)};
+        return enumerated_view_t<decltype(range)>{
+            stdc::forward<range_t>(range)};
     }
 };
 
@@ -52,7 +53,7 @@ struct enumerated_cursor_t
   public:
     explicit constexpr enumerated_cursor_t(parent_cursor_t&& c) OKAYLIB_NOEXCEPT
         : m_index(0),
-          wrapper_t(std::move(c))
+          wrapper_t(stdc::move(c))
     {
     }
 
@@ -118,7 +119,7 @@ struct range_definition<detail::enumerated_view_t<input_range_t>>
 
     using enumerated_t = detail::enumerated_view_t<input_range_t>;
     using cursor_t = detail::enumerated_cursor_t<input_range_t>;
-    using range_t = std::remove_reference_t<input_range_t>;
+    using range_t = stdc::remove_reference_t<input_range_t>;
 
     using parent_get_return_type = decltype(ok::range_get_best(
         stdc::declval<input_range_t>(),
@@ -157,9 +158,9 @@ struct range_definition<detail::enumerated_view_t<input_range_t>>
             range.template get_view_reference<enumerated_t, range_t>();
         // only const cast if the thing we are viewing is another view or a
         // nonconst reference to a range
-        auto& casted_parent_ref = const_cast<std::conditional_t<
+        auto& casted_parent_ref = const_cast<stdc::conditional_t<
             detail::is_view_v<range_t> ||
-                !is_const_c<std::remove_reference_t<input_range_t>>,
+                !is_const_c<stdc::remove_reference_t<input_range_t>>,
             range_t&, const range_t&>>(parent_ref);
 
         return value_type{ok::range_get_best(casted_parent_ref, c.inner()),
@@ -187,7 +188,7 @@ struct range_definition<detail::enumerated_view_t<input_range_t>>
         range_strict_flags::disallow_range_def_increment |
         range_strict_flags::disallow_range_def_offset;
 
-    using range_t = std::remove_reference_t<input_range_t>;
+    using range_t = stdc::remove_reference_t<input_range_t>;
     using enumerated_t = detail::enumerated_view_t<input_range_t>;
     using parent_get_return_type = decltype(ok::range_get_best(
         stdc::declval<input_range_t>(),
@@ -201,9 +202,9 @@ struct range_definition<detail::enumerated_view_t<input_range_t>>
         const range_t& parent_ref =
             range.template get_view_reference<enumerated_t, range_t>();
 
-        auto& casted_parent_ref = const_cast<std::conditional_t<
+        auto& casted_parent_ref = const_cast<stdc::conditional_t<
             detail::is_view_v<range_t> ||
-                !is_const_c<std::remove_reference_t<input_range_t>>,
+                !is_const_c<stdc::remove_reference_t<input_range_t>>,
             range_t&, const range_t&>>(parent_ref);
 
         return value_type{ok::range_get_best(casted_parent_ref, cursor),

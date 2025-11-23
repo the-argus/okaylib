@@ -133,7 +133,7 @@ arena_t<allocator_impl_t>::operator=(arena_t&& other) OKAYLIB_NOEXCEPT
     destroy();
     m_memory = other.m_memory;
     m_available_memory = other.m_available_memory;
-    m_backing = std::exchange(other.m_backing, nullopt);
+    m_backing = stdc::exchange(other.m_backing, nullopt);
     return *this;
 }
 
@@ -141,7 +141,7 @@ template <allocator_c allocator_impl_t>
 inline arena_t<allocator_impl_t>::arena_t(arena_t&& other) OKAYLIB_NOEXCEPT
     : m_memory(other.m_memory),
       m_available_memory(other.m_available_memory),
-      m_backing(std::exchange(other.m_backing, nullopt))
+      m_backing(stdc::exchange(other.m_backing, nullopt))
 {
 }
 
@@ -192,7 +192,7 @@ arena_t<allocator_impl_t>::impl_allocate(const alloc::request_t& request)
     });
 
     if (!request.leave_nonzeroed) {
-        std::memset(aligned_start, 0, request.num_bytes);
+        ::memset(aligned_start, 0, request.num_bytes);
     }
     return raw_slice(*aligned_start, request.num_bytes);
 }

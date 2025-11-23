@@ -380,9 +380,9 @@ template <typename T, allocator_c allocator_impl_t> class arcpool_t
     {
         using status_type = decltype(ok::make_into_uninitialized<T>(
             ok::stdc::declval<T&>(),
-            std::forward<constructor_args_t>(args)...));
+            stdc::forward<constructor_args_t>(args)...));
         static_assert(
-            std::is_void_v<status_type> ||
+            stdc::is_void_v<status_type> ||
                 ok::is_convertible_to_c<ok::alloc::error, status_type>,
             "Given constructor does not return an error which is "
             "compatible with ok::alloc::error- cannot use it in "
@@ -414,18 +414,18 @@ template <typename T, allocator_c allocator_impl_t> class arcpool_t
         // before this
         item->counters.increment_strongcount(ok::memory_order::release);
 
-        if constexpr (std::is_void_v<status_type>) {
+        if constexpr (stdc::is_void_v<status_type>) {
             ok::make_into_uninitialized<T>(
-                item->item.value, std::forward<constructor_args_t>(args)...);
+                item->item.value, stdc::forward<constructor_args_t>(args)...);
             return ok::status(alloc::error::success);
         } else {
             status_type status = ok::make_into_uninitialized<T>(
-                item->item.value, std::forward<constructor_args_t>(args)...);
+                item->item.value, stdc::forward<constructor_args_t>(args)...);
 
             if (ok::is_success(status)) [[likely]] {
                 return return_type(strong_t(this, item));
             } else {
-                return return_type(std::move(status));
+                return return_type(stdc::move(status));
             }
         }
     }

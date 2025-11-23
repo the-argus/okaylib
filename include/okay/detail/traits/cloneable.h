@@ -13,8 +13,8 @@ template <typename T>
 concept cloneable_member_impl_c = requires(const T& t, T& nonconst) {
     { t.clone() };
     { t.clone_into() };
-    requires std::is_same_v<decltype(t.clone()), T> &&
-                 std::is_void_v<decltype(t.clone_into(nonconst))>;
+    requires stdc::is_same_v<decltype(t.clone()), T> &&
+                 stdc::is_void_v<decltype(t.clone_into(nonconst))>;
     requires noexcept(t.clone());
     requires noexcept(t.clone_into(nonconst));
 };
@@ -23,18 +23,18 @@ concept cloneable_member_impl_fallible_c = requires(const T& t, T& nonconst) {
     { t.try_clone() };
     { t.try_clone_into() };
     requires detail::is_instance_c<decltype(t.try_clone()), res> &&
-                 std::is_same_v<typename decltype(t.try_clone())::success_type,
-                                T> &&
+                 stdc::is_same_v<typename decltype(t.try_clone())::success_type,
+                                 T> &&
                  status_type_c<decltype(t.try_clone_into(nonconst))> &&
                  // the res returned by t.clone() should have the same status
                  // type as clone_into()
-                 std::is_same_v<typename decltype(t.try_clone())::status_type,
-                                decltype(t.try_clone_into(nonconst))>;
+                 stdc::is_same_v<typename decltype(t.try_clone())::status_type,
+                                 decltype(t.try_clone_into(nonconst))>;
 };
 template <typename T>
 concept cloneable_copy_derive_c = requires(const T& t, T& nonconst) {
-    requires std::is_copy_constructible_v<T>;
-    requires std::is_copy_assignable_v<T>;
+    requires stdc::is_copy_constructible_v<T>;
+    requires stdc::is_copy_assignable_v<T>;
     requires !cloneable_member_impl_fallible_c<T>;
 };
 
@@ -90,9 +90,10 @@ template <typename T, typename = void> struct try_clone_status
 };
 
 template <try_cloneable_c T>
-struct try_clone_status<T, std::void_t<decltype(std::declval<T>().try_clone())>>
+struct try_clone_status<T,
+                        stdc::void_t<decltype(stdc::declval<T>().try_clone())>>
 {
-    using type = decltype(std::declval<const T&>().try_clone())::status_type;
+    using type = decltype(stdc::declval<const T&>().try_clone())::status_type;
 };
 } // namespace detail
 

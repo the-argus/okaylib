@@ -368,7 +368,7 @@ concept partially_equality_comparable_c =
 
 template <typename T>
     requires strongly_equality_comparable_declaration<T>::value
-struct strongly_equality_comparable_declaration<opt<T>> : public std::true_type
+struct strongly_equality_comparable_declaration<opt<T>> : public ok::true_type
 {};
 
 namespace detail {

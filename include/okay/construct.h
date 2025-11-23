@@ -39,7 +39,7 @@ template <typename T> struct make_into_uninitialized_fn_t
 
         if constexpr (is_std_constructible_c<T, args_t...>) {
             stdc::construct_at(ok::addressof(uninitialized),
-                               std::forward<args_t>(args)...);
+                               stdc::forward<args_t>(args)...);
             return;
         } else {
             using analysis = decltype(analyze_construction<args_t...>());
@@ -60,20 +60,20 @@ template <typename T> struct make_into_uninitialized_fn_t
                     if constexpr (analysis::has_inplace) {
                         return constructor.make_into_uninit(
                             uninitialized,
-                            std::forward<inner_args_t>(innerargs)...);
+                            stdc::forward<inner_args_t>(innerargs)...);
                     } else {
                         // fall back to move constructor if no in-place
                         // construction is defined
                         ok::stdc::construct_at(
                             ok::addressof(uninitialized),
-                            std::move(constructor.make(
-                                std::forward<inner_args_t>(innerargs)...)));
+                            stdc::move(constructor.make(
+                                stdc::forward<inner_args_t>(innerargs)...)));
                         return;
                     }
                 };
 
             return call_constructor(uninitialized,
-                                    std::forward<args_t>(args)...);
+                                    stdc::forward<args_t>(args)...);
         }
     }
 };
@@ -102,20 +102,20 @@ template <typename T = detail::deduced_t, typename... args_t>
 [[nodiscard]] constexpr decltype(auto) make(args_t&&... args) OKAYLIB_NOEXCEPT
 {
     constexpr bool is_constructed_type_deduced =
-        std::is_same_v<T, detail::deduced_t>;
+        stdc::is_same_v<T, detail::deduced_t>;
 
     if constexpr (!is_constructed_type_deduced &&
                   is_std_constructible_c<T, args_t...>) {
-        return T(std::forward<args_t>(args)...);
+        return T(stdc::forward<args_t>(args)...);
     } else {
         using analysis = decltype(detail::analyze_construction<args_t...>());
 
         using actual_t =
-            std::conditional_t<is_constructed_type_deduced,
-                               typename analysis::associated_type, T>;
+            stdc::conditional_t<is_constructed_type_deduced,
+                                typename analysis::associated_type, T>;
 
         static_assert(
-            !is_constructed_type_deduced || !std::is_void_v<actual_t>,
+            !is_constructed_type_deduced || !stdc::is_void_v<actual_t>,
             "Unable to deduce the type for given construction, "
             "you may need to pass the type like so: ok::make<MyType>(...), or "
             "the arguments may be incorrect.");
@@ -125,8 +125,8 @@ template <typename T = detail::deduced_t, typename... args_t>
                       "No matching constructor for the given arguments.");
         static_assert(
             is_constructed_type_deduced ||
-                std::is_void_v<typename analysis::associated_type> ||
-                std::is_same_v<T, typename analysis::associated_type>,
+                stdc::is_void_v<typename analysis::associated_type> ||
+                stdc::is_same_v<T, typename analysis::associated_type>,
             "Bad typehint provided to ok::make<...> which was able to "
             "deduce the type and found something else.");
 
@@ -139,12 +139,12 @@ template <typename T = detail::deduced_t, typename... args_t>
                               "bad template analysis? found that something has "
                               ".make() but also it can fail");
                 return constructor.make(
-                    std::forward<inner_args_t>(innerargs)...);
+                    stdc::forward<inner_args_t>(innerargs)...);
             } else {
                 if constexpr (analysis::can_fail) {
                     using status_type = decltype(constructor.make_into_uninit(
-                        std::declval<actual_t&>(),
-                        std::forward<inner_args_t>(innerargs)...));
+                        stdc::declval<actual_t&>(),
+                        stdc::forward<inner_args_t>(innerargs)...));
 
                     using accessor =
                         detail::res_accessor_t<actual_t, status_type>;
@@ -159,9 +159,9 @@ template <typename T = detail::deduced_t, typename... args_t>
                     // initializes both the status and the payload in one
                     // move
                     accessor::emplace_error_nodestroy(
-                        out,
-                        std::move(constructor.make_into_uninit(
-                            uninit, std::forward<inner_args_t>(innerargs)...)));
+                        out, stdc::move(constructor.make_into_uninit(
+                                 uninit,
+                                 stdc::forward<inner_args_t>(innerargs)...)));
 
                     return out;
                 } else {
@@ -170,14 +170,14 @@ template <typename T = detail::deduced_t, typename... args_t>
                     detail::uninitialized_storage_t<actual_t> out;
 
                     constructor.make_into_uninit(
-                        out.value, std::forward<inner_args_t>(innerargs)...);
+                        out.value, stdc::forward<inner_args_t>(innerargs)...);
 
-                    return std::move(out.value);
+                    return stdc::move(out.value);
                 }
             }
         };
 
-        return decomposed_output(std::forward<args_t>(args)...);
+        return decomposed_output(stdc::forward<args_t>(args)...);
     }
 }
 

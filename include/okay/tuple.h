@@ -692,7 +692,7 @@ constexpr decltype(auto) apply(callable_t&& c, tuple_t&& tuple)
         // NOTE: using std::tuple_size here is okay, we declared our
         // specialization for ok::tuple already
         stdc::make_index_sequence<
-            std::tuple_size<std::decay_t<tuple_t>>::value>{});
+            std::tuple_size<stdc::decay_t<tuple_t>>::value>{});
 }
 
 template <class... T> constexpr tuple<T&...> tie(T&... t) { return {t...}; }

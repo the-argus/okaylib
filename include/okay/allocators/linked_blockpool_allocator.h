@@ -273,7 +273,7 @@ linked_blockpool_allocator_t<allocator_impl_t>::impl_allocate(
 
     if (!(request.leave_nonzeroed)) {
         // we always give back the full block, so zero the full block
-        std::memset(free, 0, m.blocksize);
+        ::memset(free, 0, m.blocksize);
     }
 
     return ok::raw_slice(*reinterpret_cast<uint8_t*>(free), m.blocksize);
@@ -353,9 +353,9 @@ linked_blockpool_allocator_t<allocator_impl_t>::impl_reallocate(
             : ok::min(request.preferred_size_bytes, m.blocksize);
 
     if (!(request.flags & alloc::realloc_flags::leave_nonzeroed)) {
-        std::memset(request.memory.unchecked_address_of_first_item() +
-                        request.memory.size(),
-                    0, newsize - request.memory.size());
+        ::memset(request.memory.unchecked_address_of_first_item() +
+                     request.memory.size(),
+                 0, newsize - request.memory.size());
     }
 
     return ok::raw_slice(*request.memory.unchecked_address_of_first_item(),
@@ -375,7 +375,7 @@ struct start_with_one_pool_t
 {
     template <typename allocator_impl_t_ref, typename...>
     using associated_type = linked_blockpool_allocator_t<
-        std::remove_reference_t<allocator_impl_t_ref>>;
+        stdc::remove_reference_t<allocator_impl_t_ref>>;
 
     template <allocator_c allocator_impl_t>
     [[nodiscard]] constexpr auto

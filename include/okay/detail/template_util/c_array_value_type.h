@@ -9,14 +9,14 @@ template <typename T>
 using c_array_value_type =
     stdc::remove_reference_t<decltype(stdc::declval<T>()[0])>;
 
-template <typename T> struct c_array_value_type_safe_t : public stdc::false_type
+template <typename T> struct c_array_value_type_safe_t : public ok::false_type
 {
     using type = void;
 };
 
 template <typename T>
-    requires std::is_array_v<T>
-struct c_array_value_type_safe_t<T> : public std::true_type
+    requires stdc::is_array_v<T>
+struct c_array_value_type_safe_t<T> : public ok::true_type
 {
     using type = c_array_value_type<T>;
 };

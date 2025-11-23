@@ -10,7 +10,7 @@ template <allocator_c allocator_impl_t>
 class disable_freeing : public allocator_t
 {
   public:
-    static_assert(std::is_base_of_v<allocator_t, allocator_impl_t>,
+    static_assert(stdc::is_base_of_v<allocator_t, allocator_impl_t>,
                   "disable_freeing_t given a type which does not inherit from "
                   "allocator_t");
 
@@ -18,14 +18,10 @@ class disable_freeing : public allocator_t
         allocator_impl_t::type_features | feature_flags::can_expand_front;
 
     template <typename... args_t>
+        requires is_std_constructible_c<allocator_impl_t, args_t...>
     explicit disable_freeing(args_t&&... args) OKAYLIB_NOEXCEPT
-        : m_inner(std::forward<args_t>(args)...)
+        : m_inner(stdc::forward<args_t>(args)...)
     {
-        static_assert(
-            std::is_nothrow_constructible_v<allocator_impl_t, args_t...>,
-            "Attempt to use in-place constructor of emulate_expand_front, but "
-            "the underlying object is not nothrow constructible with the given "
-            "arguments.");
     }
 
   protected:
@@ -75,10 +71,10 @@ class emulate_expand_front : public allocator_t
 
     template <typename... args_t>
     explicit emulate_expand_front(args_t&&... args) OKAYLIB_NOEXCEPT
-        : m_inner(std::forward<args_t>(args)...)
+        : m_inner(stdc::forward<args_t>(args)...)
     {
         static_assert(
-            std::is_nothrow_constructible_v<allocator_impl_t, args_t...>,
+            stdc::is_nothrow_constructible_v<allocator_impl_t, args_t...>,
             "Attempt to use in-place constructor of emulate_expand_front, but "
             "the underlying object is not nothrow constructible with the given "
             "arguments.");
@@ -135,7 +131,7 @@ class emulate_expand_front : public allocator_t
 
         const bool zeroed = !(options.flags & realloc_flags::leave_nonzeroed);
 
-        using flags_underlying_t = std::underlying_type_t<realloc_flags>;
+        using flags_underlying_t = stdc::underlying_type_t<realloc_flags>;
 
         const auto [bytes_offset_back, bytes_offset_front, new_size] =
             options.calculate_new_preferred_size();
@@ -166,7 +162,7 @@ class emulate_expand_front : public allocator_t
 
         if (options.flags & realloc_flags::shrink_back)
             size -= bytes_offset_back;
-        std::memcpy(copy_dest, copy_src, size);
+        ::memcpy(copy_dest, copy_src, size);
 
         impl_deallocate(options.memory);
 

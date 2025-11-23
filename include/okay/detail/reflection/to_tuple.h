@@ -37,6 +37,7 @@
   without including the above copyright and permission notices.
  */
 
+#include "okay/ascii_view.h"
 #include "okay/tuple.h"
 
 #if defined(OKAYLIB_COMPAT_STRATEGY_STD)
@@ -54,13 +55,14 @@ struct any_t final
                  !ok::same_as_c<T, ok::stdc::nullptr_t>)
     [[maybe_unused]] constexpr operator T() const;
 
+    [[maybe_unused]] constexpr operator ascii_view() const { return {}; }
 #if defined(OKAYLIB_COMPAT_STRATEGY_STD)
     [[maybe_unused]] constexpr operator std::string_view() const { return {}; }
 #endif
 };
 
 template <class T, class... args_t>
-    requires(std::is_aggregate_v<std::remove_cvref_t<T>>)
+    requires(stdc::is_aggregate_v<stdc::remove_cvref_t<T>>)
 inline constexpr auto count_members = [] {
     using V = ok::remove_cvref_t<T>;
     if constexpr (requires { V{args_t{}..., any_t{}}; }) {

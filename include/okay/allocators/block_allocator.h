@@ -71,7 +71,7 @@ class block_allocator_t : public ok::allocator_t
     }
 
     block_allocator_t(members_t&& m) OKAYLIB_NOEXCEPT
-        : m(std::forward<members_t>(m))
+        : m(stdc::forward<members_t>(m))
     {
     }
 
@@ -228,9 +228,10 @@ block_allocator_t<allocator_impl_t>::impl_allocate(
         return alloc::error::oom;
     }
 
-    bytes_t output_memory = raw_slice(*reinterpret_cast<uint8_t*>(std::exchange(
-                                          m.free_head, m.free_head->prev)),
-                                      m.blocksize);
+    bytes_t output_memory =
+        raw_slice(*reinterpret_cast<uint8_t*>(
+                      stdc::exchange(m.free_head, m.free_head->prev)),
+                  m.blocksize);
     __ok_internal_assert(this->contains(output_memory));
 
     if (!request.leave_nonzeroed) {
@@ -266,7 +267,7 @@ inline void block_allocator_t<allocator_impl_t>::impl_deallocate(void* memory)
     __ok_internal_assert(this->contains(alignedmemory));
 
     auto* const free_block = reinterpret_cast<free_block_t*>(alignedmemory);
-    free_block->prev = std::exchange(m.free_head, free_block);
+    free_block->prev = stdc::exchange(m.free_head, free_block);
 }
 
 template <allocator_c allocator_impl_t>
@@ -299,9 +300,9 @@ block_allocator_t<allocator_impl_t>::impl_reallocate(
             : ok::min(request.preferred_size_bytes, m.blocksize);
 
     if (!(request.flags & alloc::realloc_flags::leave_nonzeroed)) {
-        std::memset(request.memory.unchecked_address_of_first_item() +
-                        request.memory.size(),
-                    0, newsize - request.memory.size());
+        ::memset(request.memory.unchecked_address_of_first_item() +
+                     request.memory.size(),
+                 0, newsize - request.memory.size());
     }
 
     return ok::raw_slice(*request.memory.unchecked_address_of_first_item(),

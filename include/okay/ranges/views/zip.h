@@ -460,8 +460,8 @@ constexpr detail::range_adaptor_t<detail::zip_fn_t> zip;
 template <typename... ranges_t>
 struct fmt::formatter<
     ok::detail::zipped_view_t<ranges_t...>,
-    std::enable_if_t<(... && fmt::is_formattable<
-                                 ok::remove_cvref_t<ranges_t>>::value)>>
+    stdc::enable_if_t<(
+        ... && fmt::is_formattable<ok::remove_cvref_t<ranges_t>>::value)>>
 {
     using formatted_type_t = ok::detail::zipped_view_t<ranges_t...>;
 

@@ -25,20 +25,20 @@ struct reverse_fn_t
                       "Cannot reverse given type- it is either not random "
                       "access, or its size is not finite or cannot be known in "
                       "constant time.");
-        return reversed_view_t<decltype(range)>{std::forward<range_t>(range)};
+        return reversed_view_t<decltype(range)>{stdc::forward<range_t>(range)};
     }
 };
 
 template <typename input_parent_range_t> struct reversed_cursor_t
 {
   private:
-    using parent_range_t = std::remove_reference_t<input_parent_range_t>;
+    using parent_range_t = stdc::remove_reference_t<input_parent_range_t>;
     using parent_cursor_t = cursor_type_for<parent_range_t>;
     using self_t = reversed_cursor_t;
 
   public:
     explicit constexpr reversed_cursor_t(parent_cursor_t&& c) OKAYLIB_NOEXCEPT
-        : m_inner(std::move(c))
+        : m_inner(stdc::move(c))
     {
     }
 
@@ -106,17 +106,15 @@ struct reversed_view_t : public underlying_view_type<range_t>::type
 } // namespace detail
 
 template <typename input_range_t>
-    requires(!detail::range_marked_arraylike_c<
-             remove_cvref_t<input_range_t>>)
+    requires(!detail::range_marked_arraylike_c<remove_cvref_t<input_range_t>>)
 struct range_definition<detail::reversed_view_t<input_range_t>>
     : public detail::propagate_all_range_definition_functions_with_conversion_t<
-          detail::reversed_view_t<input_range_t>,
-          remove_cvref_t<input_range_t>,
+          detail::reversed_view_t<input_range_t>, remove_cvref_t<input_range_t>,
           detail::reversed_cursor_t<input_range_t>>
 {
     static constexpr bool is_view = true;
 
-    using range_t = std::remove_reference_t<input_range_t>;
+    using range_t = stdc::remove_reference_t<input_range_t>;
     using reverse_t = detail::reversed_view_t<input_range_t>;
     using cursor_t = detail::reversed_cursor_t<input_range_t>;
 
@@ -143,12 +141,11 @@ struct range_definition<detail::reversed_view_t<input_range_t>>
 // in the case that something is arraylike, just subtract size when doing gets
 // and sets
 template <typename input_range_t>
-    requires detail::range_marked_arraylike_c<
-        remove_cvref_t<input_range_t>>
+    requires detail::range_marked_arraylike_c<remove_cvref_t<input_range_t>>
 struct range_definition<detail::reversed_view_t<input_range_t>>
     : public detail::propagate_all_range_definition_functions_with_conversion_t<
-          detail::reversed_view_t<input_range_t>,
-          remove_cvref_t<input_range_t>, size_t>
+          detail::reversed_view_t<input_range_t>, remove_cvref_t<input_range_t>,
+          size_t>
 {
     using range_t = remove_cvref_t<input_range_t>;
     using reversed_t = detail::reversed_view_t<input_range_t>;
@@ -199,7 +196,7 @@ struct range_definition<detail::reversed_view_t<input_range_t>>
             cursor < size,
             "Bad cursor passed to reverse_view_t::set(), overflow will occur");
         ok::range_set(parent_ref, size - (cursor + 1),
-                      std::forward<construction_args_t>(args)...);
+                      stdc::forward<construction_args_t>(args)...);
     }
 };
 

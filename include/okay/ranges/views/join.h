@@ -21,7 +21,7 @@ struct join_fn_t
     constexpr decltype(auto)
     operator()(input_range_t&& range) const OKAYLIB_NOEXCEPT
     {
-        using range_t = std::remove_reference_t<input_range_t>;
+        using range_t = stdc::remove_reference_t<input_range_t>;
         static_assert(range_c<range_t>,
                       "Cannot join given type- it is not a range.");
         static_assert(range_c<value_type_for<range_t>>,
@@ -32,7 +32,7 @@ struct join_fn_t
                       "Cannot join given range- it is not a producing range "
                       "which views other producing ranges.");
         return joined_view_t<decltype(range)>{
-            std::forward<input_range_t>(range)};
+            stdc::forward<input_range_t>(range)};
     }
 };
 
@@ -52,9 +52,9 @@ struct joined_cursor_t
   private:
     using outer_range_t = remove_cvref_t<input_outer_range_t>;
     using inner_range_t = value_type_for<outer_range_t>;
-    static_assert(std::is_same_v<remove_cvref_t<input_inner_range_t>,
-                                 inner_range_t>,
-                  "something broken with join view implementation");
+    static_assert(
+        stdc::is_same_v<remove_cvref_t<input_inner_range_t>, inner_range_t>,
+        "something broken with join view implementation");
     using outer_cursor_t = cursor_type_for<outer_range_t>;
     using inner_cursor_t = cursor_type_for<inner_range_t>;
     using self_t = joined_cursor_t;
@@ -83,8 +83,8 @@ struct joined_cursor_t
 
     constexpr joined_cursor_t(outer_cursor_t&& outer_cursor,
                               input_inner_range_t inner_range) OKAYLIB_NOEXCEPT
-        : m(ok::in_place, std::move(outer_cursor),
-            std::forward<stdc::remove_reference_t<input_inner_range_t>>(
+        : m(ok::in_place, stdc::move(outer_cursor),
+            stdc::forward<stdc::remove_reference_t<input_inner_range_t>>(
                 inner_range))
     {
     }
@@ -115,9 +115,9 @@ struct joined_cursor_t
 
         constexpr members_t(outer_cursor_t&& _outer,
                             input_inner_range_t inner_range) OKAYLIB_NOEXCEPT
-            : outer(std::move(_outer)),
+            : outer(stdc::move(_outer)),
               inner_view(
-                  std::forward<stdc::remove_reference_t<input_inner_range_t>>(
+                  stdc::forward<stdc::remove_reference_t<input_inner_range_t>>(
                       inner_range)),
               inner(ok::begin(inner_view))
         {
@@ -150,7 +150,7 @@ struct range_definition<detail::joined_view_t<input_range_t>>
         // constant time, it can't be random access
         nosize_flags -= range_flags::arraylike;
         if (!detail::range_gets_by_value_c<inner_range_t> &&
-            (std::is_lvalue_reference_v<input_range_t> ||
+            (stdc::is_lvalue_reference_v<input_range_t> ||
              detail::range_marked_ref_wrapper_c<input_range_t>)) {
             nosize_flags = nosize_flags | range_flags::ref_wrapper;
         }
@@ -171,10 +171,10 @@ struct range_definition<detail::joined_view_t<input_range_t>>
     }
 
     using outer_range_get_result_t = decltype(range_get_best(
-        std::declval<const outer_range_t&>(),
-        std::declval<cursor_type_for<outer_range_t>>()));
+        stdc::declval<const outer_range_t&>(),
+        stdc::declval<cursor_type_for<outer_range_t>>()));
 
-    // NOTE: this conditional here matches the conditional std::move in begin()
+    // NOTE: this conditional here matches the conditional stdc::move in begin()
     // below
     using cursor_arg_t = stdc::conditional_t<
         stdc::is_lvalue_reference_v<outer_range_get_result_t>,
@@ -205,9 +205,10 @@ struct range_definition<detail::joined_view_t<input_range_t>>
                 // make sure the type we pass in for the second argument is the
                 // same as cursor_arg_t
                 if constexpr (stdc::is_lvalue_reference_v<decltype(inner)>) {
-                    return cursor_t(std::move(outer_cursor), inner);
+                    return cursor_t(stdc::move(outer_cursor), inner);
                 } else {
-                    return cursor_t(std::move(outer_cursor), std::move(inner));
+                    return cursor_t(stdc::move(outer_cursor),
+                                    stdc::move(inner));
                 }
             }
 
@@ -336,10 +337,9 @@ template <typename range_t>
 struct fmt::formatter<ok::detail::joined_view_t<range_t>>
 {
     using formatted_type_t = ok::detail::joined_view_t<range_t>;
-    static_assert(
-        fmt::is_formattable<ok::remove_cvref_t<range_t>>::value,
-        "Attempt to format joined_view_t whose inner range is not "
-        "formattable.");
+    static_assert(fmt::is_formattable<ok::remove_cvref_t<range_t>>::value,
+                  "Attempt to format joined_view_t whose inner range is not "
+                  "formattable.");
 
     constexpr format_parse_context::iterator parse(format_parse_context& ctx)
     {

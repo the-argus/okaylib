@@ -360,9 +360,9 @@ template <typename T> struct add_lvalue_reference<T, void_t<T&>>
 template <typename T>
 using add_lvalue_reference_t = typename add_lvalue_reference<T>::type;
 
-template <typename> struct is_const : std::false_type
+template <typename> struct is_const : stdc::false_type
 {};
-template <typename T> struct is_const<const T> : std::true_type
+template <typename T> struct is_const<const T> : stdc::true_type
 {};
 
 template <typename> struct is_reference : public false_type
@@ -451,11 +451,11 @@ template <typename T, typename... args_t> struct is_constructible_impl
     {
         static_assert(!is_reference<U>{}, "bad template specialization");
         template <typename V, typename = void>
-        struct inner_again : public std::false_type
+        struct inner_again : public stdc::false_type
         {};
         template <typename V>
         struct inner_again<V, void_t<decltype(V(stdc::declval<args_t>()...))>>
-            : public std::true_type
+            : public stdc::true_type
         {};
 
         using type = inner_again<U>::type;
@@ -574,7 +574,7 @@ template <typename... args_t> struct is_nothrow_constructible_impl
     struct inner_t<T, stdc::enable_if_t<is_constructible<T, args_t...>::value>>
     {
         inline static constexpr bool is_noexcept =
-            noexcept(T(std::declval<args_t>()...));
+            noexcept(T(stdc::declval<args_t>()...));
     };
 };
 } // namespace detail
@@ -587,8 +587,8 @@ struct is_nothrow_constructible
 
 template <typename T, typename... args_t>
 struct is_trivially_constructible
-    : public std::integral_constant<bool,
-                                    __ok_has_trivial_constructor(T, args_t...)>
+    : public stdc::integral_constant<bool,
+                                     __ok_has_trivial_constructor(T, args_t...)>
 {
     static_assert(
         stdc::detail::is_complete_or_unbounded(
@@ -1006,8 +1006,8 @@ struct is_nothrow_destructible
 
 template <typename T>
 struct is_trivially_destructible
-    : public std::integral_constant<bool, detail::is_destructible_safe<T>{} &&
-                                              __ok_has_trivial_destructor(T)>
+    : public stdc::integral_constant<bool, detail::is_destructible_safe<T>{} &&
+                                               __ok_has_trivial_destructor(T)>
 {
     static_assert(
         stdc::detail::is_complete_or_unbounded(

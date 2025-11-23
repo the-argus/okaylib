@@ -25,7 +25,7 @@ struct drop_fn_t
             !(random_access_range_c<range_t> &&
               detail::range_marked_finite_c<range_t>),
             "Drop view does not support random access ranges of unknown size.");
-        return drop_view_t<decltype(range)>{std::forward<range_t>(range),
+        return drop_view_t<decltype(range)>{stdc::forward<range_t>(range),
                                             amount};
     }
 };
@@ -36,7 +36,7 @@ struct drop_cursor_bidir_t
                               remove_cvref_t<input_parent_range_t>>
 {
   private:
-    using range_t = std::remove_reference_t<input_parent_range_t>;
+    using range_t = stdc::remove_reference_t<input_parent_range_t>;
     using parent_cursor_t = cursor_type_for<range_t>;
     using wrapper_t =
         cursor_wrapper_t<drop_cursor_bidir_t<input_parent_range_t>, range_t>;
@@ -55,7 +55,7 @@ struct drop_cursor_bidir_t
     explicit constexpr drop_cursor_bidir_t(parent_cursor_t&& c,
                                            size_t consumed) OKAYLIB_NOEXCEPT
         : m_consumed(consumed),
-          wrapper_t(std::move(c))
+          wrapper_t(stdc::move(c))
     {
     }
 
@@ -77,7 +77,7 @@ struct drop_cursor_bidir_t
 };
 
 template <typename input_range_t>
-using drop_cursor_t = std::conditional_t<
+using drop_cursor_t = stdc::conditional_t<
     bidirectional_range_c<remove_cvref_t<input_range_t>> &&
         !random_access_range_c<remove_cvref_t<input_range_t>>,
     drop_cursor_bidir_t<input_range_t>,
@@ -100,7 +100,7 @@ struct drop_view_t : public underlying_view_type<input_range_t>::type
 
     constexpr drop_view_t(input_range_t&& range, size_t amount) OKAYLIB_NOEXCEPT
         : underlying_view_type<input_range_t>::type(
-              std::forward<input_range_t>(range))
+              stdc::forward<input_range_t>(range))
     {
         if constexpr (range_can_size_c<range_t>) {
             const auto& parent_ref =
@@ -142,7 +142,7 @@ struct range_definition<detail::drop_view_t<input_range_t>>
         // lvalue reference by lvalue
         if ((parent_flags & range_flags::producing &&
              !detail::range_gets_by_value_c<range_t>) &&
-            std::is_lvalue_reference_v<input_range_t>) {
+            stdc::is_lvalue_reference_v<input_range_t>) {
             initial = initial | range_flags::ref_wrapper;
         }
 
@@ -164,8 +164,9 @@ struct range_definition<detail::drop_view_t<input_range_t>>
     static constexpr size_t size(const drop_t& i)
         requires detail::range_can_size_c<range_t>
     {
-        const auto& parent_ref = i.template get_view_reference<
-            drop_t, remove_cvref_t<input_range_t>>();
+        const auto& parent_ref =
+            i.template get_view_reference<drop_t,
+                                          remove_cvref_t<input_range_t>>();
 
         // should not to overflow thanks to the cap in drop_view_t
         // constructor
@@ -189,7 +190,7 @@ struct range_definition<detail::drop_view_t<input_range_t>>
                 --counter;
             }
             if constexpr (bidirectional_range_c<range_t>) {
-                return cursor_t(std::move(c), amount);
+                return cursor_t(stdc::move(c), amount);
             } else {
                 return c;
             }
@@ -240,10 +241,9 @@ template <typename range_t>
 struct fmt::formatter<ok::detail::drop_view_t<range_t>>
 {
     using formatted_type_t = ok::detail::drop_view_t<range_t>;
-    static_assert(
-        fmt::is_formattable<ok::remove_cvref_t<range_t>>::value,
-        "Attempt to format drop_view_t whose inner range type is not "
-        "formattable.");
+    static_assert(fmt::is_formattable<ok::remove_cvref_t<range_t>>::value,
+                  "Attempt to format drop_view_t whose inner range type is not "
+                  "formattable.");
 
     constexpr format_parse_context::iterator parse(format_parse_context& ctx)
     {

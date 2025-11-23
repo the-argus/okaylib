@@ -76,7 +76,7 @@ template <typename T, allocator_c backing_allocator_t = ok::allocator_t>
 class segmented_list_t
 {
   public:
-    static_assert(!std::is_reference_v<T>,
+    static_assert(!stdc::is_reference_v<T>,
                   "Cannot create a segmented list of references.");
     static_assert(
         !is_const_c<T>,
@@ -132,7 +132,7 @@ class segmented_list_t
     }
 
     constexpr segmented_list_t(segmented_list_t&& other) noexcept
-        : m(std::move(other.m))
+        : m(stdc::move(other.m))
     {
         other.m.blocklist = nullptr;
     }
@@ -187,7 +187,7 @@ class segmented_list_t
         if (this->is_empty()) [[unlikely]] {
             return;
         }
-        if constexpr (!std::is_trivially_destructible_v<T>) {
+        if constexpr (!stdc::is_trivially_destructible_v<T>) {
 
             size_t block_size = 1; // first block always 1 big
             size_t visited = 0;
@@ -218,12 +218,12 @@ class segmented_list_t
         }
 
         T& removal_target = this->unchecked_access(idx);
-        T out = std::move(removal_target);
+        T out = stdc::move(removal_target);
         defer decr_size([this] { m.size--; });
 
         // early out if you're popping the last item
         if (idx == this->size() - 1) {
-            if constexpr (!std::is_trivially_destructible_v<T>) {
+            if constexpr (!stdc::is_trivially_destructible_v<T>) {
                 removal_target->~T();
             }
             return out;
@@ -235,7 +235,7 @@ class segmented_list_t
         for (size_t cap = size() - 1; i < cap; ++i) {
             T& moved_out = this->unchecked_access(i);
             T& still_occupied = this->unchecked_access(i + 1);
-            moved_out = std::move(still_occupied);
+            moved_out = stdc::move(still_occupied);
         }
 
         // clear out the last item, it is in a moved-from state
@@ -256,10 +256,10 @@ class segmented_list_t
         T* removal_target = ok::addressof(this->unchecked_access(idx));
         __ok_internal_assert(this->size() != 0);
         T* last = ok::addressof(this->unchecked_access(this->size() - 1));
-        T out = std::move(*removal_target);
-        *removal_target = std::move(*last);
+        T out = stdc::move(*removal_target);
+        *removal_target = stdc::move(*last);
 
-        if constexpr (!std::is_trivially_destructible_v<T>) {
+        if constexpr (!stdc::is_trivially_destructible_v<T>) {
             last->~T();
         }
 
@@ -345,7 +345,7 @@ class segmented_list_t
                 existing_item = ok::addressof(this->unchecked_access(i - 1));
                 T& nonexisting_item = this->unchecked_access(i);
                 stdc::construct_at(ok::addressof(nonexisting_item),
-                                   std::move(*existing_item));
+                                   stdc::move(*existing_item));
             }
 
             __ok_internal_assert(existing_item);
@@ -411,7 +411,7 @@ class segmented_list_t
 
         size_t visited = 0;
         for (size_t i = 0; i < m.blocklist->num_blocks; ++i) {
-            if constexpr (!std::is_trivially_destructible_v<T>) {
+            if constexpr (!stdc::is_trivially_destructible_v<T>) {
                 auto items =
                     ok::raw_slice(*m.blocklist->blocks[i], size_of_block_at(i));
 
@@ -645,7 +645,7 @@ struct copy_items_from_range_t
     template <typename backing_allocator_t, typename input_range_t, typename...>
     using associated_type =
         ok::segmented_list_t<value_type_for<const input_range_t&>,
-                             std::remove_reference_t<backing_allocator_t>>;
+                             stdc::remove_reference_t<backing_allocator_t>>;
 
     template <allocator_c backing_allocator_t, typename input_range_t>
     [[nodiscard]] constexpr auto

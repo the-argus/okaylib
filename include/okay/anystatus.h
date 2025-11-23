@@ -147,7 +147,7 @@ class anystatus_t
     constexpr void or_panic() const OKAYLIB_NOEXCEPT
     {
         if (!is_success()) [[unlikely]]
-            std::abort();
+            ::abort();
     }
 
     template <typename T>

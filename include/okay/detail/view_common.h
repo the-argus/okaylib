@@ -32,7 +32,7 @@ struct propagate_all_range_definition_functions_with_conversion_t
     // }
 
     constexpr static void increment(const derived_range_t& i, cursor_t& c)
-        requires std::is_same_v<cursor_t, cursor_type_for<parent_range_t>>
+        requires stdc::is_same_v<cursor_t, cursor_type_for<parent_range_t>>
     {
         ok::increment(
             i.template get_view_reference<derived_range_t, parent_range_t>(),
@@ -50,7 +50,7 @@ struct propagate_all_range_definition_functions_with_conversion_t
     // }
 
     constexpr static void decrement(const derived_range_t& i, cursor_t& c)
-        requires std::is_same_v<cursor_t, cursor_type_for<parent_range_t>>
+        requires stdc::is_same_v<cursor_t, cursor_type_for<parent_range_t>>
     {
         ok::decrement(
             i.template get_view_reference<derived_range_t, parent_range_t>(),
@@ -73,7 +73,7 @@ struct propagate_all_range_definition_functions_with_conversion_t
 
     constexpr static void offset(const derived_range_t& i, cursor_t& c,
                                  int64_t offset)
-        requires std::is_same_v<cursor_t, cursor_type_for<parent_range_t>>
+        requires stdc::is_same_v<cursor_t, cursor_type_for<parent_range_t>>
     {
         ok::range_offset(
             i.template get_view_reference<derived_range_t, parent_range_t>(), c,
@@ -155,7 +155,7 @@ class owning_view
 
   public:
     constexpr owning_view(range_t&& range) OKAYLIB_NOEXCEPT
-        : m_range(std::move(range))
+        : m_range(stdc::move(range))
     {
     }
 
@@ -220,7 +220,7 @@ template <typename input_range_t> class ref_view
 {
   private:
     using range_t = stdc::remove_reference_t<input_range_t>;
-    static_assert(!std::is_same_v<remove_cvref_t<input_range_t>, ref_view>);
+    static_assert(!stdc::is_same_v<remove_cvref_t<input_range_t>, ref_view>);
     range_t* m_range;
 
     // not defined
@@ -228,14 +228,14 @@ template <typename input_range_t> class ref_view
     static void is_referenceable_func(range_t&&) = delete;
 
     template <typename T, typename = void>
-    class is_referenceable : public std::false_type
+    class is_referenceable : public stdc::false_type
     {};
 
     /// Checks if a type will select lvalue reference overload to range_t
     template <typename T>
     class is_referenceable<
-        T, std::void_t<decltype(is_referenceable_func(std::declval<T>()))>>
-        : public std::true_type
+        T, stdc::void_t<decltype(is_referenceable_func(stdc::declval<T>()))>>
+        : public stdc::true_type
     {};
 
   public:
@@ -308,14 +308,14 @@ template <typename T> struct underlying_view_type
     {
         if constexpr (is_view_v<T>)
             return view;
-        else if constexpr (std::is_lvalue_reference_v<T>)
+        else if constexpr (stdc::is_lvalue_reference_v<T>)
             return ref_view<T>{view};
         else
-            return owning_view<T>{std::move(view)};
+            return owning_view<T>{stdc::move(view)};
     }
 
   public:
-    using type = decltype(wrap_range_with_view(std::declval<T>()));
+    using type = decltype(wrap_range_with_view(stdc::declval<T>()));
 };
 
 template <typename payload_t>
@@ -328,7 +328,7 @@ struct uninitialized_storage_default_constructible_t
 
     template <typename... args_t>
     constexpr uninitialized_storage_default_constructible_t(args_t&&... args)
-        OKAYLIB_NOEXCEPT : m_value(ok::in_place, std::forward<args_t>(args)...)
+        OKAYLIB_NOEXCEPT : m_value(ok::in_place, stdc::forward<args_t>(args)...)
     {
     }
 
@@ -343,7 +343,7 @@ struct uninitialized_storage_deleted_default_constructor_t
     template <typename... args_t>
     constexpr uninitialized_storage_deleted_default_constructor_t(
         args_t&&... args) OKAYLIB_NOEXCEPT
-        : m_value(ok::in_place, std::forward<args_t>(args)...)
+        : m_value(ok::in_place, stdc::forward<args_t>(args)...)
     {
     }
 
@@ -352,8 +352,8 @@ struct uninitialized_storage_deleted_default_constructor_t
 };
 
 template <typename payload_t>
-using propagate_default_constructibility_t = std::conditional_t<
-    std::is_default_constructible_v<payload_t>,
+using propagate_default_constructibility_t = stdc::conditional_t<
+    stdc::is_default_constructible_v<payload_t>,
     uninitialized_storage_default_constructible_t<payload_t>,
     uninitialized_storage_deleted_default_constructor_t<payload_t>>;
 
@@ -388,7 +388,7 @@ struct assignment_op_wrapper_t
     }
     constexpr payload_t&& value() && OKAYLIB_NOEXCEPT
     {
-        return std::move(this->m_value.value);
+        return stdc::move(this->m_value.value);
     }
     constexpr payload_t& value() const&& = delete;
 
@@ -399,7 +399,7 @@ struct assignment_op_wrapper_t
 
     constexpr self_t& operator=(const self_t& other) OKAYLIB_NOEXCEPT
     {
-        static_assert(std::is_nothrow_copy_constructible_v<payload_t>);
+        static_assert(stdc::is_nothrow_copy_constructible_v<payload_t>);
         if (this != ok::addressof(other)) {
             auto* ptr = ok::addressof(value());
             ptr->~payload_t();
@@ -410,11 +410,11 @@ struct assignment_op_wrapper_t
 
     constexpr self_t& operator=(self_t&& other) OKAYLIB_NOEXCEPT
     {
-        static_assert(std::is_nothrow_move_constructible_v<payload_t>);
+        static_assert(stdc::is_nothrow_move_constructible_v<payload_t>);
         if (this != ok::addressof(other)) {
             auto* ptr = ok::addressof(value());
             ptr->~payload_t();
-            stdc::construct_at(ptr, std::move(other).value());
+            stdc::construct_at(ptr, stdc::move(other).value());
         }
         return *this;
     }
@@ -442,7 +442,7 @@ template <typename derived_t, typename parent_range_t> struct cursor_wrapper_t
 
   public:
     explicit constexpr cursor_wrapper_t(parent_cursor_t&& c) OKAYLIB_NOEXCEPT
-        : m_inner(std::move(c))
+        : m_inner(stdc::move(c))
     {
     }
 

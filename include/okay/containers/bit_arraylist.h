@@ -63,16 +63,14 @@ class bit_arraylist_t
 
     // allow upcasting to ok::allocator_t if you explicitly construct with
     // upcast_tag
-    template <typename other_allocator_t,
-              std::enable_if_t<
-                  is_convertible_to_c<other_allocator_t*, backing_allocator_t*>,
-                  bool> = true>
+    template <typename other_allocator_t>
+        requires is_convertible_to_c<other_allocator_t*, backing_allocator_t*>
     constexpr bit_arraylist_t(const bit_arraylist::upcast_tag&,
                               bit_arraylist_t<other_allocator_t>&& other)
         : m(members_t{
               .num_bits = other.m.num_bits,
-              .allocation =
-                  std::exchange(other.m.allocation, make_null_slice<uint8_t>()),
+              .allocation = stdc::exchange(other.m.allocation,
+                                           make_null_slice<uint8_t>()),
               .allocator = static_cast<backing_allocator_t*>(other.m.allocator),
           })
     {
@@ -83,16 +81,15 @@ class bit_arraylist_t
     }
 
     template <typename other_allocator_t>
-    constexpr auto operator=(bit_arraylist_t<other_allocator_t>&& other)
-        -> std::enable_if_t<
-            is_convertible_to_c<other_allocator_t*, backing_allocator_t*>,
-            bit_arraylist_t&>
+        requires is_convertible_to_c<other_allocator_t*, backing_allocator_t*>
+    constexpr bit_arraylist_t&
+    operator=(bit_arraylist_t<other_allocator_t>&& other)
     {
         destroy();
         m = members_t{
             .num_bits = other.m.num_bits,
             .allocation =
-                std::exchange(other.m.allocation, make_null_slice<uint8_t>()),
+                stdc::exchange(other.m.allocation, make_null_slice<uint8_t>()),
             .allocator = static_cast<backing_allocator_t*>(other.m.allocator),
         };
 #ifndef NDEBUG
@@ -130,8 +127,8 @@ class bit_arraylist_t
         if (m.allocation.size() == 0) [[unlikely]] {
             return;
         }
-        std::memset(m.allocation.unchecked_address_of_first_item(),
-                    value ? char(-1) : char(0), this->size_bytes());
+        ::memset(m.allocation.unchecked_address_of_first_item(),
+                 value ? char(-1) : char(0), this->size_bytes());
     }
 
     [[nodiscard]] constexpr size_t size_bytes() const OKAYLIB_NOEXCEPT
@@ -554,7 +551,7 @@ struct copy_booleans_from_range_t
 {
     template <typename backing_allocator_t, typename...>
     using associated_type =
-        bit_arraylist_t<std::remove_reference_t<backing_allocator_t>>;
+        bit_arraylist_t<stdc::remove_reference_t<backing_allocator_t>>;
 
     template <allocator_c backing_allocator_t,
               ok::detail::producing_range_c input_range_t>

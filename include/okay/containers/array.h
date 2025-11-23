@@ -20,7 +20,7 @@ namespace ok {
   public:                                                                      \
     static_assert(!stdc::is_reference_c<T>,                                    \
                   "ok::array_t cannot store references.");                     \
-    static_assert(!std::is_void_v<T>, "Cannot create an array_t of void.");    \
+    static_assert(!stdc::is_void_v<T>, "Cannot create an array_t of void.");   \
                                                                                \
     static_assert(num_items != 0, "Cannot create an array_t of zero items.");  \
                                                                                \

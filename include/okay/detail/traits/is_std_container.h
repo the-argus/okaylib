@@ -11,7 +11,7 @@ concept pointer = requires { requires stdc::is_pointer_v<T>; };
 template <typename T>
 concept const_pointer = requires {
     requires pointer<T>;
-    requires is_const_c<std::remove_pointer_t<T>>;
+    requires is_const_c<stdc::remove_pointer_t<T>>;
 };
 template <typename T>
 concept nonconst_pointer = requires {

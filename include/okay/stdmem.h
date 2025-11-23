@@ -4,6 +4,7 @@
 #include "okay/construct.h"
 #include "okay/detail/noexcept.h"
 #include "okay/detail/traits/special_member_traits.h"
+#include "okay/detail/type_traits.h"
 #include "okay/slice.h"
 #include <cstdint>
 #include <cstring>
@@ -55,7 +56,7 @@ template <typename T>
 [[nodiscard]] constexpr slice<T>
 memcopy(const memcopy_options_t<T>& options) OKAYLIB_NOEXCEPT;
 
-/// Invokes std::memmove on the slices. Requires that T is trivially copyable.
+/// Invokes ::memmove on the slices. Requires that T is trivially copyable.
 template <typename T>
 [[nodiscard]] constexpr slice<T>
 memmove(const memcopy_options_t<T>& options) OKAYLIB_NOEXCEPT;
@@ -116,7 +117,7 @@ template <typename T>
 constexpr auto
 ok::memcopy(const memcopy_options_t<T>& options) OKAYLIB_NOEXCEPT -> slice<T>
 {
-    static_assert(std::is_trivially_copyable_v<T>,
+    static_assert(stdc::is_trivially_copyable_v<T>,
                   "Cannot memcopy non-trivially copyable type.");
 
     if (options.from.is_empty()) {
@@ -129,9 +130,9 @@ ok::memcopy(const memcopy_options_t<T>& options) OKAYLIB_NOEXCEPT -> slice<T>
                    "has a smaller destination than source.");
     }
 
-    std::memcpy(options.to.unchecked_address_of_first_item(),
-                options.from.unchecked_address_of_first_item(),
-                options.from.size() * sizeof(T));
+    ::memcpy(options.to.unchecked_address_of_first_item(),
+             options.from.unchecked_address_of_first_item(),
+             options.from.size() * sizeof(T));
 
     return raw_slice(*options.to.unchecked_address_of_first_item(),
                      options.from.size());
@@ -142,7 +143,7 @@ template <typename T>
 memmove(const ok::memcopy_options_t<T>& options) OKAYLIB_NOEXCEPT
 {
     static_assert(
-        std::is_trivially_copyable_v<T>,
+        stdc::is_trivially_copyable_v<T>,
         "Refusing to invoke ok::memmove on a non-trivially copyable type.");
 
     if (options.from.is_empty()) {
@@ -154,9 +155,9 @@ memmove(const ok::memcopy_options_t<T>& options) OKAYLIB_NOEXCEPT
                    "hold the source memory.");
     }
 
-    std::memmove(options.to.unchecked_address_of_first_item(),
-                 options.from.unchecked_address_of_first_item(),
-                 sizeof(T) * options.from.size());
+    ::memmove(options.to.unchecked_address_of_first_item(),
+              options.from.unchecked_address_of_first_item(),
+              sizeof(T) * options.from.size());
 
     return raw_slice(*options.to.unchecked_address_of_first_item(),
                      options.from.size());
@@ -218,27 +219,27 @@ constexpr void ok::memfill(ok::slice<slice_viewed_t> slice,
 {
     static_assert(!is_const_c<slice_viewed_t>,
                   "Cannot memfill a slice of const memory.");
-    if constexpr (std::is_same_v<slice_viewed_t, uint8_t>) {
+    if constexpr (stdc::is_same_v<slice_viewed_t, uint8_t>) {
         static_assert(
             is_std_constructible_c<uint8_t, constructor_args_t...>,
             "No matching conversion from given arguments to a uint8_t.");
-        std::memset(slice.unchecked_address_of_first_item(),
-                    uint8_t(std::forward<constructor_args_t>(args)...),
-                    slice.size());
+        ::memset(slice.unchecked_address_of_first_item(),
+                 uint8_t(stdc::forward<constructor_args_t>(args)...),
+                 slice.size());
     } else {
         static_assert(is_infallible_constructible_c<slice_viewed_t,
                                                     constructor_args_t...> &&
-                          std::is_nothrow_destructible_v<slice_viewed_t>,
+                          stdc::is_nothrow_destructible_v<slice_viewed_t>,
                       "Refusing to call memfill if type is not able to (in a "
                       "non-failing way) be constructed or destroyed.");
 
         for (size_t i = 0; i < slice.size(); ++i) {
             auto& item = slice.unchecked_access(i);
-            if constexpr (!std::is_trivially_destructible_v<slice_viewed_t>) {
+            if constexpr (!stdc::is_trivially_destructible_v<slice_viewed_t>) {
                 item.~slice_viewed_t();
             }
             ok::make_into_uninitialized<slice_viewed_t>(
-                item, std::forward<constructor_args_t>(args)...);
+                item, stdc::forward<constructor_args_t>(args)...);
         }
     }
 }

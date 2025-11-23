@@ -6,7 +6,6 @@
 #include "okay/detail/memory.h"
 #include "okay/detail/noexcept.h"
 #include "okay/detail/ok_assert.h"
-#include "okay/reflection/nameof.h"
 #include "okay/detail/template_util/uninitialized_storage.h"
 #include "okay/detail/traits/cloneable.h"
 #include "okay/detail/traits/mathop_traits.h"
@@ -48,10 +47,10 @@ inline constexpr bool converts_from_opt =
 
 template <typename target_t, typename opt_payload_t>
 inline constexpr bool assigns_from_opt =
-    std::is_assignable_v<target_t&, const opt<opt_payload_t>&> ||
-    std::is_assignable_v<target_t&, opt<opt_payload_t>&> ||
-    std::is_assignable_v<target_t&, const opt<opt_payload_t>&&> ||
-    std::is_assignable_v<target_t&, opt<opt_payload_t>&&>;
+    stdc::is_assignable_v<target_t&, const opt<opt_payload_t>&> ||
+    stdc::is_assignable_v<target_t&, opt<opt_payload_t>&> ||
+    stdc::is_assignable_v<target_t&, const opt<opt_payload_t>&&> ||
+    stdc::is_assignable_v<target_t&, opt<opt_payload_t>&&>;
 } // namespace detail
 
 template <typename payload_t> class opt
@@ -64,11 +63,12 @@ template <typename payload_t> class opt
     static_assert(detail::is_nonthrowing_c<payload_t>,
                   OKAYLIB_IS_NONTHROWING_ERRMSG);
 
-    static_assert(!std::is_same_v<std::remove_cv_t<payload_t>, nullopt_t>);
-    static_assert(!std::is_same_v<std::remove_cv_t<payload_t>, ok::in_place_t>);
-    static_assert(!std::is_array_v<payload_t>,
+    static_assert(!stdc::is_same_v<stdc::remove_cv_t<payload_t>, nullopt_t>);
+    static_assert(
+        !stdc::is_same_v<stdc::remove_cv_t<payload_t>, ok::in_place_t>);
+    static_assert(!stdc::is_array_v<payload_t>,
                   "opt cannot contain C style array");
-    static_assert(std::is_object_v<payload_t>);
+    static_assert(detail::is_object_c<payload_t>);
 
   private:
     inline static constexpr detail::opt_impl_type impl_type =
@@ -79,10 +79,10 @@ template <typename payload_t> class opt
 
     template <typename T>
     inline static constexpr bool not_self =
-        !std::is_same_v<opt, remove_cvref_t<T>>;
+        !stdc::is_same_v<opt, remove_cvref_t<T>>;
     template <typename T>
     inline static constexpr bool not_tag =
-        !std::is_same_v<ok::in_place_t, remove_cvref_t<T>>;
+        !stdc::is_same_v<ok::in_place_t, remove_cvref_t<T>>;
 
     detail::uninitialized_storage_t<payload_t> m_payload;
     bool m_has_value;
@@ -94,7 +94,7 @@ template <typename payload_t> class opt
     emplace_nodestroy(args_t&&... args) OKAYLIB_NOEXCEPT
     {
         ok::stdc::construct_at(ok::addressof(this->m_payload), ok::in_place,
-                               std::forward<args_t>(args)...);
+                               stdc::forward<args_t>(args)...);
     }
 
   public:
@@ -104,15 +104,15 @@ template <typename payload_t> class opt
     constexpr opt(nullopt_t) OKAYLIB_NOEXCEPT : m_has_value(false) {}
 
     constexpr opt(opt&& other)
-        requires(std::is_trivially_move_constructible_v<payload_t>)
+        requires(stdc::is_trivially_move_constructible_v<payload_t>)
     = default;
     constexpr opt(opt&& other)
-        requires(!std::is_trivially_move_constructible_v<payload_t> &&
-                 std::is_move_constructible_v<payload_t>)
+        requires(!stdc::is_trivially_move_constructible_v<payload_t> &&
+                 stdc::is_move_constructible_v<payload_t>)
     OKAYLIB_NOEXCEPT
     {
         if (other) {
-            this->emplace_nodestroy(std::move(other.ref_unchecked()));
+            this->emplace_nodestroy(stdc::move(other.ref_unchecked()));
             m_has_value = true;
         } else {
             m_has_value = false;
@@ -120,17 +120,17 @@ template <typename payload_t> class opt
     }
 
     constexpr opt& operator=(opt&& other) &
-        requires(std::is_trivially_move_assignable_v<payload_t>)
+        requires(stdc::is_trivially_move_assignable_v<payload_t>)
     = default;
     constexpr opt& operator=(opt&& other) &
-        requires(!std::is_trivially_move_assignable_v<payload_t> &&
-                 std::is_move_assignable_v<payload_t>) OKAYLIB_NOEXCEPT
+        requires(!stdc::is_trivially_move_assignable_v<payload_t> &&
+                 stdc::is_move_assignable_v<payload_t>) OKAYLIB_NOEXCEPT
     {
         if (other) {
             if (this->has_value()) {
-                this->ref_unchecked() = std::move(other.ref_unchecked());
+                this->ref_unchecked() = stdc::move(other.ref_unchecked());
             } else {
-                this->emplace_nodestroy(std::move(other.ref_unchecked()));
+                this->emplace_nodestroy(stdc::move(other.ref_unchecked()));
                 m_has_value = true;
             }
         } else {
@@ -140,13 +140,13 @@ template <typename payload_t> class opt
     }
 
     constexpr opt(const opt& other)
-        requires(std::is_trivially_copy_constructible_v<payload_t>)
+        requires(stdc::is_trivially_copy_constructible_v<payload_t>)
     = default;
     // just in case someone wants to define a non trivial copy constructor for
     // something and then put that in an opt
     constexpr opt(const opt& other)
-        requires(!std::is_trivially_copy_constructible_v<payload_t> &&
-                 std::is_copy_constructible_v<payload_t>)
+        requires(!stdc::is_trivially_copy_constructible_v<payload_t> &&
+                 stdc::is_copy_constructible_v<payload_t>)
     OKAYLIB_NOEXCEPT
     {
         if (other) {
@@ -158,13 +158,13 @@ template <typename payload_t> class opt
     }
 
     constexpr opt& operator=(const opt& other) &
-        requires(std::is_trivially_copy_assignable_v<payload_t>)
+        requires(stdc::is_trivially_copy_assignable_v<payload_t>)
     = default;
     // just in case someone wants to define a non trivial copy assignment for
     // something and then put that in an opt
     constexpr opt& operator=(const opt& other) &
-        requires(!std::is_trivially_copy_assignable_v<payload_t> &&
-                 std::is_copy_assignable_v<payload_t>) OKAYLIB_NOEXCEPT
+        requires(!stdc::is_trivially_copy_assignable_v<payload_t> &&
+                 stdc::is_copy_assignable_v<payload_t>) OKAYLIB_NOEXCEPT
     {
         if (other) {
             if (this->has_value()) {
@@ -186,7 +186,7 @@ template <typename payload_t> class opt
                  not_tag<convert_from_t> &&
                  is_std_constructible_c<payload_t, convert_from_t> &&
                  is_convertible_to_c<convert_from_t, payload_t>)
-        : m_payload(ok::in_place, std::forward<convert_from_t>(t)),
+        : m_payload(ok::in_place, stdc::forward<convert_from_t>(t)),
           m_has_value(true)
     {
     }
@@ -199,7 +199,7 @@ template <typename payload_t> class opt
                  not_tag<convert_from_t> &&
                  is_std_constructible_c<payload_t, convert_from_t> &&
                  !is_convertible_to_c<convert_from_t, payload_t>)
-        : m_payload(ok::in_place, std::forward<convert_from_t>(t)),
+        : m_payload(ok::in_place, stdc::forward<convert_from_t>(t)),
           m_has_value(true)
     {
     }
@@ -210,15 +210,15 @@ template <typename payload_t> class opt
                      // TODO: cant have payload and decayed incoming_t be the
                      // same, only if scalar though. why? copied this from STL
                      // implementation
-                     !(std::is_scalar_v<payload_t> &&
-                       std::is_same_v<payload_t, std::decay_t<incoming_t>>) &&
+                     !(stdc::is_scalar_v<payload_t> &&
+                       stdc::is_same_v<payload_t, stdc::decay_t<incoming_t>>) &&
                      is_std_constructible_c<payload_t, incoming_t> &&
-                     std::is_assignable_v<payload_t&, incoming_t>)
+                     stdc::is_assignable_v<payload_t&, incoming_t>)
     {
         if (m_has_value) {
-            this->ref_unchecked() = std::forward<incoming_t>(incoming);
+            this->ref_unchecked() = stdc::forward<incoming_t>(incoming);
         } else {
-            this->emplace_nodestroy(std::forward<incoming_t>(incoming));
+            this->emplace_nodestroy(stdc::forward<incoming_t>(incoming));
             m_has_value = true;
         }
         return *this;
@@ -228,7 +228,7 @@ template <typename payload_t> class opt
     template <typename... args_t>
     explicit constexpr opt(ok::in_place_t, args_t&&... args) OKAYLIB_NOEXCEPT
         requires(is_infallible_constructible_c<payload_t, args_t...>)
-        : m_payload(ok::in_place, std::forward<args_t>(args)...),
+        : m_payload(ok::in_place, stdc::forward<args_t>(args)...),
           m_has_value(true)
     {
     }
@@ -260,7 +260,7 @@ template <typename payload_t> class opt
     constexpr opt(opt<T>&& other) : m_has_value(other.m_has_value)
     {
         if (other.has_value())
-            this->emplace_nodestroy(std::move(other.ref_unchecked()));
+            this->emplace_nodestroy(stdc::move(other.ref_unchecked()));
     }
 
     template <typename T>
@@ -287,7 +287,7 @@ template <typename payload_t> class opt
     explicit constexpr opt(opt<T>&& other) : m_has_value(other.m_has_value)
     {
         if (other.has_value())
-            this->emplace_nodestroy(std::move(other.ref_unchecked()));
+            this->emplace_nodestroy(stdc::move(other.ref_unchecked()));
     }
 
     template <typename... args_t>
@@ -295,7 +295,7 @@ template <typename payload_t> class opt
         requires(is_std_constructible_c<payload_t, args_t...>)
     {
         this->reset();
-        this->emplace_nodestroy(std::forward<args_t>(args)...);
+        this->emplace_nodestroy(stdc::forward<args_t>(args)...);
         m_has_value = true;
         return this->ref_unchecked();
     }
@@ -320,7 +320,7 @@ template <typename payload_t> class opt
         if (!has_value()) [[unlikely]] {
             __ok_abort("Attempt to get value from a null optional.");
         }
-        return std::move(this->ref_unchecked());
+        return stdc::move(this->ref_unchecked());
     }
 
     [[nodiscard]] constexpr const payload_t&
@@ -341,7 +341,7 @@ template <typename payload_t> class opt
     [[nodiscard]] constexpr payload_t&& ref_unchecked() && OKAYLIB_NOEXCEPT
     {
         __ok_assert(this->has_value(), "Bad access to opt payload.");
-        return std::move(m_payload.value);
+        return stdc::move(m_payload.value);
     }
 
     [[nodiscard]] constexpr const payload_t&
@@ -353,7 +353,7 @@ template <typename payload_t> class opt
 
     [[nodiscard]] constexpr payload_t
     copy_out_or(payload_t alternative) const OKAYLIB_NOEXCEPT
-        requires(std::is_copy_constructible_v<payload_t>)
+        requires(stdc::is_copy_constructible_v<payload_t>)
     {
         if (!this->has_value()) [[unlikely]] {
             return alternative;
@@ -364,7 +364,7 @@ template <typename payload_t> class opt
     template <typename callable_t>
     [[nodiscard]] constexpr payload_t
     copy_out_or_run(callable_t&& callable) const& OKAYLIB_NOEXCEPT
-        requires(std::is_copy_constructible_v<payload_t> &&
+        requires(stdc::is_copy_constructible_v<payload_t> &&
                  is_std_invocable_r_c<callable_t, payload_t>)
     {
         if (!this->has_value()) [[unlikely]] {
@@ -376,10 +376,10 @@ template <typename payload_t> class opt
     /// Performs a move and also destroys the opt which was moved out of,
     /// leaving behind a nullopt.
     [[nodiscard]] constexpr opt take() OKAYLIB_NOEXCEPT
-        requires(std::is_move_constructible_v<payload_t>)
+        requires(stdc::is_move_constructible_v<payload_t>)
     {
         if (this->has_value()) {
-            opt out(std::move(this->ref_unchecked()));
+            opt out(stdc::move(this->ref_unchecked()));
             this->reset();
             return out;
         } else {
@@ -391,14 +391,14 @@ template <typename payload_t> class opt
     /// value or, if null, a wrapped default value.
     [[nodiscard]] constexpr payload_t
     take_or(payload_t&& alternative) OKAYLIB_NOEXCEPT
-        requires(std::is_move_constructible_v<payload_t>)
+        requires(stdc::is_move_constructible_v<payload_t>)
     {
         if (this->has_value()) {
-            payload_t out(std::move(this->ref_unchecked()));
+            payload_t out(stdc::move(this->ref_unchecked()));
             this->reset();
             return out;
         } else {
-            return std::move(alternative);
+            return stdc::move(alternative);
         }
     }
 
@@ -410,7 +410,7 @@ template <typename payload_t> class opt
         requires(is_std_invocable_r_c<callable_t, payload_t>)
     {
         if (this->has_value()) {
-            payload_t out(std::move(this->ref_unchecked()));
+            payload_t out(stdc::move(this->ref_unchecked()));
             this->reset();
             return out;
         } else {
@@ -421,7 +421,7 @@ template <typename payload_t> class opt
     /// Call destructor of internal type, or just reset it if it doesnt have one
     constexpr void reset() OKAYLIB_NOEXCEPT
     {
-        if constexpr (std::is_trivially_destructible_v<payload_t>) {
+        if constexpr (stdc::is_trivially_destructible_v<payload_t>) {
             m_has_value = false;
         } else {
             if (m_has_value) {
@@ -467,7 +467,7 @@ template <typename payload_t> class opt
     }
 
     constexpr ~opt()
-        requires(!std::is_trivially_destructible_v<payload_t>)
+        requires(!stdc::is_trivially_destructible_v<payload_t>)
     {
         if (m_has_value) {
             this->ref_unchecked().~payload_t();
@@ -481,7 +481,7 @@ template <typename payload_t> class opt
             // res can convert from another res with the same status since
             // the success types (payload_t and opt<payload_t>) are convertible
             return res<opt, try_clone_status_t<payload_t>>(
-                ok::in_place, std::move(ok::try_clone(this->ref_unchecked())));
+                ok::in_place, stdc::move(ok::try_clone(this->ref_unchecked())));
         } else {
             return res<opt, try_clone_status_t<payload_t>>(ok::in_place,
                                                            nullopt);
@@ -509,7 +509,7 @@ template <typename payload_t> class opt
             } else {
                 if (auto res = ok::try_clone(this->ref_unchecked());
                     res.is_success()) {
-                    dest.emplace_nodestroy(std::move(res.unwrap()));
+                    dest.emplace_nodestroy(stdc::move(res.unwrap()));
                     return ret(res.status());
                 } else {
                     return ret(res.status());
@@ -529,7 +529,7 @@ template <typename payload_t> class opt
                 ok::clone_into(this->ref_unchecked(), dest.ref_unchecked());
             } else {
                 dest.emplace_nodestroy(
-                    std::move(ok::clone(this->ref_unchecked())));
+                    stdc::move(ok::clone(this->ref_unchecked())));
             }
         } else {
             dest.reset();
@@ -537,7 +537,7 @@ template <typename payload_t> class opt
     }
 
     constexpr ~opt()
-        requires(std::is_trivially_destructible_v<payload_t>)
+        requires(stdc::is_trivially_destructible_v<payload_t>)
     = default;
 
 #if defined(OKAYLIB_USE_FMT)
@@ -549,7 +549,7 @@ template <typename payload_t> class opt
 template <stdc::is_reference_c payload_t> class opt<payload_t>
 {
   public:
-    using pointer_t = std::remove_reference_t<payload_t>;
+    using pointer_t = stdc::remove_reference_t<payload_t>;
 
   private:
     inline static constexpr detail::opt_impl_type impl_type =
@@ -564,7 +564,7 @@ template <stdc::is_reference_c payload_t> class opt<payload_t>
     // allow pointer conversion
     constexpr opt(pointer_t* p) OKAYLIB_NOEXCEPT : m_pointer(p) {}
     // allow non-const reference construction
-    constexpr opt(std::remove_const_t<pointer_t>& p) OKAYLIB_NOEXCEPT
+    constexpr opt(stdc::remove_const_t<pointer_t>& p) OKAYLIB_NOEXCEPT
         : m_pointer(ok::addressof(p))
     {
     }
@@ -581,7 +581,7 @@ template <stdc::is_reference_c payload_t> class opt<payload_t>
     template <typename other_t>
     constexpr opt(const opt<other_t>& other) OKAYLIB_NOEXCEPT
         requires(is_convertible_to_c<other_t, payload_t> &&
-                 !std::is_same_v<remove_cvref_t<other_t>, opt>)
+                 !stdc::is_same_v<remove_cvref_t<other_t>, opt>)
         : m_pointer(other.as_ptr())
     {
     }
@@ -661,13 +661,13 @@ template <typename payload_t> struct range_definition<ok::opt<payload_t>>
         range_flags initial = range_flags::sized | range_flags::arraylike |
                               range_flags::implements_set | range_flags::sized |
                               range_flags::producing | range_flags::consuming;
-        return std::is_reference_v<payload_t>
+        return ok::stdc::is_reference_c<payload_t>
                    ? initial | range_flags::ref_wrapper
                    : initial;
     }
 
   public:
-    using value_type = std::remove_reference_t<payload_t>;
+    using value_type = stdc::remove_reference_t<payload_t>;
 
     constexpr static range_flags flags = determine_flags();
 
@@ -693,7 +693,7 @@ template <typename payload_t> struct range_definition<ok::opt<payload_t>>
     /// as it can't be const otherwise.
     template <typename T = payload_t>
     static constexpr auto& get(opt_range_t& range, size_t cursor)
-        requires(!is_const_c<std::remove_reference_t<value_type>>)
+        requires(!is_const_c<stdc::remove_reference_t<value_type>>)
     {
         if (cursor != 0) {
             __ok_abort("Access to optional with out-of-range index");
@@ -740,8 +740,7 @@ template <typename payload_t> struct fmt::formatter<ok::opt<payload_t>>
                     // just format reference as pointer, if the contents itself
                     // can't be formatted
                     return fmt::format_to(
-                        ctx.out(), "opt<{:s}: {:p}>",
-                        ok::nameof<payload_t>(),
+                        ctx.out(), "opt<{:s}: {:p}>", ok::nameof<payload_t>(),
                         static_cast<const void*>(optional.m_pointer));
                 }
             } else if constexpr (ok::opt<payload_t>::impl_type ==

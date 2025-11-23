@@ -20,7 +20,7 @@ struct keep_if_fn_t
     operator()(range_t&& range,
                predicate_t&& filter_predicate) const OKAYLIB_NOEXCEPT
     {
-        using T = std::remove_reference_t<range_t>;
+        using T = stdc::remove_reference_t<range_t>;
         static_assert(
             requires(const cursor_type_for<T>& c) {
                 {
@@ -31,8 +31,8 @@ struct keep_if_fn_t
                "the range. This may also be caused by a lambda being "
                "marked \"mutable\", or the lambda not returning bool.");
         return keep_if_view_t<decltype(range), predicate_t>{
-            std::forward<range_t>(range),
-            std::forward<predicate_t>(filter_predicate)};
+            stdc::forward<range_t>(range),
+            stdc::forward<predicate_t>(filter_predicate)};
     }
 };
 
@@ -40,7 +40,7 @@ template <typename range_t, typename predicate_t>
 struct keep_if_view_t : public underlying_view_type<range_t>::type
 {
   private:
-    assignment_op_wrapper_t<std::remove_reference_t<predicate_t>>
+    assignment_op_wrapper_t<stdc::remove_reference_t<predicate_t>>
         m_filter_predicate;
 
   public:
@@ -56,8 +56,8 @@ struct keep_if_view_t : public underlying_view_type<range_t>::type
 
     constexpr keep_if_view_t(range_t&& range,
                              predicate_t&& filter_predicate) OKAYLIB_NOEXCEPT
-        : m_filter_predicate(std::move(filter_predicate)),
-          underlying_view_type<range_t>::type(std::forward<range_t>(range))
+        : m_filter_predicate(stdc::move(filter_predicate)),
+          underlying_view_type<range_t>::type(stdc::forward<range_t>(range))
     {
     }
 };
@@ -74,7 +74,7 @@ struct range_definition<detail::keep_if_view_t<input_range_t, predicate_t>>
 
     using value_type = value_type_for<input_range_t>;
 
-    using range_t = std::remove_reference_t<input_range_t>;
+    using range_t = stdc::remove_reference_t<input_range_t>;
     using keep_if_t = detail::keep_if_view_t<input_range_t, predicate_t>;
     using cursor_t = cursor_type_for<range_t>;
 

@@ -11,7 +11,7 @@ struct identity_fn_t
     template <typename T>
     constexpr decltype(auto) operator()(T&& item) const noexcept
     {
-        return std::forward<T>(item);
+        return stdc::forward<T>(item);
     }
 };
 

@@ -60,7 +60,7 @@ class arraylist_t
                   "arraylist_t cannot store references.");
     static_assert(!stdc::is_void_v<T>, "cannot create an array list of void.");
     static_assert(
-        std::is_trivially_copyable_v<T> || stdc::is_move_constructible_v<T> ||
+        stdc::is_trivially_copyable_v<T> || stdc::is_move_constructible_v<T> ||
             is_std_constructible_c<T, T&&>,
         "Type given to arraylist_t must be either trivially copyable or move "
         "constructible, otherwise it cannot move the items when reallocating.");
@@ -173,27 +173,27 @@ class arraylist_t
 
         if (idx < this->size()) {
             // move all other items towards the back of the arraylist
-            if constexpr (std::is_trivially_copyable_v<T>) {
-                std::memmove(m.items + idx + 1, m.items + idx,
-                             (this->size() - idx) * sizeof(T));
+            if constexpr (stdc::is_trivially_copyable_v<T>) {
+                ::memmove(m.items + idx + 1, m.items + idx,
+                          (this->size() - idx) * sizeof(T));
             } else {
                 __ok_internal_assert(this->size() != 0);
                 // move last item into uninitialized memory
                 ok::stdc::construct_at(m.items + this->size(),
-                                       std::move(m.items[this->size() - 1]));
+                                       stdc::move(m.items[this->size() - 1]));
 
                 // move the rest of the items on top of each other
                 for (size_t i = this->size() - 1; i > idx; --i) {
                     T& target = m.items[i];
                     T& source = m.items[i - 1];
-                    target = std::move(source);
+                    target = stdc::move(source);
                 }
 
                 // make the item we are inserting into uninitialized
                 // since we are inserting a new thing over it anyways,
                 // there's not way to benefit from anything like leftover memory
                 // after move optimizations
-                if constexpr (!std::is_trivially_destructible_v<T>) {
+                if constexpr (!stdc::is_trivially_destructible_v<T>) {
                     m.items[idx].~T();
                 }
             }
@@ -203,15 +203,15 @@ class arraylist_t
         auto& uninit = m.items[idx];
 
         using enum_t = decltype(ok::make_into_uninitialized<T>(
-            std::declval<T&>(), std::forward<args_t>(args)...));
-        if constexpr (!std::is_void_v<enum_t>) {
+            stdc::declval<T&>(), stdc::forward<args_t>(args)...));
+        if constexpr (!stdc::is_void_v<enum_t>) {
             static_assert(
                 is_convertible_to_c<alloc::error, enum_t>,
                 "In order to use a potentially failing constructor with "
                 "arraylist_t::append(), the constructor's enum type must "
                 "define a conversion from alloc::error.");
             auto result = ok::make_into_uninitialized<T>(
-                uninit, std::forward<args_t>(args)...);
+                uninit, stdc::forward<args_t>(args)...);
 
             if (result == enum_t::success) [[likely]] {
                 ++m.size;
@@ -219,19 +219,19 @@ class arraylist_t
                 // move all other items BACK to where they were before (this is
                 // supposed to be the cold path and it only invokes nonfailing
                 // operations so it should be fine to do this)
-                if constexpr (std::is_trivially_copyable_v<T>) {
-                    std::memmove(m.items + idx, m.items + idx + 1,
-                                 (this->size() - idx) * sizeof(T));
+                if constexpr (stdc::is_trivially_copyable_v<T>) {
+                    stdc::memmove(m.items + idx, m.items + idx + 1,
+                                  (this->size() - idx) * sizeof(T));
                 } else {
                     // this accesses spots[i + 1] but that is initialized
                     // at this point
                     for (size_t i = idx; i < this->size(); ++i) {
                         T& target = m.items[i];
                         T& source = m.items[i + 1];
-                        target = std::move(source);
+                        target = stdc::move(source);
                     }
                     // make the stuff off the end uninitialized again
-                    if constexpr (!std::is_trivially_destructible_v<T>) {
+                    if constexpr (!stdc::is_trivially_destructible_v<T>) {
                         m.items[this->size()].~T();
                     }
                 }
@@ -239,7 +239,7 @@ class arraylist_t
             return status(enum_t(result));
         } else {
             ok::make_into_uninitialized<T>(uninit,
-                                           std::forward<args_t>(args)...);
+                                           stdc::forward<args_t>(args)...);
             ++m.size;
             return status(alloc::error::success);
         }
@@ -267,7 +267,7 @@ class arraylist_t
         }
         T& removed = m.items[idx];
         // moved out at index
-        T out(std::move(removed));
+        T out(stdc::move(removed));
 
         defer decrement([this] { --m.size; });
 
@@ -275,25 +275,25 @@ class arraylist_t
             // we've left `removed` in a valid state because we thought we were
             // going to shift stuff above it down into it, but there's nothing
             // above so just destroy it.
-            if constexpr (!std::is_trivially_destructible_v<T>) {
+            if constexpr (!stdc::is_trivially_destructible_v<T>) {
                 removed.~T();
             }
             return out;
         }
 
-        if constexpr (std::is_trivially_copyable_v<T>) {
+        if constexpr (stdc::is_trivially_copyable_v<T>) {
             const size_t idxplusone = idx + 1;
-            std::memmove(m.items + idx, m.items + idxplusone,
-                         (this->size() - idxplusone) * sizeof(T));
+            stdc::memmove(m.items + idx, m.items + idxplusone,
+                          (this->size() - idxplusone) * sizeof(T));
         } else {
             for (size_t i = this->size() - 1; i > idx; --i) {
                 T& source = m.items[i];
                 T& target = m.items[i - 1];
-                target = std::move(source);
+                target = stdc::move(source);
             }
 
             // only call the destructor of the last-most item
-            if constexpr (!std::is_trivially_destructible_v<T>) {
+            if constexpr (!stdc::is_trivially_destructible_v<T>) {
                 m.items[this->size() - 1].~T();
             }
         }
@@ -308,12 +308,12 @@ class arraylist_t
         }
         T& target = m.items[idx];
         // moved out at index
-        T out(std::move(target));
+        T out(stdc::move(target));
 
         defer decrement([this, target] { --m.size; });
 
         if (idx == this->size() - 1) {
-            if constexpr (!std::is_trivially_destructible_v<T>) {
+            if constexpr (!stdc::is_trivially_destructible_v<T>) {
                 target.~T();
             }
             return out;
@@ -321,9 +321,9 @@ class arraylist_t
 
         T& last = m.items[this->size() - 1];
 
-        target = std::move(last);
+        target = stdc::move(last);
 
-        if constexpr (!std::is_trivially_destructible_v<T>) {
+        if constexpr (!stdc::is_trivially_destructible_v<T>) {
             last.~T();
         }
 
@@ -423,10 +423,9 @@ class arraylist_t
     /// Args `args` must select a nonfailing constructor.
     /// The constructor may get called multiple times, for each new element.
     template <typename... args_t>
-    [[nodiscard]] constexpr auto resize(size_t new_size,
-                                        args_t&&... args) OKAYLIB_NOEXCEPT
-        -> std::enable_if_t<is_infallible_constructible_c<T, args_t...>,
-                            status<alloc::error>>
+        requires is_infallible_constructible_c<T, args_t...>
+    [[nodiscard]] constexpr status<alloc::error>
+    resize(size_t new_size, args_t&&... args) OKAYLIB_NOEXCEPT
     {
         if (this->size() == new_size) [[unlikely]] {
             return alloc::error::success;
@@ -444,13 +443,13 @@ class arraylist_t
             }
             __ok_assert(this->capacity() >= new_size,
                         "Allocator did not return enough memory to arraylist");
-            if constexpr (std::is_trivially_default_constructible_v<T> &&
+            if constexpr (stdc::is_trivially_default_constructible_v<T> &&
                           sizeof...(args_t) == 0) {
-                std::memset(m.items, 0, sizeof(T) * new_size);
+                ::memset(m.items, 0, sizeof(T) * new_size);
             } else {
                 for (size_t i = 0; i < new_size; ++i) {
                     ok::make_into_uninitialized<T>(
-                        m.items[i], std::forward<args_t>(args)...);
+                        m.items[i], stdc::forward<args_t>(args)...);
                 }
             }
             m.size = new_size;
@@ -460,7 +459,7 @@ class arraylist_t
         const bool shrinking = this->size() > new_size;
 
         if (shrinking) {
-            if constexpr (!std::is_trivially_destructible_v<T>) {
+            if constexpr (!stdc::is_trivially_destructible_v<T>) {
                 for (size_t i = new_size; i < this->size(); ++i) {
                     m.items[i].~T();
                 }
@@ -480,17 +479,17 @@ class arraylist_t
             __ok_internal_assert(this->capacity() >= new_size);
 
             // initialize new elements
-            if constexpr (std::is_trivially_default_constructible_v<T> &&
+            if constexpr (stdc::is_trivially_default_constructible_v<T> &&
                           sizeof...(args_t) == 0) {
                 // manually zero memory
                 // TODO: some ifdef here maybe to avoid zeroing based on build
                 // option? or a template param?
-                std::memset(m.items + this->size(), 0,
-                            (new_size - this->size()) * sizeof(T));
+                ::memset(m.items + this->size(), 0,
+                         (new_size - this->size()) * sizeof(T));
             } else {
                 for (size_t i = this->size(); i < new_size; ++i) {
                     ok::make_into_uninitialized<T>(
-                        m.items[i], std::forward<args_t>(args)...);
+                        m.items[i], stdc::forward<args_t>(args)...);
                 }
             }
 
@@ -521,13 +520,12 @@ class arraylist_t
     }
 
     template <typename... args_t>
+        requires is_constructible_c<T, args_t...>
     constexpr auto append(args_t&&... args) OKAYLIB_NOEXCEPT
-        -> std::enable_if_t<
-            is_constructible_c<T, args_t...>,
-            // append may return the error type from an erroring constructor
-            decltype(insert_at(this->size(), std::forward<args_t>(args)...))>
+        // append may return the error type from an erroring constructor
+        -> decltype(insert_at(this->size(), stdc::forward<args_t>(args)...))
     {
-        return insert_at(this->size(), std::forward<args_t>(args)...);
+        return insert_at(this->size(), stdc::forward<args_t>(args)...);
     }
 
     /// Returns an error only if allocation to expand space for the new items
@@ -604,7 +602,7 @@ class arraylist_t
         const auto realloc_flags =
             realloc_flags::leave_nonzeroed | realloc_flags::expand_back;
 
-        if constexpr (!std::is_trivially_copyable_v<T>) {
+        if constexpr (!stdc::is_trivially_copyable_v<T>) {
             // if we're not trivially copyable, dont let the allocator do
             // the memcpying, we will do it ourselves after
             result_t<potentially_in_place_reallocation_t> res =
@@ -643,13 +641,13 @@ class arraylist_t
                 T* const dest = reinterpret_cast<T*>(
                     reallocation.memory.unchecked_address_of_first_item());
 
-                if constexpr (std::is_trivially_copyable_v<T>) {
-                    std::memcpy((void*)dest, (void*)src, m.size * sizeof(T));
+                if constexpr (stdc::is_trivially_copyable_v<T>) {
+                    ::memcpy((void*)dest, (void*)src, m.size * sizeof(T));
                 } else {
                     for (size_t i = 0; i < m.size; ++i) {
                         T& src_item = src[i];
-                        ok::stdc::construct_at(dest + i, std::move(src_item));
-                        if constexpr (!std::is_trivially_destructible_v<T>) {
+                        ok::stdc::construct_at(dest + i, stdc::move(src_item));
+                        if constexpr (!stdc::is_trivially_destructible_v<T>) {
                             src_item.~T();
                         }
                     }
@@ -691,7 +689,7 @@ class arraylist_t
     constexpr void call_destructor_on_all_items() OKAYLIB_NOEXCEPT
     {
         __ok_internal_assert(this->capacity() > 0);
-        if constexpr (!std::is_trivially_destructible_v<T>) {
+        if constexpr (!stdc::is_trivially_destructible_v<T>) {
             for (size_t i = 0; i < m.size; ++i) {
                 m.items[i].~T();
             }
