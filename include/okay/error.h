@@ -7,12 +7,12 @@
 #include "okay/detail/memory.h"
 #include "okay/detail/noexcept.h"
 #include "okay/detail/template_util/uninitialized_storage.h"
+#include "okay/reflection/nameof.h"
 #include "okay/detail/traits/cloneable.h"
 #include "okay/detail/traits/error_traits.h"
 #include "okay/opt.h"
 
 #if defined(OKAYLIB_USE_FMT)
-#include "okay/ctti/ctti.h"
 #include <fmt/core.h>
 #endif
 
@@ -900,10 +900,10 @@ template <ok::status_enum enum_t> struct fmt::formatter<ok::status<enum_t>>
         } else {
             if (status.is_success()) {
                 return fmt::format_to(ctx.out(), "{:s}::success",
-                                      ok::ctti::nameof<enum_t>());
+                                      ok::nameof<enum_t>());
             } else {
                 return fmt::format_to(
-                    ctx.out(), "{:s}::{}", ok::ctti::nameof<enum_t>(),
+                    ctx.out(), "{:s}::{}", ok::nameof<enum_t>(),
                     stdc::underlying_type_t<enum_t>(status.as_enum()));
             }
         }
@@ -936,7 +936,7 @@ struct fmt::formatter<ok::res<success_t, status_t>>
                                           result.unwrap_unchecked());
                 } else {
                     return fmt::format_to(ctx.out(), "res<{:s}: {:p}>",
-                                          ok::ctti::nameof<success_t>(),
+                                          ok::nameof<success_t>(),
                                           static_cast<void*>(result.m_success));
                 }
             } else {

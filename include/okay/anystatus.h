@@ -2,9 +2,9 @@
 #define __OKAYLIB_ANYSTATUS_H__
 
 #include "okay/allocators/allocator.h"
-#include "okay/ctti/ctti.h"
 #include "okay/detail/noexcept.h"
 #include "okay/error.h"
+#include "okay/reflection/typehash.h"
 #include <cstdint>
 
 #if defined(OKAYLIB_USE_FMT)
@@ -107,7 +107,7 @@ class anyerr_t
     template <status_enum_c enum_t>
     [[nodiscard]] constexpr opt<enum_t> try_cast() const noexcept
     {
-        constexpr auto typehash = ctti::typehash_32<enum_t>();
+        constexpr auto typehash = ok::typehash_32<enum_t>();
         const uint32_t stored_typehash = (m_value & enum_typehash_mask) >> 32;
 
         if (typehash != stored_typehash)
@@ -169,7 +169,7 @@ class anystatus_t
         if (!m_status)
             return {};
 
-        if (void* casted = m_status->try_cast_to(ok::ctti::typehash<T>()))
+        if (void* casted = m_status->try_cast_to(ok::typehash<T>()))
             return *static_cast<T*>(casted);
         return {};
     }
@@ -181,7 +181,7 @@ class anystatus_t
         if (!m_status)
             return {};
 
-        if (const void* casted = m_status->try_cast_to(ok::ctti::typehash<T>()))
+        if (const void* casted = m_status->try_cast_to(ok::typehash<T>()))
             return *static_cast<const T*>(casted);
         return {};
     }

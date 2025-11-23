@@ -6,6 +6,7 @@
 #include "okay/detail/memory.h"
 #include "okay/detail/noexcept.h"
 #include "okay/detail/ok_assert.h"
+#include "okay/reflection/nameof.h"
 #include "okay/detail/template_util/uninitialized_storage.h"
 #include "okay/detail/traits/cloneable.h"
 #include "okay/detail/traits/mathop_traits.h"
@@ -14,7 +15,6 @@
 #include <cstring> // memcpy
 
 #if defined(OKAYLIB_USE_FMT)
-#include "okay/ctti/ctti.h"
 #include <fmt/core.h>
 #endif
 
@@ -741,7 +741,7 @@ template <typename payload_t> struct fmt::formatter<ok::opt<payload_t>>
                     // can't be formatted
                     return fmt::format_to(
                         ctx.out(), "opt<{:s}: {:p}>",
-                        ok::ctti::nameof<payload_t>(),
+                        ok::nameof<payload_t>(),
                         static_cast<const void*>(optional.m_pointer));
                 }
             } else if constexpr (ok::opt<payload_t>::impl_type ==
@@ -751,7 +751,7 @@ template <typename payload_t> struct fmt::formatter<ok::opt<payload_t>>
             }
         }
         return fmt::format_to(ctx.out(), "opt<{:s} : null>",
-                              ok::ctti::nameof<payload_t>());
+                              ok::nameof<payload_t>());
     }
 };
 #endif

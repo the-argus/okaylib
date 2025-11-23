@@ -4,8 +4,9 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace ok::ctti::detail {
-// From https://github.com/foonathan/string_id. As usually, thanks Jonathan.
+namespace ok::detail {
+// originally from C++11 "CTTI" library
+// From https://github.com/foonathan/string_id
 // See http://www.isthe.com/chongo/tech/comp/fnv/#FNV-param
 constexpr uint64_t fnv_basis = 14695981039346656037ull;
 constexpr uint64_t fnv_prime = 1099511628211ull;
@@ -133,5 +134,5 @@ constexpr cstring filter_typename_prefix(const cstring& type_name)
     return filter_struct(filter_class(type_name));
 }
 
-} // namespace ok::ctti::detail
+} // namespace ok::detail
 #endif
