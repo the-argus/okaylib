@@ -26,12 +26,11 @@ class reserving_page_allocator_t : public allocator_t
   public:
     // NOTE: page allocator not threadsafe, uses errno and GetLastError on win
     static constexpr alloc::feature_flags type_features =
-        alloc::feature_flags::can_expand_back |
-        // NOTE: although this says it can reclaim, the current implementation
-        // doesn't actually return pages back to the OS because it doesn't do
-        // bookkeeping so it can't know how many pages are currently allocated
+        // NOTE: current implementation does not un-commit pages when shrinking
+        // on reallocation, although it does free things when deallocating
         alloc::feature_flags::can_reclaim |
-        alloc::feature_flags::can_predictably_realloc_in_place;
+        alloc::feature_flags::can_predictably_realloc_in_place |
+        alloc::feature_flags::needs_accurate_sizehint;
 
     struct options_t
     {
@@ -115,7 +114,8 @@ class reserving_page_allocator_t : public allocator_t
         return type_features;
     }
 
-    inline void impl_deallocate(void* memory) OKAYLIB_NOEXCEPT final
+    inline void impl_deallocate(void* memory,
+                                size_t size_hint) OKAYLIB_NOEXCEPT final
     {
         size_t page_size = mmap::get_page_size();
         if (page_size == 0) [[unlikely]] {
@@ -146,16 +146,13 @@ class reserving_page_allocator_t : public allocator_t
             return alloc::error::platform_failure;
         }
 
-        if (request.flags & alloc::realloc_flags::shrink_back) [[unlikely]] {
-            // TODO: probably try to reclaim memory here, however it requires
-            // inserting bookkeeping data that says how many pages were
-            // initially allocated
+        // if we are shrinking the allocation just give a subslice
+        if (request.preferred_size_bytes == 0 &&
+            request.new_size_bytes < request.memory.size_bytes())
             return request.memory.subslice(
                 {.start = 0, .length = request.new_size_bytes});
-        }
 
-        const size_t actual_size_bytes =
-            ok::max(request.preferred_size_bytes, request.new_size_bytes);
+        const size_t actual_size_bytes = request.calculate_preferred_size();
 
         const size_t num_bytes =
             runtime_round_up_to_multiple_of(page_size, actual_size_bytes);
@@ -175,13 +172,6 @@ class reserving_page_allocator_t : public allocator_t
 
         return raw_slice(*request.memory.unchecked_address_of_first_item(),
                          num_bytes);
-    }
-
-    [[nodiscard]] inline alloc::result_t<alloc::reallocation_extended_t>
-    impl_reallocate_extended(const alloc::reallocate_extended_request_t&
-                                 options) OKAYLIB_NOEXCEPT final
-    {
-        return alloc::error::unsupported;
     }
 
   private:

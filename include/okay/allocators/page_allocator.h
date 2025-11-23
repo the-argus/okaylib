@@ -18,7 +18,8 @@ class page_allocator_t : public allocator_t
   public:
     // NOTE: page allocator not threadsafe, uses errno and GetLastError on win
     static constexpr alloc::feature_flags type_features =
-        alloc::feature_flags::can_reclaim;
+        alloc::feature_flags::can_reclaim |
+        alloc::feature_flags::needs_accurate_sizehint;
 
     page_allocator_t() = default;
 
@@ -60,7 +61,8 @@ class page_allocator_t : public allocator_t
         return type_features;
     }
 
-    inline void impl_deallocate(void* memory) OKAYLIB_NOEXCEPT final
+    inline void impl_deallocate(void* memory,
+                                size_t size_hint) OKAYLIB_NOEXCEPT final
     {
         const size_t page_size = mmap::get_page_size();
         if (page_size == 0) [[unlikely]] {
@@ -71,20 +73,13 @@ class page_allocator_t : public allocator_t
         // should keep track of contiguously allocated pages, on
         // windows/linux/mac? maybe not, in that case we need to insert size
         // markers into the page allocations
-        const auto code = mmap::memory_unmap(memory, page_size);
+        const auto code = mmap::memory_unmap(memory, size_hint);
         __ok_internal_assert(code == 0);
     }
 
     // you cannot realloc pages
     [[nodiscard]] inline alloc::result_t<bytes_t>
     impl_reallocate(const alloc::reallocate_request_t&) OKAYLIB_NOEXCEPT final
-    {
-        return alloc::error::unsupported;
-    }
-
-    [[nodiscard]] inline alloc::result_t<alloc::reallocation_extended_t>
-    impl_reallocate_extended(const alloc::reallocate_extended_request_t&
-                                 options) OKAYLIB_NOEXCEPT final
     {
         return alloc::error::unsupported;
     }

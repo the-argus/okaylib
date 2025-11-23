@@ -17,7 +17,7 @@ class linked_blockpool_allocator_t : public ok::allocator_t
   public:
     static constexpr alloc::feature_flags type_features =
         alloc::feature_flags::can_predictably_realloc_in_place |
-        alloc::feature_flags::can_expand_back;
+        alloc::feature_flags::can_reclaim;
 
     linked_blockpool_allocator_t&
     operator=(const linked_blockpool_allocator_t&) = delete;
@@ -64,17 +64,11 @@ class linked_blockpool_allocator_t : public ok::allocator_t
         return type_features;
     }
 
-    inline void impl_deallocate(void*) OKAYLIB_NOEXCEPT final;
+    inline void impl_deallocate(void* memory,
+                                size_t size_hint) OKAYLIB_NOEXCEPT final;
 
     [[nodiscard]] inline alloc::result_t<bytes_t>
     impl_reallocate(const alloc::reallocate_request_t&) OKAYLIB_NOEXCEPT final;
-
-    [[nodiscard]] inline alloc::result_t<alloc::reallocation_extended_t>
-    impl_reallocate_extended(const alloc::reallocate_extended_request_t&
-                                 options) OKAYLIB_NOEXCEPT final
-    {
-        return alloc::error::unsupported;
-    }
 
   private:
     inline status<alloc::error> alloc_new_blockpool() OKAYLIB_NOEXCEPT;
@@ -281,7 +275,7 @@ linked_blockpool_allocator_t<allocator_impl_t>::impl_allocate(
 
 template <allocator_c allocator_impl_t>
 inline void linked_blockpool_allocator_t<allocator_impl_t>::impl_deallocate(
-    void* memory) OKAYLIB_NOEXCEPT
+    void* memory, size_t size_hint) OKAYLIB_NOEXCEPT
 {
     // do a linear search through all pools, looking for the one that contains
     // the freed memory

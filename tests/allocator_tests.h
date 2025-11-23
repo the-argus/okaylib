@@ -63,10 +63,10 @@ struct memory_resource_counter_wrapper_t : public ok::allocator_t
     /// NOTE: the implementation of this is not required to check for nullptr,
     /// that should be handled by the deallocate() wrapper that users actually
     /// call
-    void impl_deallocate(void* memory) OKAYLIB_NOEXCEPT final
+    void impl_deallocate(void* memory, size_t size_hint) OKAYLIB_NOEXCEPT final
     {
         if constexpr (ok::allocator_c<allocator_impl_t>) {
-            wrapped.deallocate(memory);
+            wrapped.deallocate(memory, size_hint);
         }
     }
 
@@ -75,17 +75,6 @@ struct memory_resource_counter_wrapper_t : public ok::allocator_t
     {
         if constexpr (ok::allocator_c<allocator_impl_t>) {
             return wrapped.reallocate(options);
-        } else {
-            return ok::alloc::error::unsupported;
-        }
-    }
-
-    [[nodiscard]] ok::alloc::result_t<ok::alloc::reallocation_extended_t>
-    impl_reallocate_extended(const ok::alloc::reallocate_extended_request_t&
-                                 options) OKAYLIB_NOEXCEPT final
-    {
-        if constexpr (ok::allocator_c<allocator_impl_t>) {
-            return wrapped.reallocate_extended(options);
         } else {
             return ok::alloc::error::unsupported;
         }
@@ -283,8 +272,7 @@ template <ok::memory_resource_c allocator_t> struct allocator_tests
             auto reallocation = ally.reallocate(alloc::reallocate_request_t{
                 .memory = allocation,
                 .new_size_bytes = 1,
-                .flags = alloc::realloc_flags::expand_back |
-                         alloc::realloc_flags::in_place_orelse_fail,
+                .flags = alloc::realloc_flags::in_place_orelse_fail,
             });
 
             REQUIRE(reallocation.status() == alloc::error::unsupported);

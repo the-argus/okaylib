@@ -45,17 +45,15 @@ template <typename T> using result_t = ok::res<T, error>;
 enum class realloc_flags : uint16_t
 {
     // clang-format off
-    expand_front                    = 0b00000001,
-    expand_back                     = 0b00000010,
-    shrink_front                    = 0b00000100,
-    shrink_back                     = 0b00001000,
-    try_defragment                  = 0b00010000,
-    leave_nonzeroed                 = 0b00100000,
+    // This flag suggests that the caller prefers to be reallocated in order to
+    // save memory
+    try_defragment                  = 0b0001,
+    leave_nonzeroed                 = 0b0010,
     // This flag asks the allocator to check if it will be able to reallocate in
     // place before performing it, and fail if not.
     // This is only supported by allocators that
     // can_predictably_realloc_in_place.
-    in_place_orelse_fail            = 0b01000000,
+    in_place_orelse_fail            = 0b0100,
     // clang-format on
 };
 
@@ -69,10 +67,15 @@ enum class feature_flags : uint16_t
     // If this flag is off, then passing in_place_orelse_fail will always return
     // error::unsupported.
     can_predictably_realloc_in_place            = 0b000001,
-    can_expand_back                             = 0b000010,
-    can_expand_front                            = 0b000100,
     // Whether shrinking provides any benefits for this allocator
-    can_reclaim                                 = 0b001000,
+    can_reclaim                                 = 0b000010,
+    keeps_destructor_list                       = 0b000100,
+    can_restore_scope                           = 0b001000,
+    // If set, this allocator does not keep track of the sizes of allocations,
+    // and needs its users to do so. usually only not set for low-level
+    // allocators like page allocators which are only intended to be used by
+    // other allocators.
+    needs_accurate_sizehint                     = 0b010000,
     // clang-format on
 };
 
@@ -116,23 +119,19 @@ struct request_t
 struct reallocate_request_t
 {
     bytes_t memory;
-    // size of the memory after reallocating
+    // minimum size of the memory after reallocating. arraylist may set this to
+    // current size + sizeof(T) when appending. Although it is not the optimal
+    // size increase, it is the minimum needed to continue without an error.
     size_t new_size_bytes;
-    // ignored if shrinking or if zero
+    // the optimal new size after reallocation. for an arraylist this would be
+    // current size * growth_factor. ignored if shrinking or if zero
     size_t preferred_size_bytes = 0;
-    // ok::alloc::default_align if zero
-    size_t alignment = 0;
-    // just for try_defragment or leave_nonzeroed. flags::expand_back and
-    // flags::shrink_back do nothing.
-    alloc::realloc_flags flags;
+    size_t alignment = ok::alloc::default_align;
+    alloc::realloc_flags flags = {};
 
     [[nodiscard]] constexpr bool is_valid() const OKAYLIB_NOEXCEPT
     {
-        constexpr alloc::realloc_flags forbidden =
-            realloc_flags::shrink_front | realloc_flags::expand_front;
-
-        // cannot expand or shrink front
-        return !(flags & forbidden) && !memory.is_empty() &&
+        return !memory.is_empty() &&
                // no attempt to... free the memory?
                (new_size_bytes != 0) &&
                // preferred should be zero OR ( (we're growing OR staying the
@@ -142,95 +141,11 @@ struct reallocate_request_t
                  preferred_size_bytes > new_size_bytes));
     }
 
-    [[nodiscard]] constexpr bool min_alignment() const noexcept
+    [[nodiscard]] constexpr size_t calculate_preferred_size() const noexcept
     {
-        return alignment ? alignment : ok::alloc::default_align;
+        return preferred_size_bytes == 0 ? new_size_bytes
+                                         : preferred_size_bytes;
     }
-};
-
-struct reallocate_extended_request_t
-{
-    bytes_t memory;
-    size_t required_bytes_back;
-    size_t preferred_bytes_back = 0;
-    size_t required_bytes_front;
-    size_t preferred_bytes_front = 0;
-    void* future_compat = nullptr;
-    alloc::realloc_flags flags;
-
-    [[nodiscard]] constexpr bool is_valid() const OKAYLIB_NOEXCEPT
-    {
-        const bool changing_back = flags & realloc_flags::expand_back ||
-                                   flags & realloc_flags::shrink_back;
-        const bool changing_front = flags & realloc_flags::expand_front ||
-                                    flags & realloc_flags::shrink_front;
-        return
-            // exactly one of expand_back or shrink_back, and one of shrink_back
-            // and expand_back
-            ((flags & realloc_flags::expand_back) !=
-                 (flags & realloc_flags::shrink_back) ||
-             (flags & realloc_flags::expand_front) !=
-                 (flags & realloc_flags::shrink_front)) &&
-            // preferred bytes should not be specified if shrinking
-            ((flags & realloc_flags::expand_front) ||
-             preferred_bytes_front == 0) &&
-            ((flags & realloc_flags::expand_back) ||
-             preferred_bytes_back == 0) &&
-            // cannot shrink more than size of allocation
-            (((flags & realloc_flags::shrink_back) * required_bytes_back) +
-             ((flags & realloc_flags::shrink_front) * required_bytes_front)) <
-                memory.size() &&
-            // some bytes need to be required; a no-op is assumed to be a
-            // mistake
-            (!changing_back || required_bytes_back != 0) &&
-            (!changing_front || required_bytes_front != 0) &&
-            // preferred bytes should be either zero or greater than required
-            // bytes
-            (preferred_bytes_back > required_bytes_back ||
-             preferred_bytes_back == 0) &&
-            (preferred_bytes_front > required_bytes_front ||
-             preferred_bytes_front == 0);
-    }
-
-    /// Calculate information about how big the allocation will be after
-    /// reallocation if the preferred size is respected exactly.
-    ///
-    /// Tuple returned has the following elements:
-    /// 0: bytes_offset_back. how many bytes will be added/removed from back
-    /// 1: bytes_offset_front. how many bytes will be added/removed from front
-    /// 2: new_size. the new total size of the allocation
-    [[nodiscard]] constexpr ok::tuple<size_t, size_t, size_t>
-    calculate_new_preferred_size() const OKAYLIB_NOEXCEPT
-    {
-        ok::tuple<size_t, size_t, size_t> out;
-        auto& amount_changed_back = ok::get<0>(out);
-        auto& amount_changed_front = ok::get<1>(out);
-        auto& new_size = ok::get<2>(out);
-        amount_changed_back =
-            ok::max(required_bytes_back, preferred_bytes_back);
-        amount_changed_front =
-            ok::max(required_bytes_front, preferred_bytes_front);
-
-        new_size = memory.size();
-
-        if (flags & realloc_flags::expand_back)
-            new_size += amount_changed_back;
-        else if (flags & realloc_flags::shrink_back)
-            new_size -= amount_changed_back;
-
-        if (flags & realloc_flags::expand_front)
-            new_size += amount_changed_front;
-        else if (flags & realloc_flags::shrink_front)
-            new_size -= amount_changed_front;
-
-        return out;
-    }
-};
-
-struct reallocation_extended_t
-{
-    bytes_t memory;
-    size_t bytes_offset_front = 0;
 };
 
 template <typename T, typename allocator_impl_t = ok::allocator_t> struct owned
@@ -301,10 +216,20 @@ template <typename T, typename allocator_impl_t = ok::allocator_t> struct owned
 } // namespace alloc
 
 /// A memory resource is anything that can allocate memory, but not necessarily
-/// free or reallocate it
+/// free or reallocate it. If features() has the keeps_destructor_list flag set,
+/// it also supports arena_push_destructor(). If the can_restore_scope flag is
+/// set, it also supports creating "save points" in allocation, where memory
+/// allocated and destructors registered after save will be deleted/called when
+/// the save point is restored.
 class memory_resource_t
 {
   public:
+    [[nodiscard]] constexpr alloc::feature_flags
+    features() const OKAYLIB_NOEXCEPT
+    {
+        return impl_features();
+    }
+
     [[nodiscard]] constexpr alloc::result_t<bytes_t>
     allocate(const alloc::request_t& request) OKAYLIB_NOEXCEPT
     {
@@ -315,6 +240,69 @@ class memory_resource_t
             return alloc::error::unsupported;
         }
         return impl_allocate(request);
+    }
+
+    /// If the allocator has keeps_destructor_list, then this will push the
+    /// object's destructor to the arena's list of destructors to call when
+    /// clearing the allocator. If it errors, then it is up to the caller to
+    /// call the destructor.
+    ///
+    /// If the allocator this points to does not support this operation, this
+    /// panics in debug mode and does nothing in release.
+    template <typename T>
+        requires(!stdc::is_trivially_destructible_v<T>)
+    [[nodiscard]] constexpr ok::status<alloc::error>
+    arena_push_destructor(T& allocated)
+    {
+        const auto features = this->features();
+        __ok_assert(features & alloc::feature_flags::keeps_destructor_list,
+                    "Attempt to push destructor to a non-arena allocator, "
+                    "indicates a possible resource leak.");
+        if (features & alloc::feature_flags::keeps_destructor_list) {
+            return impl_arena_push_destructor({
+                .destructor = &T::~T,
+                .object = ok::addressof(allocated),
+            });
+        }
+        return alloc::error::unsupported;
+    }
+
+    struct allocator_restore_point_t
+    {
+        friend class ok::memory_resource_t;
+
+        allocator_restore_point_t(const allocator_restore_point_t&) = delete;
+        allocator_restore_point_t&
+        operator=(const allocator_restore_point_t&) = delete;
+        allocator_restore_point_t(allocator_restore_point_t&&) = delete;
+        allocator_restore_point_t&
+        operator=(allocator_restore_point_t&&) = delete;
+
+        constexpr ~allocator_restore_point_t()
+        {
+            m_allocator.impl_arena_restore_scope(m_handle);
+        }
+
+        allocator_restore_point_t() = delete;
+
+      private:
+        constexpr allocator_restore_point_t(ok::memory_resource_t& allocator)
+            : m_allocator(allocator), m_handle(allocator.impl_arena_new_scope())
+        {
+        }
+
+        void* m_handle;
+        ok::memory_resource_t& m_allocator;
+    };
+
+    [[nodiscard]] constexpr allocator_restore_point_t
+    begin_scope() OKAYLIB_NOEXCEPT
+    {
+        __ok_assert(features() & alloc::feature_flags::can_restore_scope,
+                    "Attempt to call begin_scope() on an allocator which does "
+                    "not support scopes. You may have passed something that is "
+                    "not an arena to a task expecting an arena.");
+        return allocator_restore_point_t(*this);
     }
 
     /// Version of make which simply returns an allocation error or a reference
@@ -334,8 +322,7 @@ class memory_resource_t
             // explicitly
             !stdc::is_void_v<deduced> || !is_constructed_type_deduced,
             "Type deduction failed for the given allocator.make() call. You "
-            "may "
-            "need to provide the type explicitly, e.g. "
+            "may need to provide the type explicitly, e.g. "
             "`allocator.make<int>(0)`");
         using actual_t =
             stdc::conditional_t<is_constructed_type_deduced, deduced, T>;
@@ -375,65 +362,59 @@ class memory_resource_t
     }
 
   protected:
-    [[nodiscard]] virtual alloc::result_t<bytes_t>
-    impl_allocate(const alloc::request_t&) OKAYLIB_NOEXCEPT = 0;
-};
-
-class arena_allocator_restore_scope_interface_t
-{
-    struct allocator_restore_point_t
+    struct destructor_t
     {
-        friend class ok::arena_allocator_restore_scope_interface_t;
-
-        allocator_restore_point_t(const allocator_restore_point_t&) = delete;
-        allocator_restore_point_t&
-        operator=(const allocator_restore_point_t&) = delete;
-        allocator_restore_point_t(allocator_restore_point_t&&) = delete;
-        allocator_restore_point_t&
-        operator=(allocator_restore_point_t&&) = delete;
-
-        constexpr ~allocator_restore_point_t()
-        {
-            m_allocator.restore_scope(m_handle);
-        }
-
-        allocator_restore_point_t() = delete;
-
-      private:
-        constexpr allocator_restore_point_t(
-            ok::arena_allocator_restore_scope_interface_t& allocator)
-            : m_allocator(allocator), m_handle(allocator.new_scope())
-        {
-        }
-
-        void* m_handle;
-        ok::arena_allocator_restore_scope_interface_t& m_allocator;
+        void (*destructor)(void* object);
+        void* object;
     };
 
-    [[nodiscard]] constexpr allocator_restore_point_t
-    begin_scope() OKAYLIB_NOEXCEPT
+    [[nodiscard]] virtual alloc::result_t<bytes_t>
+    impl_allocate(const alloc::request_t&) OKAYLIB_NOEXCEPT = 0;
+
+    [[nodiscard]] virtual alloc::feature_flags
+    impl_features() const OKAYLIB_NOEXCEPT = 0;
+
+    virtual ok::status<alloc::error>
+    impl_arena_push_destructor(destructor_t) OKAYLIB_NOEXCEPT
     {
-        return allocator_restore_point_t(*this);
+        __ok_assert(false,
+                    "called an unimplemented impl_arena_push_destructor. "
+                    "probably indicates marking a type as being an arena with "
+                    "features(), but then not providing an override for the "
+                    "impl_arena_push_destructor function.");
+        return alloc::error::unsupported;
     }
 
-  protected:
-    [[nodiscard]] virtual void* new_scope() OKAYLIB_NOEXCEPT = 0;
-    virtual void restore_scope(void* handle) OKAYLIB_NOEXCEPT = 0;
+    [[nodiscard]] virtual void* impl_arena_new_scope() OKAYLIB_NOEXCEPT
+    {
+        __ok_assert(false,
+                    "called unimplemented impl_arena_new_scope, indicates an "
+                    "allocator which is marked as being an arena but does not "
+                    "implement new_scope and restore_scope as it needs to.");
+        return nullptr;
+    }
+
+    virtual void impl_arena_restore_scope(void* handle) OKAYLIB_NOEXCEPT
+    {
+        __ok_assert(false,
+                    "called unimplemented impl_arena_new_scope, indicates an "
+                    "allocator which is marked as being an arena but does not "
+                    "implement new_scope and restore_scope as it needs to.");
+    }
 };
 
 class allocator_t : public memory_resource_t
 {
   public:
-    [[nodiscard]] constexpr alloc::feature_flags
-    features() const OKAYLIB_NOEXCEPT
-    {
-        return impl_features();
-    }
-
-    constexpr void deallocate(void* memory) OKAYLIB_NOEXCEPT
+    /// Deallocate memory, optionally providing size_hint to tell the allocator
+    /// how big you think the allocated memory is (only some allocators require
+    /// this, so if you don't want to support those then just leave that
+    /// parameter as 0)
+    constexpr void deallocate(void* memory,
+                              size_t size_hint = 0) OKAYLIB_NOEXCEPT
     {
         if (memory) [[likely]]
-            impl_deallocate(memory);
+            impl_deallocate(memory, size_hint);
     }
 
     [[nodiscard]] constexpr alloc::result_t<bytes_t>
@@ -446,36 +427,19 @@ class allocator_t : public memory_resource_t
         return impl_reallocate(options);
     }
 
-    [[nodiscard]] constexpr alloc::result_t<alloc::reallocation_extended_t>
-    reallocate_extended(const alloc::reallocate_extended_request_t& options)
-        OKAYLIB_NOEXCEPT
-    {
-        if (!options.is_valid()) [[unlikely]] {
-            __ok_assert(false, "invalid reallocate_extended_request_t");
-            return alloc::error::usage;
-        }
-        return impl_reallocate_extended(options);
-    }
-
     template <typename T = detail::deduced_t, typename... args_t>
     [[nodiscard]] constexpr decltype(auto)
     make(args_t&&... args) OKAYLIB_NOEXCEPT;
 
   protected:
-    [[nodiscard]] virtual alloc::feature_flags
-    impl_features() const OKAYLIB_NOEXCEPT = 0;
-
     /// NOTE: the implementation of this is not required to check for nullptr,
     /// that should be handled by the deallocate() wrapper that users actually
     /// call
-    virtual void impl_deallocate(void* memory) OKAYLIB_NOEXCEPT = 0;
+    virtual void impl_deallocate(void* memory,
+                                 size_t size_hint) OKAYLIB_NOEXCEPT = 0;
 
     [[nodiscard]] virtual alloc::result_t<bytes_t> impl_reallocate(
         const alloc::reallocate_request_t& options) OKAYLIB_NOEXCEPT = 0;
-
-    [[nodiscard]] virtual alloc::result_t<alloc::reallocation_extended_t>
-    impl_reallocate_extended(const alloc::reallocate_extended_request_t&
-                                 options) OKAYLIB_NOEXCEPT = 0;
 };
 
 // A concept which requires that a type implements the functions allocate() and
@@ -501,51 +465,46 @@ concept memory_resource_c = requires(const T& const_allocator, T& allocator,
 };
 
 template <typename T>
-concept allocator_c = requires(
-    const T& const_allocator, T& allocator,
-    const alloc::reallocate_request_t& reallocate_request,
-    const alloc::reallocate_extended_request_t& reallocate_extended_request,
-    void* voidptr) {
-    requires memory_resource_c<T>;
+concept allocator_c =
+    requires(const T& const_allocator, T& allocator,
+             const alloc::reallocate_request_t& reallocate_request,
+             void* voidptr) {
+        requires memory_resource_c<T>;
 
-    { const_allocator.features() } -> ok::same_as_c<alloc::feature_flags>;
+        { const_allocator.features() } -> ok::same_as_c<alloc::feature_flags>;
 
-    { allocator.deallocate(voidptr) } -> ok::is_void_c;
+        { allocator.deallocate(voidptr) } -> ok::is_void_c;
 
-    {
-        allocator.reallocate(reallocate_request)
-    } -> ok::same_as_c<alloc::result_t<bytes_t>>;
+        {
+            allocator.reallocate(reallocate_request)
+        } -> ok::same_as_c<alloc::result_t<bytes_t>>;
 
-    {
-        allocator.reallocate_extended(reallocate_extended_request)
-    } -> ok::same_as_c<alloc::result_t<alloc::reallocation_extended_t>>;
+        // make sure nonconst functions do not work on const version
+        requires !(requires {
+            { const_allocator.deallocate(voidptr) };
+            { const_allocator.reallocate(reallocate_request) };
+        });
 
-    // make sure nonconst functions do not work on const version
-    requires !(requires {
-        { const_allocator.deallocate(voidptr) };
-        { const_allocator.reallocate(reallocate_request) };
-        { const_allocator.reallocate_extended(reallocate_extended_request) };
-    });
-
-    // approximate make() function
-    // the owned value can optionally provide specialization for the allocator,
-    // or it can just return an owned pointing to a polymorphic allocator_t
-    requires(requires {
-                {
-                    allocator.template make<int>(1)
-                } -> ok::same_as_c<alloc::result_t<alloc::owned<int, T>>>;
-                {
-                    allocator.template make<int>()
-                } -> ok::same_as_c<alloc::result_t<alloc::owned<int, T>>>;
-            }) || (requires {
-                {
-                    allocator.template make<int>(1)
-                } -> ok::same_as_c<alloc::result_t<alloc::owned<int>>>;
-                {
-                    allocator.template make<int>()
-                } -> ok::same_as_c<alloc::result_t<alloc::owned<int>>>;
-            });
-};
+        // approximate make() function
+        // the owned value can optionally provide specialization for the
+        // allocator, or it can just return an owned pointing to a polymorphic
+        // allocator_t
+        requires(requires {
+                    {
+                        allocator.template make<int>(1)
+                    } -> ok::same_as_c<alloc::result_t<alloc::owned<int, T>>>;
+                    {
+                        allocator.template make<int>()
+                    } -> ok::same_as_c<alloc::result_t<alloc::owned<int, T>>>;
+                }) || (requires {
+                    {
+                        allocator.template make<int>(1)
+                    } -> ok::same_as_c<alloc::result_t<alloc::owned<int>>>;
+                    {
+                        allocator.template make<int>()
+                    } -> ok::same_as_c<alloc::result_t<alloc::owned<int>>>;
+                });
+    };
 
 namespace alloc {
 
@@ -556,22 +515,20 @@ struct potentially_in_place_reallocation_t
     bool was_in_place;
 };
 
-/// Wrapper around reallocate_extended which tries to do
+/// Wrapper around reallocate and allocate which tries to do
 /// in_place_orelse_fail and then allocates a separate buffer of the correct
 /// size if in_place reallocation failed.
-template <allocator_c allocator_impl_t>
+template <allocator_c allocator_impl_t = ok::allocator_t>
 [[nodiscard]] constexpr result_t<potentially_in_place_reallocation_t>
 reallocate_in_place_orelse_keep_old_nocopy(
-    allocator_impl_t& allocator,
-    const alloc::reallocate_extended_request_t& options)
+    allocator_impl_t& allocator, const alloc::reallocate_request_t& options)
 {
     __ok_assert(options.flags & realloc_flags::in_place_orelse_fail,
                 "Attempt to call reallocate_in_place_orelse_keep_old_nocopy "
                 "but the given options do not specify in_place_orelse_fail");
 
     // try to do it in place if possible
-    result_t<reallocation_extended_t> reallocation_res =
-        allocator.reallocate_extended(options);
+    res reallocation_res = allocator.reallocate(options);
     if (reallocation_res.is_success()) {
         auto& reallocation = reallocation_res.unwrap();
         return potentially_in_place_reallocation_t{
@@ -581,19 +538,13 @@ reallocate_in_place_orelse_keep_old_nocopy(
         };
     }
 
-    const bool leave_nonzeroed = options.flags & realloc_flags::leave_nonzeroed;
-
-    auto [bytes_offset_back, bytes_offset_front, new_size] =
-        options.calculate_new_preferred_size();
-
-    // propagate leave_nonzeroed request to allocate call
-    result_t<bytes_t> res = allocator.allocate(alloc::request_t{
-        .num_bytes = new_size,
-        .leave_nonzeroed = leave_nonzeroed,
+    res res = allocator.allocate(alloc::request_t{
+        .num_bytes = options.calculate_preferred_size(),
+        .leave_nonzeroed = options.flags & realloc_flags::leave_nonzeroed,
     });
 
     if (!res.is_success()) [[unlikely]]
-        return res.status();
+        return res;
 
     return potentially_in_place_reallocation_t{
         .memory = res.unwrap(),
@@ -603,7 +554,7 @@ reallocate_in_place_orelse_keep_old_nocopy(
 } // namespace alloc
 
 /// Calls the destructor of an object and then frees its memory
-template <typename T, allocator_c allocator_impl_t>
+template <typename T, allocator_c allocator_impl_t = ok::allocator_t>
 constexpr void destroy_and_free(allocator_impl_t& ally,
                                 T& object) OKAYLIB_NOEXCEPT
 {

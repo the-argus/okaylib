@@ -12,8 +12,7 @@ namespace ok {
 // TODO: use atomics and conditionally allow arena to implement threadsafe
 // allocate_interface_t if its allocator_impl_t also does
 template <allocator_c allocator_impl_t = ok::allocator_t>
-class arena_t : public ok::memory_resource_t,
-                public ok::arena_allocator_restore_scope_interface_t
+class arena_t : public ok::memory_resource_t
 {
   public:
     inline explicit arena_t(bytes_t static_buffer) OKAYLIB_NOEXCEPT;
@@ -37,15 +36,33 @@ class arena_t : public ok::memory_resource_t,
     [[nodiscard]] inline alloc::result_t<bytes_t>
     impl_allocate(const alloc::request_t&) OKAYLIB_NOEXCEPT final;
 
-    [[nodiscard]] virtual inline void* new_scope() OKAYLIB_NOEXCEPT;
-    virtual inline void restore_scope(void* handle) OKAYLIB_NOEXCEPT;
+    [[nodiscard]] inline void* impl_arena_new_scope() OKAYLIB_NOEXCEPT override;
+    inline void
+    impl_arena_restore_scope(void* handle) OKAYLIB_NOEXCEPT override;
+
+    ok::status<alloc::error> impl_arena_push_destructor(destructor_t destructor)
+        OKAYLIB_NOEXCEPT override;
 
   private:
+    struct destructor_list_node_t
+    {
+        destructor_t destructors_and_object;
+        opt<destructor_list_node_t&> prev = nullptr;
+    };
+
+    alloc::feature_flags impl_features() const OKAYLIB_NOEXCEPT final
+    {
+        return alloc::feature_flags::can_restore_scope |
+               alloc::feature_flags::keeps_destructor_list;
+    }
+
     inline void destroy() OKAYLIB_NOEXCEPT;
+    inline void call_all_destructors() OKAYLIB_NOEXCEPT;
 
     bytes_t m_memory;
     bytes_t m_available_memory;
     opt<allocator_impl_t&> m_backing;
+    opt<destructor_list_node_t&> m_last_pushed_destructor;
 };
 
 template <typename arena_impl_t>
@@ -70,13 +87,7 @@ class arena_compat_wrapper_t : public ok::allocator_t
         return m_arena->allocate(request);
     }
 
-    alloc::feature_flags impl_features() const OKAYLIB_NOEXCEPT final
-    {
-        // doesnt implement any nice features
-        return {};
-    }
-
-    void impl_deallocate(void* memory) OKAYLIB_NOEXCEPT final
+    void impl_deallocate(void* memory, size_t size_hint) OKAYLIB_NOEXCEPT final
     {
         // deallocating with an arena is a no-op
         return;
@@ -88,7 +99,7 @@ class arena_compat_wrapper_t : public ok::allocator_t
         // just allocate a new block with the new size and do a copy
         res allocation = m_arena->allocate(alloc::request_t{
             .num_bytes = options.preferred_size_bytes,
-            .alignment = options.min_alignment(),
+            .alignment = options.alignment,
             .leave_nonzeroed = true,
         });
 
@@ -102,15 +113,6 @@ class arena_compat_wrapper_t : public ok::allocator_t
 
         // freeing the old allocation is not possible with arena
         return newmem;
-    }
-
-    alloc::result_t<alloc::reallocation_extended_t> impl_reallocate_extended(
-        const alloc::reallocate_extended_request_t& options)
-        OKAYLIB_NOEXCEPT final
-    {
-        // arena cannot do a reallocate extended request
-        // TODO: could sort of implement a compat for this
-        return alloc::error::unsupported;
     }
 
   private:
@@ -157,9 +159,23 @@ inline arena_t<allocator_impl_t>::arena_t(bytes_t initial_buffer,
 template <allocator_c allocator_impl_t>
 inline void arena_t<allocator_impl_t>::destroy() OKAYLIB_NOEXCEPT
 {
+    call_all_destructors();
     if (m_backing)
         m_backing.ref_unchecked().deallocate(
             m_memory.unchecked_address_of_first_item());
+}
+
+template <allocator_c allocator_impl_t>
+inline void arena_t<allocator_impl_t>::call_all_destructors() OKAYLIB_NOEXCEPT
+{
+    opt<destructor_list_node_t> node = m_last_pushed_destructor;
+    while (node) {
+        destructor_t& destructor_and_object =
+            node.ref_or_panic().destructors_and_object;
+        destructor_and_object.destructor(destructor_and_object.object);
+        node = node.prev;
+    }
+    m_last_pushed_destructor.reset();
 }
 
 template <allocator_c allocator_impl_t>
@@ -199,7 +215,7 @@ arena_t<allocator_impl_t>::impl_allocate(const alloc::request_t& request)
 
 template <allocator_c allocator_impl_t>
 [[nodiscard]] inline void*
-arena_t<allocator_impl_t>::new_scope() OKAYLIB_NOEXCEPT
+arena_t<allocator_impl_t>::impl_arena_new_scope() OKAYLIB_NOEXCEPT
 {
     ok::res result = this->make_non_owning<bytes_t>(m_available_memory);
     if (result.is_success()) [[likely]]
@@ -209,8 +225,8 @@ arena_t<allocator_impl_t>::new_scope() OKAYLIB_NOEXCEPT
 }
 
 template <allocator_c allocator_impl_t>
-inline void
-arena_t<allocator_impl_t>::restore_scope(void* handle) OKAYLIB_NOEXCEPT
+inline void arena_t<allocator_impl_t>::impl_arena_restore_scope(void* handle)
+    OKAYLIB_NOEXCEPT
 {
     if (!handle) [[unlikely]]
         return;
@@ -219,8 +235,24 @@ arena_t<allocator_impl_t>::restore_scope(void* handle) OKAYLIB_NOEXCEPT
 }
 
 template <allocator_c allocator_impl_t>
+ok::status<alloc::error> arena_t<allocator_impl_t>::impl_arena_push_destructor(
+    destructor_t destructor) OKAYLIB_NOEXCEPT
+{
+    res noderes = this->make_non_owning<destructor_list_node_t>(destructor);
+    if (!ok::is_success(noderes)) [[unlikely]]
+        return noderes;
+
+    destructor_list_node_t& node = noderes.unwrap();
+
+    node.prev = m_last_pushed_destructor;
+    m_last_pushed_destructor = node;
+    return alloc::error::success;
+}
+
+template <allocator_c allocator_impl_t>
 void arena_t<allocator_impl_t>::clear() OKAYLIB_NOEXCEPT
 {
+    call_all_destructors();
 #ifndef NDEBUG
     ok::memfill(m_memory, 0);
 #endif

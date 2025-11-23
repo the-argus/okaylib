@@ -599,8 +599,7 @@ class arraylist_t
     reallocate(size_t required_bytes, size_t preferred_bytes)
     {
         using namespace alloc;
-        const auto realloc_flags =
-            realloc_flags::leave_nonzeroed | realloc_flags::expand_back;
+        const auto realloc_flags = realloc_flags::leave_nonzeroed;
 
         if constexpr (!stdc::is_trivially_copyable_v<T>) {
             // if we're not trivially copyable, dont let the allocator do
@@ -608,11 +607,13 @@ class arraylist_t
             result_t<potentially_in_place_reallocation_t> res =
                 reallocate_in_place_orelse_keep_old_nocopy(
                     *m.backing_allocator,
-                    reallocate_extended_request_t{
+                    reallocate_request_t{
                         .memory = reinterpret_as_bytes(
                             raw_slice(*m.items, this->capacity())),
-                        .required_bytes_back = required_bytes,
-                        .preferred_bytes_back = preferred_bytes,
+                        .required_bytes_back =
+                            this->items().size_bytes() + required_bytes,
+                        .preferred_bytes_back =
+                            this->items().size_bytes() + preferred_bytes,
                         .flags =
                             realloc_flags | realloc_flags::in_place_orelse_fail,
                     });

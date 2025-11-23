@@ -33,7 +33,7 @@ class slab_allocator_t : public ok::allocator_t
 
   public:
     static constexpr alloc::feature_flags type_features =
-        alloc::feature_flags::can_expand_back |
+        alloc::feature_flags::can_reclaim |
         alloc::feature_flags::can_predictably_realloc_in_place;
 
     friend ok::slab_allocator::with_blocks_t;
@@ -61,17 +61,11 @@ class slab_allocator_t : public ok::allocator_t
         return type_features;
     }
 
-    inline void impl_deallocate(void* memory) OKAYLIB_NOEXCEPT final;
+    inline void impl_deallocate(void* memory,
+                                size_t size_hint) OKAYLIB_NOEXCEPT final;
 
     [[nodiscard]] inline alloc::result_t<bytes_t>
     impl_reallocate(const alloc::reallocate_request_t&) OKAYLIB_NOEXCEPT final;
-
-    [[nodiscard]] inline alloc::result_t<alloc::reallocation_extended_t>
-    impl_reallocate_extended(const alloc::reallocate_extended_request_t&
-                                 options) OKAYLIB_NOEXCEPT final
-    {
-        return alloc::error::unsupported;
-    }
 };
 
 template <allocator_c allocator_impl_t, size_t num_blocksizes>
@@ -108,11 +102,11 @@ slab_allocator_t<allocator_impl_t, num_blocksizes>::clear() OKAYLIB_NOEXCEPT
 
 template <allocator_c allocator_impl_t, size_t num_blocksizes>
 inline void slab_allocator_t<allocator_impl_t, num_blocksizes>::impl_deallocate(
-    void* memory) OKAYLIB_NOEXCEPT
+    void* memory, size_t /* size_hint */) OKAYLIB_NOEXCEPT
 {
     for (size_t i = 0; i < num_blocksizes; ++i) {
         auto& allocator = m_allocators[i];
-        if (allocator.contains(slice_from_one(*(uint8_t*)memory))) {
+        if (allocator.contains(memory)) {
             allocator.deallocate(memory);
             return;
         }

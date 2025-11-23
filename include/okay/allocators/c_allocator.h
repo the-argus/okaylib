@@ -11,7 +11,6 @@ class c_allocator_t : public ok::allocator_t
 {
   public:
     static constexpr alloc::feature_flags type_features =
-        alloc::feature_flags::can_expand_back |
         alloc::feature_flags::can_reclaim;
 
     c_allocator_t() = default;
@@ -23,14 +22,11 @@ class c_allocator_t : public ok::allocator_t
     [[nodiscard]] inline alloc::feature_flags
     impl_features() const OKAYLIB_NOEXCEPT final;
 
-    inline void impl_deallocate(void* memory) OKAYLIB_NOEXCEPT final;
+    inline void impl_deallocate(void* memory,
+                                size_t size_hint) OKAYLIB_NOEXCEPT final;
 
     [[nodiscard]] inline alloc::result_t<bytes_t>
     impl_reallocate(const alloc::reallocate_request_t&) OKAYLIB_NOEXCEPT final;
-
-    [[nodiscard]] inline alloc::result_t<alloc::reallocation_extended_t>
-    impl_reallocate_extended(const alloc::reallocate_extended_request_t&
-                                 options) OKAYLIB_NOEXCEPT final;
 
   private:
     [[nodiscard]] inline alloc::result_t<bytes_t>
@@ -75,7 +71,8 @@ c_allocator_t::impl_allocate(const alloc::request_t& request) OKAYLIB_NOEXCEPT
     return out;
 }
 
-inline void c_allocator_t::impl_deallocate(void* memory) OKAYLIB_NOEXCEPT
+inline void c_allocator_t::impl_deallocate(void* memory, size_t /* size_hint */)
+    OKAYLIB_NOEXCEPT
 {
     ::free(memory);
 }
@@ -94,9 +91,8 @@ inline void c_allocator_t::impl_deallocate(void* memory) OKAYLIB_NOEXCEPT
 
     const bool zeroed = !(options.flags & realloc_flags::leave_nonzeroed);
 
-    auto res = realloc_inner(
-        options.memory,
-        ok::max(options.preferred_size_bytes, options.new_size_bytes), zeroed);
+    auto res = realloc_inner(options.memory, options.calculate_preferred_size(),
+                             zeroed);
     if (!res.is_success()) [[unlikely]]
         return res.status();
 
@@ -132,73 +128,6 @@ c_allocator_t::realloc_inner(bytes_t memory, size_t new_size,
     }
 
     return out;
-}
-
-[[nodiscard]] inline auto c_allocator_t::impl_reallocate_extended(
-    const alloc::reallocate_extended_request_t& options)
-    OKAYLIB_NOEXCEPT -> alloc::result_t<alloc::reallocation_extended_t>
-{
-    using namespace alloc;
-
-    if (options.flags & realloc_flags::in_place_orelse_fail) {
-        // not a supported operation by C allocator
-        return error::couldnt_expand_in_place;
-    }
-
-    if (options.memory.size() == 0) [[unlikely]] {
-        __ok_assert(
-            false,
-            "Attempt to reallocate a slice of zero bytes with C allocator.");
-        return error::unsupported;
-    }
-
-    if (options.flags & realloc_flags::expand_front) [[unlikely]] {
-        __ok_assert(false,
-                    "unsupported flag expand_front passed to c allocator");
-        return error::unsupported;
-    }
-
-    auto [bytes_offset_back, bytes_offset_front, new_size] =
-        options.calculate_new_preferred_size();
-
-    // early out if this looks like a regular realloc
-    if (bytes_offset_front == 0) [[likely]] {
-        auto res = this->realloc_inner(
-            options.memory, new_size,
-            !(options.flags & realloc_flags::leave_nonzeroed));
-        if (!res.is_success()) [[unlikely]]
-            return res.status();
-
-        return reallocation_extended_t{.memory = res.unwrap()};
-    }
-
-    // shrink_front may be requested. make a new allocation so we dont have to
-    // worry about tagging the allocation's start or anything
-    uint8_t* newmem = static_cast<uint8_t*>(::malloc(new_size));
-
-    if (!newmem) [[unlikely]]
-        return error::oom;
-
-    // memcpy from the old memory and then free the old memory. any shrunk-out
-    // memory is lost.
-    {
-        size_t size = options.memory.size() - bytes_offset_front;
-        if (options.flags & realloc_flags::shrink_back) {
-            size -= bytes_offset_back;
-        }
-
-        ::memcpy(newmem,
-                 options.memory.unchecked_address_of_first_item() +
-                     bytes_offset_front,
-                 size);
-    }
-
-    ::free(options.memory.unchecked_address_of_first_item());
-
-    return reallocation_extended_t{
-        .memory = raw_slice(*static_cast<uint8_t*>(newmem), new_size),
-        .bytes_offset_front = bytes_offset_front,
-    };
 }
 
 [[nodiscard]] alloc::feature_flags

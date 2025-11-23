@@ -42,10 +42,11 @@ struct ooming_allocator_t : ok::allocator_t
         return backing_actual->features();
     }
 
-    inline void impl_deallocate(void* memory) OKAYLIB_NOEXCEPT final
+    inline void impl_deallocate(void* memory,
+                                size_t size_hint) OKAYLIB_NOEXCEPT final
     {
         if (backing_actual)
-            backing_actual->deallocate(memory);
+            backing_actual->deallocate(memory, size_hint);
     }
 
     [[nodiscard]] inline alloc::result_t<bytes_t> impl_reallocate(
@@ -55,16 +56,6 @@ struct ooming_allocator_t : ok::allocator_t
             return alloc::error::oom;
 
         return backing_actual->reallocate(request);
-    }
-
-    [[nodiscard]] inline alloc::result_t<alloc::reallocation_extended_t>
-    impl_reallocate_extended(const alloc::reallocate_extended_request_t&
-                                 options) OKAYLIB_NOEXCEPT final
-    {
-        if (should_oom || !backing_actual)
-            return alloc::error::oom;
-
-        return backing_actual->reallocate_extended(options);
     }
 };
 
