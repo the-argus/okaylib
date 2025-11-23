@@ -151,6 +151,8 @@ const test_source_files = &[_][]const u8{
     "iterables/take_at_most/take_at_most.cpp",
     "iterables/transform/transform.cpp",
     "iterables/zip/zip.cpp",
+
+    "generator/generator.cpp",
 };
 
 const tests_backtrace_source_files = &[_][]const u8{

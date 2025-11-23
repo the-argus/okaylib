@@ -1245,6 +1245,7 @@ concept is_complete_c = requires { sizeof(T); };
 namespace ok {
 using true_type = ok::stdc::true_type;
 using false_type = ok::stdc::false_type;
+using nullptr_t = decltype(nullptr);
 } // namespace ok
 
 #endif
