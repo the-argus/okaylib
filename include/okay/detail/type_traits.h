@@ -202,6 +202,13 @@ struct remove_pointer : public detail::remove_pointer_helper<T, remove_cv_t<T>>
 
 template <typename T> using remove_pointer_t = typename remove_pointer<T>::type;
 
+template <typename T> struct add_const
+{
+    using type = T const;
+};
+
+template <typename T> using add_const_t = typename add_const<T>::type;
+
 template <typename T> struct add_pointer
 {
     using type = typename remove_reference<T>::type*;

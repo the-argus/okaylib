@@ -589,6 +589,7 @@ template <stdc::is_reference_c payload_t> class opt<payload_t>
     constexpr payload_t emplace(payload_t other) OKAYLIB_NOEXCEPT
     {
         m_pointer = ok::addressof(other);
+        return *m_pointer;
     }
 
     constexpr bool has_value() const OKAYLIB_NOEXCEPT

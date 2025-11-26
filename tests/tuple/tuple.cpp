@@ -67,6 +67,54 @@ static_assert(
     !std::is_trivially_move_constructible_v<ok::tuple<noncopy_t, int, int>>);
 static_assert(
     !std::is_trivially_move_assignable_v<ok::tuple<noncopy_t, int, int>>);
+using namespace ok;
+static_assert(std::is_constructible_v<std::tuple<int&, int>, int&, int> ==
+              stdc::is_constructible_v<ok::tuple<int&, int>, int&, int>);
+static_assert(stdc::is_constructible_v<std::tuple<int&, int>, int&, int> ==
+              std::is_constructible_v<ok::tuple<int&, int>, int&, int>);
+
+static_assert(std::is_move_assignable_v<std::tuple<int&>> ==
+              stdc::is_move_assignable_v<ok::tuple<int&>>);
+static_assert(stdc::is_move_assignable_v<std::tuple<int&>> ==
+              std::is_move_assignable_v<ok::tuple<int&>>);
+
+static_assert(std::is_move_assignable_v<std::tuple<int&, int>> ==
+              stdc::is_move_assignable_v<ok::tuple<int&, int>>);
+static_assert(stdc::is_move_assignable_v<std::tuple<int&, int>> ==
+              std::is_move_assignable_v<ok::tuple<int&, int>>);
+
+static_assert(std::is_move_constructible_v<std::tuple<int&>> ==
+              stdc::is_move_constructible_v<ok::tuple<int&>>);
+static_assert(stdc::is_move_constructible_v<std::tuple<int&>> ==
+              std::is_move_constructible_v<ok::tuple<int&>>);
+
+static_assert(std::is_move_constructible_v<std::tuple<int&, int>> ==
+              stdc::is_move_constructible_v<ok::tuple<int&, int>>);
+static_assert(stdc::is_move_constructible_v<std::tuple<int&, int>> ==
+              std::is_move_constructible_v<ok::tuple<int&, int>>);
+
+static_assert(std::is_copy_assignable_v<std::tuple<int&>> ==
+              stdc::is_copy_assignable_v<ok::tuple<int&>>);
+static_assert(stdc::is_copy_assignable_v<std::tuple<int&>> ==
+              std::is_copy_assignable_v<ok::tuple<int&>>);
+
+static_assert(std::is_copy_assignable_v<std::tuple<int&, int>> ==
+              stdc::is_copy_assignable_v<ok::tuple<int&, int>>);
+static_assert(stdc::is_copy_assignable_v<std::tuple<int&, int>> ==
+              std::is_copy_assignable_v<ok::tuple<int&, int>>);
+
+static_assert(std::is_copy_constructible_v<std::tuple<int&>> ==
+              stdc::is_copy_constructible_v<ok::tuple<int&>>);
+static_assert(stdc::is_copy_constructible_v<std::tuple<int&>> ==
+              std::is_copy_constructible_v<ok::tuple<int&>>);
+static_assert(std::is_copy_constructible_v<std::tuple<int&, int>> ==
+              stdc::is_copy_constructible_v<ok::tuple<int&, int>>);
+static_assert(stdc::is_copy_constructible_v<std::tuple<int&, int>> ==
+              std::is_copy_constructible_v<ok::tuple<int&, int>>);
+static_assert(std::is_trivially_destructible_v<ok::tuple<int&, int, int>> ==
+              stdc::is_trivially_destructible_v<std::tuple<int&, int, int>>);
+static_assert(stdc::is_trivially_destructible_v<ok::tuple<int&, int, int>> ==
+              std::is_trivially_destructible_v<std::tuple<int&, int, int>>);
 
 struct eql_counter_type
 {

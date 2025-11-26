@@ -408,10 +408,8 @@ class tuple : public detail::tuple_impl_t<0, elements_t...>
     }
 };
 
-#if __cpp_deduction_guides >= 201606
 template <typename... other_types_t>
 tuple(other_types_t...) -> tuple<other_types_t...>;
-#endif
 
 template <> class tuple<>
 {
