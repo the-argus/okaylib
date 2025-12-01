@@ -1,7 +1,7 @@
-#ifndef __OKAYLIB_RANGES_ALGORITHM_H__
-#define __OKAYLIB_RANGES_ALGORITHM_H__
+#ifndef __OKAYLIB_ITERABLES_ALGORITHM_H__
+#define __OKAYLIB_ITERABLES_ALGORITHM_H__
 
-#include "okay/ranges/ranges.h"
+#include "okay/iterables/iterables.h"
 
 namespace ok {
 namespace detail {
@@ -15,275 +15,101 @@ struct identity_fn_t
     }
 };
 
-struct ranges_equal_fn_t
+struct iterators_equal_fn_t
 {
-    template <producing_range_c range_lhs_t, producing_range_c range_rhs_t>
-        requires(is_equality_comparable_to_c<value_type_for<range_lhs_t>,
-                                             value_type_for<range_rhs_t>> &&
-                 (!range_marked_infinite_c<range_lhs_t> ||
-                  !range_marked_infinite_c<range_rhs_t>))
+    template <iterator_c iterator_lhs_t, iterator_c iterator_rhs_t>
+        requires(
+            is_equality_comparable_to_c<typename iterator_lhs_t::value_type,
+                                        typename iterator_rhs_t::value_type> &&
+            (!infinite_iterator_c<iterator_lhs_t> ||
+             !infinite_iterator_c<iterator_rhs_t>))
     constexpr decltype(auto)
-    operator()(range_lhs_t&& lhs, range_rhs_t&& rhs) const OKAYLIB_NOEXCEPT
+    operator()(iterator_lhs_t&& lhs,
+               iterator_rhs_t&& rhs) const OKAYLIB_NOEXCEPT
     {
         constexpr bool both_ranges_have_known_size =
-            range_impls_size_c<range_lhs_t> && range_impls_size_c<range_rhs_t>;
+            sized_iterator_c<iterator_lhs_t> &&
+            sized_iterator_c<iterator_rhs_t>;
 
         if constexpr (both_ranges_have_known_size) {
-            if (ok::size(lhs) != ok::size(rhs)) {
+            if (lhs.size() != rhs.size()) {
                 return false;
             }
         }
 
-        if constexpr (both_ranges_have_known_size ||
-                      range_marked_infinite_c<range_rhs_t>) {
-            // case where we only check if the lhs is in bounds
-            auto rhs_cursor = ok::begin(rhs);
-            for (auto lhs_cursor = ok::begin(lhs);
-                 ok::is_inbounds(lhs, lhs_cursor);
-                 ok::increment(lhs, lhs_cursor)) {
-                __ok_internal_assert(ok::is_inbounds(rhs, rhs_cursor));
+        while (true) {
+            ok::opt lhs_value = lhs.next();
+            ok::opt rhs_value = lhs.next();
 
-                auto&& r = ok::range_get_best(rhs, rhs_cursor);
-                auto&& l = ok::range_get_best(lhs, lhs_cursor);
-
-                if (r != l) {
-                    return false;
-                }
-
-                ok::increment(rhs, rhs_cursor);
-            }
-            return true;
-        } else if constexpr (range_marked_infinite_c<range_lhs_t>) {
-            // case where we only check if the rhs is in bounds
-            auto lhs_cursor = ok::begin(lhs);
-            for (auto cursor = ok::begin(rhs); ok::is_inbounds(rhs, cursor);
-                 ok::increment(rhs, cursor)) {
-                __ok_internal_assert(ok::is_inbounds(lhs, lhs_cursor));
-
-                auto&& r = ok::range_get_best(rhs, cursor);
-                auto&& l = ok::range_get_best(lhs, lhs_cursor);
-
-                if (r != l) {
-                    return false;
-                }
-
-                ok::increment(lhs, lhs_cursor);
-            }
-            return true;
-        } else {
-            // case where we keep track of whether either side has gone out of
-            // bounds at any point
-
-            // only do this if we have some combination of sized and finite
-            // ranges, (either infinite) or (both sized) dont make sense
-            static_assert((range_marked_finite_c<range_lhs_t> ||
-                           range_marked_finite_c<range_rhs_t>) &&
-                              (!range_marked_infinite_c<range_lhs_t> &&
-                               !range_marked_infinite_c<range_rhs_t>),
-                          "Internal static_assert failed, broken template "
-                          "logic in okaylib");
-            auto lhs_cursor = ok::begin(lhs);
-            auto rhs_cursor = ok::begin(rhs);
-
-            while (true) {
-                const bool left_good = ok::is_inbounds(lhs, lhs_cursor);
-                const bool right_good = ok::is_inbounds(rhs, rhs_cursor);
-
-                if (!left_good || !right_good) {
-                    // only return that theyre the same if they both ended at
-                    // the same time
-                    return left_good == right_good;
-                }
-
-                auto&& r = ok::range_get_best(rhs, rhs_cursor);
-                auto&& l = ok::range_get_best(lhs, lhs_cursor);
-
-                if (r != l) {
-                    return false;
-                }
-
-                ok::increment(lhs, lhs_cursor);
-                ok::increment(rhs, rhs_cursor);
-            }
+            if (lhs_value != rhs_value)
+                return false;
+            if (!lhs_value && !rhs_value)
+                return true;
         }
+        // NOTE: unreachable
     }
 };
 } // namespace detail
-
-template <typename T> struct dest
-{
-    constexpr dest(T& ref) noexcept : m_ref(ref) {}
-
-    constexpr T& value() const noexcept { return m_ref; }
-
-  private:
-    T& m_ref;
-};
-
-template <typename T> struct source
-{
-    constexpr source(const T& ref) noexcept : m_ref(ref) {}
-    constexpr const T& value() const noexcept { return m_ref; }
-
-  private:
-    const T& m_ref;
-};
 
 namespace detail {
 
-template <bool allow_small_destination = false> struct ranges_copy_fn_t
+template <bool allow_small_destination = false>
+struct iterators_copy_assign_fn_t
 {
-    template <typename dest_range_t, typename source_range_t>
-    constexpr void
-    operator()(dest<dest_range_t> dest_wrapper,
-               source<source_range_t> source_wrapper) const OKAYLIB_NOEXCEPT
+    template <iterator_c dest_iterator_t, iterator_c source_iterator_t>
+    constexpr void operator()(dest_iterator_t dest,
+                              source_iterator_t source) const OKAYLIB_NOEXCEPT
     {
-        dest_range_t& dest = dest_wrapper.value();
-        const source_range_t& source = source_wrapper.value();
-
-        static_assert(detail::consuming_range_c<dest_range_t>,
-                      "Range given as `dest` is not an output range.");
-        static_assert(detail::producing_range_c<source_range_t>,
-                      "Range given as `source` is not an input range.");
-        static_assert(is_convertible_to_c<value_type_for<source_range_t>,
-                                          value_type_for<dest_range_t>>,
-                      "The values inside the given ranges are not convertible, "
-                      "cannot copy from source to dest.");
+        static_assert(ok::stdc::is_lvalue_reference_v<
+                          typename dest_iterator_t::value_type>,
+                      "Attempt to copy assign into an iterator which does not "
+                      "produce references.");
         static_assert(
-            !detail::range_marked_infinite_c<dest_range_t> ||
-                !detail::range_marked_infinite_c<source_range_t>,
+            requires(typename dest_iterator_t::value_type destitem,
+                     typename source_iterator_t::value_type sourceitem) {
+                {
+                    destitem = sourceitem
+                } -> ok::same_as_c<stdc::add_lvalue_reference_t<
+                      typename dest_iterator_t::value_type>>;
+            },
+            "Attempt to copy assign from an iterator which cannot assign into "
+            "the destination.");
+
+        static_assert(
+            !infinite_iterator_c<dest_iterator_t> ||
+                !infinite_iterator_c<source_iterator_t>,
             "Attempt to copy an infinite range into an infinite range, "
             "this will just loop forever.");
-        constexpr bool both_ranges_have_known_size =
-            range_impls_size_c<dest_range_t> &&
-            range_impls_size_c<source_range_t>;
+        constexpr bool both_sized_iterators =
+            sized_iterator_c<dest_iterator_t> &&
+            sized_iterator_c<source_iterator_t>;
 
-        if constexpr (both_ranges_have_known_size) {
-
-            if (ok::size(dest) < ok::size(source)) {
-                if constexpr (!allow_small_destination) {
-                    __ok_abort(
-                        "Attempt to ranges_copy() from a source which is "
-                        "larger than the destination.");
-                } else {
-                    // we know destination is smaller, track that only
-                    auto dest_cursor = ok::begin(dest);
-                    auto source_cursor = ok::begin(source);
-                    while (ok::is_inbounds(dest, dest_cursor)) {
-                        ok::range_set(
-                            dest, dest_cursor,
-                            ok::range_get_best(source, source_cursor));
-
-                        ok::increment(dest, dest_cursor);
-                        ok::increment(source, source_cursor);
-                    }
-                }
-            } else {
-                // identical code to above but we only check if the source is
-                // exhausted, since we know that dest is at least as big
-                auto dest_cursor = ok::begin(dest);
-                auto source_cursor = ok::begin(source);
-                while (ok::is_inbounds(source, source_cursor)) {
-                    ok::range_set(dest, dest_cursor,
-                                  ok::range_get_best(source, source_cursor));
-
-                    ok::increment(dest, dest_cursor);
-                    ok::increment(source, source_cursor);
-                }
-            }
-
-        } else {
-            auto dest_cursor = ok::begin(dest);
-            auto source_cursor = ok::begin(source);
             while (true) {
+                ok::opt dest_item = dest.next();
+                ok::opt source_item = dest.next();
 
-                // optimizations: we only need to check the bounds for
-                // non-infinite ranges
-                if constexpr (range_marked_infinite_c<source_range_t>) {
-                    if (!ok::is_inbounds(dest, dest_cursor)) {
-                        return;
-                    }
-                } else if constexpr (range_marked_infinite_c<dest_range_t>) {
-                    if (!ok::is_inbounds(source, source_cursor)) {
-                        return;
-                    }
-                } else {
-                    // if both ranges are either finite or sized, we have to
-                    // check both ranges
-                    const bool dest_inbounds =
-                        ok::is_inbounds(dest, dest_cursor);
-                    const bool source_inbounds =
-                        ok::is_inbounds(source, source_cursor);
-
-                    if (!source_inbounds) {
-                        return;
-                    } else if (!dest_inbounds) {
-                        if constexpr (!allow_small_destination) {
-                            // still more things to copy, but dest ran out
-                            __ok_abort(
-                                "Attempt to ranges_copy() from a source which "
-                                "is larger than the destination can hold.");
-                        } else {
-                            return;
-                        }
+                if constexpr (!allow_small_destination) {
+                    if (!dest_item && source_item) {
+                        __ok_abort(
+                            "Attempt to iterators_copy_assign() from a source "
+                            "which is larger than the destination.");
                     }
                 }
 
-                ok::range_set(dest, dest_cursor,
-                              ok::range_get_best(source, source_cursor));
+                if (!source_item || !dest_item) [[unlikely]]
+                    break;
 
-                ok::increment(dest, dest_cursor);
-                ok::increment(source, source_cursor);
+                dest_item.ref_unchecked() = source_item.ref_unchecked();
             }
-        }
     }
 };
 
 } // namespace detail
 
-inline constexpr detail::ranges_equal_fn_t ranges_equal;
-inline constexpr detail::ranges_copy_fn_t<false> ranges_copy;
-inline constexpr detail::ranges_copy_fn_t<true> ranges_copy_as_much_as_will_fit;
+inline constexpr detail::iterators_equal_fn_t ranges_equal;
+inline constexpr detail::iterators_copy_assign_fn_t<true> iterators_copy_assign;
+inline constexpr detail::iterators_copy_assign_fn_t<false> iterators_copy_assign_strict;
 inline constexpr detail::identity_fn_t identity;
-
-template <detail::producing_range_c input_t, typename predicate_t>
-constexpr bool all_of(const input_t& input,
-                      const predicate_t& predicate) OKAYLIB_NOEXCEPT
-{
-    for (auto cursor = ok::begin(input); ok::is_inbounds(input, cursor);
-         ok::increment(input, cursor)) {
-        if (!predicate(ok::range_get(input, cursor))) {
-            return false;
-        }
-    }
-    return true;
-}
-
-template <detail::producing_range_c input_t>
-constexpr bool all_of(const input_t& input) OKAYLIB_NOEXCEPT
-{
-    return all_of(input, identity);
-}
-
-template <detail::producing_range_c input_t, typename predicate_t>
-constexpr bool any_of(const input_t& input,
-                      const predicate_t& predicate) OKAYLIB_NOEXCEPT
-{
-    for (auto cursor = ok::begin(input); ok::is_inbounds(input, cursor);
-         ok::increment(input, cursor)) {
-        if (predicate(ok::range_get(input, cursor))) {
-            return true;
-        }
-    }
-    return false;
-}
-
-template <detail::producing_range_c input_t>
-constexpr bool any_of(const input_t& input) OKAYLIB_NOEXCEPT
-{
-    return any_of(input, identity);
-}
-
 } // namespace ok
 
 #endif

@@ -8,6 +8,13 @@
 
 namespace ok {
 
+template <typename T, typename... args_t>
+concept predicate_c = requires(const T& predicate, args_t&&... args) {
+    {
+        ok::invoke(predicate, ok::stdc::forward<args_t>(args)...)
+    } -> ok::same_as_c<bool>;
+};
+
 /// Class which takes in its derived class as a template argument, and
 /// implements common desireable features like STL style forward iteration (for
 /// compatibility with standard foreach loops) and view member functions like
@@ -558,7 +565,8 @@ template <typename derived_t> struct iterator_common_impl_t
     template <typename callable_t>
     constexpr void for_each(const callable_t& callable) &&
         requires ok::detail::invocable_c<
-            callable_t, decltype(this -> next().ref_unchecked())>
+            callable_t,
+            decltype(static_cast<derived_t*>(this) -> next().ref_unchecked())>
     {
         for (auto&& item : *this) {
             ok::invoke(
@@ -566,6 +574,72 @@ template <typename derived_t> struct iterator_common_impl_t
                 stdc::forward<
                     ok::remove_cvref_t<typename derived_t::value_type>>(item));
         }
+    }
+
+    template <typename predicate_t>
+    constexpr bool all_of(const predicate_t& predicate) &&
+        requires predicate_c<
+            predicate_t,
+            decltype(static_cast<derived_t*>(this) -> next().ref_unchecked())>
+    {
+        for (auto&& item : *this) {
+            const bool satisfied_predicate = ok::invoke(
+                predicate,
+                stdc::forward<
+                    ok::remove_cvref_t<typename derived_t::value_type>>(item));
+
+            if (!satisfied_predicate) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    template <typename predicate_t>
+    constexpr bool all_of() &&
+        requires ok::stdc::convertible_to_c<typename derived_t::value_type,
+                                            bool>
+    {
+        for (auto&& item : *this) {
+            if (!stdc::forward<
+                    ok::remove_cvref_t<typename derived_t::value_type>>(item)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    template <typename predicate_t>
+    constexpr bool any_of(const predicate_t& predicate) &&
+        requires predicate_c<
+            predicate_t,
+            decltype(static_cast<derived_t*>(this) -> next().ref_unchecked())>
+    {
+        for (auto&& item : *this) {
+            const bool satisfied_predicate = ok::invoke(
+                predicate,
+                stdc::forward<
+                    ok::remove_cvref_t<typename derived_t::value_type>>(item));
+
+            if (satisfied_predicate) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    template <typename predicate_t>
+    constexpr bool any_of() &&
+        requires ok::stdc::convertible_to_c<typename derived_t::value_type,
+                                            bool>
+    {
+        for (auto&& item : *this) {
+            if (stdc::forward<
+                    ok::remove_cvref_t<typename derived_t::value_type>>(item)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     [[nodiscard]] constexpr auto next()
