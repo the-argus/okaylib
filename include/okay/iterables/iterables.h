@@ -229,9 +229,10 @@ struct reverse_t : public iterator_common_impl_t<reverse_t<viewed_t>>
         return iterable.size() - iterable.index() - 1;
     }
 };
+template <typename viewed_t> struct drop_t;
 
 template <iterator_c viewed_t>
-struct drop_t : public iterator_common_impl_t<drop_t<viewed_t>>
+struct drop_t<viewed_t> : public iterator_common_impl_t<drop_t<viewed_t>>
 {
     viewed_t iterable;
     size_t skips_remaining;
@@ -261,6 +262,63 @@ struct drop_t : public iterator_common_impl_t<drop_t<viewed_t>>
         __ok_internal_assert(out);
 
         return out;
+    }
+};
+
+template <arraylike_iterator_c viewed_t>
+struct drop_t<viewed_t> : public iterator_common_impl_t<drop_t<viewed_t>>
+{
+  private:
+    viewed_t iterable;
+    const size_t skips;
+
+  public:
+    using value_type = typename viewed_t::value_type;
+
+    static constexpr bool is_infinite = infinite_iterator_c<viewed_t>;
+
+    constexpr drop_t(viewed_t&& input, size_t skips)
+        : iterable(stdc::move(input)), skips(skips)
+    {
+        const size_t maybe_bad_index = iterable.index();
+        if (maybe_bad_index < skips) {
+            iterable.offset(skips - maybe_bad_index);
+        }
+        __ok_internal_assert(iterable.index() >= skips);
+    }
+
+    [[nodiscard]] constexpr size_t size() const
+        requires sized_iterator_c<viewed_t>
+    {
+        const size_t size = iterable.size();
+        return ok::max(size, skips) - skips;
+    }
+
+    [[nodiscard]] constexpr size_t index() const
+    {
+        const size_t index = iterable.index();
+        __ok_internal_assert(index >= skips);
+        return index - skips;
+    }
+
+    [[nodiscard]] constexpr auto access() const { return iterable.access(); }
+    [[nodiscard]] constexpr auto access() { return iterable.access(); }
+
+    constexpr void offset(int64_t offset_amount) const
+    {
+        const size_t index = iterable.index();
+
+        if (-int64_t(index) > offset_amount || index + offset_amount < skips) {
+            // offset_amount is negative and is going to subtract by more than
+            // the current index, overflow
+            // OR
+            // offset amount is negative, does not cause overflow, but the
+            // caller would see it as overflow thanks to the transformation
+            // caused by our .index(), so they have failed
+            __ok_abort("index integer overflow in drop adaptor");
+        }
+
+        iterable.offset(offset_amount);
     }
 };
 
@@ -313,8 +371,11 @@ struct enumerate_t<viewed_t>
     }
 };
 
+template <typename viewed_t, typename predicate_t> struct transform_t;
+
 template <iterator_c viewed_t, typename predicate_t>
-struct transform_t
+    requires(!arraylike_iterator_c<viewed_t>)
+struct transform_t<viewed_t, predicate_t>
     : public iterator_common_impl_t<transform_t<viewed_t, predicate_t>>
 {
     viewed_t iterable;
@@ -337,6 +398,43 @@ struct transform_t
             return out;
         out.emplace(predicate(opt.ref_unchecked()));
         return out;
+    }
+};
+
+template <arraylike_iterator_c viewed_t, typename predicate_t>
+struct transform_t<viewed_t, predicate_t>
+    : public iterator_common_impl_t<transform_t<viewed_t, predicate_t>>
+{
+    viewed_t iterable;
+    const predicate_t& predicate;
+
+    using value_type = decltype(predicate(
+        stdc::declval<
+            stdc::add_lvalue_reference_t<typename viewed_t::value_type>>()));
+
+    constexpr transform_t(viewed_t&& input, const predicate_t& pred)
+        : iterable(stdc::move(input)), predicate(pred)
+    {
+    }
+
+    [[nodiscard]] constexpr size_t index() const { return iterable.index(); }
+
+    [[nodiscard]] constexpr size_t size() const
+        requires sized_iterator_c<viewed_t>
+    {
+        return iterable.size();
+    }
+
+    constexpr value_type access() const
+    {
+        auto&& item = iterable.access();
+        return predicate(stdc::forward<typename viewed_t::value_type>(item));
+    }
+
+    constexpr value_type access()
+    {
+        auto&& item = iterable.access();
+        return predicate(stdc::forward<typename viewed_t::value_type>(item));
     }
 };
 } // namespace adaptor
