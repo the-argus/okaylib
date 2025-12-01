@@ -577,7 +577,7 @@ template <typename derived_t> struct iterator_common_impl_t
     }
 
     template <typename predicate_t>
-    constexpr bool all_of(const predicate_t& predicate) &&
+    constexpr bool all_satisfy(const predicate_t& predicate) &&
         requires predicate_c<
             predicate_t,
             decltype(static_cast<derived_t*>(this) -> next().ref_unchecked())>
@@ -596,7 +596,7 @@ template <typename derived_t> struct iterator_common_impl_t
     }
 
     template <typename predicate_t>
-    constexpr bool all_of() &&
+    constexpr bool is_all_true() &&
         requires ok::stdc::convertible_to_c<typename derived_t::value_type,
                                             bool>
     {
@@ -610,7 +610,7 @@ template <typename derived_t> struct iterator_common_impl_t
     }
 
     template <typename predicate_t>
-    constexpr bool any_of(const predicate_t& predicate) &&
+    constexpr bool any_satisfy(const predicate_t& predicate) &&
         requires predicate_c<
             predicate_t,
             decltype(static_cast<derived_t*>(this) -> next().ref_unchecked())>
@@ -629,7 +629,7 @@ template <typename derived_t> struct iterator_common_impl_t
     }
 
     template <typename predicate_t>
-    constexpr bool any_of() &&
+    constexpr bool is_any_true() &&
         requires ok::stdc::convertible_to_c<typename derived_t::value_type,
                                             bool>
     {
