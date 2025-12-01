@@ -1,27 +1,57 @@
 #ifndef __OKAYLIB_RANGES_INDICES_H__
 #define __OKAYLIB_RANGES_INDICES_H__
 
-#include "okay/ranges/range_definition.h"
+#include "okay/ranges/iterator.h"
+#include <cstddef>
+#include <cstdint>
 
 namespace ok {
 
 struct indices_t
-{};
-
-constexpr indices_t indices{};
-
-template <> struct range_definition<indices_t>
 {
-    static constexpr range_flags flags =
-        range_flags::producing | range_flags::arraylike | range_flags::infinite;
-
-    using value_type = size_t;
-
-    static constexpr size_t get(const indices_t& i, const size_t c) noexcept
+    struct cursor_t
     {
-        return c;
+        static constexpr bool is_infinite = true;
+        using value_type = size_t;
+
+        size_t m_index;
+
+        cursor_t() = delete;
+        constexpr cursor_t(size_t index) : m_index(index) {}
+
+        constexpr size_t access(const indices_t& /* iterable */) const
+        {
+            return m_index;
+        }
+
+        constexpr void offset(const indices_t& /* iterable */,
+                              int64_t offset_amount)
+        {
+            m_index += offset_amount;
+        }
+
+        constexpr size_t index(indices_t& /* iterable */) const
+        {
+            return m_index;
+        }
+    };
+
+    constexpr auto iter() const
+    {
+        // can be owning because every instance of indices_t is equivalent
+        return owning_iterator_t<indices_t, cursor_t>{indices_t{}, cursor_t{0}};
+    }
+
+    constexpr auto iter_from(size_t first_index) const
+    {
+        return owning_iterator_t<indices_t, cursor_t>{
+            indices_t{},
+            cursor_t{first_index},
+        };
     }
 };
+
+constexpr inline indices_t indices{};
 
 } // namespace ok
 

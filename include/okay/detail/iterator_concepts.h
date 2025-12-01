@@ -2,12 +2,13 @@
 #define __OKAYLIB_DETAIL_RANGE_CONCEPTS_H__
 
 #include "okay/detail/type_traits.h"
+#include <cstdint>
 
 /*
  * Iterators are used to iterate on a series of values in a generic way.
  * In okaylib, there are:
  *
- * - Iterables -> things that produce iterators
+ * - Iterables -> things that produce iterators via a .iter() function
  * - Cursors -> object which implements iteration
  * - Iterators -> thing with a .next() function that iterates over an iterable
  * - Iterator adaptors -> thing that wraps an iterator to become another
@@ -15,7 +16,8 @@
  *
  * An iterable is something which has a function `.iter()` which produces an
  * iterator. That iterator will either have a reference to or internally own
- * the iterable.
+ * the iterable. `.iter()` is the default but most library functions should
+ * provide an overload accepting an arbitrary callable to apply to the iterable.
  *
  * A "cursor" is a type which the iterable implementor puts the functions that
  * define how to move through and access the iterable, as well as the
@@ -47,32 +49,48 @@ concept iterator_c = requires(T& nonconst) {
     { nonconst.next() } -> ok::same_as_c<ok::opt<typename T::value_type>>;
 };
 
+namespace detail {
+template <typename T>
+concept iterator_impl_c = requires(T& d) {
+    { d.next_impl() } -> ok::same_as_c<ok::opt<typename T::value_type>>;
+};
+} // namespace detail
+
 template <typename T>
 concept sized_iterator_c = requires(const T& const_t) {
+    requires iterator_c<T>;
     { const_t.size() } -> ok::same_as_c<size_t>;
 };
 
 template <typename T>
-concept infinite_iterator_c = requires { requires T::is_infinite; };
+concept infinite_iterator_c = requires {
+    requires iterator_c<T>;
+    requires T::is_infinite;
+};
 
 template <typename cursor_t, typename corresponding_iterable_t>
 concept sized_cursor_c = requires(const cursor_t& const_t,
                                   const corresponding_iterable_t& iterable) {
     { const_t.size(iterable) } -> ok::same_as_c<size_t>;
 };
+
 template <typename T, typename corresponding_iterable_t>
 concept infinite_cursor_c = requires { requires T::is_infinite; };
 
 template <typename cursor_t, typename corresponding_iterable_t>
 concept const_accessible_cursor_c =
     requires(const cursor_t& cursor, const corresponding_iterable_t& iterable) {
-        { cursor.access(iterable) } -> ok::same_as_c<typename cursor_t::value_type>;
+        {
+            cursor.access(iterable)
+        } -> ok::same_as_c<typename cursor_t::value_type>;
     };
 
 template <typename cursor_t, typename corresponding_iterable_t>
 concept nonconst_accessible_cursor_c =
     requires(const cursor_t& cursor, corresponding_iterable_t& iterable) {
-        { cursor.access(iterable) } -> ok::same_as_c<typename cursor_t::value_type>;
+        {
+            cursor.access(iterable)
+        } -> ok::same_as_c<typename cursor_t::value_type>;
     };
 
 template <typename T, typename corresponding_iterable_t>
@@ -80,26 +98,34 @@ concept arraylike_cursor_c =
     requires(const T& cursor, T& nonconst_cursor,
              corresponding_iterable_t& nonconst_iterable,
              const corresponding_iterable_t& const_iterable, int64_t offset) {
+        // can get the index of the cursor
         { cursor.index(const_iterable) } -> ok::same_as_c<size_t>;
+        // can offset the cursor by an int64_t
         { nonconst_cursor.offset(const_iterable, offset) } -> ok::is_void_c;
+        // can access the cursor with the iterable
         requires(const_accessible_cursor_c<T, corresponding_iterable_t> ||
                  nonconst_accessible_cursor_c<T, corresponding_iterable_t>);
-        requires(cursor_sized_c<T, corresponding_iterable_t> ||
-                 cursor_infinite_c<T, corresponding_iterable_t>);
+        // it is either infinite or knows its size in constant time
+        requires(sized_cursor_c<T, corresponding_iterable_t> ||
+                 infinite_cursor_c<T, corresponding_iterable_t>);
     };
 
 template <typename T>
-concept arraylike_iterable_c =
+concept arraylike_iterator_c =
     requires(T& nonconst, const T& const_t, int64_t offset) {
         { const_t.index() } -> ok::same_as_c<size_t>;
         { nonconst.offset(offset) } -> ok::is_void_c;
+        // access on the iterator itself should always be nonconst, as the
+        // iterator is a mutable object created by the .iter() and consumed
+        // during iteration
         { nonconst.access() } -> ok::same_as_c<typename T::value_type>;
-        requires(iter_sized_c<T> || iter_infinite_c<T>);
+        requires(sized_iterator_c<T> || infinite_iterator_c<T>);
     };
 
-template <typename iterable_t>
-concept index_provider_c = requires(const iterable_t& iterable) {
-    { iterable.index() } -> ok::same_as_c<size_t>;
+template <typename T>
+concept index_providing_iterator_c = requires(const T& iterator) {
+    requires iterator_c<T> || arraylike_iterator_c<T>;
+    { iterator.index() } -> ok::same_as_c<size_t>;
 };
 } // namespace ok
 

@@ -1,6 +1,6 @@
 #pragma once
 #include "okay/detail/abort.h"
-#include "okay/ranges/ranges.h"
+#include "okay/ranges/iterator.h"
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -387,6 +387,142 @@ template <> struct range_definition<fifty_items_bidir_no_pre_decrement_t>
     {
         --c.inner;
     }
+};
+
+struct myiterable_t
+{
+    template <typename value_type_t, bool forward = true> struct cursor_t
+    {
+        using value_type = value_type_t&;
+
+        size_t index;
+
+        cursor_t() = delete;
+
+        constexpr cursor_t(const myiterable_t&)
+            requires forward
+            : index(0)
+        {
+        }
+
+        constexpr operator size_t() const { return index; }
+
+        constexpr cursor_t(const myiterable_t& iterable)
+            requires(!forward)
+            : index(iterable.size())
+        {
+        }
+
+        constexpr ok::opt<value_type> next(const myiterable_t& iterable)
+        {
+            ok::opt<value_type> out;
+
+            if constexpr (forward) {
+                if (index >= iterable.size())
+                    return out;
+                out.emplace(iterable.items[index]);
+                ++index;
+            } else {
+                if (index == 0)
+                    return out;
+                out.emplace(iterable.items[index - 1]);
+                --index;
+            }
+            return out;
+        }
+    };
+
+    constexpr auto iter() const&
+    {
+        return ref_iterator_t{*this, cursor_t<const int>(*this)};
+    }
+    constexpr auto iter() &&
+    {
+        return owning_iterator_t<myiterable_t, cursor_t<const int>>{
+            std::move(*this), cursor_t<const int>(*this)};
+    }
+    constexpr auto reverse_iter() const&
+    {
+        return ref_iterator_t{*this, cursor_t<const int, false>(*this)};
+    }
+
+    [[nodiscard]] constexpr size_t size() const { return 10; }
+
+    int items[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+};
+
+struct my_arraylike_iterable_t
+{
+    template <typename value_type_t> struct cursor_t
+    {
+        using value_type = value_type_t&;
+
+        size_t m_index = 0;
+
+        cursor_t() = default;
+
+        constexpr const value_type_t&
+        access(const my_arraylike_iterable_t& iterable) const
+        {
+            __ok_assert(m_index < iterable.size(),
+                        "out of bounds access to arraylike iterable");
+            return iterable.items[m_index];
+        }
+
+        constexpr value_type_t& access(my_arraylike_iterable_t& iterable) const
+            requires(!ok::stdc::is_const_c<value_type_t>)
+        {
+            __ok_assert(m_index < iterable.size(),
+                        "out of bounds access to arraylike iterable");
+            return iterable.items[m_index];
+        }
+
+        constexpr size_t size(const my_arraylike_iterable_t& iterable) const
+        {
+            return iterable.size();
+        }
+
+        constexpr size_t index(const my_arraylike_iterable_t&) const
+        {
+            return m_index;
+        }
+
+        constexpr void offset(const my_arraylike_iterable_t& iterable,
+                              int64_t offset)
+        {
+            m_index += offset;
+        }
+    };
+
+    constexpr auto iter_const() const&
+    {
+        return ref_arraylike_iterator_t<const my_arraylike_iterable_t,
+                                        cursor_t<const int>>{*this, {}};
+    }
+
+    constexpr auto iter() &
+    {
+        return ref_arraylike_iterator_t<my_arraylike_iterable_t, cursor_t<int>>{
+            *this, {}};
+    }
+
+    constexpr auto iter_const() &&
+    {
+        return owning_arraylike_iterator_t<const my_arraylike_iterable_t,
+                                           cursor_t<const int>>{
+            ok::stdc::move(*this), {}};
+    }
+
+    constexpr auto iter() &&
+    {
+        return owning_arraylike_iterator_t<my_arraylike_iterable_t,
+                                           cursor_t<int>>{ok::stdc::move(*this),
+                                                          {}};
+    }
+
+    [[nodiscard]] constexpr size_t size() const { return 10; }
+
+    int items[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
 };
 
 } // namespace ok
