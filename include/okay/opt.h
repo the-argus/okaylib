@@ -10,7 +10,6 @@
 #include "okay/detail/traits/cloneable.h"
 #include "okay/detail/traits/mathop_traits.h"
 #include "okay/detail/traits/special_member_traits.h"
-#include "okay/ranges/range_definition.h"
 #include <cstring> // memcpy
 
 #if defined(OKAYLIB_USE_FMT)
@@ -648,67 +647,6 @@ template <stdc::is_reference_c payload_t> class opt<payload_t>
 #if defined(OKAYLIB_USE_FMT)
     friend struct fmt::formatter<opt>;
 #endif
-};
-
-template <typename range_t> struct range_definition;
-
-template <typename payload_t> struct range_definition<ok::opt<payload_t>>
-{
-  private:
-    using opt_range_t = opt<payload_t>;
-
-    consteval static range_flags determine_flags()
-    {
-        range_flags initial = range_flags::sized | range_flags::arraylike |
-                              range_flags::implements_set | range_flags::sized |
-                              range_flags::producing | range_flags::consuming;
-        return ok::stdc::is_reference_c<payload_t>
-                   ? initial | range_flags::ref_wrapper
-                   : initial;
-    }
-
-  public:
-    using value_type = stdc::remove_reference_t<payload_t>;
-
-    constexpr static range_flags flags = determine_flags();
-
-    static constexpr void increment(const opt_range_t& range,
-                                    size_t& cursor) OKAYLIB_NOEXCEPT
-    {
-        ++cursor;
-    }
-
-    static constexpr bool is_inbounds(const opt_range_t& range,
-                                      const size_t& cursor) OKAYLIB_NOEXCEPT
-    {
-        return range.has_value() && cursor == 0;
-    }
-
-    static constexpr size_t size(const opt_range_t& range) OKAYLIB_NOEXCEPT
-    {
-        return size_t(range.has_value());
-    }
-
-    /// nonconst get_ref is disabled for reference wrapper optionals which are
-    /// storing a const reference. no need to check if payload_t is a reference
-    /// as it can't be const otherwise.
-    template <typename T = payload_t>
-    static constexpr auto& get(opt_range_t& range, size_t cursor)
-        requires(!is_const_c<stdc::remove_reference_t<value_type>>)
-    {
-        if (cursor != 0) {
-            __ok_abort("Access to optional with out-of-range index");
-        }
-        return range.ref_or_panic();
-    }
-
-    static constexpr auto& get(const opt_range_t& range, size_t cursor)
-    {
-        if (cursor != 0) {
-            __ok_abort("Access to optional with out-of-range index");
-        }
-        return range.ref_or_panic();
-    }
 };
 
 } // namespace ok
