@@ -2,6 +2,7 @@
 #define __OKAYLIB_DETAIL_RANGE_CONCEPTS_H__
 
 #include "okay/detail/type_traits.h"
+#include "okay/detail/utility.h"
 #include <cstdint>
 
 /*
@@ -58,13 +59,21 @@ concept iterator_impl_c = requires(T& d) {
 
 template <typename T>
 concept sized_iterator_c = requires(const T& const_t) {
-    requires iterator_c<T>;
+    // not depending on this here so that arraylike iterators (which may not
+    // also satisfy iterator_c, at least before resolving CRTP inheritance with
+    // common iterator implementation) can still satisfy this
+    //
+    // requires iterator_c<T>;
     { const_t.size() } -> ok::same_as_c<size_t>;
 };
 
 template <typename T>
 concept infinite_iterator_c = requires {
-    requires iterator_c<T>;
+    // not depending on this here so that arraylike iterators (which may not
+    // also satisfy iterator_c, at least before resolving CRTP inheritance with
+    // common iterator implementation) can still satisfy this
+    //
+    // requires iterator_c<T>;
     requires T::is_infinite;
 };
 
@@ -126,6 +135,14 @@ template <typename T>
 concept index_providing_iterator_c = requires(const T& iterator) {
     requires iterator_c<T> || arraylike_iterator_c<T>;
     { iterator.index() } -> ok::same_as_c<size_t>;
+};
+
+template <typename T>
+concept iterable_c = requires(T& iterable_nonconst, const T& iterable_const,
+                              T&& iterable_rvalue) {
+    { iterable_nonconst.iter() } -> iterator_c;
+    { iterable_const.iter() } -> iterator_c;
+    { stdc::move(iterable_rvalue).iter() } -> iterator_c;
 };
 } // namespace ok
 

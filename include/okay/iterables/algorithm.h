@@ -106,7 +106,7 @@ struct iterators_copy_assign_fn_t
 
 } // namespace detail
 
-inline constexpr detail::iterators_equal_fn_t ranges_equal;
+inline constexpr detail::iterators_equal_fn_t iterators_equal;
 inline constexpr detail::iterators_copy_assign_fn_t<true> iterators_copy_assign;
 inline constexpr detail::iterators_copy_assign_fn_t<false> iterators_copy_assign_strict;
 inline constexpr detail::identity_fn_t identity;

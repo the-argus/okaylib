@@ -1,6 +1,6 @@
 #pragma once
 #include "okay/detail/abort.h"
-#include "okay/ranges/iterator.h"
+#include "okay/iterables/iterables.h"
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -111,8 +111,6 @@ class example_range_bidirectional
     using value_type = uint8_t;
     using inherited_range_type = example_range_bidirectional;
 
-    friend class ok::range_definition<example_range_bidirectional>;
-
     struct cursor_t
     {
         constexpr cursor_t() = default;
@@ -213,182 +211,6 @@ struct counter_type
 
 inline special_member_counters_t counter_type::counters{};
 
-// implement range trait for example_range_cstyle
-namespace ok {
-template <> struct range_definition<example_range_cstyle>
-{
-    using value_type = typename example_range_cstyle::value_type;
-
-    constexpr static range_flags flags =
-        range_flags::sized | range_flags::consuming | range_flags::producing;
-
-    static constexpr size_t size(const example_range_cstyle& i) OKAYLIB_NOEXCEPT
-    {
-        return i.size();
-    }
-
-    static constexpr value_type& get(example_range_cstyle& i,
-                                     size_t c) OKAYLIB_NOEXCEPT
-    {
-        return i[c];
-    }
-
-    static constexpr const value_type& get(const example_range_cstyle& i,
-                                           size_t c) OKAYLIB_NOEXCEPT
-    {
-        return i[c];
-    }
-
-    static constexpr size_t begin(const example_range_cstyle&) OKAYLIB_NOEXCEPT
-    {
-        return 0;
-    }
-
-    static constexpr bool is_inbounds(const example_range_cstyle& i,
-                                      size_t c) OKAYLIB_NOEXCEPT
-    {
-        return c < i.size();
-    }
-};
-
-template <> struct range_definition<example_range_bidirectional>
-{
-    using value_type = typename example_range_bidirectional::value_type;
-
-    constexpr static range_flags flags =
-        range_flags::finite | range_flags::producing | range_flags::consuming;
-
-    static constexpr value_type&
-    get(example_range_bidirectional& i,
-        const example_range_bidirectional::cursor_t& c) OKAYLIB_NOEXCEPT
-    {
-        return i.get(c);
-    }
-
-    static constexpr const value_type&
-    get(const example_range_bidirectional& i,
-        const example_range_bidirectional::cursor_t& c) OKAYLIB_NOEXCEPT
-    {
-        return i.get(c);
-    }
-
-    static constexpr example_range_bidirectional::cursor_t
-    begin(const example_range_bidirectional&) OKAYLIB_NOEXCEPT
-    {
-        return {};
-    }
-
-    static constexpr bool
-    is_inbounds(const example_range_bidirectional& i,
-                const example_range_bidirectional::cursor_t& c) OKAYLIB_NOEXCEPT
-    {
-        return c.inner() < i.num_bytes;
-    }
-};
-
-template <> struct range_definition<fifty_items_unknown_size_t>
-{
-    static constexpr range_flags flags =
-        range_flags::producing | range_flags::finite;
-
-    using value_type = size_t;
-
-    static constexpr size_t
-    begin(const fifty_items_unknown_size_t&) OKAYLIB_NOEXCEPT
-    {
-        return 0;
-    }
-
-    static constexpr bool is_inbounds(const fifty_items_unknown_size_t&,
-                                      size_t c) OKAYLIB_NOEXCEPT
-    {
-        return c < 50;
-    }
-
-    static constexpr value_type get(const fifty_items_unknown_size_t&,
-                                    size_t c) OKAYLIB_NOEXCEPT
-    {
-        return c + 1;
-    }
-};
-
-template <> struct range_definition<fifty_items_unknown_size_no_pre_increment_t>
-{
-    using self_t = fifty_items_unknown_size_no_pre_increment_t;
-    using value_type = size_t;
-
-    static constexpr range_flags flags =
-        range_flags::finite | range_flags::producing;
-
-    struct cursor_t
-    {
-        constexpr cursor_t(size_t _inner) : inner(_inner) {}
-        size_t inner;
-    };
-
-    static constexpr cursor_t begin(const self_t&) OKAYLIB_NOEXCEPT
-    {
-        return 0;
-    }
-
-    static constexpr bool is_inbounds(const self_t&,
-                                      cursor_t c) OKAYLIB_NOEXCEPT
-    {
-        return c.inner < 50;
-    }
-
-    static constexpr value_type get(const self_t&, cursor_t c) OKAYLIB_NOEXCEPT
-    {
-        return c.inner + 1;
-    }
-
-    static constexpr void increment(const self_t&, cursor_t& c) OKAYLIB_NOEXCEPT
-    {
-        ++c.inner;
-    }
-};
-
-template <> struct range_definition<fifty_items_bidir_no_pre_decrement_t>
-{
-    using self_t = fifty_items_bidir_no_pre_decrement_t;
-    using value_type = size_t;
-
-    static constexpr range_flags flags =
-        range_flags::finite | range_flags::producing;
-
-    struct cursor_t
-    {
-        constexpr cursor_t(size_t _inner) : inner(_inner) {}
-        size_t inner;
-    };
-
-    static constexpr cursor_t begin(const self_t&) OKAYLIB_NOEXCEPT
-    {
-        return 0;
-    }
-
-    static constexpr bool is_inbounds(const self_t&,
-                                      cursor_t c) OKAYLIB_NOEXCEPT
-    {
-        return c.inner < 50;
-    }
-
-    static constexpr value_type get(const self_t&, cursor_t c) OKAYLIB_NOEXCEPT
-    {
-        return c.inner + 1;
-    }
-
-    static constexpr void increment(const self_t&, cursor_t& c) OKAYLIB_NOEXCEPT
-    {
-        ++c.inner;
-    }
-
-    static constexpr void decrement(const self_t&, cursor_t& c) OKAYLIB_NOEXCEPT
-    {
-        --c.inner;
-    }
-};
-
 struct myiterable_t
 {
     template <typename value_type_t, bool forward = true> struct cursor_t
@@ -434,16 +256,16 @@ struct myiterable_t
 
     constexpr auto iter() const&
     {
-        return ref_iterator_t{*this, cursor_t<const int>(*this)};
+        return ok::ref_iterator_t{*this, cursor_t<const int>(*this)};
     }
     constexpr auto iter() &&
     {
-        return owning_iterator_t<myiterable_t, cursor_t<const int>>{
+        return ok::owning_iterator_t<myiterable_t, cursor_t<const int>>{
             std::move(*this), cursor_t<const int>(*this)};
     }
     constexpr auto reverse_iter() const&
     {
-        return ref_iterator_t{*this, cursor_t<const int, false>(*this)};
+        return ok::ref_iterator_t{*this, cursor_t<const int, false>(*this)};
     }
 
     [[nodiscard]] constexpr size_t size() const { return 10; }
@@ -496,33 +318,31 @@ struct my_arraylike_iterable_t
 
     constexpr auto iter_const() const&
     {
-        return ref_arraylike_iterator_t<const my_arraylike_iterable_t,
-                                        cursor_t<const int>>{*this, {}};
+        return ok::ref_arraylike_iterator_t<const my_arraylike_iterable_t,
+                                            cursor_t<const int>>{*this, {}};
     }
 
     constexpr auto iter() &
     {
-        return ref_arraylike_iterator_t<my_arraylike_iterable_t, cursor_t<int>>{
-            *this, {}};
+        return ok::ref_arraylike_iterator_t<my_arraylike_iterable_t,
+                                            cursor_t<int>>{*this, {}};
     }
 
     constexpr auto iter_const() &&
     {
-        return owning_arraylike_iterator_t<const my_arraylike_iterable_t,
-                                           cursor_t<const int>>{
+        return ok::owning_arraylike_iterator_t<const my_arraylike_iterable_t,
+                                               cursor_t<const int>>{
             ok::stdc::move(*this), {}};
     }
 
     constexpr auto iter() &&
     {
-        return owning_arraylike_iterator_t<my_arraylike_iterable_t,
-                                           cursor_t<int>>{ok::stdc::move(*this),
-                                                          {}};
+        return ok::owning_arraylike_iterator_t<my_arraylike_iterable_t,
+                                               cursor_t<int>>{
+            ok::stdc::move(*this), {}};
     }
 
     [[nodiscard]] constexpr size_t size() const { return 10; }
 
     int items[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
 };
-
-} // namespace ok

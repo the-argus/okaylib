@@ -8,7 +8,7 @@
 
 #define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
 #include "okay/detail/abort.h"
-#include "okay/ranges/algorithm.h"
+#include "okay/iterables/algorithm.h"
 #include <doctest.h>
 
 #define REQUIREABORTS(operation)                    \
@@ -23,10 +23,8 @@
         REQUIRE(status);                            \
     }
 
-#define REQUIRE_RANGES_EQUAL(range1, range2)              \
-    {                                                     \
-        auto&& rng1 = range1;                             \
-        auto&& rng2 = range2;                             \
-        bool ranges_equal = ok::ranges_equal(rng1, rng2); \
-        REQUIRE(ranges_equal);                            \
+#define REQUIRE_RANGES_EQUAL(iter1, iter2)                     \
+    {                                                          \
+        bool ranges_equal = ok::iterators_equal(iter1, iter2); \
+        REQUIRE(ranges_equal);                                 \
     }

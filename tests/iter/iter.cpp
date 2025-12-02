@@ -1,6 +1,8 @@
 #include "test_header.h"
 // test header must be first
-#include "okay/ranges/iter.h"
+#include "okay/iterables/indices.h"
+#include "okay/iterables/iterables.h"
+#include "testing_types.h"
 
 using namespace ok;
 
@@ -112,5 +114,42 @@ TEST_SUITE("iter")
                 REQUIRE(i == idx);
             }
         }
+    }
+
+    TEST_CASE("zip view")
+    {
+        SUBCASE("zip view with arraylike value types")
+        {
+            int ints[] = {0, 1, 2, 3, 4};
+
+            for (auto [i, index] : ok::iter(ints).enumerate()) {
+                REQUIRE(i == index);
+            }
+
+            REQUIRE(ok::iter(ints).zip(ok::indices()).size() == 5);
+
+            for (auto [i, index] : ok::iter(ints).zip(ok::indices())) {
+                REQUIRE(i == index);
+            }
+
+            for (auto [enumerated_normal, enumerated_zip] :
+                 ok::iter(ints).enumerate().zip(
+                     ok::iter(ints).zip(ok::indices()))) {
+                REQUIRE(enumerated_normal == enumerated_zip);
+            }
+        }
+
+        SUBCASE("zip view with forward value types")
+        {
+            myiterable_t iterable{};
+
+            for (auto [i, index] : iterable.iter().zip(indices())) {
+                REQUIRE(i == index);
+            }
+        }
+
+        SUBCASE("zip view with a lvalue reference and a value type") {}
+
+        SUBCASE("zip view with only lvalue references") {}
     }
 }

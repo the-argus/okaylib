@@ -7,6 +7,7 @@
 
 namespace ok {
 
+namespace detail {
 struct indices_t
 {
     struct cursor_t
@@ -30,29 +31,20 @@ struct indices_t
             m_index += offset_amount;
         }
 
-        constexpr size_t index(indices_t& /* iterable */) const
+        constexpr size_t index(const indices_t& /* iterable */) const
         {
             return m_index;
         }
     };
-
-    constexpr auto iter() const
-    {
-        // can be owning because every instance of indices_t is equivalent
-        return owning_iterator_t<indices_t, cursor_t>{indices_t{}, cursor_t{0}};
-    }
-
-    constexpr auto iter_from(size_t first_index) const
-    {
-        return owning_iterator_t<indices_t, cursor_t>{
-            indices_t{},
-            cursor_t{first_index},
-        };
-    }
 };
+} // namespace detail
 
-constexpr inline indices_t indices{};
-
+constexpr auto indices() OKAYLIB_NOEXCEPT
+{
+    using namespace detail;
+    return owning_arraylike_iterator_t<indices_t, indices_t::cursor_t>{
+        indices_t{}, indices_t::cursor_t{0}};
+}
 } // namespace ok
 
 #endif
