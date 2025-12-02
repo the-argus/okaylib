@@ -7,8 +7,8 @@
 #include "okay/detail/template_util/uninitialized_storage.h"
 #include "okay/detail/traits/is_instance.h"
 #include "okay/detail/traits/is_std_container.h"
+#include "okay/iterables/iterables.h"
 #include "okay/math/rounding.h"
-#include "okay/ranges/ranges.h"
 #include <assert.h>
 #include <stdint.h>
 #include <string.h>
@@ -696,74 +696,6 @@ template <typename T>
 {
     return raw_slice(item, 1);
 }
-
-template <typename range_t> struct range_definition;
-
-template <typename viewed_t> struct range_definition<slice<viewed_t>>
-{
-    static constexpr range_flags flags =
-        range_flags::sized | range_flags::arraylike |
-        (stdc::is_const_c<viewed_t>
-             ? range_flags::none
-             : (range_flags::implements_set | range_flags::consuming)) |
-        range_flags::producing | range_flags::ref_wrapper;
-
-    using value_type = viewed_t;
-
-    static constexpr size_t size(const slice<viewed_t>& slice) OKAYLIB_NOEXCEPT
-    {
-        return slice.size();
-    }
-
-    static constexpr value_type& get(const slice<viewed_t>& range,
-                                     size_t cursor) OKAYLIB_NOEXCEPT
-    {
-        return range[cursor];
-    }
-};
-
-template <> struct range_definition<const_bit_slice_t>
-{
-    static constexpr range_flags flags =
-        range_flags::arraylike | range_flags::sized | range_flags::producing;
-
-    using value_type = bit;
-
-    static constexpr size_t size(const const_bit_slice_t& bs) OKAYLIB_NOEXCEPT
-    {
-        return bs.size();
-    }
-
-    static constexpr bit get(const const_bit_slice_t& range, size_t cursor)
-    {
-        return range.get_bit(cursor);
-    }
-};
-
-template <> struct range_definition<bit_slice_t>
-{
-    static constexpr range_flags flags =
-        range_flags::arraylike | range_flags::sized | range_flags::producing |
-        range_flags::consuming | range_flags::implements_set;
-
-    using value_type = bit;
-
-    static constexpr size_t size(const bit_slice_t& bs) OKAYLIB_NOEXCEPT
-    {
-        return bs.size();
-    }
-
-    static constexpr bit get(const bit_slice_t& range, size_t cursor)
-    {
-        return range.get_bit(cursor);
-    }
-
-    static constexpr void set(bit_slice_t& range, size_t cursor, bit value)
-    {
-        return range.set_bit(cursor, value);
-    }
-};
-
 } // namespace ok
 
 #if defined(OKAYLIB_USE_FMT)

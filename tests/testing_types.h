@@ -235,7 +235,11 @@ struct myiterable_t
         {
         }
 
-        constexpr ok::opt<value_type> next(const myiterable_t& iterable)
+        using iterable_arg_t =
+            ok::stdc::conditional_t<ok::is_const_c<value_type_t>,
+                                    const myiterable_t&, myiterable_t&>;
+
+        constexpr ok::opt<value_type> next(iterable_arg_t iterable)
         {
             ok::opt<value_type> out;
 
@@ -258,6 +262,10 @@ struct myiterable_t
     {
         return ok::ref_iterator_t{*this, cursor_t<const int>(*this)};
     }
+    constexpr auto iter() &
+    {
+        return ok::ref_iterator_t{*this, cursor_t<int>(*this)};
+    }
     constexpr auto iter() &&
     {
         return ok::owning_iterator_t<myiterable_t, cursor_t<const int>>{
@@ -275,7 +283,7 @@ struct myiterable_t
 
 struct my_arraylike_iterable_t
 {
-    template <typename value_type_t> struct cursor_t
+    template <typename iterable_t, typename value_type_t> struct cursor_t
     {
         using value_type = value_type_t&;
 
@@ -283,16 +291,7 @@ struct my_arraylike_iterable_t
 
         cursor_t() = default;
 
-        constexpr const value_type_t&
-        access(const my_arraylike_iterable_t& iterable) const
-        {
-            __ok_assert(m_index < iterable.size(),
-                        "out of bounds access to arraylike iterable");
-            return iterable.items[m_index];
-        }
-
-        constexpr value_type_t& access(my_arraylike_iterable_t& iterable) const
-            requires(!ok::stdc::is_const_c<value_type_t>)
+        constexpr value_type_t& access(iterable_t& iterable) const
         {
             __ok_assert(m_index < iterable.size(),
                         "out of bounds access to arraylike iterable");
@@ -318,27 +317,22 @@ struct my_arraylike_iterable_t
 
     constexpr auto iter_const() const&
     {
-        return ok::ref_arraylike_iterator_t<const my_arraylike_iterable_t,
-                                            cursor_t<const int>>{*this, {}};
+        return ok::ref_arraylike_iterator_t<
+            const my_arraylike_iterable_t,
+            cursor_t<const my_arraylike_iterable_t, const int>>{*this, {}};
     }
 
     constexpr auto iter() &
     {
-        return ok::ref_arraylike_iterator_t<my_arraylike_iterable_t,
-                                            cursor_t<int>>{*this, {}};
-    }
-
-    constexpr auto iter_const() &&
-    {
-        return ok::owning_arraylike_iterator_t<const my_arraylike_iterable_t,
-                                               cursor_t<const int>>{
-            ok::stdc::move(*this), {}};
+        return ok::ref_arraylike_iterator_t<
+            my_arraylike_iterable_t, cursor_t<my_arraylike_iterable_t, int>>{
+            *this, {}};
     }
 
     constexpr auto iter() &&
     {
-        return ok::owning_arraylike_iterator_t<my_arraylike_iterable_t,
-                                               cursor_t<int>>{
+        return ok::owning_arraylike_iterator_t<
+            my_arraylike_iterable_t, cursor_t<my_arraylike_iterable_t, int>>{
             ok::stdc::move(*this), {}};
     }
 

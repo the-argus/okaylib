@@ -46,19 +46,23 @@ namespace ok {
 template <typename payload_t> class opt;
 
 template <typename T>
-concept iterator_c = requires(T& nonconst) {
-    { nonconst.next() } -> ok::same_as_c<ok::opt<typename T::value_type>>;
+concept iterator_c = requires(stdc::remove_cvref_t<T>& nonconst) {
+    {
+        nonconst.next()
+    } -> ok::same_as_c<ok::opt<typename stdc::remove_cvref_t<T>::value_type>>;
 };
 
 namespace detail {
 template <typename T>
-concept iterator_impl_c = requires(T& d) {
-    { d.next_impl() } -> ok::same_as_c<ok::opt<typename T::value_type>>;
+concept iterator_impl_c = requires(stdc::remove_cvref_t<T>& d) {
+    {
+        d.next_impl()
+    } -> ok::same_as_c<ok::opt<typename stdc::remove_cvref_t<T>::value_type>>;
 };
 } // namespace detail
 
 template <typename T>
-concept sized_iterator_c = requires(const T& const_t) {
+concept sized_iterator_c = requires(const stdc::remove_cvref_t<T>& const_t) {
     // not depending on this here so that arraylike iterators (which may not
     // also satisfy iterator_c, at least before resolving CRTP inheritance with
     // common iterator implementation) can still satisfy this
@@ -77,73 +81,56 @@ concept infinite_iterator_c = requires {
     requires T::is_infinite;
 };
 
-template <typename cursor_t, typename corresponding_iterable_t>
-concept sized_cursor_c = requires(const cursor_t& const_t,
-                                  const corresponding_iterable_t& iterable) {
-    { const_t.size(iterable) } -> ok::same_as_c<size_t>;
-};
-
-template <typename T, typename corresponding_iterable_t>
-concept infinite_cursor_c = requires { requires T::is_infinite; };
-
-template <typename cursor_t, typename corresponding_iterable_t>
-concept const_accessible_cursor_c =
-    requires(const cursor_t& cursor, const corresponding_iterable_t& iterable) {
-        {
-            cursor.access(iterable)
-        } -> ok::same_as_c<typename cursor_t::value_type>;
+template <typename T, typename cv_qualified_corresponding_iterable_t>
+concept sized_cursor_c =
+    requires(const stdc::remove_cvref_t<T>& const_t,
+             cv_qualified_corresponding_iterable_t& iterable) {
+        { const_t.size(iterable) } -> ok::same_as_c<size_t>;
     };
 
-template <typename cursor_t, typename corresponding_iterable_t>
-concept nonconst_accessible_cursor_c =
-    requires(const cursor_t& cursor, corresponding_iterable_t& iterable) {
-        {
-            cursor.access(iterable)
-        } -> ok::same_as_c<typename cursor_t::value_type>;
-    };
+template <typename T, typename cv_qualified_corresponding_iterable_t>
+concept infinite_cursor_c =
+    requires { requires stdc::remove_cvref_t<T>::is_infinite; };
 
-template <typename T, typename corresponding_iterable_t>
+template <typename T, typename cv_qualified_corresponding_iterable_t>
 concept arraylike_cursor_c =
-    requires(const T& cursor, T& nonconst_cursor,
-             corresponding_iterable_t& nonconst_iterable,
-             const corresponding_iterable_t& const_iterable, int64_t offset) {
+    requires(const stdc::remove_cvref_t<T>& cursor,
+             stdc::remove_cvref_t<T>& nonconst_cursor,
+             cv_qualified_corresponding_iterable_t& iterable, int64_t offset) {
         // can get the index of the cursor
-        { cursor.index(const_iterable) } -> ok::same_as_c<size_t>;
+        { cursor.index(iterable) } -> ok::same_as_c<size_t>;
         // can offset the cursor by an int64_t
-        { nonconst_cursor.offset(const_iterable, offset) } -> ok::is_void_c;
+        { nonconst_cursor.offset(iterable, offset) } -> ok::is_void_c;
         // can access the cursor with the iterable
-        requires(const_accessible_cursor_c<T, corresponding_iterable_t> ||
-                 nonconst_accessible_cursor_c<T, corresponding_iterable_t>);
+        {
+            cursor.access(iterable)
+        } -> ok::same_as_c<typename stdc::remove_cvref_t<T>::value_type>;
         // it is either infinite or knows its size in constant time
-        requires(sized_cursor_c<T, corresponding_iterable_t> ||
-                 infinite_cursor_c<T, corresponding_iterable_t>);
+        requires(sized_cursor_c<T, cv_qualified_corresponding_iterable_t> ||
+                 infinite_cursor_c<T, cv_qualified_corresponding_iterable_t>);
     };
 
 template <typename T>
 concept arraylike_iterator_c =
-    requires(T& nonconst, const T& const_t, int64_t offset) {
+    requires(stdc::remove_cvref_t<T>& nonconst,
+             const stdc::remove_cvref_t<T>& const_t, int64_t offset) {
         { const_t.index() } -> ok::same_as_c<size_t>;
         { nonconst.offset(offset) } -> ok::is_void_c;
         // access on the iterator itself should always be nonconst, as the
         // iterator is a mutable object created by the .iter() and consumed
         // during iteration
-        { nonconst.access() } -> ok::same_as_c<typename T::value_type>;
+        {
+            nonconst.access()
+        } -> ok::same_as_c<typename stdc::remove_cvref_t<T>::value_type>;
         requires(sized_iterator_c<T> || infinite_iterator_c<T>);
     };
 
 template <typename T>
-concept index_providing_iterator_c = requires(const T& iterator) {
-    requires iterator_c<T> || arraylike_iterator_c<T>;
-    { iterator.index() } -> ok::same_as_c<size_t>;
-};
-
-template <typename T>
-concept iterable_c = requires(T& iterable_nonconst, const T& iterable_const,
-                              T&& iterable_rvalue) {
-    { iterable_nonconst.iter() } -> iterator_c;
-    { iterable_const.iter() } -> iterator_c;
-    { stdc::move(iterable_rvalue).iter() } -> iterator_c;
-};
+concept index_providing_iterator_c =
+    requires(const stdc::remove_cvref_t<T>& iterator) {
+        requires iterator_c<T> || arraylike_iterator_c<T>;
+        { iterator.index() } -> ok::same_as_c<size_t>;
+    };
 } // namespace ok
 
 #endif
