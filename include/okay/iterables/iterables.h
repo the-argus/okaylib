@@ -463,9 +463,9 @@ struct zip_t<viewed_t...> : public iterator_common_impl_t<zip_t<viewed_t...>>
             ok::opt<size_t> out;
             (
                 [&] {
-                    if constexpr (sized_iterator_c<
-                                      detail::nth_type<indices, viewed_t...>>) {
-                        const auto size = ok::get<indices>();
+                    if constexpr (!infinite_iterator_c<viewed_t>) {
+                        const size_t size =
+                            ok::get<indices>(m_iterators).size();
                         if (!out || out.ref_unchecked() > size)
                             out = size;
                     }
