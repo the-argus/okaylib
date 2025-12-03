@@ -17,15 +17,16 @@ struct identity_fn_t
 
 struct iterators_equal_fn_t
 {
-    template <iterator_c iterator_lhs_t, iterator_c iterator_rhs_t>
-        requires(
-            is_equality_comparable_to_c<typename iterator_lhs_t::value_type,
-                                        typename iterator_rhs_t::value_type> &&
-            (!infinite_iterator_c<iterator_lhs_t> ||
-             !infinite_iterator_c<iterator_rhs_t>))
+    template <typename iterator_lhs_t, typename iterator_rhs_t>
     constexpr decltype(auto)
     operator()(iterator_lhs_t&& lhs,
                iterator_rhs_t&& rhs) const OKAYLIB_NOEXCEPT
+        requires requires {
+            requires(!is_iterable_infinite<decltype(lhs)> ||
+                     !is_iterable_infinite<decltype(rhs)>);
+            requires is_equality_comparable_to_c<value_type_for<decltype(lhs)>,
+                                                 value_type_for<decltype(rhs)>>;
+        }
     {
         constexpr bool both_ranges_have_known_size =
             sized_iterator_c<iterator_lhs_t> &&
@@ -37,11 +38,14 @@ struct iterators_equal_fn_t
             }
         }
 
-        while (true) {
-            ok::opt lhs_value = lhs.next();
-            ok::opt rhs_value = lhs.next();
+        auto&& lhs_iterator = ok::iter(stdc::forward<iterator_lhs_t>(lhs));
+        auto&& rhs_iterator = ok::iter(stdc::forward<iterator_rhs_t>(rhs));
 
-            if (lhs_value != rhs_value)
+        while (true) {
+            ok::opt lhs_value = lhs_iterator.next();
+            ok::opt rhs_value = rhs_iterator.next();
+
+            if (!lhs_value.deep_compare_with(rhs_value))
                 return false;
             if (!lhs_value && !rhs_value)
                 return true;
@@ -84,23 +88,23 @@ struct iterators_copy_assign_fn_t
             sized_iterator_c<dest_iterator_t> &&
             sized_iterator_c<source_iterator_t>;
 
-            while (true) {
-                ok::opt dest_item = dest.next();
-                ok::opt source_item = dest.next();
+        while (true) {
+            ok::opt dest_item = dest.next();
+            ok::opt source_item = dest.next();
 
-                if constexpr (!allow_small_destination) {
-                    if (!dest_item && source_item) {
-                        __ok_abort(
-                            "Attempt to iterators_copy_assign() from a source "
-                            "which is larger than the destination.");
-                    }
+            if constexpr (!allow_small_destination) {
+                if (!dest_item && source_item) {
+                    __ok_abort(
+                        "Attempt to iterators_copy_assign() from a source "
+                        "which is larger than the destination.");
                 }
-
-                if (!source_item || !dest_item) [[unlikely]]
-                    break;
-
-                dest_item.ref_unchecked() = source_item.ref_unchecked();
             }
+
+            if (!source_item || !dest_item) [[unlikely]]
+                break;
+
+            dest_item.ref_unchecked() = source_item.ref_unchecked();
+        }
     }
 };
 
@@ -108,7 +112,8 @@ struct iterators_copy_assign_fn_t
 
 inline constexpr detail::iterators_equal_fn_t iterators_equal;
 inline constexpr detail::iterators_copy_assign_fn_t<true> iterators_copy_assign;
-inline constexpr detail::iterators_copy_assign_fn_t<false> iterators_copy_assign_strict;
+inline constexpr detail::iterators_copy_assign_fn_t<false>
+    iterators_copy_assign_strict;
 inline constexpr detail::identity_fn_t identity;
 } // namespace ok
 

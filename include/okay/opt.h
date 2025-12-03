@@ -441,9 +441,10 @@ template <typename payload_t> class opt
     // intuitive sense to someone who doesn know the ins and outs of the C++
     // stl. Do I want a sorted vector of optionals to have all the nulls at the
     // front? maybe, but why is that default
-    constexpr friend bool operator==(const opt& a,
-                                     const opt& b) OKAYLIB_NOEXCEPT
-        requires(detail::is_equality_comparable_to_self_c<payload_t>)
+    template <typename other_payload_t>
+        requires detail::is_equality_comparable_to_c<payload_t, other_payload_t>
+    constexpr friend bool
+    operator==(const opt& a, const opt<other_payload_t>& b) OKAYLIB_NOEXCEPT
     {
         if (a.has_value() != b.has_value())
             return false;
@@ -451,18 +452,37 @@ template <typename payload_t> class opt
         return !a.has_value() || a.ref_unchecked() == b.ref_unchecked();
     }
 
+    template <typename other_t>
+        requires detail::is_equality_comparable_to_c<payload_t, other_t>
     constexpr friend bool operator==(const opt& a,
-                                     const payload_t& b) OKAYLIB_NOEXCEPT
-        requires(detail::is_equality_comparable_to_self_c<payload_t>)
+                                     const other_t& b) OKAYLIB_NOEXCEPT
     {
         return a.has_value() && a.ref_unchecked() == b;
     }
 
-    constexpr friend bool operator==(const payload_t& b,
+    template <typename other_t>
+        requires detail::is_equality_comparable_to_c<payload_t, other_t>
+    constexpr friend bool operator==(const other_t& b,
                                      const opt& a) OKAYLIB_NOEXCEPT
-        requires(detail::is_equality_comparable_to_self_c<payload_t>)
     {
         return a.has_value() && a.ref_unchecked() == b;
+    }
+
+    // compatibility with optional reference deep_compare_with()
+    template <typename other_t>
+        requires detail::is_equality_comparable_to_c<payload_t, other_t>
+    [[nodiscard]] constexpr bool
+    deep_compare_with(const other_t& b) const OKAYLIB_NOEXCEPT
+    {
+        return *this == b;
+    }
+
+    template <typename other_payload_t>
+        requires detail::is_equality_comparable_to_c<payload_t, other_payload_t>
+    [[nodiscard]] constexpr bool
+    deep_compare_with(const opt<other_payload_t>& b) const OKAYLIB_NOEXCEPT
+    {
+        return *this == b;
     }
 
     constexpr ~opt()
@@ -637,6 +657,28 @@ template <stdc::is_reference_c payload_t> class opt<payload_t>
     [[nodiscard]] constexpr bool is_alias_for(const opt& other) OKAYLIB_NOEXCEPT
     {
         return m_pointer && (m_pointer == other.m_pointer);
+    }
+
+    template <typename other_t>
+        requires ok::detail::is_equality_comparable_to_c<pointer_t, other_t>
+    [[nodiscard]] constexpr bool
+    deep_compare_with(const other_t& other) OKAYLIB_NOEXCEPT
+    {
+        return m_pointer && *m_pointer == other;
+    }
+
+    template <typename other_payload_t>
+        requires ok::detail::is_equality_comparable_to_c<pointer_t,
+                                                         other_payload_t>
+    [[nodiscard]] constexpr bool
+    deep_compare_with(const opt<other_payload_t>& other) OKAYLIB_NOEXCEPT
+    {
+        if (!m_pointer != !other)
+            return false;
+        if (!m_pointer && !other)
+            return true;
+        __ok_internal_assert(m_pointer && other);
+        return *m_pointer == other.ref_unchecked();
     }
 
     [[nodiscard]] constexpr pointer_t* as_ptr() const OKAYLIB_NOEXCEPT

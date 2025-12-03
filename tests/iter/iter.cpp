@@ -181,22 +181,20 @@ TEST_SUITE("iter")
 
         SUBCASE("zip view with only lvalue references")
         {
-            static_assert(iterable_c<int(&)[5]>);
-
-            int ints[] = {0, 1, 2, 3, 4};
+            int ints[] = {0, 1, 2, 3, 4, 5};
             myiterable_t iterable;
 
-            for (auto& [iterable_item, int_item] : zip(iterable, ints)) {
+            for (auto& [iterable_item, int_item] :
+                 zip(iterable, reverse(ints))) {
                 static_assert(same_as_c<decltype(iterable_item), int&>);
                 static_assert(same_as_c<decltype(int_item), int&>);
 
-                int_item = iterable_item;
+                REQUIRE(int_item != iterable_item);
+                int_item = iterable_item; // swap the two ranges
             }
 
-            // constexpr maybe_undefined_array_t expected = {4, 3, 2, 1, 0};
-            // static_assert(iterable_c<decltype(ok::iter(expected))>);
-            // auto test = ok::iterators_equal(ok::iter(ints),
-            // ok::iter(expected)); REQUIRE(test);
+            REQUIRE(ok::iterators_equal(
+                ints, maybe_undefined_array_t{5, 4, 3, 2, 1, 0}));
         }
     }
 }

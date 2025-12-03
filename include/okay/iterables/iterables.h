@@ -612,14 +612,14 @@ struct transform_t<viewed_t, callable_t>
 namespace detail {
 /// Class which wraps a std::vector, std::span, or std::array to make it
 /// iterable.
-template <typename container_t>
+template <typename cvref_qualified_container_t>
 class stdlib_arraylike_container_iterable_compat_t
 {
-    using storage_type =
-        stdc::conditional_t<stdc::is_rvalue_reference_v<container_t>,
-                            stdc::remove_reference_t<container_t>, container_t>;
+    using container_t = ok::remove_cvref_t<cvref_qualified_container_t>;
 
-    using noref_container_t = ok::remove_cvref_t<container_t>;
+    using storage_type = stdc::conditional_t<
+        stdc::is_lvalue_reference_v<cvref_qualified_container_t>,
+        cvref_qualified_container_t, container_t>;
 
     storage_type m_container;
 
@@ -636,7 +636,7 @@ class stdlib_arraylike_container_iterable_compat_t
       public:
         constexpr cursor_t() = default;
 
-        using value_type = value_type_t&;
+        using value_type = value_type_t;
 
         constexpr size_t
         index(const stdlib_arraylike_container_iterable_compat_t&) const
@@ -664,19 +664,36 @@ class stdlib_arraylike_container_iterable_compat_t
     };
 
   public:
-    constexpr stdlib_arraylike_container_iterable_compat_t(container_t container)
-        : m_container(
-              stdc::forward<stdc::remove_reference_t<container_t>>(container))
+    constexpr stdlib_arraylike_container_iterable_compat_t(
+        cvref_qualified_container_t container)
+        requires stdc::is_rvalue_reference_v<cvref_qualified_container_t>
+        : m_container(stdc::move(container))
+    {
+    }
+
+    constexpr stdlib_arraylike_container_iterable_compat_t(
+        cvref_qualified_container_t container)
+        requires stdc::is_lvalue_reference_v<cvref_qualified_container_t>
+        : m_container(container)
+    {
+    }
+
+    constexpr stdlib_arraylike_container_iterable_compat_t(
+        cvref_qualified_container_t container)
+        requires(!stdc::is_reference_v<cvref_qualified_container_t>)
+        : m_container(stdc::move(container))
     {
     }
 
     [[nodiscard]] constexpr auto iter() &&
     {
-        return ok::owning_arraylike_iterator_t<
-            stdlib_arraylike_container_iterable_compat_t,
-            cursor_t<stdlib_arraylike_container_iterable_compat_t,
-                     typename noref_container_t::value_type>>{stdc::move(*this),
-                                                              {}};
+        using cursor = cursor_t<stdlib_arraylike_container_iterable_compat_t,
+                                decltype(m_container[size_t{}])>;
+
+        using iterator = ok::owning_arraylike_iterator_t<
+            stdlib_arraylike_container_iterable_compat_t, cursor>;
+
+        return iterator{stdc::move(*this), {}};
     }
 };
 
@@ -807,9 +824,7 @@ concept iterable_c = requires(T obj) {
 
 template <typename T>
 concept arraylike_iterable_c = requires(T obj) {
-    {
-        ok::iter(stdc::forward<stdc::remove_reference_t<T>>(obj))
-    } -> arraylike_iterator_c;
+    { ok::iter(obj) } -> arraylike_iterator_c;
 };
 
 namespace detail {
@@ -818,6 +833,16 @@ namespace detail {
 template <typename... Ts>
 concept zip_constraints_c = (iterable_c<Ts> && ...);
 } // namespace detail
+
+template <iterable_c T>
+using iterator_for = decltype(ok::iter(stdc::declval<T>()));
+
+template <iterable_c T>
+using value_type_for = typename iterator_for<T>::value_type;
+
+template <typename T>
+inline constexpr bool is_iterable_infinite =
+    infinite_iterator_c<iterator_for<T>>;
 
 template <typename derived_t> struct iterator_common_impl_t
 {
