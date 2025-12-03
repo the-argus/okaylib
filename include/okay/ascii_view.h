@@ -15,6 +15,7 @@
 #include "okay/detail/utility.h"
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 
 namespace ok {
 namespace detail {
@@ -76,6 +77,13 @@ class ascii_view
                                                        size_t length)
     {
         return {chars, length};
+    }
+
+    // uses nonconstexpr cstring ::strlen
+    // TODO: strlen can be constexpr, right?
+    [[nodiscard]] static ascii_view from_cstring(const char* cstring)
+    {
+        return from_raw(cstring, ::strlen(cstring));
     }
 
     template <size_t N>

@@ -1,3 +1,4 @@
+#include "okay/ascii_view.h"
 #include "test_header.h"
 // test header must be first
 #include "okay/containers/array.h"
@@ -195,6 +196,44 @@ TEST_SUITE("iter")
 
             REQUIRE(ok::iterators_equal(
                 ints, maybe_undefined_array_t{5, 4, 3, 2, 1, 0}));
+        }
+    }
+
+    TEST_CASE("keep_if view")
+    {
+        constexpr auto is_even = [](const auto& i) { return i % 2 == 0; };
+
+        SUBCASE("filter odd numbers out")
+        {
+            int myints[] = {0, 1, 2, 3, 4, 5};
+            maybe_undefined_array_t myints_array = {0, 1, 2, 3, 4, 5};
+            maybe_undefined_array_t expected = {0, 2, 4};
+
+            REQUIRE(ok::iterators_equal(keep_if(myints, is_even),
+                                        keep_if(myints_array, is_even)));
+            REQUIRE(ok::iterators_equal(keep_if(myints, is_even), expected));
+            REQUIRE(
+                ok::iterators_equal(keep_if(myints_array, is_even), expected));
+        }
+
+        SUBCASE("filter odd indices out of non-integer iterable")
+        {
+            const char* strings[] = {
+                "keep", "removeodd", "keep", "removeodd, again", "keep",
+            };
+
+            size_t runs = 0;
+            for (const char*& item :
+                 enumerate(strings)
+                     .keep_if([&](const auto& pair) {
+                         const auto& [str, index] = pair;
+                         return is_even(index);
+                     })
+                     .transform([](auto&& a) { return ok::get<0>(a); })) {
+                ++runs;
+                REQUIRE(ascii_view::from_cstring(item) == ascii_view("keep"));
+            }
+            REQUIRE(runs == 3);
         }
     }
 }
