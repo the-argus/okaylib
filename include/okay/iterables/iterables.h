@@ -835,7 +835,8 @@ concept zip_constraints_c = (iterable_c<Ts> && ...);
 } // namespace detail
 
 template <iterable_c T>
-using iterator_for = decltype(ok::iter(stdc::declval<T>()));
+using iterator_for =
+    stdc::remove_cvref_t<decltype(ok::iter(stdc::declval<T>()))>;
 
 template <iterable_c T>
 using value_type_for = typename iterator_for<T>::value_type;
