@@ -1,8 +1,8 @@
 #ifndef __OKAYLIB_DETAIL_RANGE_CONCEPTS_H__
 #define __OKAYLIB_DETAIL_RANGE_CONCEPTS_H__
 
+#include "okay/detail/traits/special_member_traits.h"
 #include "okay/detail/type_traits.h"
-#include "okay/detail/utility.h"
 #include <cstdint>
 
 /*
@@ -47,6 +47,7 @@ template <typename payload_t> class opt;
 
 template <typename T>
 concept iterator_c = requires(stdc::remove_cvref_t<T>& nonconst) {
+    requires ok::detail::is_moveable_c<T>;
     {
         nonconst.next()
     } -> ok::same_as_c<ok::opt<typename stdc::remove_cvref_t<T>::value_type>>;
@@ -91,6 +92,14 @@ concept sized_cursor_c =
 template <typename T, typename cv_qualified_corresponding_iterable_t>
 concept infinite_cursor_c =
     requires { requires stdc::remove_cvref_t<T>::is_infinite; };
+
+template <typename T, typename cv_qualified_corresponding_iterable_t>
+concept cursor_c = requires(stdc::remove_cvref_t<T>& cursor,
+                            cv_qualified_corresponding_iterable_t& iterable) {
+    {
+        cursor.next(iterable)
+    } -> same_as_c<opt<typename stdc::remove_cvref_t<T>::value_type>>;
+};
 
 template <typename T, typename cv_qualified_corresponding_iterable_t>
 concept arraylike_cursor_c =
