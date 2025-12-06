@@ -52,7 +52,9 @@ inline constexpr bool assigns_from_opt =
     stdc::is_assignable_v<target_t&, opt<opt_payload_t>&&>;
 } // namespace detail
 
-template <typename payload_t> class opt
+template <typename payload_t>
+    requires(!stdc::is_reference_c<payload_t>)
+class opt<payload_t>
 {
   public:
     // type constraints
@@ -565,7 +567,7 @@ template <typename payload_t> class opt
 };
 
 // template specialization for lvalue references
-template <stdc::is_reference_c payload_t> class opt<payload_t>
+template <stdc::is_lvalue_reference_c payload_t> class opt<payload_t>
 {
   public:
     using pointer_t = stdc::remove_reference_t<payload_t>;

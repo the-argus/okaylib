@@ -47,7 +47,7 @@ template <typename payload_t> class opt;
 
 template <typename T>
 concept iterator_c = requires(stdc::remove_cvref_t<T>& nonconst) {
-    requires ok::detail::is_moveable_c<T>;
+    requires ok::detail::is_moveable_c<stdc::remove_cvref_t<T>>;
     {
         nonconst.next()
     } -> ok::same_as_c<ok::opt<typename stdc::remove_cvref_t<T>::value_type>>;

@@ -1054,6 +1054,9 @@ template <typename T>
 concept is_reference_c = is_reference<T>::value;
 
 template <typename T>
+concept is_lvalue_reference_c = is_lvalue_reference<T>::value;
+
+template <typename T>
 concept is_const_c = is_const<T>::value;
 
 template <typename T>
