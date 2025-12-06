@@ -157,7 +157,6 @@ const test_source_files = &[_][]const u8{
     "slab_allocator/slab_allocator.cpp",
     "block_allocator/block_allocator.cpp",
     "arc/arc.cpp",
-    "any_of/any_of.cpp",
     "arcpool/arcpool.cpp",
     "arraylist/arraylist.cpp",
     "algorithm/ranges_equal.cpp",
@@ -166,6 +165,8 @@ const test_source_files = &[_][]const u8{
     "bit_arraylist/bit_arraylist.cpp",
     "segmented_list/segmented_list.cpp",
     "reflection/reflection.cpp",
+    "iterables/all_satisfy/all_satisfy.cpp",
+    "iterables/any_satisfy/any_satisfy.cpp",
 };
 
 const tests_backtrace_source_files = &[_][]const u8{
