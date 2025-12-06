@@ -1229,6 +1229,9 @@ template <typename T>
 concept is_void_c = requires { requires stdc::is_void_v<T>; };
 
 template <typename T>
+concept is_nonvoid_c = requires { requires !stdc::is_void_v<T>; };
+
+template <typename T>
 concept is_const_c = stdc::is_const_c<T>;
 
 namespace detail {

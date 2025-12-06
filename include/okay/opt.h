@@ -3,6 +3,7 @@
 
 #include "okay/detail/abort.h"
 #include "okay/detail/addressof.h"
+#include "okay/detail/invoke.h"
 #include "okay/detail/memory.h"
 #include "okay/detail/noexcept.h"
 #include "okay/detail/ok_assert.h"
@@ -408,7 +409,8 @@ class opt<payload_t>
     template <typename callable_t>
     [[nodiscard]] constexpr payload_t
     take_or_run(callable_t&& callable) OKAYLIB_NOEXCEPT
-        requires(is_std_invocable_r_c<callable_t, payload_t>)
+        requires(
+            is_std_invocable_r_c<callable_t, decltype(this -> ref_unchecked())>)
     {
         if (this->has_value()) {
             payload_t out(stdc::move(this->ref_unchecked()));
@@ -416,6 +418,31 @@ class opt<payload_t>
             return out;
         } else {
             return callable();
+        }
+    }
+
+    /// Take the value, and call a transformation function on it before moving
+    /// it into the returned optional. If this is already null, then we also
+    /// return null
+    template <typename callable_t>
+    [[nodiscard]] constexpr auto
+    take_and_run(callable_t&& callable) OKAYLIB_NOEXCEPT
+        requires requires {
+            {
+                invoke(stdc::forward<callable_t>(callable),
+                       stdc::move(this->ref_unchecked()))
+            } -> is_nonvoid_c;
+        }
+    {
+        using ret_t = decltype(invoke(stdc::forward<callable_t>(callable),
+                                      stdc::move(this->ref_unchecked())));
+        if (this->has_value()) {
+            opt<ret_t> out(invoke(stdc::forward<callable_t>(callable),
+                                  stdc::move(this->ref_unchecked())));
+            this->reset();
+            return out;
+        } else {
+            return opt<ret_t>{};
         }
     }
 
@@ -686,6 +713,31 @@ template <stdc::is_lvalue_reference_c payload_t> class opt<payload_t>
     [[nodiscard]] constexpr pointer_t* as_ptr() const OKAYLIB_NOEXCEPT
     {
         return m_pointer;
+    }
+
+    /// Take the value, and call a transformation function on it before moving
+    /// it into the returned optional. If this is already null, then we also
+    /// return null
+    template <typename callable_t>
+    [[nodiscard]] constexpr auto
+    take_and_run(callable_t&& callable) OKAYLIB_NOEXCEPT
+        requires requires {
+            {
+                invoke(stdc::forward<callable_t>(callable),
+                       this->ref_unchecked())
+            } -> is_nonvoid_c;
+        }
+    {
+        using ret_t = decltype(invoke(stdc::forward<callable_t>(callable),
+                                      this->ref_unchecked()));
+        if (this->has_value()) {
+            opt<ret_t> out(invoke(stdc::forward<callable_t>(callable),
+                                  this->ref_unchecked()));
+            this->reset();
+            return out;
+        } else {
+            return opt<ret_t>{};
+        }
     }
 
 #if defined(OKAYLIB_USE_FMT)

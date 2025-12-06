@@ -244,7 +244,8 @@ class stdlib_arraylike_container_iterable_compat_t
             __ok_assert(m_index < size(iterable),
                         "out of bounds iteration into stdlib style container");
             if constexpr (stdc::is_pointer_v<storage_type>) {
-                container_t& container = *iterable.m_container;
+                stdc::remove_reference_t<cvref_qualified_container_t>&
+                    container = *iterable.m_container;
                 return container[m_index];
             } else {
                 return iterable.m_container[m_index];
@@ -421,6 +422,12 @@ concept iterable_impl_c = requires(T obj) {
                  stdc::is_lvalue_reference_v<T>;
     { ok::iter(stdc::forward<stdc::remove_cvref_t<T>>(obj)) } -> iterator_c;
 };
+template <typename T>
+concept iterable_const_ref_impl_c = requires(T obj) {
+    requires stdc::is_lvalue_reference_v<T>;
+    requires stdc::is_const_c<stdc::remove_reference_t<T>>;
+    { ok::iter(obj) } -> iterator_c;
+};
 } // namespace detail
 
 /// An iterable is something that can have ok::iter called on it. (Technically
@@ -429,7 +436,9 @@ template <typename T>
 concept iterable_c =
     // the forward<remove_cvref_t<T>>(...) in the iterable_impl_c doesn't work
     // on c style array references, so we have to make an exception for them
-    stdc::is_array_v<stdc::remove_cvref_t<T>> || detail::iterable_impl_c<T>;
+    stdc::is_array_v<stdc::remove_cvref_t<T>> || detail::iterable_impl_c<T> ||
+    // the forward also seems to not work on the const lvalue ref?
+    detail::iterable_const_ref_impl_c<T>;
 
 template <typename T>
 concept arraylike_iterable_c = requires(T obj) {
@@ -765,7 +774,8 @@ struct flatten_t<viewed_t> : public iterator_common_impl_t<flatten_t<viewed_t>>
     using value_type = typename inner_iterator_t::value_type;
 
     constexpr flatten_t(viewed_t&& input)
-        : iterator(stdc::move(input)), inner_iterator(iterator.next())
+        : iterator(stdc::move(input)),
+          inner_iterator(iterator.next().take_and_run(iter))
     {
     }
 
@@ -778,13 +788,13 @@ struct flatten_t<viewed_t> : public iterator_common_impl_t<flatten_t<viewed_t>>
             return out;
 
         if (!(out = inner_iterator.ref_unchecked().next())) {
-            inner_iterator = iterator.next();
+            inner_iterator = iterator.next().take_and_run(iter);
             while (inner_iterator) {
 
-                if ((out = inner_iterator.next()))
+                if ((out = inner_iterator.ref_unchecked().next()))
                     return out;
 
-                inner_iterator = iterator.next();
+                inner_iterator = iterator.next().take_and_run(iter);
             }
         }
 

@@ -241,10 +241,53 @@ TEST_SUITE("iter")
     {
         SUBCASE("2d array")
         {
-            maybe_undefined_array_t outer { maybe_undefined_array_t{0, 1}, maybe_undefined_array_t{2, 3} };
-            maybe_undefined_array_t expected {0,1 ,2 ,3};
+            maybe_undefined_array_t outer{
+                maybe_undefined_array_t{0, 1},
+                maybe_undefined_array_t{2, 3},
+            };
+            maybe_undefined_array_t expected{0, 1, 2, 3};
 
             REQUIRE(iterators_equal(iter(outer).flatten(), expected));
+        }
+
+        SUBCASE("2d array const")
+        {
+            const maybe_undefined_array_t outer{
+                maybe_undefined_array_t{0, 1},
+                maybe_undefined_array_t{2, 3},
+            };
+            const maybe_undefined_array_t expected{0, 1, 2, 3};
+            REQUIRE(iterators_equal(iter(outer).flatten(), expected));
+        }
+
+        SUBCASE("3d array")
+        {
+            constexpr maybe_undefined_array_t outer{
+                maybe_undefined_array_t{
+                    maybe_undefined_array_t{0, 1},
+                    maybe_undefined_array_t{2, 3},
+                    maybe_undefined_array_t{4, 5},
+                },
+                maybe_undefined_array_t{
+                    maybe_undefined_array_t{6, 7},
+                    maybe_undefined_array_t{8, 9},
+                    maybe_undefined_array_t{10, 11},
+                },
+            };
+
+            constexpr maybe_undefined_array_t expected_flatten_once{
+                maybe_undefined_array_t{0, 1}, maybe_undefined_array_t{2, 3},
+                maybe_undefined_array_t{4, 5}, maybe_undefined_array_t{6, 7},
+                maybe_undefined_array_t{8, 9}, maybe_undefined_array_t{10, 11},
+            };
+
+            constexpr maybe_undefined_array_t expected_flatten_twice{
+                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
+
+            REQUIRE(
+                iterators_equal(iter(outer).flatten(), expected_flatten_once));
+            REQUIRE(iterators_equal(iter(outer).flatten().flatten(),
+                                    expected_flatten_twice));
         }
     }
 }

@@ -15,7 +15,7 @@
 #endif
 
 namespace ok {
-#define __ok_internal_array_impl                                               \
+#define __ok_internal_array_impl(this_template, n_items)                       \
                                                                                \
   public:                                                                      \
     static_assert(!stdc::is_reference_c<T>,                                    \
@@ -62,6 +62,18 @@ namespace ok {
         return __m_items;                                                      \
     }                                                                          \
                                                                                \
+    template <detail::is_equality_comparable_to_c<value_type> U>               \
+    [[nodiscard]] constexpr friend bool operator==(                            \
+        const this_template& self, const this_template<U, n_items>& other)     \
+    {                                                                          \
+        for (size_t i = 0; i < n_items; ++i) {                                 \
+            if (self[i] != other[i]) {                                         \
+                return false;                                                  \
+            }                                                                  \
+        }                                                                      \
+        return true;                                                           \
+    }                                                                          \
+                                                                               \
     [[nodiscard]] constexpr slice<const T> items() const& OKAYLIB_NOEXCEPT     \
     {                                                                          \
         return raw_slice(*data(), size());                                     \
@@ -88,7 +100,7 @@ template <typename T, size_t num_items> struct array_t
         "add a default constructor to your type (best practice) or use "
         "ok::undefined_array_t and be aware of undefined initialization.");
 
-    __ok_internal_array_impl
+    __ok_internal_array_impl(array_t, num_items)
 };
 
 template <typename T, size_t num_items> struct zeroed_array_t
@@ -107,7 +119,7 @@ template <typename T, size_t num_items> struct zeroed_array_t
         ok::memfill(ok::slice(__m_items), 0);
     }
 
-    __ok_internal_array_impl
+    __ok_internal_array_impl(zeroed_array_t, num_items)
 };
 
 /// A maybe_undefined_array_t is an array of trivially constructible objects
@@ -121,7 +133,7 @@ template <typename T, size_t num_items> struct maybe_undefined_array_t
                   "constructible types, use ok::array_t for types that have "
                   "some defined initialization / default construction.");
 
-    __ok_internal_array_impl
+    __ok_internal_array_impl(maybe_undefined_array_t, num_items)
 };
 
 // aggregate initialization template deducation, so you can do
