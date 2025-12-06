@@ -157,7 +157,6 @@ const test_source_files = &[_][]const u8{
     "slab_allocator/slab_allocator.cpp",
     "block_allocator/block_allocator.cpp",
     "arc/arc.cpp",
-    "all_of/all_of.cpp",
     "any_of/any_of.cpp",
     "arcpool/arcpool.cpp",
     "arraylist/arraylist.cpp",

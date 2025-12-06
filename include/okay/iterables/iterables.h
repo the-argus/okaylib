@@ -373,6 +373,88 @@ concept has_iter_memfun_c = requires(stdc::remove_cv_t<T>& iterable_nonconst,
     { stdc::move(iterable_rvalue).iter() } -> iterator_c;
 };
 
+template <typename T, bool is_const> struct opt_cursor_t
+{
+    using container_t = stdc::conditional_t<is_const, const opt<T>&, opt<T>&>;
+    bool has_called = false;
+
+    using value_type = decltype(stdc::declval<container_t>().ref_unchecked());
+
+    [[nodiscard]] constexpr opt<value_type>
+    next(container_t container) OKAYLIB_NOEXCEPT
+    {
+        has_called = true;
+        if (!has_called && container)
+            return opt<value_type>(container.ref_unchecked());
+        return opt<value_type>{};
+    }
+};
+
+/// Iterable which just holds a reference to an iterator and calls its
+/// functions, useful since adaptors only work on rvalues
+template <typename T> struct ref_wrap_iterable_t
+{
+    struct cursor_t
+    {
+        using value_type = typename T::value_type;
+
+        [[nodiscard]] constexpr opt<value_type>
+        next(const ref_wrap_iterable_t& container) OKAYLIB_NOEXCEPT
+        {
+            return container.iterator->next();
+        }
+    };
+
+    T* iterator;
+
+    constexpr ref_wrap_iterable_t(T& iterator) OKAYLIB_NOEXCEPT
+        : iterator(addressof(iterator))
+    {
+    }
+};
+
+template <typename T> struct ref_wrap_arraylike_iterable_t
+{
+    struct cursor_t
+    {
+        using value_type = typename T::value_type;
+
+        static inline constexpr bool is_infinite = infinite_iterator_c<T>;
+
+        [[nodiscard]] constexpr size_t
+        index(const ref_wrap_arraylike_iterable_t& i) const OKAYLIB_NOEXCEPT
+        {
+            return i.iterator->index();
+        }
+
+        [[nodiscard]] constexpr size_t
+        size(const ref_wrap_arraylike_iterable_t& i) const OKAYLIB_NOEXCEPT
+            requires(!is_infinite)
+        {
+            return i.iterator->size();
+        }
+
+        constexpr void offset(const ref_wrap_arraylike_iterable_t& i,
+                              int64_t offset_amount) OKAYLIB_NOEXCEPT
+        {
+            i.iterator->offset(offset_amount);
+        }
+
+        [[nodiscard]] constexpr value_type
+        access(ref_wrap_arraylike_iterable_t& i) const OKAYLIB_NOEXCEPT
+        {
+            return i.iterator->access();
+        }
+    };
+
+    T* iterator;
+
+    constexpr ref_wrap_arraylike_iterable_t(T& iterator) OKAYLIB_NOEXCEPT
+        : iterator(addressof(iterator))
+    {
+    }
+};
+
 struct make_into_iterator_fn_t
 {
     template <typename T, size_t N>
@@ -400,14 +482,65 @@ struct make_into_iterator_fn_t
         return stdc::forward<T>(iterable).iter();
     }
 
-    /// If a thing is already an iterator, ok::iter() is just an identity
-    /// function
+    /// If a thing is already an iterator and its coming in as an rvalue,
+    /// ok::iter() is just an identity function
     template <iterator_c T>
         requires(!stdlib_arraylike_container_c<T> && !has_iter_memfun_c<T>)
     [[nodiscard]] constexpr decltype(auto)
     operator()(T&& iterator) const OKAYLIB_NOEXCEPT
     {
         return stdc::forward<T>(iterator);
+    }
+
+  public:
+    // retroactively make ok::opt iterable
+    template <is_instance_c<ok::opt> T>
+    [[nodiscard]] constexpr auto
+    operator()(const T& optional) const OKAYLIB_NOEXCEPT
+    {
+        return ref_iterator_t<T, opt_cursor_t<typename T::value_type, true>>{
+            optional, {}};
+    }
+
+    template <is_instance_c<ok::opt> T>
+    [[nodiscard]] constexpr auto operator()(T& optional) const OKAYLIB_NOEXCEPT
+    {
+        return ref_iterator_t<T, opt_cursor_t<typename T::value_type, false>>{
+            optional, {}};
+    }
+
+    template <is_instance_c<ok::opt> T>
+    [[nodiscard]] constexpr auto operator()(T&& optional) const OKAYLIB_NOEXCEPT
+    {
+        return owning_iterator_t<T,
+                                 opt_cursor_t<typename T::value_type, false>>{
+            stdc::move(optional), {}};
+    }
+
+    // wrap lvalue iterators
+    template <iterator_c T>
+        requires(!arraylike_iterator_c<T> && !stdlib_arraylike_container_c<T> &&
+                 !has_iter_memfun_c<T>)
+    [[nodiscard]] constexpr decltype(auto)
+    operator()(T& iterator) const OKAYLIB_NOEXCEPT
+    {
+        using iterable_t = ref_wrap_iterable_t<T>;
+        using cursor_t = typename iterable_t::cursor_t;
+        return owning_iterator_t<iterable_t, cursor_t>{
+            iterable_t(iterator),
+            {},
+        };
+    }
+    template <arraylike_iterator_c T>
+    [[nodiscard]] constexpr decltype(auto)
+    operator()(T& iterator) const OKAYLIB_NOEXCEPT
+        requires(stdc::is_lvalue_reference_v<decltype(iterator)> &&
+                 !stdlib_arraylike_container_c<T> && !has_iter_memfun_c<T>)
+    {
+        using iterable_t = ref_wrap_arraylike_iterable_t<T>;
+        using cursor_t = typename iterable_t::cursor_t;
+        return owning_arraylike_iterator_t<iterable_t, cursor_t>{
+            iterable_t(iterator), cursor_t{}};
     }
 };
 
@@ -480,6 +613,7 @@ template <arraylike_iterator_c viewed_t>
     requires sized_iterator_c<viewed_t>
 struct reverse_t;
 template <typename viewed_t> struct drop_t;
+template <typename viewed_t> struct take_t;
 template <iterator_c viewed_t> struct enumerate_t;
 template <typename... viewed_t> struct zip_t;
 template <typename viewed_t, typename callable_t> struct transform_t;
@@ -583,6 +717,12 @@ template <typename derived_t> struct iterator_common_impl_t
             ok::stdc::move(*static_cast<derived_t*>(this)), num_to_drop);
     }
 
+    [[nodiscard]] constexpr auto take_at_most(size_t max_num_to_take) &&
+    {
+        return adaptor::take_t<derived_t>(
+            ok::stdc::move(*static_cast<derived_t*>(this)), max_num_to_take);
+    }
+
     [[nodiscard]] constexpr auto enumerate() &&
     {
         return adaptor::enumerate_t<derived_t>(
@@ -639,9 +779,7 @@ template <typename derived_t> struct iterator_common_impl_t
 
     template <typename predicate_t>
     constexpr bool all_satisfy(const predicate_t& predicate) &&
-        requires predicate_c<
-            predicate_t,
-            decltype(static_cast<derived_t*>(this) -> next().ref_unchecked())>
+        requires predicate_c<predicate_t, typename derived_t::value_type>
     {
         for (auto&& item : *this) {
             const bool satisfied_predicate = ok::invoke(
@@ -715,7 +853,8 @@ template <typename derived_t> struct iterator_common_impl_t
         ok::opt<typename derived_t::value_type> out;
         auto* derived = static_cast<derived_t*>(this);
 
-        if constexpr (sized_iterator_c<derived_t>) {
+        if constexpr (arraylike_iterator_c<derived_t> &&
+                      sized_iterator_c<derived_t>) {
             if (this->index() >= derived->size())
                 return out;
         }
@@ -836,6 +975,76 @@ struct reverse_t : public iterator_common_impl_t<reverse_t<viewed_t>>
 };
 
 template <iterator_c viewed_t>
+    requires(!arraylike_iterator_c<viewed_t>)
+struct take_t<viewed_t> : public iterator_common_impl_t<take_t<viewed_t>>
+{
+    viewed_t iterator;
+    size_t consumptions_remaining;
+
+    using value_type = typename viewed_t::value_type;
+
+    constexpr take_t(viewed_t&& input, size_t consumptions)
+        : iterator(stdc::move(input)), consumptions_remaining(consumptions)
+    {
+    }
+
+    [[nodiscard]] constexpr opt<value_type> next()
+    {
+        if (!consumptions_remaining)
+            return {};
+
+        --consumptions_remaining;
+        return iterator.next();
+    }
+};
+
+template <arraylike_iterator_c viewed_t>
+struct take_t<viewed_t> : public iterator_common_impl_t<take_t<viewed_t>>
+{
+  private:
+    viewed_t iterator;
+    size_t clamped_length;
+
+  public:
+    using value_type = typename viewed_t::value_type;
+
+    // taking from an infinite iterator makes it finite
+    static constexpr bool is_infinite = false;
+
+    constexpr take_t(viewed_t&& input, size_t consumptions)
+        : iterator(stdc::move(input)), clamped_length(consumptions)
+    {
+    }
+
+    [[nodiscard]] constexpr size_t size() const
+    {
+        if constexpr (sized_iterator_c<viewed_t>) {
+            return ok::min(iterator.size(), clamped_length);
+        } else {
+            static_assert(infinite_iterator_c<viewed_t>);
+            return clamped_length;
+        }
+    }
+
+    [[nodiscard]] constexpr size_t index_impl() const
+    {
+        return iterator.index();
+    }
+
+    [[nodiscard]] constexpr auto access()
+    {
+        __ok_internal_assert(index_impl() < clamped_length);
+        return iterator.access();
+    }
+
+    constexpr void offset(int64_t offset_amount)
+    {
+        iterator.offset(offset_amount);
+    }
+};
+
+template <iterator_c viewed_t>
+    requires(!arraylike_iterator_c<viewed_t>)
 struct drop_t<viewed_t> : public iterator_common_impl_t<drop_t<viewed_t>>
 {
     viewed_t iterator;
@@ -874,7 +1083,7 @@ struct drop_t<viewed_t> : public iterator_common_impl_t<drop_t<viewed_t>>
 {
   private:
     viewed_t iterator;
-    const size_t skips;
+    size_t skips;
 
   public:
     using value_type = typename viewed_t::value_type;
@@ -905,7 +1114,6 @@ struct drop_t<viewed_t> : public iterator_common_impl_t<drop_t<viewed_t>>
         return index - skips;
     }
 
-    [[nodiscard]] constexpr auto access() const { return iterator.access(); }
     [[nodiscard]] constexpr auto access() { return iterator.access(); }
 
     constexpr void offset(int64_t offset_amount) const
@@ -1083,21 +1291,6 @@ struct zip_t<viewed_t...> : public iterator_common_impl_t<zip_t<viewed_t...>>
             ok::stdc::make_index_sequence<sizeof...(viewed_t)>());
     }
 
-    constexpr value_type access() const
-    {
-        __ok_assert(ok::get<0>(m_iterators).index() < m_size,
-                    "Out of bounds access to zipped view");
-
-        const auto with_indices =
-            [&]<size_t... indices>(
-                ok::stdc::index_sequence<indices...>) -> value_type {
-            return value_type{ok::get<indices>(m_iterators).access()...};
-        };
-
-        return with_indices(
-            ok::stdc::make_index_sequence<sizeof...(viewed_t)>());
-    }
-
     constexpr value_type access()
     {
         __ok_assert(ok::get<0>(m_iterators).index() < m_size,
@@ -1124,14 +1317,14 @@ struct transform_t<viewed_t, callable_t>
 {
   private:
     viewed_t iterator;
-    const callable_t& transformer;
+    const callable_t* transformer;
 
   public:
-    using value_type =
-        decltype(transformer(stdc::declval<typename viewed_t::value_type>()));
+    using value_type = decltype((*transformer)(
+        stdc::declval<typename viewed_t::value_type>()));
 
     constexpr transform_t(viewed_t&& input, const callable_t& transformer)
-        : iterator(stdc::move(input)), transformer(transformer)
+        : iterator(stdc::move(input)), transformer(addressof(transformer))
     {
     }
 
@@ -1141,7 +1334,7 @@ struct transform_t<viewed_t, callable_t>
         opt<typename viewed_t::value_type> opt = iterator.next();
         if (!opt)
             return out;
-        out.emplace(transformer(
+        out.emplace((*transformer)(
             stdc::forward<
                 stdc::remove_reference_t<typename viewed_t::value_type>>(
                 opt.ref_unchecked())));
@@ -1154,18 +1347,23 @@ struct transform_t<viewed_t, callable_t>
     : public iterator_common_impl_t<transform_t<viewed_t, callable_t>>
 {
     viewed_t iterator;
-    const callable_t& transformer;
+    const callable_t* transformer;
 
-    using value_type = decltype(transformer(
+    using value_type = decltype((*transformer)(
         stdc::declval<
             stdc::add_lvalue_reference_t<typename viewed_t::value_type>>()));
 
+    static inline constexpr bool is_infinite = infinite_iterator_c<viewed_t>;
+
     constexpr transform_t(viewed_t&& input, const callable_t& transformer)
-        : iterator(stdc::move(input)), transformer(transformer)
+        : iterator(stdc::move(input)), transformer(addressof(transformer))
     {
     }
 
-    [[nodiscard]] constexpr size_t index() const { return iterator.index(); }
+    [[nodiscard]] constexpr size_t index_impl() const
+    {
+        return iterator.index();
+    }
 
     [[nodiscard]] constexpr size_t size() const
         requires sized_iterator_c<viewed_t>
@@ -1173,12 +1371,12 @@ struct transform_t<viewed_t, callable_t>
         return iterator.size();
     }
 
-    constexpr value_type access() const
+    constexpr void offset(int64_t offset_amount) OKAYLIB_NOEXCEPT
     {
-        return transformer(iterator.access());
+        iterator.offset(offset_amount);
     }
 
-    constexpr value_type access() { return transformer(iterator.access()); }
+    constexpr value_type access() { return (*transformer)(iterator.access()); }
 };
 } // namespace adaptor
 
@@ -1219,6 +1417,13 @@ constexpr auto drop(T&& iterable, size_t num_to_drop)
     requires iterable_c<decltype(iterable)>
 {
     return ok::iter(stdc::forward<T>(iterable)).drop(num_to_drop);
+}
+
+template <typename T>
+constexpr auto take_at_most(T&& iterable, size_t max_num_to_take)
+    requires iterable_c<decltype(iterable)>
+{
+    return ok::iter(stdc::forward<T>(iterable)).take_at_most(max_num_to_take);
 }
 
 template <typename T, typename predicate_t>

@@ -588,6 +588,80 @@ class opt<payload_t>
         requires(stdc::is_trivially_destructible_v<payload_t>)
     = default;
 
+    // standard library style iteration, for compatibility with foreach loops
+    struct sentinel_t
+    {};
+
+  private:
+    template <bool is_const> struct iterator_impl;
+    template <bool is_const> friend struct iterator_impl;
+
+    template <bool is_const> struct iterator_impl
+    {
+      private:
+        stdc::conditional_t<is_const, const opt&, opt&> m_parent;
+        bool m_iterated = false;
+
+      public:
+        // TODO: make these two std:: things work without STL
+        using iterator_category = std::input_iterator_tag;
+        using difference_type = std::ptrdiff_t;
+        using value_type =
+            stdc::conditional_t<is_const, stdc::add_const_t<payload_t>,
+                                payload_t>;
+        using reference = ok::stdc::add_lvalue_reference_t<value_type>;
+        using pointer = ok::stdc::add_pointer_t<value_type>;
+
+        constexpr iterator_impl() = delete;
+
+        constexpr iterator_impl(decltype(m_parent) parent) : m_parent(parent) {}
+
+        constexpr reference operator*() const OKAYLIB_NOEXCEPT
+        {
+            if (m_iterated || !m_parent) [[unlikely]] {
+                __ok_abort("out of bounds dereference of opt iterator");
+            }
+            return m_parent.ref_unchecked();
+        }
+
+        constexpr iterator_impl& operator++() OKAYLIB_NOEXCEPT
+        {
+            m_iterated = true;
+            return *this;
+        }
+
+        constexpr iterator_impl operator++(int) const OKAYLIB_NOEXCEPT
+        {
+            iterator_impl tmp = *this;
+            ++(*this);
+            return tmp;
+        }
+
+        constexpr friend bool operator==(const iterator_impl& a,
+                                         const sentinel_t&) OKAYLIB_NOEXCEPT
+        {
+            return a.m_iterated || !a.m_parent;
+        }
+
+        constexpr friend bool operator!=(const iterator_impl& a,
+                                         const sentinel_t& b) OKAYLIB_NOEXCEPT
+        {
+            return !(a == b);
+        }
+    };
+
+  public:
+    using iterator = iterator_impl<false>;
+    using const_iterator = iterator_impl<true>;
+
+    [[nodiscard]] constexpr iterator begin() { return iterator(*this); }
+    [[nodiscard]] constexpr const_iterator begin() const
+    {
+        return const_iterator(*this);
+    }
+
+    [[nodiscard]] constexpr sentinel_t end() const { return {}; }
+
 #if defined(OKAYLIB_USE_FMT)
     friend struct fmt::formatter<opt>;
 #endif
