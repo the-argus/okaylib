@@ -588,7 +588,7 @@ template <typename derived_t> struct iterator_common_impl_t
     }
 
     [[nodiscard]] constexpr auto flatten() &&
-        requires iterator_c<value_type_for<derived_t>>
+        requires iterable_c<value_type_for<derived_t>>
     {
         return adaptor::flatten_t<derived_t>(
             ok::stdc::move(*static_cast<derived_t*>(this)));
@@ -753,7 +753,7 @@ struct keep_if_t
 };
 
 template <iterator_c viewed_t>
-    requires iterator_c<value_type_for<viewed_t>>
+    requires iterable_c<value_type_for<viewed_t>>
 struct flatten_t<viewed_t> : public iterator_common_impl_t<flatten_t<viewed_t>>
 {
   private:

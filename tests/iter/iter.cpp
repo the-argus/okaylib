@@ -236,4 +236,15 @@ TEST_SUITE("iter")
             REQUIRE(runs == 3);
         }
     }
+
+    TEST_CASE("flatten view")
+    {
+        SUBCASE("2d array")
+        {
+            maybe_undefined_array_t outer { maybe_undefined_array_t{0, 1}, maybe_undefined_array_t{2, 3} };
+            maybe_undefined_array_t expected {0,1 ,2 ,3};
+
+            REQUIRE(iterators_equal(iter(outer).flatten(), expected));
+        }
+    }
 }
