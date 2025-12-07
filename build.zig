@@ -132,11 +132,6 @@ const okaylib_headers = &[_][]const u8{
 
 const test_source_files = &[_][]const u8{
     "defer/defer.cpp",
-    "transform/transform.cpp",
-    "keep_if/keep_if.cpp",
-    "take_at_most/take_at_most.cpp",
-    "drop/drop.cpp",
-    "reverse/reverse.cpp",
     "opt/opt.cpp",
     "res/res.cpp",
     "iter/iter.cpp",
@@ -146,9 +141,7 @@ const test_source_files = &[_][]const u8{
     "stdmem/stdmem.cpp",
     "ranges/ranges.cpp",
     "ordering/ordering.cpp",
-    "join/join.cpp",
     "tuple/tuple.cpp",
-    "zip/zip.cpp",
     "c_allocator/c_allocator.cpp",
     "arena_allocator/arena_allocator.cpp",
     "linked_blockpool_allocator/linked_blockpool_allocator.cpp",
@@ -163,9 +156,17 @@ const test_source_files = &[_][]const u8{
     "bit_arraylist/bit_arraylist.cpp",
     "segmented_list/segmented_list.cpp",
     "reflection/reflection.cpp",
+
     "iterables/all_satisfy/all_satisfy.cpp",
     "iterables/any_satisfy/any_satisfy.cpp",
+    "iterables/drop/drop.cpp",
     "iterables/enumerate/enumerate.cpp",
+    "iterables/flatten/flatten.cpp",
+    "iterables/keep_if/keep_if.cpp",
+    "iterables/reverse/reverse.cpp",
+    "iterables/take_at_most/take_at_most.cpp",
+    "iterables/transform/transform.cpp",
+    "iterables/zip/zip.cpp",
 };
 
 const tests_backtrace_source_files = &[_][]const u8{
