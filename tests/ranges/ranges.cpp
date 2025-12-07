@@ -72,7 +72,7 @@ static_assert(ok::detail::producing_range_c<ok::slice<const int>>);
 static_assert(ok::detail::consuming_range_c<ok::slice<int>>);
 static_assert(!ok::detail::range_impls_construction_set_c<ok::slice<const int>,
                                                           const int&>);
-static_assert(ok::is_const_c<ok::slice<const int>::viewed_type>);
+static_assert(ok::is_const_c<ok::slice<const int>::value_type>);
 static_assert(
     std::is_same_v<decltype(ok::range_get(
                        ok::stdc::declval<const ok::slice<const int>&>(), 0)),

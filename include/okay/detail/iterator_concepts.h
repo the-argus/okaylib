@@ -60,7 +60,6 @@ concept iterator_impl_c = requires(stdc::remove_cvref_t<T>& d) {
         d.next_impl()
     } -> ok::same_as_c<ok::opt<typename stdc::remove_cvref_t<T>::value_type>>;
 };
-} // namespace detail
 
 template <typename T>
 concept sized_iterator_c = requires(const stdc::remove_cvref_t<T>& const_t) {
@@ -81,6 +80,7 @@ concept infinite_iterator_c = requires {
     // requires iterator_c<T>;
     requires T::is_infinite;
 };
+} // namespace detail
 
 template <typename T, typename cv_qualified_corresponding_iterable_t>
 concept sized_cursor_c =
@@ -112,7 +112,7 @@ concept arraylike_cursor_c =
         { nonconst_cursor.offset(iterable, offset) } -> ok::is_void_c;
         // can access the cursor with the iterable
         {
-            cursor.access(iterable)
+            nonconst_cursor.access(iterable)
         } -> ok::same_as_c<typename stdc::remove_cvref_t<T>::value_type>;
         // it is either infinite or knows its size in constant time
         requires(sized_cursor_c<T, cv_qualified_corresponding_iterable_t> ||
@@ -131,7 +131,7 @@ concept arraylike_iterator_c =
         {
             nonconst.access()
         } -> ok::same_as_c<typename stdc::remove_cvref_t<T>::value_type>;
-        requires(sized_iterator_c<T> || infinite_iterator_c<T>);
+        requires(detail::sized_iterator_c<T> || detail::infinite_iterator_c<T>);
     };
 
 template <typename T>

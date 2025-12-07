@@ -92,10 +92,10 @@ template <typename viewed_t> class slice
     // friends with all other types of slices
     template <typename T> friend class slice;
 
-    using viewed_type = viewed_t;
+    using value_type = viewed_t;
 
     // raw access to contents
-    [[nodiscard]] constexpr viewed_type*
+    [[nodiscard]] constexpr value_type*
     address_of_first() const OKAYLIB_NOEXCEPT
     {
         return ok::addressof(first());
@@ -104,7 +104,7 @@ template <typename viewed_t> class slice
     /// Guaranteed to never return nullptr, it is defined behavior to
     /// dereference this pointer but it is only defined behavior to write to it
     /// if the slice is not empty.
-    [[nodiscard]] constexpr viewed_type*
+    [[nodiscard]] constexpr value_type*
     unchecked_address_of_first_item() const OKAYLIB_NOEXCEPT
     {
         __ok_assert(
@@ -134,7 +134,7 @@ template <typename viewed_t> class slice
         return m_elements == 0;
     }
 
-    [[nodiscard]] constexpr viewed_type& first() const OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr value_type& first() const OKAYLIB_NOEXCEPT
     {
         if (this->is_empty()) [[unlikely]] {
             __ok_abort("Attempt to get first() item from empty slice.");
@@ -142,7 +142,7 @@ template <typename viewed_t> class slice
         return m_data[0];
     }
 
-    [[nodiscard]] constexpr viewed_type& last() OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr value_type& last() OKAYLIB_NOEXCEPT
     {
         if (this->is_empty()) [[unlikely]] {
             __ok_abort("Attempt to get last() item from empty slice.");
@@ -200,24 +200,24 @@ template <typename viewed_t> class slice
     // coerce to const if you explicitly provide type info like
     // int i[] = {1, 2, 3 4};
     // slice<const int> s(i);
-    template <typename nonconst_viewed_type, size_t size>
-        requires(is_const_c<viewed_type> &&
-                 stdc::is_same_v<const nonconst_viewed_type, viewed_type>)
-    constexpr slice(nonconst_viewed_type (&array)[size]) OKAYLIB_NOEXCEPT
+    template <typename nonconst_value_type, size_t size>
+        requires(is_const_c<value_type> &&
+                 stdc::is_same_v<const nonconst_value_type, value_type>)
+    constexpr slice(nonconst_value_type (&array)[size]) OKAYLIB_NOEXCEPT
         : m_data(array),
           m_elements(size)
     {
     }
 
     // can convert to const version of self
-    constexpr operator slice<const viewed_type>() const OKAYLIB_NOEXCEPT
+    constexpr operator slice<const value_type>() const OKAYLIB_NOEXCEPT
     {
-        return slice<const viewed_type>(*m_data, m_elements);
+        return slice<const value_type>(*m_data, m_elements);
     }
 
     [[nodiscard]] constexpr bool
-    is_alias_for(const slice<const viewed_type>& other) OKAYLIB_NOEXCEPT
-        requires(!is_const_c<viewed_type>)
+    is_alias_for(const slice<const value_type>& other) OKAYLIB_NOEXCEPT
+        requires(!is_const_c<value_type>)
     {
         return m_elements == other.m_elements && m_data == other.m_data;
     };
@@ -228,7 +228,7 @@ template <typename viewed_t> class slice
         return m_elements == other.m_elements && m_data == other.m_data;
     };
 
-    [[nodiscard]] constexpr viewed_type&
+    [[nodiscard]] constexpr value_type&
     operator[](size_t idx) const OKAYLIB_NOEXCEPT
     {
         if (idx >= m_elements) [[unlikely]] {
@@ -237,7 +237,7 @@ template <typename viewed_t> class slice
         return m_data[idx];
     }
 
-    [[nodiscard]] constexpr viewed_type&
+    [[nodiscard]] constexpr value_type&
     unchecked_access(size_t idx) const OKAYLIB_NOEXCEPT
     {
         __ok_assert(idx < m_elements, "Out of bounds access into slice.");

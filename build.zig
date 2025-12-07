@@ -100,7 +100,6 @@ const okaylib_headers = &[_][]const u8{
     "detail/view_common.h",
     "detail/memory.h",
 
-    "macros/foreach.h",
     "macros/try.h",
 
     "math/math.h",
@@ -133,7 +132,6 @@ const okaylib_headers = &[_][]const u8{
 
 const test_source_files = &[_][]const u8{
     "defer/defer.cpp",
-    "enumerate/enumerate.cpp",
     "transform/transform.cpp",
     "keep_if/keep_if.cpp",
     "take_at_most/take_at_most.cpp",
@@ -167,6 +165,7 @@ const test_source_files = &[_][]const u8{
     "reflection/reflection.cpp",
     "iterables/all_satisfy/all_satisfy.cpp",
     "iterables/any_satisfy/any_satisfy.cpp",
+    "iterables/enumerate/enumerate.cpp",
 };
 
 const tests_backtrace_source_files = &[_][]const u8{

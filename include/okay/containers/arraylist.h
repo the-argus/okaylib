@@ -69,7 +69,7 @@ class arraylist_t
                   "not possible. Remove the const, and consider passing a "
                   "const reference to the arraylist instead.");
 
-    using viewed_type = T;
+    using value_type = T;
 
     [[nodiscard]] constexpr size_t size() const OKAYLIB_NOEXCEPT
     {

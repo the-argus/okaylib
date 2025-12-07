@@ -24,7 +24,7 @@ static_assert(!ok::detail::std_arraylike_container<int>,
 
 using namespace ok;
 
-static_assert(std::is_same_v<slice<const uint8_t>::viewed_type, const uint8_t>,
+static_assert(std::is_same_v<slice<const uint8_t>::value_type, const uint8_t>,
               "slice::value_type doesnt work as expected");
 
 // undefined memory should not be iterable
