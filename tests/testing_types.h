@@ -105,57 +105,93 @@ class example_range_cstyle
     size_t num_bytes;
 };
 
-class example_range_bidirectional
+class example_iterable_forward_and_array
 {
   public:
     using value_type = uint8_t;
-    using inherited_range_type = example_range_bidirectional;
 
-    struct cursor_t
+    template <bool is_const> struct cursor_t
     {
-        constexpr cursor_t() = default;
+        template <typename T>
+        using maybe_const_t = ok::stdc::conditional_t<is_const, const T, T>;
 
-        friend class example_range_bidirectional;
+        using value_type = maybe_const_t<uint8_t>&;
 
-        constexpr cursor_t& operator++() OKAYLIB_NOEXCEPT
+        size_t index = 0;
+
+        constexpr ok::opt<value_type>
+        next(maybe_const_t<example_iterable_forward_and_array>& iterable)
         {
-            ++m_inner;
-            return *this;
+            if (index >= iterable.size())
+                return {};
+            ok::opt<value_type> out(iterable[index]);
+            ++index;
+            return out;
         }
-
-        constexpr cursor_t& operator--() OKAYLIB_NOEXCEPT
-        {
-            if (m_inner == 0)
-                __ok_abort("Integer overflow funny business in "
-                           "example_range_bidirectional");
-            --m_inner;
-            return *this;
-        }
-
-        constexpr size_t inner() const OKAYLIB_NOEXCEPT { return m_inner; }
-
-      private:
-        size_t m_inner = 0;
     };
 
-    constexpr value_type& get(cursor_t index) OKAYLIB_NOEXCEPT
+    constexpr value_type& operator[](size_t index) OKAYLIB_NOEXCEPT
     {
-        if (index.inner() >= num_bytes)
+        if (index >= num_bytes)
             __ok_abort("Out of bounds access into bytes of "
-                       "example_range_bidirectional");
-        return bytes[index.inner()];
+                       "example_iterable_forward");
+        return bytes[index];
     }
 
-    constexpr const value_type& get(cursor_t index) const OKAYLIB_NOEXCEPT
+    constexpr const value_type& operator[](size_t index) const OKAYLIB_NOEXCEPT
     {
-        return (*const_cast<example_range_bidirectional*>(this)).get(index);
+        return (*const_cast<example_iterable_forward_and_array*>(this))[index];
     }
 
-    example_range_bidirectional() OKAYLIB_NOEXCEPT
+    constexpr auto iter() const&
     {
-        bytes = static_cast<uint8_t*>(malloc(100));
+        return ok::ref_iterator_t<const example_iterable_forward_and_array,
+                                  cursor_t<true>>{*this, {}};
+    }
+
+    constexpr auto iter() &
+    {
+        return ok::ref_iterator_t<example_iterable_forward_and_array,
+                                  cursor_t<false>>{*this, {}};
+    }
+
+    constexpr auto iter() &&
+    {
+        return ok::owning_iterator_t<example_iterable_forward_and_array,
+                                     cursor_t<false>>{ok::stdc::move(*this),
+                                                      {}};
+    }
+
+    constexpr size_t size() const noexcept { return 100; }
+
+    constexpr example_iterable_forward_and_array() OKAYLIB_NOEXCEPT
+    {
+        bytes = static_cast<uint8_t*>(malloc(size()));
         std::memset(bytes, 0, 100);
         num_bytes = 100;
+    }
+
+    constexpr ~example_iterable_forward_and_array() { free(bytes); }
+
+    example_iterable_forward_and_array(
+        const example_iterable_forward_and_array&) = delete;
+    example_iterable_forward_and_array&
+    operator=(const example_iterable_forward_and_array&) = delete;
+
+    constexpr example_iterable_forward_and_array(
+        example_iterable_forward_and_array&& other)
+        : bytes(ok::stdc::exchange(other.bytes, nullptr)),
+          num_bytes(other.num_bytes)
+    {
+    }
+
+    constexpr example_iterable_forward_and_array&
+    operator=(example_iterable_forward_and_array&& other)
+    {
+        free(bytes);
+        bytes = ok::stdc::exchange(other.bytes, nullptr);
+        num_bytes = other.num_bytes;
+        return *this;
     }
 
   private:

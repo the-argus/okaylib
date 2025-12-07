@@ -188,10 +188,8 @@ struct owning_arraylike_iterator_t
     }
 
     [[nodiscard]] constexpr size_t size() const
+        requires(!is_infinite)
     {
-        static_assert(sized_cursor_c<cursor_t, iterable_t>,
-                      "requires constraints are too loose somewhere, this "
-                      "should never be reached");
         return cursor.size(iterable);
     }
 
@@ -503,7 +501,8 @@ struct make_into_iterator_fn_t
     }
 
     template <typename T>
-        requires stdlib_arraylike_container_c<stdc::remove_cvref_t<T>>
+        requires(stdlib_arraylike_container_c<stdc::remove_cvref_t<T>> &&
+                 !has_iter_memfun_c<T>)
     [[nodiscard]] constexpr decltype(auto)
     operator()(T&& arraylike) const OKAYLIB_NOEXCEPT
     {
@@ -513,7 +512,7 @@ struct make_into_iterator_fn_t
     }
 
     template <typename T>
-        requires(!stdlib_arraylike_container_c<T> && has_iter_memfun_c<T>)
+        requires(has_iter_memfun_c<T>)
     [[nodiscard]] constexpr decltype(auto)
     operator()(T&& iterable) const OKAYLIB_NOEXCEPT
     {
@@ -887,8 +886,11 @@ template <typename derived_t> struct iterator_common_impl_t
     }
 
     [[nodiscard]] constexpr auto next()
-        requires arraylike_iterator_c<derived_t>
+        requires(!detail::iterator_impl_c<derived_t>)
     {
+        static_assert(arraylike_iterator_c<derived_t>,
+                      "The iterator inheriting from iterator_common_impl_t "
+                      "does not have .next_impl(), nor is it arraylike");
         ok::opt<typename derived_t::value_type> out;
         auto* derived = static_cast<derived_t*>(this);
 
@@ -1120,7 +1122,8 @@ struct drop_t<viewed_t> : public iterator_common_impl_t<drop_t<viewed_t>>
     [[nodiscard]] constexpr size_t size() const OKAYLIB_NOEXCEPT
         requires detail::sized_iterator_c<viewed_t>
     {
-        return iterator.size() - skips;
+        const size_t size = iterator.size();
+        return size > skips ? size - skips : 0;
     }
 
     [[nodiscard]] constexpr opt<value_type> next_impl()
@@ -1133,8 +1136,10 @@ struct drop_t<viewed_t> : public iterator_common_impl_t<drop_t<viewed_t>>
         while (skips_remaining) {
             out.reset();
             out = iterator.next();
-            if (!out)
+            if (!out) {
+                skips_remaining = 0;
                 return out;
+            }
             --skips_remaining;
         }
 
@@ -1169,22 +1174,21 @@ struct drop_t<viewed_t> : public iterator_common_impl_t<drop_t<viewed_t>>
     }
 
     [[nodiscard]] constexpr size_t size() const
-        requires detail::sized_iterator_c<viewed_t>
+        requires(!is_infinite)
     {
-        const size_t size = iterator.size();
-        return ok::max(size, skips) - skips;
+        return ok::max(iterator.size(), skips) - skips;
     }
 
-    [[nodiscard]] constexpr size_t index() const
+    [[nodiscard]] constexpr size_t index_impl() const
     {
         const size_t index = iterator.index();
         __ok_internal_assert(index >= skips);
         return index - skips;
     }
 
-    [[nodiscard]] constexpr auto access() { return iterator.access(); }
+    [[nodiscard]] constexpr value_type access() { return iterator.access(); }
 
-    constexpr void offset(int64_t offset_amount) const
+    constexpr void offset(int64_t offset_amount)
     {
         const size_t index = iterator.index();
 
