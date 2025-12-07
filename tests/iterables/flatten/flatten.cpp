@@ -1,10 +1,6 @@
 #include "test_header.h"
 // test header must be first
-#include "okay/macros/foreach.h"
-#include "okay/ranges/views/enumerate.h"
-#include "okay/ranges/views/join.h"
-#include "okay/ranges/views/keep_if.h"
-#include "okay/ranges/views/transform.h"
+#include "okay/iterables/iterables.h"
 #include "okay/slice.h"
 #include <array>
 
@@ -22,25 +18,19 @@ TEST_SUITE("join")
 
             slice<int> arrays[] = {a, b, c};
 
-            static_assert(random_access_range_c<decltype(a)>);
-            static_assert(random_access_range_c<decltype(arrays)>);
-            // i wish... maybe if the sizes of all the arrays were statically
-            // known
-            static_assert(!random_access_range_c<decltype(arrays | join)>);
+            static_assert(arraylike_iterable_c<decltype(a)>);
+            static_assert(arraylike_iterable_c<decltype(arrays)>);
+            // TODO: fix this, a range should be able to declare that all of its
+            // items are ranges which are of the same size
+            static_assert(!arraylike_iterable_c<decltype(flatten(arrays))>);
 
             size_t counter = 0;
-            auto&& rng = arrays | join;
-            using T = decltype(arrays | join);
+            auto&& rng = flatten(arrays);
+            using T = decltype(flatten(arrays));
             using namespace detail;
             using U = int&;
-            static_assert(range_has_definition_c<T>);
-            static_assert(!range_gets_by_value_c<T>);
-            static_assert(range_c<T>);
-            static_assert(detail::valid_range_value_type_c<
-                          typename range_def_for<T>::value_type>);
-            auto t = ok::begin(rng);
-            ok_foreach(int i, rng)
-            {
+            static_assert(iterable_c<T>);
+            for (int i : rng) {
                 switch (i) {
                 case 1:
                     REQUIRE(counter % 3 == 0);
@@ -69,7 +59,9 @@ TEST_SUITE("join")
             slice<int> arrays[] = {a, b, c, d};
 
             size_t counter = 0;
-            ok_foreach(auto&& _, arrays | join) { ++counter; }
+            for (auto&& _ : flatten(arrays)) {
+                ++counter;
+            }
             REQUIRE(counter == 3);
         }
 
@@ -81,8 +73,7 @@ TEST_SUITE("join")
             std::array<int, 0> d = {};
             slice<int> arrays[] = {a, b, c, d};
 
-            ok_foreach(ok_pair(i, index), arrays | join | enumerate)
-            {
+            for (auto [i, index] : flatten(arrays).enumerate()) {
                 REQUIRE(i - 1 == index);
             }
         }
@@ -92,18 +83,17 @@ TEST_SUITE("join")
             int myints[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14};
 
             auto evens_keep_if =
-                myints | keep_if([](int i) { return i % 2 == 0; });
+                keep_if(myints, [](int i) { return i % 2 == 0; });
 
-            const auto empty_range_or_even_number =
-                transform([](int i) -> opt<int> {
-                    if (i % 2 == 0)
-                        return i;
-                    else
-                        return {};
-                });
+            const auto empty_range_or_even_number = [](int i) -> opt<int> {
+                if (i % 2 == 0)
+                    return i;
+                else
+                    return {};
+            };
 
             auto evens_opt_transform =
-                myints | empty_range_or_even_number | join;
+                ok::transform(myints, empty_range_or_even_number).flatten();
 
             auto begin_keep_if = ok::begin(evens_keep_if);
             auto begin_transform = ok::begin(evens_opt_transform);
