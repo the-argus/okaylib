@@ -1,10 +1,9 @@
 #include "test_header.h"
 // test header must be first
 #include "okay/containers/array.h"
-#include "okay/macros/foreach.h"
-#include "okay/ranges/views/enumerate.h"
-#include "okay/ranges/views/keep_if.h"
-#include "okay/ranges/views/transform.h"
+#include "okay/iterables/algorithm.h"
+#include "okay/iterables/indices.h"
+#include "okay/iterables/iterables.h"
 #include "okay/slice.h"
 #include "okay/stdmem.h"
 #include <array>
@@ -18,42 +17,13 @@ TEST_SUITE("keep_if")
         SUBCASE("identity keep_if")
         {
             std::array<int, 50> ints = {};
-            std::fill(ints.begin(), ints.end(), 0);
 
-            for (auto c = ok::begin(ints); ok::is_inbounds(ints, c);
-                 ok::increment(ints, c)) {
-                int& item = ok::range_get_ref(ints, c);
-                item = c;
-            }
+            for (auto& [integer, index] : enumerate(ints))
+                integer = index;
 
-            auto identity = ints | keep_if([](auto i) { return true; });
-            static_assert(range_c<decltype(identity)>);
-            for (auto c = ok::begin(identity); ok::is_inbounds(identity, c);
-                 ok::increment(identity, c)) {
-                int& item = ok::range_get_ref(identity, c);
-                REQUIRE(item == c);
-            }
-        }
+            constexpr auto identity = [](auto i) { return true; };
 
-        SUBCASE("identity keep_if with macros")
-        {
-            std::array<int, 50> ints = {};
-            memfill(slice(ints), 0);
-
-            size_t c = 0;
-            ok_foreach(auto& item, ints)
-            {
-                item = c;
-                ++c;
-            }
-
-            auto identity = ints | keep_if([](auto) { return true; });
-            c = 0;
-            ok_foreach(const auto& item, identity)
-            {
-                REQUIRE(item == c);
-                ++c;
-            }
+            REQUIRE(iterators_equal(keep_if(ints, identity), ints));
         }
 
         SUBCASE("skip even numbers with std::array")
@@ -62,39 +32,15 @@ TEST_SUITE("keep_if")
 
             std::array<int, 50> ints;
 
-            static_assert(!detail::range_impls_increment_c<decltype(ints)>);
-            static_assert(
-                detail::range_can_increment_c<decltype(ints |
-                                                       keep_if(is_even))>);
-            static_assert(random_access_range_c<decltype(ints)>);
-            static_assert(
-                bidirectional_range_c<decltype(ints | keep_if(is_even))>);
-            static_assert(
-                !detail::range_can_offset_c<decltype(ints | keep_if(is_even))>);
-            static_assert(
-                !random_access_range_c<decltype(ints | keep_if(is_even))>);
-            static_assert(std::is_same_v<
-                          cursor_type_for<decltype(ints)>,
-                          cursor_type_for<decltype(ints | keep_if(is_even))>>);
-            static_assert(std::is_same_v<
-                          value_type_for<decltype(ints)>,
-                          value_type_for<decltype(ints | keep_if(is_even))>>);
+            for (auto& [integer, index] : enumerate(ints))
+                integer = index;
 
-            ok_foreach(ok_pair(item, index), enumerate(ints)) item = index;
+            // starts at zero
+            REQUIRE(keep_if(ints, is_even).next().deep_compare_with(0));
 
-            auto&& items = ints | keep_if(is_even);
-            auto begin = ok::begin(items);
-            REQUIRE(ok::range_get(items, begin) == 0);
-            for (auto i = ok::begin(items); ok::is_inbounds(items, i);
-                 ok::increment(items, i)) {
-                REQUIRE(ok::range_get(items, i) % 2 == 0);
-            }
+            auto&& items = keep_if(ints, is_even);
 
-            // or, with macros
-            ok_foreach(const int i, ints | keep_if(is_even))
-            {
-                REQUIRE(i % 2 == 0);
-            }
+            REQUIRE(std::move(items).all_satisfy(is_even));
         }
 
         SUBCASE("ok::begin() skips until first item that should be kept")
@@ -102,59 +48,55 @@ TEST_SUITE("keep_if")
             auto is_odd = [](auto i) { return i % 2 == 1; };
             int myints[100];
 
-            ok_foreach(ok_pair(i, index), myints | enumerate) { i = index; }
+            iterators_copy_assign(iter(myints), indices());
+            // for (auto& [integer, index] : enumerate(myints))
+            //     integer = index;
 
-            auto filtered = myints | keep_if(is_odd);
-            // starts at 1, skipping zero because it is not odd
-            REQUIRE(range_get(filtered, ok::begin(filtered)) == 1);
+            auto filtered = keep_if(myints, is_odd);
+            REQUIRE(std::move(filtered).next().deep_compare_with(1));
         }
 
         SUBCASE("keep_if by index and then go back to not having index type")
         {
-            auto skip_every_other_enumerated = keep_if([](auto i) -> bool {
+            auto skip_odd_indices = [](auto i) -> bool {
                 auto out = ok::get<1>(i) % 2 == 1;
                 return out;
-            });
-            auto un_enumerate =
-                transform([](ok::tuple<int&, const size_t> pair) -> int& {
-                    return ok::get<0>(pair);
-                });
+            };
+            auto remove_index = [](ok::tuple<int&, const size_t> pair) -> int& {
+                return ok::get<0>(pair);
+            };
 
             std::array<int, 50> ints{};
 
-            ok_foreach(ok_pair(i, index), enumerate(ints))
-            {
+            for (auto& [integer, index] : enumerate(ints))
                 // start at 50 and count backwards
-                i = ints.size() - index;
-            }
+                integer = ints.size() - index;
 
-            using T = decltype(ints | enumerate | skip_every_other_enumerated);
+            using T = decltype(enumerate(ints).keep_if(skip_odd_indices));
             static_assert(std::is_same_v<ok::tuple<int&, const size_t>,
                                          value_type_for<T>>);
-            static_assert(std::is_same_v<ok::tuple<int&, const size_t>,
-                                         decltype(ok::range_get_best(
-                                             stdc::declval<T>(),
-                                             ok::begin(stdc::declval<T>())))>);
+            static_assert(
+                std::is_same_v<
+                    ok::tuple<int&, const size_t>,
+                    stdc::remove_cvref_t<
+                        decltype(stdc::declval<T>().next().ref_unchecked())>>);
 
-            ok_foreach(const int i, ints | enumerate |
-                                        skip_every_other_enumerated |
-                                        un_enumerate)
-            {
+            for (const int i : enumerate(ints)
+                                   .keep_if(skip_odd_indices)
+                                   .transform(remove_index))
                 REQUIRE(i % 2 == 1);
-            }
         }
 
         SUBCASE("keep_if of const ref to array is a range")
         {
-            const auto keep_if_less_than_100 =
-                ok::keep_if([](int i) -> bool { return i < 100; });
+            const auto less_than_100 = [](int i) -> bool { return i < 100; };
 
-            constexpr ok::maybe_undefined_array_t nums = {0, 100, 1, 100,
-                                                          2, 100, 3, 100};
+            constexpr ok::maybe_undefined_array_t nums = {
+                0, 100, 1, 100, 2, 100, 3, 100,
+            };
 
             int counter = 0;
-            ok_foreach(int i, nums | keep_if_less_than_100)
-            {
+            for (int i : keep_if(nums, less_than_100)) {
                 REQUIRE(i == counter);
                 ++counter;
             }
@@ -162,29 +104,25 @@ TEST_SUITE("keep_if")
 
         SUBCASE("keep_if with no matches never runs in loop")
         {
-            auto keep_none = keep_if([](auto) { return false; });
+            auto none = [](auto) { return false; };
 
             std::array<int, 50> array;
             memfill(slice(array), 0);
 
-            ok_foreach(const int i, array | keep_none)
-            {
+            for (const int i : keep_if(array, none))
                 // should be unreachable
                 REQUIRE(false);
-            }
         }
 
         SUBCASE("filter with over empty array never runs")
         {
-            auto keep_all = keep_if([](auto) { return true; });
+            auto all = [](auto) { return true; };
 
             std::array<int, 0> array;
 
-            ok_foreach(const int i, array | keep_all)
-            {
+            for (const int i : keep_if(array, all))
                 // should be unreachable
                 REQUIRE(false);
-            }
         }
     }
 }
