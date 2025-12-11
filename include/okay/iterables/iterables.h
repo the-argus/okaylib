@@ -1531,7 +1531,7 @@ inline constexpr auto transform =
                                         const callable_t& transformer)
     requires(iterable_c<decltype(iterable)> &&
              detail::invocable_c<const callable_t,
-                                 typename stdc::remove_cvref_t<T>::value_type>)
+                                 value_type_for<decltype(iterable)>>)
 { return ok::iter(stdc::forward<T>(iterable)).transform(transformer); };
 
 inline constexpr auto reverse = []<typename T>(T&& iterable)
