@@ -18,8 +18,8 @@ TEST_SUITE("join")
 
             slice<int> arrays[] = {a, b, c};
 
-            static_assert(arraylike_iterable_c<decltype(a)>);
-            static_assert(arraylike_iterable_c<decltype(arrays)>);
+            static_assert(arraylike_iterable_c<decltype(a)&>);
+            static_assert(arraylike_iterable_c<decltype(arrays)&>);
             // TODO: fix this, a range should be able to declare that all of its
             // items are ranges which are of the same size
             static_assert(!arraylike_iterable_c<decltype(flatten(arrays))>);
@@ -93,24 +93,10 @@ TEST_SUITE("join")
             };
 
             auto evens_opt_transform =
-                ok::transform(myints, empty_range_or_even_number).flatten();
+                transform(myints, empty_range_or_even_number).flatten();
 
-            auto begin_keep_if = ok::begin(evens_keep_if);
-            auto begin_transform = ok::begin(evens_opt_transform);
-
-            while (ok::is_inbounds(evens_keep_if, begin_keep_if)) {
-                // if this fires it means keep_if and transform -> opt | join
-                // are not equivalent
-                REQUIRE(ok::is_inbounds(evens_opt_transform, begin_transform));
-
-                auto&& a = ok::range_get(evens_keep_if, begin_keep_if);
-                auto&& b = ok::range_get(evens_opt_transform, begin_transform);
-
-                REQUIRE(a == b);
-
-                ok::increment(evens_keep_if, begin_keep_if);
-                ok::increment(evens_opt_transform, begin_transform);
-            }
+            REQUIRE(iterators_equal(std::move(evens_keep_if),
+                                    std::move(evens_opt_transform)));
         }
     }
 }
