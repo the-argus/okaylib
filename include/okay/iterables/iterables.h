@@ -1018,7 +1018,7 @@ struct take_t<viewed_t> : public iterator_common_impl_t<take_t<viewed_t>>
         return iterator.index();
     }
 
-    [[nodiscard]] constexpr auto access()
+    [[nodiscard]] constexpr value_type access()
     {
         __ok_internal_assert(index_impl() < clamped_length);
         return iterator.access();

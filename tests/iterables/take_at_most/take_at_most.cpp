@@ -4,7 +4,6 @@
 #include "okay/iterables/iterables.h"
 #include "testing_types.h"
 #include <array>
-#include <vector>
 
 using namespace ok;
 
