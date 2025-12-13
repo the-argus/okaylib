@@ -134,7 +134,6 @@ const test_source_files = &[_][]const u8{
     "defer/defer.cpp",
     "opt/opt.cpp",
     "res/res.cpp",
-    "iter/iter.cpp",
     "reserving_page_allocator/reserving_page_allocator.cpp",
     "slice/slice.cpp",
     "status/status.cpp",
@@ -157,6 +156,7 @@ const test_source_files = &[_][]const u8{
     "segmented_list/segmented_list.cpp",
     "reflection/reflection.cpp",
 
+    "iterables/iterables.cpp",
     "iterables/all_satisfy/all_satisfy.cpp",
     "iterables/any_satisfy/any_satisfy.cpp",
     "iterables/drop/drop.cpp",
