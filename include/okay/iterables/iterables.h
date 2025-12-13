@@ -416,82 +416,6 @@ template <typename T, bool is_const> struct opt_cursor_t
     }
 };
 
-/// Iterable which just holds a reference to an iterator and calls its
-/// functions, useful since adaptors only work on rvalues
-template <typename T> struct ref_wrap_iterable_t
-{
-    struct cursor_t
-    {
-        using value_type = typename T::value_type;
-
-        [[nodiscard]] constexpr opt<value_type>
-        next(const ref_wrap_iterable_t& container) OKAYLIB_NOEXCEPT
-        {
-            return container.iterator->next();
-        }
-
-        [[nodiscard]] constexpr size_t
-        size(const ref_wrap_iterable_t& container) const OKAYLIB_NOEXCEPT
-            requires detail::sized_iterator_c<T>
-        {
-            return container.iterator->size();
-        }
-    };
-
-    T* iterator;
-
-    constexpr ref_wrap_iterable_t(T& iterator) OKAYLIB_NOEXCEPT
-        : iterator(ok::addressof(iterator))
-    {
-    }
-};
-
-template <typename T> struct ref_wrap_arraylike_iterable_t
-{
-    static_assert(!stdc::is_const_c<T>,
-                  "const reference to an iterator doesn't make sense- they are "
-                  "meant to be consumed/modified");
-
-    struct cursor_t
-    {
-        using value_type = typename T::value_type;
-
-        static inline constexpr bool is_infinite = infinite_iterator_c<T>;
-
-        [[nodiscard]] constexpr size_t
-        index(const ref_wrap_arraylike_iterable_t& i) const OKAYLIB_NOEXCEPT
-        {
-            return i.iterator->index();
-        }
-
-        [[nodiscard]] constexpr size_t
-        size(const ref_wrap_arraylike_iterable_t& i) const OKAYLIB_NOEXCEPT
-            requires(!is_infinite)
-        {
-            return i.iterator->size();
-        }
-
-        constexpr void offset(const ref_wrap_arraylike_iterable_t& i,
-                              int64_t offset_amount) OKAYLIB_NOEXCEPT
-        {
-            i.iterator->offset(offset_amount);
-        }
-
-        [[nodiscard]] constexpr value_type
-        access(ref_wrap_arraylike_iterable_t& i) OKAYLIB_NOEXCEPT
-        {
-            return i.iterator->access();
-        }
-    };
-
-    T* iterator;
-
-    constexpr ref_wrap_arraylike_iterable_t(T& iterator) OKAYLIB_NOEXCEPT
-        : iterator(ok::addressof(iterator))
-    {
-    }
-};
-
 struct make_into_iterator_fn_t
 {
     template <typename T, size_t N>
@@ -523,14 +447,24 @@ struct make_into_iterator_fn_t
     /// If a thing is already an iterator and its coming in as an rvalue,
     /// ok::iter() is just an identity function
     template <iterator_c T>
-        requires(!stdlib_arraylike_container_c<T> && !has_iter_memfun_c<T>)
     [[nodiscard]] constexpr decltype(auto)
     operator()(T&& iterator) const OKAYLIB_NOEXCEPT
+        requires(stdc::is_rvalue_reference_v<decltype(iterator)> &&
+                 !stdlib_arraylike_container_c<T> && !has_iter_memfun_c<T>)
     {
         return stdc::forward<T>(iterator);
     }
 
-  public:
+    // if a thing is an lvalue iterator, then it just gets copied if it can
+    template <iterator_c T>
+    [[nodiscard]] constexpr T
+    operator()(const T& iterator) const OKAYLIB_NOEXCEPT
+        requires(stdc::is_copy_constructible_v<decltype(iterator)> &&
+                 !stdlib_arraylike_container_c<T> && !has_iter_memfun_c<T>)
+    {
+        return iterator;
+    }
+
     // retroactively make ok::opt iterable
     template <is_instance_c<ok::opt> T>
     [[nodiscard]] constexpr auto
@@ -553,32 +487,6 @@ struct make_into_iterator_fn_t
         return owning_iterator_t<T,
                                  opt_cursor_t<typename T::value_type, false>>{
             stdc::move(optional), {}};
-    }
-
-    // wrap lvalue iterators
-    template <iterator_c T>
-        requires(!stdc::is_const_c<T> && !arraylike_iterator_c<T> &&
-                 !stdlib_arraylike_container_c<T> && !has_iter_memfun_c<T>)
-    [[nodiscard]] constexpr decltype(auto)
-    operator()(T& iterator) const OKAYLIB_NOEXCEPT
-    {
-        using iterable_t = ref_wrap_iterable_t<T>;
-        using cursor_t = typename iterable_t::cursor_t;
-        return owning_iterator_t<iterable_t, cursor_t>{
-            iterable_t(iterator),
-            {},
-        };
-    }
-    template <arraylike_iterator_c T>
-    [[nodiscard]] constexpr decltype(auto)
-    operator()(T& iterator) const OKAYLIB_NOEXCEPT
-        requires(!stdc::is_const_c<T> && !stdlib_arraylike_container_c<T> &&
-                 !has_iter_memfun_c<T>)
-    {
-        using iterable_t = ref_wrap_arraylike_iterable_t<T>;
-        using cursor_t = typename iterable_t::cursor_t;
-        return owning_arraylike_iterator_t<iterable_t, cursor_t>{
-            iterable_t(iterator), cursor_t{}};
     }
 };
 
