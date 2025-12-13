@@ -1,8 +1,7 @@
 #include "test_header.h"
 // test header must be first
-#include "okay/macros/foreach.h"
-#include "okay/ranges/indices.h"
-#include "okay/ranges/views/take_at_most.h"
+#include "okay/iterables/indices.h"
+#include "okay/iterables/iterables.h"
 #include "testing_types.h"
 #include <array>
 #include <vector>
@@ -11,104 +10,68 @@ using namespace ok;
 
 TEST_SUITE("take_at_most")
 {
-    TEST_CASE("functionality")
+    TEST_CASE("take_at_most of array is still an array of known length")
     {
-        SUBCASE("get first half of array of constant size")
-        {
-            std::array<int, 50> array;
-            static_assert(random_access_range_c<decltype(array)>);
-            auto half_view = array | take_at_most(25);
-            static_assert(random_access_range_c<decltype(half_view)>);
-            REQUIRE(ok::size(half_view) == 25);
+        std::array<int, 50> array;
+        static_assert(arraylike_iterable_c<decltype(array)>);
+        static_assert(arraylike_iterable_c<decltype(take_at_most(array, 25))>);
+        REQUIRE(ok::size(take_at_most(array, 25)) == 25);
+    }
+
+    TEST_CASE("take_at_most size does not overflow, clamps at zero")
+    {
+        std::array<int, 50> array;
+        REQUIRE(ok::size(take_at_most(array, 0)) == 0);
+    }
+
+    TEST_CASE("take_at_most size does not exceed container size")
+    {
+        std::array<int, 50> array;
+        REQUIRE(
+            ok::size(take_at_most(array, std::numeric_limits<size_t>::max())) ==
+            array.size());
+    }
+
+    TEST_CASE("take_at_most of a forward iterable whose size is not known")
+    {
+        using container_t =
+            forward_iterable_size_test_t<size_mode::unknown_sized>;
+        container_t container;
+        static_assert(iterable_c<decltype(container)>);
+        auto half_iterator = container.iter().take_at_most(25);
+        static_assert(iterable_c<decltype(half_iterator)>);
+
+        size_t counter = 0;
+        for (auto&& _ : half_iterator) {
+            ++counter;
         }
+        REQUIRE(counter == 25);
+    }
 
-        SUBCASE("get first half of forward no increment")
-        {
-            fifty_items_unknown_size_no_pre_increment_t unknown_size;
-            static_assert(multi_pass_range_c<decltype(unknown_size)>);
-            auto half_view = unknown_size | take_at_most(25);
-            static_assert(multi_pass_range_c<decltype(half_view)>);
+    TEST_CASE("take_at_most of a forward iterable whose size *is* known")
+    {
+        using container_t =
+            forward_iterable_size_test_t<size_mode::known_sized>;
+        container_t container;
+        static_assert(iterable_c<decltype(container)>);
+        auto half_iterator = container.iter().take_at_most(25);
+        static_assert(iterable_c<decltype(half_iterator)>);
 
-            size_t counter = 0;
-            ok_foreach(auto&& i, half_view) { ++counter; }
-            REQUIRE(counter == 25);
+        REQUIRE(ok::size(half_iterator) == 25);
+
+        size_t counter = 0;
+        for (auto&& _ : half_iterator) {
+            ++counter;
         }
+        REQUIRE(counter == 25);
+    }
 
-        SUBCASE("get first half of bidirectional no increment/decrement")
-        {
-            fifty_items_bidir_no_pre_decrement_t bidir_nooperators;
-            static_assert(bidirectional_range_c<decltype(bidir_nooperators)>);
-            auto half_view = bidir_nooperators | take_at_most(25);
-            static_assert(bidirectional_range_c<decltype(half_view)>);
-
-            size_t counter = 0;
-            ok_foreach(auto&& i, half_view) { ++counter; }
-            REQUIRE(counter == 25);
-        }
-
-        SUBCASE("get first half of bidirectional")
-        {
-            example_range_bidirectional bidir;
-            static_assert(bidirectional_range_c<decltype(bidir)>);
-            auto half_view = bidir | take_at_most(25);
-            range_def_for<decltype(half_view)> test;
-            static_assert(range_c<decltype(half_view)>);
-            static_assert(bidirectional_range_c<decltype(half_view)>);
-
-            size_t count = 0;
-            for (auto c = ok::begin(half_view); ok::is_inbounds(half_view, c);
-                 ok::increment(half_view, c)) {
-                ++count;
-            }
-            REQUIRE(count == 25);
-        }
-
-        SUBCASE("get first half of vector of runtime known size")
-        {
-            std::vector<int> vec;
-            vec.resize(50);
-            auto half_view = vec | take_at_most(25);
-            REQUIRE(ok::size(half_view) == 25);
-        }
-
-        SUBCASE("get first half of container of unknown size")
-        {
-            fifty_items_unknown_size_t items;
-            size_t count = 0;
-            ok_foreach(auto&& _, items) { ++count; }
-            REQUIRE(count == 50);
-
-            auto half_view = items | take_at_most(25);
-
-            count = 0;
-            ok_foreach(size_t i, half_view) { ++count; }
-            REQUIRE(count == 25);
-        }
-
-        SUBCASE("can't take more than container")
-        {
-            std::array<int, 50> array;
-            auto big_view = array | take_at_most(100);
-            REQUIRE(ok::size(big_view) == 50);
-        }
-
-        SUBCASE("can't take more than container of unknown size")
-        {
-            fifty_items_unknown_size_t items;
-            auto big_view = items | take_at_most(100);
-            size_t count = 0;
-            ok_foreach(auto&& blank, big_view) { ++count; }
-            REQUIRE(count == 50);
-        }
-
-        SUBCASE("take subset of indices")
-        {
-            size_t counter = 0;
-            ok_foreach(auto i, indices | take_at_most(10))
-            {
-                REQUIRE(i == counter);
-                ++counter;
-            }
+    TEST_CASE("take subset of indices")
+    {
+        size_t counter = 0;
+        for (auto i : ok::indices().take_at_most(10)) {
+            REQUIRE(i == counter);
+            ++counter;
         }
     }
 }

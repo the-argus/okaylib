@@ -2,6 +2,7 @@
 #define __OKAYLIB_RANGES_ITERATOR_H__
 
 #include "okay/detail/iterator_concepts.h"
+#include "okay/detail/template_util/ref_as_const.h"
 #include "okay/detail/utility.h"
 #include "okay/math/ordering.h"
 #include "okay/tuple.h"
@@ -633,6 +634,10 @@ template <typename T>
 inline constexpr bool is_iterable_infinite =
     detail::infinite_iterator_c<iterator_for<T>>;
 
+template <typename T>
+inline constexpr bool is_iterable_sized =
+    detail::sized_iterator_c<iterator_for<T>>;
+
 namespace adaptor {
 template <typename T, typename corresponding_iterator_t>
 concept keep_if_predicate_c =
@@ -654,6 +659,8 @@ template <typename viewed_t> struct take_t;
 template <typename viewed_t> struct enumerate_t;
 template <typename... viewed_t> struct zip_t;
 template <typename viewed_t, typename callable_t> struct transform_t;
+template <typename viewed_t> struct as_const_t;
+template <typename viewed_t, size_t index> struct get_t;
 } // namespace adaptor
 
 template <typename derived_t> struct iterator_common_impl_t
@@ -788,6 +795,18 @@ template <typename derived_t> struct iterator_common_impl_t
     {
         return adaptor::transform_t<derived_t, callable_t>(
             ok::stdc::move(*static_cast<derived_t*>(this)), transformer);
+    }
+
+    [[nodiscard]] constexpr auto as_const() &&
+    {
+        return adaptor::as_const_t<derived_t>(
+            ok::stdc::move(*static_cast<derived_t*>(this)));
+    }
+
+    template <size_t index> [[nodiscard]] constexpr auto get_tuple_elem() &&
+    {
+        return adaptor::get_t<derived_t, index>(
+            ok::stdc::move(*static_cast<derived_t*>(this)));
     }
 
     template <typename first_other_iterable_t, typename... extra_iterables_t>
@@ -1209,7 +1228,7 @@ struct drop_t<viewed_t> : public iterator_common_impl_t<drop_t<viewed_t>>
 template <iterator_c viewed_t>
     requires(!index_providing_iterator_c<viewed_t> &&
              (stdc::is_reference_v<value_type_for<viewed_t>> ||
-              detail::is_moveable_c<value_type_for<viewed_t>>))
+              detail::is_move_constructible_c<value_type_for<viewed_t>>))
 struct enumerate_t<viewed_t>
     : public iterator_common_impl_t<enumerate_t<viewed_t>>
 {
@@ -1243,7 +1262,7 @@ template <iterator_c viewed_t>
     requires(index_providing_iterator_c<viewed_t> &&
              !arraylike_iterator_c<viewed_t> &&
              (stdc::is_reference_v<value_type_for<viewed_t>> ||
-              detail::is_moveable_c<value_type_for<viewed_t>>))
+              detail::is_move_constructible_c<value_type_for<viewed_t>>))
 struct enumerate_t<viewed_t>
     : public iterator_common_impl_t<enumerate_t<viewed_t>>
 {
@@ -1267,14 +1286,14 @@ struct enumerate_t<viewed_t>
         opt<typename viewed_t::value_type> opt = iterator.next();
         if (!opt)
             return out;
-        out.emplace(opt.ref_or_panic(), idx);
+        out.emplace(stdc::move(opt.ref_unchecked()), idx);
         return out;
     }
 };
 
 template <arraylike_iterator_c viewed_t>
     requires(stdc::is_reference_v<value_type_for<viewed_t>> ||
-             detail::is_moveable_c<value_type_for<viewed_t>>)
+             detail::is_move_constructible_c<value_type_for<viewed_t>>)
 struct enumerate_t<viewed_t>
     : public iterator_common_impl_t<enumerate_t<viewed_t>>
 {
@@ -1306,6 +1325,35 @@ struct enumerate_t<viewed_t>
     }
 };
 
+namespace detail {
+template <typename... tuple_elems_t>
+// performs some funny lambda fold trickery to find the minimum value
+// returned by size() for all the iterators, unless they are all
+// infinite/unsized in which case nullopt is returned
+constexpr ok::opt<size_t>
+size_impl(const ok::tuple<tuple_elems_t...>& iterators)
+{
+    const auto with_indices =
+        [&]<size_t... indices>(
+            ok::stdc::index_sequence<indices...>) -> ok::opt<size_t> {
+        ok::opt<size_t> out;
+        (
+            [&] {
+                if constexpr (ok::detail::sized_iterator_c<tuple_elems_t>) {
+                    const size_t size = ok::get<indices>(iterators).size();
+                    if (!out || out.ref_unchecked() > size)
+                        out = size;
+                }
+            }(),
+            ...);
+        return out;
+    };
+
+    return with_indices(
+        ok::stdc::make_index_sequence<sizeof...(tuple_elems_t)>());
+}
+} // namespace detail
+
 template <typename... viewed_t>
     requires((iterator_c<viewed_t> && ...) &&
              !(arraylike_iterator_c<viewed_t> && ...) &&
@@ -1316,14 +1364,29 @@ struct zip_t<viewed_t...> : public iterator_common_impl_t<zip_t<viewed_t...>>
 
   private:
     ok::tuple<viewed_t...> m_iterators;
+    // TODO: only used it all iterators are sized, optimize this away when not
+    // needed?
+    size_t m_size;
 
   public:
     using value_type = ok::tuple<typename viewed_t::value_type...>;
+
+    inline static constexpr bool is_infinite =
+        (ok::detail::infinite_iterator_c<viewed_t> && ...);
 
     template <typename... rvalues_t>
     constexpr zip_t(rvalues_t&&... iterators)
         : m_iterators(stdc::move(iterators)...)
     {
+        if constexpr ((is_iterable_sized<viewed_t> && ...)) {
+            m_size = adaptor::detail::size_impl(m_iterators).ref_unchecked();
+        }
+    }
+
+    [[nodiscard]] constexpr size_t size() const
+        requires(is_iterable_sized<viewed_t> && ...)
+    {
+        return m_size;
     }
 
     [[nodiscard]] constexpr opt<value_type> next_impl()
@@ -1359,43 +1422,19 @@ struct zip_t<viewed_t...> : public iterator_common_impl_t<zip_t<viewed_t...>>
     ok::tuple<viewed_t...> m_iterators;
     size_t m_size;
 
-    // performs some funny lambda fold trickery to find the minimum value
-    // returned by size() for all the iterators, unless they are all infinite in
-    // which case nullopt is returned
-    constexpr ok::opt<size_t> size_impl()
-    {
-        const auto with_indices =
-            [&]<size_t... indices>(
-                ok::stdc::index_sequence<indices...>) -> ok::opt<size_t> {
-            ok::opt<size_t> out;
-            (
-                [&] {
-                    if constexpr (!detail::infinite_iterator_c<viewed_t>) {
-                        const size_t size =
-                            ok::get<indices>(m_iterators).size();
-                        if (!out || out.ref_unchecked() > size)
-                            out = size;
-                    }
-                }(),
-                ...);
-            return out;
-        };
-
-        return with_indices(
-            ok::stdc::make_index_sequence<sizeof...(viewed_t)>());
-    }
-
   public:
     using value_type = ok::tuple<typename viewed_t::value_type...>;
 
     inline static constexpr bool is_infinite =
-        (detail::infinite_iterator_c<viewed_t> && ...);
+        (ok::detail::infinite_iterator_c<viewed_t> && ...);
 
     template <typename... rvalues_t>
     constexpr zip_t(rvalues_t&&... iterators)
-        : m_iterators(stdc::move(iterators)...),
-          m_size(size_impl().copy_out_or(-1))
+        : m_iterators(stdc::move(iterators)...), m_size()
     {
+        if constexpr (!is_infinite) {
+            m_size = adaptor::detail::size_impl(m_iterators).ref_unchecked();
+        }
     }
 
     [[nodiscard]] constexpr size_t index_impl() const
@@ -1486,7 +1525,7 @@ struct transform_t<viewed_t, callable_t>
             stdc::add_lvalue_reference_t<typename viewed_t::value_type>>()));
 
     static inline constexpr bool is_infinite =
-        detail::infinite_iterator_c<viewed_t>;
+        ok::detail::infinite_iterator_c<viewed_t>;
 
     constexpr transform_t(viewed_t&& input, const callable_t& transformer)
         : iterator(stdc::move(input)), transformer(ok::addressof(transformer))
@@ -1499,7 +1538,7 @@ struct transform_t<viewed_t, callable_t>
     }
 
     [[nodiscard]] constexpr size_t size() const
-        requires detail::sized_iterator_c<viewed_t>
+        requires ok::detail::sized_iterator_c<viewed_t>
     {
         return iterator.size();
     }
@@ -1511,6 +1550,121 @@ struct transform_t<viewed_t, callable_t>
 
     constexpr value_type access() { return (*transformer)(iterator.access()); }
 };
+
+template <iterator_c viewed_t>
+    requires(!arraylike_iterator_c<viewed_t> &&
+             stdc::is_reference_v<value_type_for<viewed_t>>)
+struct as_const_t<viewed_t>
+    : public iterator_common_impl_t<as_const_t<viewed_t>>
+{
+  private:
+    viewed_t iterator;
+
+  public:
+    constexpr as_const_t(viewed_t&& input) : iterator(stdc::move(input)) {}
+
+    using value_type = ok::detail::ref_as_const_t<value_type_for<viewed_t>>;
+
+    [[nodiscard]] constexpr opt<value_type> next_impl()
+    {
+        auto parent = iterator.next();
+        if (!parent)
+            return {};
+        return parent.ref_unchecked();
+    }
+};
+
+template <arraylike_iterator_c viewed_t>
+    requires stdc::is_reference_v<value_type_for<viewed_t>>
+struct as_const_t<viewed_t>
+    : public iterator_common_impl_t<as_const_t<viewed_t>>
+{
+    viewed_t iterator;
+
+    static inline constexpr bool is_infinite =
+        ok::detail::infinite_iterator_c<viewed_t>;
+
+    using value_type = ok::detail::ref_as_const_t<value_type_for<viewed_t>>;
+
+    constexpr as_const_t(viewed_t&& input) : iterator(stdc::move(input)) {}
+
+    [[nodiscard]] constexpr size_t index_impl() const
+    {
+        return iterator.index();
+    }
+
+    [[nodiscard]] constexpr size_t size() const
+        requires ok::detail::sized_iterator_c<viewed_t>
+    {
+        return iterator.size();
+    }
+
+    constexpr void offset(int64_t offset_amount) OKAYLIB_NOEXCEPT
+    {
+        iterator.offset(offset_amount);
+    }
+
+    constexpr value_type access() { return iterator.access(); }
+};
+
+template <iterator_c viewed_t, size_t index>
+    requires(!arraylike_iterator_c<viewed_t> &&
+             ok::detail::is_instance_c<value_type_for<viewed_t>, ok::tuple>)
+struct get_t<viewed_t, index>
+    : public iterator_common_impl_t<get_t<viewed_t, index>>
+{
+  private:
+    viewed_t iterator;
+
+  public:
+    constexpr get_t(viewed_t&& input) : iterator(stdc::move(input)) {}
+
+    using value_type =
+        decltype(ok::get<index>(stdc::declval<value_type_for<viewed_t>>()));
+
+    [[nodiscard]] constexpr opt<value_type> next_impl()
+    {
+        auto parent = iterator.next();
+        if (!parent)
+            return {};
+        return ok::get<index>(parent.ref_unchecked());
+    }
+};
+
+template <arraylike_iterator_c viewed_t, size_t index>
+    requires ok::detail::is_instance_c<value_type_for<viewed_t>, ok::tuple>
+struct get_t<viewed_t, index>
+    : public iterator_common_impl_t<get_t<viewed_t, index>>
+{
+    viewed_t iterator;
+
+    static inline constexpr bool is_infinite =
+        ok::detail::infinite_iterator_c<viewed_t>;
+
+    using value_type =
+        decltype(ok::get<index>(stdc::declval<value_type_for<viewed_t>>()));
+
+    constexpr get_t(viewed_t&& input) : iterator(stdc::move(input)) {}
+
+    [[nodiscard]] constexpr size_t index_impl() const
+    {
+        return iterator.index();
+    }
+
+    [[nodiscard]] constexpr size_t size() const
+        requires ok::detail::sized_iterator_c<viewed_t>
+    {
+        return iterator.size();
+    }
+
+    constexpr void offset(int64_t offset_amount) OKAYLIB_NOEXCEPT
+    {
+        iterator.offset(offset_amount);
+    }
+
+    constexpr value_type access() { return ok::get<index>(iterator.access()); }
+};
+
 } // namespace adaptor
 
 inline constexpr auto zip = []<typename T, typename T2, typename... extras_t>(

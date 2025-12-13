@@ -1,4 +1,5 @@
 #pragma once
+#include "okay/containers/array.h"
 #include "okay/detail/abort.h"
 #include "okay/iterables/iterables.h"
 #include <cstddef>
@@ -66,7 +67,7 @@ struct nonmoveable_t
     nonmoveable_t& operator=(const nonmoveable_t& other) = default;
     nonmoveable_t(const nonmoveable_t& other) = default;
 
-    // yay moving
+    // no moving
     nonmoveable_t& operator=(nonmoveable_t&& other) = delete;
     nonmoveable_t(nonmoveable_t&& other) = delete;
 };
@@ -75,8 +76,6 @@ class example_range_cstyle
 {
   public:
     using value_type = uint8_t;
-    // propagate our range definition to child  classes
-    using inherited_range_type = example_range_cstyle;
 
     value_type& operator[](size_t index) OKAYLIB_NOEXCEPT
     {
@@ -199,17 +198,54 @@ class example_iterable_forward_and_array
     size_t num_bytes;
 };
 
-class example_range_cstyle_child : public example_range_cstyle
-{};
+enum class size_mode
+{
+    known_sized,
+    unknown_sized,
+};
 
-class fifty_items_unknown_size_t
-{};
+template <size_mode mode> class forward_iterable_size_test_t
+{
+    struct cursor_t
+    {
+        size_t idx;
 
-class fifty_items_unknown_size_no_pre_increment_t
-{};
+        using value_type = size_t;
 
-class fifty_items_bidir_no_pre_decrement_t
-{};
+        [[nodiscard]] constexpr size_t
+        size(const forward_iterable_size_test_t&) const
+            requires(mode == size_mode::known_sized)
+        {
+            return 50;
+        }
+
+        ok::opt<value_type> next(const forward_iterable_size_test_t&)
+        {
+            if (idx >= 50)
+                return {};
+            ok::opt<value_type> out = idx * idx;
+            ++idx;
+            return out;
+        }
+    };
+
+  public:
+    [[nodiscard]] auto iter() const&
+    {
+        return ok::ref_iterator_t{*this, cursor_t{}};
+    }
+
+    [[nodiscard]] auto iter() &
+    {
+        return ok::ref_iterator_t{*this, cursor_t{}};
+    }
+
+    [[nodiscard]] auto iter() &&
+    {
+        return ok::owning_iterator_t<forward_iterable_size_test_t, cursor_t>{
+            ok::stdc::move(*this), {}};
+    }
+};
 
 struct special_member_counters_t
 {
@@ -247,7 +283,12 @@ struct counter_type
 
 inline special_member_counters_t counter_type::counters{};
 
-struct myiterable_t
+/*
+ * Iterable for testing that the correct cvref types are returned for something
+ * which can iterate by reference (ie. it actually contains the values and is
+ * not a generator)
+ */
+struct forward_iterable_reftype_test_t
 {
     template <typename value_type_t, bool forward = true> struct cursor_t
     {
@@ -257,7 +298,7 @@ struct myiterable_t
 
         cursor_t() = delete;
 
-        constexpr cursor_t(const myiterable_t&)
+        constexpr cursor_t(const forward_iterable_reftype_test_t&)
             requires forward
             : index(0)
         {
@@ -265,7 +306,7 @@ struct myiterable_t
 
         constexpr operator size_t() const { return index; }
 
-        constexpr cursor_t(const myiterable_t& iterable)
+        constexpr cursor_t(const forward_iterable_reftype_test_t& iterable)
             requires(!forward)
             : index(iterable.size())
         {
@@ -273,7 +314,8 @@ struct myiterable_t
 
         using iterable_arg_t =
             ok::stdc::conditional_t<ok::is_const_c<value_type_t>,
-                                    const myiterable_t&, myiterable_t&>;
+                                    const forward_iterable_reftype_test_t&,
+                                    forward_iterable_reftype_test_t&>;
 
         constexpr ok::opt<value_type> next(iterable_arg_t iterable)
         {
@@ -304,72 +346,96 @@ struct myiterable_t
     }
     constexpr auto iter() &&
     {
-        return ok::owning_iterator_t<myiterable_t, cursor_t<const int>>{
-            std::move(*this), cursor_t<const int>(*this)};
+        return ok::owning_iterator_t<forward_iterable_reftype_test_t,
+                                     cursor_t<int>>{
+            std::move(*this),
+            cursor_t<int>(*this),
+        };
     }
+
     constexpr auto reverse_iter() const&
     {
         return ok::ref_iterator_t{*this, cursor_t<const int, false>(*this)};
     }
 
+    constexpr auto reverse_iter() &
+    {
+        return ok::ref_iterator_t{*this, cursor_t<int, false>(*this)};
+    }
+
+    constexpr auto reverse_iter() &&
+    {
+        return ok::owning_iterator_t<forward_iterable_reftype_test_t,
+                                     cursor_t<int, false>>{
+            std::move(*this),
+            cursor_t<int, false>(*this),
+        };
+    }
+
     [[nodiscard]] constexpr size_t size() const { return 10; }
+
+    constexpr static ok::maybe_undefined_array_t expected{
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
+    };
 
     int items[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
 };
 
-struct my_arraylike_iterable_t
+struct arraylike_iterable_reftype_test_t
 {
-    template <typename iterable_t, typename value_type_t> struct cursor_t
+    template <typename iterable_t> struct cursor_t
     {
-        using value_type = value_type_t&;
+        using value_type = int&;
 
         size_t m_index = 0;
 
         cursor_t() = default;
 
-        constexpr value_type_t& access(iterable_t& iterable) const
+        constexpr value_type& access(iterable_t& iterable) const
         {
             __ok_assert(m_index < iterable.size(),
                         "out of bounds access to arraylike iterable");
             return iterable.items[m_index];
         }
 
-        constexpr size_t size(const my_arraylike_iterable_t& iterable) const
+        constexpr size_t
+        size(const arraylike_iterable_reftype_test_t& iterable) const
         {
             return iterable.size();
         }
 
-        constexpr size_t index(const my_arraylike_iterable_t&) const
+        constexpr size_t index(const arraylike_iterable_reftype_test_t&) const
         {
             return m_index;
         }
 
-        constexpr void offset(const my_arraylike_iterable_t& iterable,
+        constexpr void offset(const arraylike_iterable_reftype_test_t& iterable,
                               int64_t offset)
         {
             m_index += offset;
         }
     };
 
-    constexpr auto iter_const() const&
-    {
-        return ok::ref_arraylike_iterator_t<
-            const my_arraylike_iterable_t,
-            cursor_t<const my_arraylike_iterable_t, const int>>{*this, {}};
-    }
-
     constexpr auto iter() &
     {
-        return ok::ref_arraylike_iterator_t<
-            my_arraylike_iterable_t, cursor_t<my_arraylike_iterable_t, int>>{
-            *this, {}};
+        return ok::ref_arraylike_iterator_t{
+            *this, cursor_t<arraylike_iterable_reftype_test_t>{}};
+    }
+
+    constexpr auto iter() const&
+    {
+        return ok::ref_arraylike_iterator_t{
+            *this, cursor_t<const arraylike_iterable_reftype_test_t>{}};
     }
 
     constexpr auto iter() &&
     {
         return ok::owning_arraylike_iterator_t<
-            my_arraylike_iterable_t, cursor_t<my_arraylike_iterable_t, int>>{
-            ok::stdc::move(*this), {}};
+            arraylike_iterable_reftype_test_t,
+            cursor_t<arraylike_iterable_reftype_test_t>>{
+            ok::stdc::move(*this),
+            {},
+        };
     }
 
     [[nodiscard]] constexpr size_t size() const { return 10; }

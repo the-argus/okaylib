@@ -162,6 +162,7 @@ const test_source_files = &[_][]const u8{
     "iterables/drop/drop.cpp",
     "iterables/enumerate/enumerate.cpp",
     "iterables/flatten/flatten.cpp",
+    "iterables/get/get.cpp",
     "iterables/keep_if/keep_if.cpp",
     "iterables/reverse/reverse.cpp",
     "iterables/take_at_most/take_at_most.cpp",

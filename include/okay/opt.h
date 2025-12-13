@@ -482,17 +482,19 @@ class opt<payload_t>
     }
 
     template <typename other_t>
-        requires detail::is_equality_comparable_to_c<payload_t, other_t>
+        requires(!same_as_c<other_t, opt>)
     constexpr friend bool operator==(const opt& a,
                                      const other_t& b) OKAYLIB_NOEXCEPT
+        requires detail::is_equality_comparable_to_c<payload_t, other_t>
     {
         return a.has_value() && a.ref_unchecked() == b;
     }
 
     template <typename other_t>
-        requires detail::is_equality_comparable_to_c<payload_t, other_t>
+        requires(!same_as_c<other_t, opt>)
     constexpr friend bool operator==(const other_t& b,
                                      const opt& a) OKAYLIB_NOEXCEPT
+        requires detail::is_equality_comparable_to_c<payload_t, other_t>
     {
         return a.has_value() && a.ref_unchecked() == b;
     }

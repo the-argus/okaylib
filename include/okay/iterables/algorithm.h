@@ -60,37 +60,38 @@ namespace detail {
 template <bool allow_small_destination = false>
 struct iterators_copy_assign_fn_t
 {
-    template <iterator_c dest_iterator_t, iterator_c source_iterator_t>
-    constexpr void operator()(dest_iterator_t dest,
-                              source_iterator_t source) const OKAYLIB_NOEXCEPT
+    template <typename dest_iterator_t, typename source_iterator_t>
+    constexpr void operator()(dest_iterator_t&& dest,
+                              source_iterator_t&& source) const OKAYLIB_NOEXCEPT
+        requires iterable_c<decltype(dest)> && iterable_c<decltype(source)>
     {
-        static_assert(ok::stdc::is_lvalue_reference_v<
-                          typename dest_iterator_t::value_type>,
-                      "Attempt to copy assign into an iterator which does not "
-                      "produce references.");
         static_assert(
-            requires(typename dest_iterator_t::value_type destitem,
-                     typename source_iterator_t::value_type sourceitem) {
+            ok::stdc::is_lvalue_reference_v<value_type_for<dest_iterator_t>>,
+            "Attempt to copy assign into an iterator which does not "
+            "produce references.");
+        static_assert(
+            requires(value_type_for<dest_iterator_t> destitem,
+                     value_type_for<source_iterator_t> sourceitem) {
                 {
                     destitem = sourceitem
                 } -> ok::same_as_c<stdc::add_lvalue_reference_t<
-                      typename dest_iterator_t::value_type>>;
+                      value_type_for<dest_iterator_t>>>;
             },
             "Attempt to copy assign from an iterator which cannot assign into "
             "the destination.");
 
         static_assert(
-            !infinite_iterator_c<dest_iterator_t> ||
-                !infinite_iterator_c<source_iterator_t>,
+            !is_iterable_infinite<decltype(dest)> ||
+                !is_iterable_infinite<decltype(source)>,
             "Attempt to copy an infinite range into an infinite range, "
             "this will just loop forever.");
-        constexpr bool both_sized_iterators =
-            sized_iterator_c<dest_iterator_t> &&
-            sized_iterator_c<source_iterator_t>;
+
+        auto&& dest_iter = iter(dest);
+        auto&& source_iter = iter(source);
 
         while (true) {
-            ok::opt dest_item = dest.next();
-            ok::opt source_item = dest.next();
+            ok::opt dest_item = dest_iter.next();
+            ok::opt source_item = source_iter.next();
 
             if constexpr (!allow_small_destination) {
                 if (!dest_item && source_item) {
