@@ -1,9 +1,7 @@
 #include "test_header.h"
 // test header must be first
-#include "okay/iterables/iterables.h"
 #include "okay/iterables/indices.h"
-#include "okay/slice.h"
-#include "okay/stdmem.h"
+#include "okay/iterables/iterables.h"
 #include <array>
 
 using namespace ok;
@@ -31,8 +29,7 @@ TEST_SUITE("transform")
             iterators_copy_assign(ints, indices());
 
             size_t c = 0;
-            for (const int i : transform( ints, squared))
-            {
+            for (const int i : transform(ints, squared)) {
                 REQUIRE(i == c * c);
                 ++c;
             }
@@ -46,8 +43,7 @@ TEST_SUITE("transform")
             iterators_copy_assign(ints, indices());
 
             size_t c = 0;
-            for(const int i : transform(std::move(ints), squared))
-            {
+            for (const int i : transform(std::move(ints), squared)) {
                 REQUIRE(i == c * c);
                 ++c;
             }
@@ -62,8 +58,7 @@ TEST_SUITE("transform")
             iterators_copy_assign(ints, indices());
 
             size_t c = 0;
-            for(const int i : transform(ints, squared))
-            {
+            for (const int i : transform(ints, squared)) {
                 REQUIRE(i == c * c);
                 ++c;
             }

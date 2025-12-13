@@ -1063,7 +1063,7 @@ struct take_t<viewed_t> : public iterator_common_impl_t<take_t<viewed_t>>
         return ok::min(iterator.size(), consumptions);
     }
 
-    [[nodiscard]] constexpr opt<value_type> next()
+    [[nodiscard]] constexpr opt<value_type> next_impl()
     {
         if (consumptions_remaining == 0)
             return {};
@@ -1084,6 +1084,8 @@ struct take_t<viewed_t> : public iterator_common_impl_t<take_t<viewed_t>>
 
   public:
     using value_type = typename viewed_t::value_type;
+    static_assert(stdc::is_same_v<decltype(stdc::declval<viewed_t>().access()),
+                                  value_type>);
 
     // taking from an infinite iterator makes it finite
     static constexpr bool is_infinite = false;

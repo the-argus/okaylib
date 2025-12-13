@@ -385,13 +385,14 @@ struct arraylike_iterable_reftype_test_t
 {
     template <typename iterable_t> struct cursor_t
     {
-        using value_type = int&;
+        using value_type =
+            decltype(ok::stdc::declval<iterable_t&>().items[size_t{}]);
 
         size_t m_index = 0;
 
         cursor_t() = default;
 
-        constexpr value_type& access(iterable_t& iterable) const
+        constexpr auto& access(iterable_t& iterable) const
         {
             __ok_assert(m_index < iterable.size(),
                         "out of bounds access to arraylike iterable");

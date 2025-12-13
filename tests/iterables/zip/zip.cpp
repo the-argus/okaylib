@@ -2,7 +2,6 @@
 // test header must be first
 #include "okay/iterables/indices.h"
 #include "okay/iterables/iterables.h"
-#include "okay/stdmem.h"
 #include "testing_types.h"
 #include <array>
 
@@ -116,6 +115,87 @@ TEST_SUITE("zip")
 
         for (auto [s, i] : zip(array, indices())) {
             REQUIRE(s == i);
+        }
+    }
+
+    TEST_CASE("different combinations of forward/arraylike/reference/by value")
+    {
+        SUBCASE("zip view with arraylike value types")
+        {
+            int ints[] = {0, 1, 2, 3, 4};
+
+            for (auto [i, index] : ok::iter(ints).enumerate()) {
+                REQUIRE(i == index);
+            }
+
+            for (auto [i, index] : enumerate(ints)) {
+                REQUIRE(i == index);
+            }
+
+            REQUIRE(ok::iter(ints).zip(ok::indices()).size() == 5);
+            REQUIRE(zip(ints, indices()).size() == 5);
+
+            for (auto [i, index] : zip(ints, indices())) {
+                REQUIRE(i == index);
+            }
+
+            for (auto [enumerated_normal, enumerated_zip] :
+                 enumerate(ints).zip(zip(ints, ok::indices()))) {
+                REQUIRE(enumerated_normal == enumerated_zip);
+            }
+        }
+
+        SUBCASE("zip view with forward value types")
+        {
+            forward_iterable_size_test_t<size_mode::unknown_sized> iterable;
+
+            for (auto [i, index] : iterable.iter().zip(indices())) {
+                REQUIRE(i == index);
+            }
+
+            for (auto [enumerated_normal, enumerated_zip] :
+                 enumerate(iterable).zip(zip(iterable, indices()))) {
+                REQUIRE(enumerated_normal == enumerated_zip);
+            }
+        }
+
+        SUBCASE("zip view with an lvalue reference and a value type")
+        {
+            int ints[] = {0, 1, 2, 3, 4};
+
+            for (auto& [int_item, index] : ok::iter(ints).zip(indices())) {
+                static_assert(same_as_c<decltype(int_item), int&>);
+                static_assert(same_as_c<decltype(index), size_t>);
+                REQUIRE(int_item == index);
+            }
+
+            arraylike_iterable_reftype_test_t iterable;
+
+            for (auto& [iterable_item, int_item, index] :
+                 iterable.iter().zip(ok::iter(ints), indices())) {
+                static_assert(same_as_c<decltype(iterable_item), int&>);
+                static_assert(same_as_c<decltype(int_item), int&>);
+                static_assert(same_as_c<decltype(index), size_t>);
+                REQUIRE(iterable_item == int_item);
+            }
+        }
+
+        SUBCASE("zip view with only lvalue references")
+        {
+            int ints[] = {0, 1, 2, 3, 4, 5};
+            arraylike_iterable_reftype_test_t iterable;
+
+            for (auto& [iterable_item, int_item] :
+                 zip(iterable, reverse(ints))) {
+                static_assert(same_as_c<decltype(iterable_item), int&>);
+                static_assert(same_as_c<decltype(int_item), int&>);
+
+                REQUIRE(int_item != iterable_item);
+                int_item = iterable_item; // swap the two ranges
+            }
+
+            REQUIRE(ok::iterators_equal(
+                ints, maybe_undefined_array_t{5, 4, 3, 2, 1, 0}));
         }
     }
 }

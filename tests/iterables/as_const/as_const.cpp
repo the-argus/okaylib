@@ -1,6 +1,5 @@
 #include "test_header.h"
 // test header must be first
-#include "okay/iterables/indices.h"
 #include "okay/iterables/iterables.h"
 #include "testing_types.h"
 #include <vector>

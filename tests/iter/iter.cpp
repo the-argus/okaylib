@@ -14,14 +14,14 @@ TEST_SUITE("iter")
     {
         SUBCASE("forward only iterable")
         {
-            myiterable_t iterable;
+            forward_iterable_size_test_t<size_mode::known_sized> iterable;
             size_t num_items = 0;
 
             for (int i : iterable.iter()) {
                 REQUIRE(i == num_items);
                 ++num_items;
             }
-            REQUIRE(num_items == iterable.size());
+            REQUIRE(num_items == ok::size(iterable));
 
             // test enumerate too
             for (auto [i, idx] : iterable.iter().enumerate()) {
@@ -31,20 +31,22 @@ TEST_SUITE("iter")
 
         SUBCASE("forward only iterable, rvalue")
         {
+            using iterable_t =
+                forward_iterable_size_test_t<size_mode::known_sized>;
             size_t num_items = 0;
 
-            for (int i : myiterable_t{}.iter()) {
+            for (int i : iterable_t{}.iter()) {
                 REQUIRE(i == num_items);
                 ++num_items;
             }
 
-            // myiterable_t always has the same size
-            REQUIRE(num_items == myiterable_t{}.size());
+            REQUIRE(num_items == ok::size(iterable_t{}));
         }
 
         SUBCASE("random access iterable")
         {
-            my_arraylike_iterable_t iterable;
+            using iterable_t = arraylike_iterable_reftype_test_t;
+            iterable_t iterable;
             size_t num_items = 0;
             for (int& i : iterable.iter()) {
                 REQUIRE(i == num_items);
@@ -55,9 +57,10 @@ TEST_SUITE("iter")
 
         SUBCASE("random access iterable, const")
         {
-            my_arraylike_iterable_t iterable;
+            using iterable_t = arraylike_iterable_reftype_test_t;
+            iterable_t iterable;
             size_t num_items = 0;
-            for (const int& i : iterable.iter_const()) {
+            for (const int& i : iterable.iter()) {
                 REQUIRE(i == num_items);
                 ++num_items;
             }
@@ -66,22 +69,24 @@ TEST_SUITE("iter")
 
         SUBCASE("random access iterable, rvalue")
         {
+            using iterable_t = arraylike_iterable_reftype_test_t;
             size_t num_items = 0;
-            for (int& i : my_arraylike_iterable_t{}.iter()) {
+            for (int& i : iterable_t{}.iter()) {
                 REQUIRE(i == num_items);
                 ++num_items;
             }
-            REQUIRE(num_items == my_arraylike_iterable_t{}.size());
+            REQUIRE(num_items == iterable_t{}.size());
         }
 
         SUBCASE("random access iterable, rvalue const")
         {
+            using iterable_t = arraylike_iterable_reftype_test_t;
             size_t num_items = 0;
-            for (const int& i : my_arraylike_iterable_t{}.iter_const()) {
+            for (const int& i : iterable_t{}.iter()) {
                 REQUIRE(i == num_items);
                 ++num_items;
             }
-            REQUIRE(num_items == my_arraylike_iterable_t{}.size());
+            REQUIRE(num_items == iterable_t{}.size());
         }
     }
 
@@ -89,7 +94,8 @@ TEST_SUITE("iter")
     {
         SUBCASE("forward only iterable, but backwards")
         {
-            myiterable_t iterable;
+            using iterable_t = forward_iterable_reftype_test_t;
+            iterable_t iterable;
             size_t num_items = 0;
 
             for (int i : iterable.reverse_iter()) {
@@ -105,7 +111,7 @@ TEST_SUITE("iter")
             using T = std::tuple<int&, size_t>;
             static_assert(std::is_move_assignable_v<T>);
 
-            my_arraylike_iterable_t iterable;
+            arraylike_iterable_reftype_test_t iterable;
             size_t num_items = 0;
             for (auto& [i, idx] : iterable.iter().reverse().enumerate()) {
                 REQUIRE(i == (iterable.size() - num_items - 1));
@@ -115,179 +121,6 @@ TEST_SUITE("iter")
             for (auto [i, idx] : iterable.iter().enumerate()) {
                 REQUIRE(i == idx);
             }
-        }
-    }
-
-    TEST_CASE("zip view")
-    {
-        SUBCASE("zip view with arraylike value types")
-        {
-            int ints[] = {0, 1, 2, 3, 4};
-
-            for (auto [i, index] : ok::iter(ints).enumerate()) {
-                REQUIRE(i == index);
-            }
-
-            for (auto [i, index] : enumerate(ints)) {
-                REQUIRE(i == index);
-            }
-
-            REQUIRE(ok::iter(ints).zip(ok::indices()).size() == 5);
-            REQUIRE(zip(ints, indices()).size() == 5);
-
-            for (auto [i, index] : zip(ints, indices())) {
-                REQUIRE(i == index);
-            }
-
-            for (auto [enumerated_normal, enumerated_zip] :
-                 enumerate(ints).zip(zip(ints, ok::indices()))) {
-                REQUIRE(enumerated_normal == enumerated_zip);
-            }
-        }
-
-        SUBCASE("zip view with forward value types")
-        {
-            myiterable_t iterable;
-
-            for (auto [i, index] : iterable.iter().zip(indices())) {
-                REQUIRE(i == index);
-            }
-
-            for (auto [enumerated_normal, enumerated_zip] :
-                 enumerate(iterable).zip(zip(iterable, indices()))) {
-                REQUIRE(enumerated_normal == enumerated_zip);
-            }
-        }
-
-        SUBCASE("zip view with an lvalue reference and a value type")
-        {
-            int ints[] = {0, 1, 2, 3, 4};
-
-            for (auto& [int_item, index] : ok::iter(ints).zip(indices())) {
-                static_assert(same_as_c<decltype(int_item), int&>);
-                static_assert(same_as_c<decltype(index), size_t>);
-                REQUIRE(int_item == index);
-            }
-
-            myiterable_t iterable;
-
-            for (auto& [iterable_item, int_item, index] :
-                 iterable.iter().zip(ok::iter(ints), indices())) {
-                static_assert(same_as_c<decltype(iterable_item), int&>);
-                static_assert(same_as_c<decltype(int_item), int&>);
-                static_assert(same_as_c<decltype(index), size_t>);
-                REQUIRE(iterable_item == int_item);
-            }
-        }
-
-        SUBCASE("zip view with only lvalue references")
-        {
-            int ints[] = {0, 1, 2, 3, 4, 5};
-            myiterable_t iterable;
-
-            for (auto& [iterable_item, int_item] :
-                 zip(iterable, reverse(ints))) {
-                static_assert(same_as_c<decltype(iterable_item), int&>);
-                static_assert(same_as_c<decltype(int_item), int&>);
-
-                REQUIRE(int_item != iterable_item);
-                int_item = iterable_item; // swap the two ranges
-            }
-
-            REQUIRE(ok::iterators_equal(
-                ints, maybe_undefined_array_t{5, 4, 3, 2, 1, 0}));
-        }
-    }
-
-    TEST_CASE("keep_if view")
-    {
-        constexpr auto is_even = [](const auto& i) { return i % 2 == 0; };
-
-        SUBCASE("filter odd numbers out")
-        {
-            int myints[] = {0, 1, 2, 3, 4, 5};
-            maybe_undefined_array_t myints_array = {0, 1, 2, 3, 4, 5};
-            maybe_undefined_array_t expected = {0, 2, 4};
-
-            REQUIRE(ok::iterators_equal(keep_if(myints, is_even),
-                                        keep_if(myints_array, is_even)));
-            REQUIRE(ok::iterators_equal(keep_if(myints, is_even), expected));
-            REQUIRE(
-                ok::iterators_equal(keep_if(myints_array, is_even), expected));
-        }
-
-        SUBCASE("filter odd indices out of non-integer iterable")
-        {
-            const char* strings[] = {
-                "keep", "removeodd", "keep", "removeodd, again", "keep",
-            };
-
-            size_t runs = 0;
-            for (const char*& item :
-                 enumerate(strings)
-                     .keep_if([&](const auto& pair) {
-                         const auto& [str, index] = pair;
-                         return is_even(index);
-                     })
-                     .transform([](auto&& a) { return ok::get<0>(a); })) {
-                ++runs;
-                REQUIRE(ascii_view::from_cstring(item) == ascii_view("keep"));
-            }
-            REQUIRE(runs == 3);
-        }
-    }
-
-    TEST_CASE("flatten view")
-    {
-        SUBCASE("2d array")
-        {
-            maybe_undefined_array_t outer{
-                maybe_undefined_array_t{0, 1},
-                maybe_undefined_array_t{2, 3},
-            };
-            maybe_undefined_array_t expected{0, 1, 2, 3};
-
-            REQUIRE(iterators_equal(iter(outer).flatten(), expected));
-        }
-
-        SUBCASE("2d array const")
-        {
-            const maybe_undefined_array_t outer{
-                maybe_undefined_array_t{0, 1},
-                maybe_undefined_array_t{2, 3},
-            };
-            const maybe_undefined_array_t expected{0, 1, 2, 3};
-            REQUIRE(iterators_equal(iter(outer).flatten(), expected));
-        }
-
-        SUBCASE("3d array")
-        {
-            constexpr maybe_undefined_array_t outer{
-                maybe_undefined_array_t{
-                    maybe_undefined_array_t{0, 1},
-                    maybe_undefined_array_t{2, 3},
-                    maybe_undefined_array_t{4, 5},
-                },
-                maybe_undefined_array_t{
-                    maybe_undefined_array_t{6, 7},
-                    maybe_undefined_array_t{8, 9},
-                    maybe_undefined_array_t{10, 11},
-                },
-            };
-
-            constexpr maybe_undefined_array_t expected_flatten_once{
-                maybe_undefined_array_t{0, 1}, maybe_undefined_array_t{2, 3},
-                maybe_undefined_array_t{4, 5}, maybe_undefined_array_t{6, 7},
-                maybe_undefined_array_t{8, 9}, maybe_undefined_array_t{10, 11},
-            };
-
-            constexpr maybe_undefined_array_t expected_flatten_twice{
-                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
-
-            REQUIRE(
-                iterators_equal(iter(outer).flatten(), expected_flatten_once));
-            REQUIRE(iterators_equal(iter(outer).flatten().flatten(),
-                                    expected_flatten_twice));
         }
     }
 }
