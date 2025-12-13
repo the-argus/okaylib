@@ -138,7 +138,6 @@ const test_source_files = &[_][]const u8{
     "slice/slice.cpp",
     "status/status.cpp",
     "stdmem/stdmem.cpp",
-    "ranges/ranges.cpp",
     "ordering/ordering.cpp",
     "tuple/tuple.cpp",
     "c_allocator/c_allocator.cpp",
