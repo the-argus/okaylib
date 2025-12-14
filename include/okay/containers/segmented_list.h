@@ -4,8 +4,8 @@
 #include "okay/allocators/allocator.h"
 #include "okay/defer.h"
 #include "okay/error.h"
+#include "okay/iterables/iterables.h"
 #include "okay/math/math.h"
-#include "okay/ranges/ranges.h"
 #include "okay/stdmem.h"
 #include "okay/tuple.h"
 
@@ -654,16 +654,16 @@ struct copy_items_from_range_t
         return ok::make(*this, allocator, range);
     }
 
-    template <allocator_c backing_allocator_t,
-              ok::detail::producing_range_c input_range_t>
-    [[nodiscard]] constexpr alloc::error
-    make_into_uninit(ok::segmented_list_t<value_type_for<const input_range_t&>,
-                                          backing_allocator_t>& output,
-                     backing_allocator_t& allocator,
-                     const input_range_t& range) const OKAYLIB_NOEXCEPT
-        requires ok::detail::range_marked_sized_c<input_range_t>
+    template <allocator_c backing_allocator_t, typename input_iterable_t>
+    [[nodiscard]] constexpr alloc::error make_into_uninit(
+        ok::segmented_list_t<value_type_for<const input_iterable_t&>,
+                             backing_allocator_t>& output,
+        backing_allocator_t& allocator,
+        const input_iterable_t& iterable) const OKAYLIB_NOEXCEPT
+        requires iterable_c<decltype(iterable)> &&
+                 is_iterable_sized<decltype(iterable)>
     {
-        using T = value_type_for<const input_range_t&>;
+        using T = value_type_for<decltype(iterable)>;
 
         using M =
             typename ok::segmented_list_t<T, backing_allocator_t>::members_t;
@@ -671,7 +671,7 @@ struct copy_items_from_range_t
         using blocklist_t =
             typename ok::segmented_list_t<T, backing_allocator_t>::blocklist_t;
 
-        const size_t num_initial_blocks = log2_uint_ceil(ok::size(range));
+        const size_t num_initial_blocks = log2_uint_ceil(ok::size(iterable));
         const size_t num_initial_spots =
             get_num_spots_for_blocks(num_initial_blocks);
 
@@ -733,10 +733,8 @@ struct copy_items_from_range_t
             .allocator = ok::addressof(allocator),
         };
 
-        for (auto c = ok::begin(range); ok::is_inbounds(range, c);
-             ok::increment(range, c)) {
-            auto stat =
-                output.insert_at(output.size(), ok::range_get_best(range, c));
+        for (auto item : ok::iter(iterable)) {
+            auto stat = output.insert_at(output.size(), stdc::move(item));
             __ok_internal_assert(ok::is_success(stat));
         }
 
@@ -752,35 +750,6 @@ inline constexpr segmented_list::detail::copy_items_from_range_t
     copy_items_from_range;
 
 } // namespace segmented_list
-
-template <typename T, typename backing_allocator_t>
-struct range_definition<ok::segmented_list_t<T, backing_allocator_t>>
-{
-    // always consuming because T is always nonconst
-    static constexpr range_flags flags =
-        range_flags::sized | range_flags::arraylike | range_flags::consuming |
-        range_flags::producing;
-
-    using range_t = ok::segmented_list_t<T, backing_allocator_t>;
-    using value_type = T;
-
-    static constexpr value_type& get(range_t& r, size_t c) OKAYLIB_NOEXCEPT
-    {
-        return r[c];
-    }
-
-    static constexpr const value_type& get(const range_t& r,
-                                           size_t c) OKAYLIB_NOEXCEPT
-    {
-        return r[c];
-    }
-
-    static constexpr size_t size(const range_t& r) OKAYLIB_NOEXCEPT
-    {
-        return r.size();
-    }
-};
-
 } // namespace ok
 
 #if defined(OKAYLIB_USE_FMT)

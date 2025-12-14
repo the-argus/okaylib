@@ -529,14 +529,26 @@ namespace detail {
 // everything incorrectly if I write this constraint in line
 template <typename... Ts>
 concept zip_constraints_c = (iterable_c<Ts> && ...);
+
+template <typename T> struct value_type_safe_t
+{
+    using type = void;
+};
+template <typename T>
+    requires requires { typename T::value_type; }
+struct value_type_safe_t<T>
+{
+    using type = T::value_type;
+};
 } // namespace detail
 
-template <iterable_c T>
-using iterator_for =
-    stdc::remove_cvref_t<decltype(ok::iter(stdc::declval<T>()))>;
+template <typename T>
+using iterator_for = stdc::conditional_t<
+    iterable_c<T>, stdc::remove_cvref_t<decltype(ok::iter(stdc::declval<T>()))>,
+    void>;
 
-template <iterable_c T>
-using value_type_for = typename iterator_for<T>::value_type;
+template <typename T>
+using value_type_for = typename detail::value_type_safe_t<T>::type;
 
 template <typename T>
 inline constexpr bool is_iterable_infinite =

@@ -2,8 +2,9 @@
 #define __OKAYLIB_CONTAINERS_BITSET_H__
 
 #include "okay/construct.h"
+#include "okay/detail/template_util/c_array_length.h"
+#include "okay/iterables/iterables.h"
 #include "okay/math/rounding.h"
-#include "okay/ranges/ranges.h"
 #include "okay/slice.h"
 #include <cstdint>
 
@@ -38,6 +39,37 @@ template <size_t num_bits> class bit_array_t
         }
     }
     constexpr bit_array_t(bit_array::detail::undefined_tag_t) noexcept {}
+
+    struct cursor_t
+    {
+      private:
+        size_t m_index = 0;
+
+      public:
+        constexpr cursor_t() = default;
+
+        using value_type = ok::bit;
+
+        [[nodiscard]] constexpr size_t size(const bit_array_t& ba) const
+        {
+            return ba.size_bits();
+        }
+
+        [[nodiscard]] constexpr size_t index(const bit_array_t&) const
+        {
+            return m_index;
+        }
+
+        constexpr void offset(int64_t offset_amount)
+        {
+            m_index += offset_amount;
+        }
+
+        [[nodiscard]] constexpr value_type access(const bit_array_t& ba)
+        {
+            return ba.get_bit(m_index);
+        }
+    };
 
   public:
     friend struct bit_array::detail::all_bits_on_t<num_bits>;
@@ -170,30 +202,23 @@ template <size_t num_bits> class bit_array_t
     {
         return !(lhs == rhs);
     }
-};
 
-template <size_t max_elems> struct range_definition<bit_array_t<max_elems>>
-{
-    static constexpr range_flags flags =
-        range_flags::sized | range_flags::consuming | range_flags::producing |
-        range_flags::implements_set | range_flags::arraylike;
-
-    using bit_array_t = bit_array_t<max_elems>;
-    using value_type = ok::bit;
-
-    static constexpr size_t size(const bit_array_t& bs) OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr auto iter() &
     {
-        return max_elems;
+        return ref_iterator_t{*this, cursor_t{}};
     }
 
-    static constexpr ok::bit get(const bit_array_t& range, size_t cursor)
+    [[nodiscard]] constexpr auto iter() const&
     {
-        return range.get_bit(cursor);
+        return ref_iterator_t{*this, cursor_t{}};
     }
 
-    static constexpr void set(bit_array_t& range, size_t cursor, ok::bit value)
+    [[nodiscard]] constexpr auto iter() &&
     {
-        return range.set_bit(cursor, value);
+        return owning_iterator_t<bit_array_t, cursor_t>{
+            stdc::move(*this),
+            cursor_t{},
+        };
     }
 };
 

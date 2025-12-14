@@ -105,8 +105,6 @@ class ascii_view
 
     // NOTE: this function is dangerous not only because it exposes a raw
     // pointer but also because the string may not be null terminated
-    // TODO: consider removing this and providing range-like-ness in the
-    // range_definition.h header
     [[nodiscard]] constexpr const char* data() const { return m_str; }
 
     [[nodiscard]] constexpr size_t size() const { return m_length; }

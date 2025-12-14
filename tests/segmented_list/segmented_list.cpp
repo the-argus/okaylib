@@ -1,14 +1,11 @@
-#include "okay/ranges/views/enumerate.h"
-#include "okay/ranges/views/std_for.h"
 #include "test_header.h"
 // test header must be first
+#include "okay/iterables/iterables.h"
 #include "okay/allocators/arena.h"
 #include "okay/allocators/c_allocator.h"
 #include "okay/containers/array.h"
 #include "okay/containers/bit_array.h"
 #include "okay/containers/segmented_list.h"
-#include "okay/ranges/indices.h"
-#include "okay/ranges/views/transform.h"
 #include "testing_types.h"
 
 using namespace ok;
@@ -63,7 +60,7 @@ TEST_SUITE("segmented list")
 
             segmented_list_t bools =
                 segmented_list::copy_items_from_range(
-                    c_allocator, rng | transform(&ok::bit::operator bool))
+                    c_allocator, transform(rng, &ok::bit::operator bool))
                     .unwrap();
 
             REQUIRE(ok::size(bools) == ok::size(rng));
