@@ -194,7 +194,7 @@ TEST_SUITE("ordering")
     TEST_CASE("partial min returns nullopt on undefined comparison")
     {
         REQUIRE(!ok::partial_min(0.f / 0.0f, 10.f).has_value());
-        REQUIRE(ok::partial_min(0.f, 10.f) == 0.f);
+        REQUIRE((ok::partial_min(0.f, 10.f) == 0.f));
         REQUIRE(ok::partial_min(0.f, 10.f).has_value());
     }
 
@@ -238,9 +238,9 @@ TEST_SUITE("ordering")
 
     TEST_CASE("partial clamp floats")
     {
-        REQUIRE(ok::partial_clamp(10.f, {.min = 20.f, .max = 30.f}) == 20.f);
-        REQUIRE(ok::partial_clamp(40.f, {.min = 20.f, .max = 30.f}) == 30.f);
-        REQUIRE(ok::partial_clamp(25.f, {.min = 20.f, .max = 30.f}) == 25.f);
+        REQUIRE((ok::partial_clamp(10.f, {.min = 20.f, .max = 30.f}) == 20.f));
+        REQUIRE((ok::partial_clamp(40.f, {.min = 20.f, .max = 30.f}) == 30.f));
+        REQUIRE((ok::partial_clamp(25.f, {.min = 20.f, .max = 30.f}) == 25.f));
         REQUIRE(!ok::partial_clamp(0.0f / 0.0f, {.min = 20.f, .max = 30.f})
                      .has_value());
         REQUIRE(!ok::partial_clamp(1.f, {.min = 0.0f / 0.0f, .max = 30.f})
@@ -251,9 +251,9 @@ TEST_SUITE("ordering")
 
     TEST_CASE("partial clamp doubles")
     {
-        REQUIRE(ok::partial_clamp(10., {.min = 20., .max = 30.}) == 20.);
-        REQUIRE(ok::partial_clamp(40., {.min = 20., .max = 30.}) == 30.);
-        REQUIRE(ok::partial_clamp(25., {.min = 20., .max = 30.}) == 25.);
+        REQUIRE((ok::partial_clamp(10., {.min = 20., .max = 30.}) == 20.));
+        REQUIRE((ok::partial_clamp(40., {.min = 20., .max = 30.}) == 30.));
+        REQUIRE((ok::partial_clamp(25., {.min = 20., .max = 30.}) == 25.));
         REQUIRE(!ok::partial_clamp(0.0 / 0.0, {.min = 20., .max = 30.})
                      .has_value());
         REQUIRE(
