@@ -25,7 +25,7 @@ static_assert(std::is_same_v<slice<const uint8_t>::value_type, const uint8_t>,
               "slice::value_type doesnt work as expected");
 
 // undefined memory should not be iterable
-static_assert(!ok::range_c<ok::undefined_memory_t<int>>);
+static_assert(!ok::iterable_c<ok::undefined_memory_t<int>>);
 
 TEST_SUITE("slice")
 {
@@ -155,7 +155,7 @@ TEST_SUITE("slice")
 
             slice<int> ints = slice_from_one((int&)oneint[0]);
             REQUIRE(ints.size() == 1);
-            ok_foreach(int i, ints) REQUIRE(i == oneint[0]);
+            for(int i : ok::iter(ints)) REQUIRE(i == oneint[0]);
 
             slice<const int> ints_const = slice_from_one(oneint[0]);
             REQUIRE(ints.size() == 1);
@@ -203,7 +203,7 @@ TEST_SUITE("slice")
             REQUIRE(slice.size() == 0);
 
             size_t index = 0;
-            ok_foreach(auto byte, slice) { ++index; }
+            for (auto byte : iter(slice)) { ++index; }
             REQUIRE(index == 0);
         }
 
@@ -214,7 +214,7 @@ TEST_SUITE("slice")
 
             memfill(slice, 0);
             uint8_t index = 0;
-            ok_foreach(auto& byte, slice)
+            for(auto& byte : iter(slice))
             {
                 REQUIRE(byte == 0);
                 byte = index;
@@ -236,7 +236,7 @@ TEST_SUITE("slice")
             const slice<uint8_t> slice(mem);
 
             uint8_t index = 0;
-            ok_foreach(const auto& byte, slice)
+            for(const auto& byte : iter(slice))
             {
                 REQUIRE(byte == 0);
                 mem[index] = index;
@@ -245,7 +245,7 @@ TEST_SUITE("slice")
 
             // make sure that also changed slice
             index = 0;
-            ok_foreach(const auto& byte, slice)
+            for(const auto& byte : iter(slice))
             {
                 REQUIRE(byte == index);
                 ++index;
@@ -269,7 +269,7 @@ TEST_SUITE("slice")
             REQUIRE(mslice.is_alias_for(bytes_t(mem)));
             memfill<uint8_t>(mem, 0);
 
-            ok_foreach(ok_pair(byte, index), enumerate(mslice))
+            for(auto [byte, index] : enumerate(mslice))
             {
                 static_assert(std::is_same_v<decltype(byte), uint8_t&>);
                 static_assert(std::is_same_v<decltype(index), const size_t>);
@@ -349,15 +349,15 @@ TEST_SUITE("slice")
             maybe_undefined_array_t<uint8_t, sizeof(bytes)> expected = {
                 all_ones, all_ones, all_ones, all_ones, 0, 0, 0, 0};
 
-            REQUIRE(ranges_equal(bytes, expected));
+            REQUIRE(iterators_equal(bytes, expected));
 
             const_bit_slice_t all_expected_bits =
                 raw_bit_slice(slice(expected), expected.size() * 8, 0);
             const_bit_slice_t first_half_expected =
                 all_bits.subslice({.length = all_expected_bits.size() / 2});
 
-            REQUIRE(ranges_equal(first_half_expected, first_half));
-            REQUIRE(ranges_equal(all_expected_bits, all_bits));
+            REQUIRE(iterators_equal(first_half_expected, first_half));
+            REQUIRE(iterators_equal(all_expected_bits, all_bits));
         }
 
         SUBCASE("subslice() with some offset")
@@ -374,8 +374,7 @@ TEST_SUITE("slice")
             // all bits have been set to 1
             REQUIRE(a.items().last() == 255);
 
-            bool all_set =
-                all_of(a | drop(1), [](uint8_t byte) { return byte == 255; });
+            bool all_set = drop(a, 1).all_satisfy([](uint8_t byte) { return byte == 255; });
             REQUIRE(all_set);
 
             // first five least significant bits are skipped
