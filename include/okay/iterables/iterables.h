@@ -763,7 +763,6 @@ template <typename derived_t> struct iterator_common_impl_t
         return true;
     }
 
-    template <typename predicate_t>
     constexpr bool is_all_true() &&
         requires ok::stdc::convertible_to_c<typename derived_t::value_type,
                                             bool>
