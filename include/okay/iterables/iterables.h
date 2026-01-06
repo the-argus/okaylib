@@ -65,6 +65,7 @@ struct owning_iterator_t
     : public iterator_common_impl_t<owning_iterator_t<iterable_t, cursor_t>>
 {
   private:
+    static_assert(!stdc::is_reference_v<iterable_t>);
     using storage_type = stdc::remove_const_t<iterable_t>;
 
     storage_type iterable;
@@ -486,7 +487,7 @@ struct make_into_iterator_fn_t
     [[nodiscard]] constexpr auto
     operator()(opt<T>&& optional) const OKAYLIB_NOEXCEPT
     {
-        return owning_iterator_t<decltype(optional), opt_cursor_t<T, false>>{
+        return owning_iterator_t<opt<T>, opt_cursor_t<T, false>>{
             stdc::move(optional), {}};
     }
 };
