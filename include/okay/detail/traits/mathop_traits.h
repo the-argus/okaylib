@@ -22,12 +22,12 @@ concept has_inplace_addition_with_i64_c = requires(T& t, const int64_t& i) {
 };
 
 template <typename T, typename other_t>
-concept is_equality_comparable_to_c = requires(T& a, other_t& b) {
+concept is_equality_comparable_to_c = requires(const T& a, const other_t& b) {
     { a == b } -> same_as_c<bool>;
 };
 
 template <typename T>
-concept is_equality_comparable_to_self_c = requires(T& a, T& b) {
+concept is_equality_comparable_to_self_c = requires(const T& a, const T& b) {
     { a == b } -> same_as_c<bool>;
 };
 
