@@ -548,7 +548,8 @@ using iterator_for = stdc::conditional_t<
     void>;
 
 template <typename T>
-using value_type_for = typename detail::value_type_safe_t<T>::type;
+using value_type_for =
+    typename detail::value_type_safe_t<stdc::remove_cvref_t<T>>::type;
 
 template <typename T>
 inline constexpr bool is_iterable_infinite =
