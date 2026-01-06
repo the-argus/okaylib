@@ -24,8 +24,8 @@ struct iterators_equal_fn_t
         requires requires {
             requires(!is_iterable_infinite<decltype(lhs)> ||
                      !is_iterable_infinite<decltype(rhs)>);
-            requires is_equality_comparable_to_c<value_type_for<decltype(lhs)>,
-                                                 value_type_for<decltype(rhs)>>;
+            requires is_equality_comparable_to_c<
+                value_type_for<iterator_lhs_t>, value_type_for<iterator_rhs_t>>;
         }
     {
         constexpr bool both_ranges_have_known_size =
