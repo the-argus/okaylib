@@ -409,15 +409,14 @@ class opt<payload_t>
     template <typename callable_t>
     [[nodiscard]] constexpr payload_t
     take_or_run(callable_t&& callable) OKAYLIB_NOEXCEPT
-        requires(
-            is_std_invocable_r_c<callable_t, decltype(this -> ref_unchecked())>)
+        requires(is_std_invocable_c<callable_t>)
     {
         if (this->has_value()) {
             payload_t out(stdc::move(this->ref_unchecked()));
             this->reset();
             return out;
         } else {
-            return callable();
+            return ok::invoke(callable);
         }
     }
 
@@ -464,54 +463,42 @@ class opt<payload_t>
         return this->has_value();
     }
 
-    // optional does not implement full spaceship... stdlib chooses to make
-    // null optionals be considered "less" than all possible values of the
-    // payload type. I think this is confusing and only equality really makes
-    // intuitive sense to someone who doesn know the ins and outs of the C++
-    // stl. Do I want a sorted vector of optionals to have all the nulls at the
-    // front? maybe, but why is that default
-    template <typename other_payload_t>
-        requires detail::is_equality_comparable_to_c<payload_t, other_payload_t>
-    constexpr friend bool
-    operator==(const opt& a, const opt<other_payload_t>& b) OKAYLIB_NOEXCEPT
-    {
-        if (a.has_value() != b.has_value())
-            return false;
-
-        return !a.has_value() || a.ref_unchecked() == b.ref_unchecked();
-    }
-
+    // comparison from this opt to any other type that isn't an optional
     template <typename other_t>
-        requires(!same_as_c<other_t, opt>)
-    constexpr friend bool operator==(const opt& a,
+        requires(!detail::is_instance_c<other_t, opt>)
+    constexpr friend bool operator==(const opt a,
                                      const other_t& b) OKAYLIB_NOEXCEPT
         requires detail::is_equality_comparable_to_c<payload_t, other_t>
     {
-        return a.has_value() && a.ref_unchecked() == b;
+        if (!a.has_value())
+            return false;
+        return a.ref_unchecked() == b;
     }
 
-    template <typename other_t>
-        requires(!same_as_c<other_t, opt>)
-    constexpr friend bool operator==(const other_t& b,
-                                     const opt& a) OKAYLIB_NOEXCEPT
-        requires detail::is_equality_comparable_to_c<payload_t, other_t>
+    // comparison from this opt to any other optional
+    template <typename other_payload_t>
+    constexpr friend bool
+    operator==(const opt a, const opt<other_payload_t>& b) OKAYLIB_NOEXCEPT
+        requires detail::is_equality_comparable_to_c<payload_t, other_payload_t>
     {
-        return a.has_value() && a.ref_unchecked() == b;
+        if (!a.has_value() && !b.has_value())
+            return true;
+        if (a.has_value() != b.has_value())
+            return false;
+
+        return a.ref_unchecked() == b.ref_unchecked();
+    }
+
+    constexpr friend bool operator==(const opt a, nullopt_t) OKAYLIB_NOEXCEPT
+    {
+        return !a.has_value();
     }
 
     // compatibility with optional reference deep_compare_with()
     template <typename other_t>
-        requires detail::is_equality_comparable_to_c<payload_t, other_t>
     [[nodiscard]] constexpr bool
     deep_compare_with(const other_t& b) const OKAYLIB_NOEXCEPT
-    {
-        return *this == b;
-    }
-
-    template <typename other_payload_t>
-        requires detail::is_equality_comparable_to_c<payload_t, other_payload_t>
-    [[nodiscard]] constexpr bool
-    deep_compare_with(const opt<other_payload_t>& b) const OKAYLIB_NOEXCEPT
+        requires detail::is_equality_comparable_to_c<opt, other_t>
     {
         return *this == b;
     }
@@ -605,9 +592,6 @@ class opt<payload_t>
         bool m_iterated = false;
 
       public:
-        // TODO: make these two std:: things work without STL
-        using iterator_category = std::input_iterator_tag;
-        using difference_type = std::ptrdiff_t;
         using value_type =
             stdc::conditional_t<is_const, stdc::add_const_t<payload_t>,
                                 payload_t>;
@@ -815,6 +799,76 @@ template <stdc::is_lvalue_reference_c payload_t> class opt<payload_t>
             return opt<ret_t>{};
         }
     }
+
+  private:
+    struct sentinel_t
+    {};
+
+    template <bool is_const> struct iterator_impl;
+    template <bool is_const> friend struct iterator_impl;
+
+    template <bool is_const> struct iterator_impl
+    {
+      private:
+        stdc::conditional_t<is_const, const opt&, opt&> m_parent;
+        bool m_iterated = false;
+
+      public:
+        using value_type =
+            stdc::conditional_t<is_const, stdc::add_const_t<payload_t>,
+                                payload_t>;
+        using reference = ok::stdc::add_lvalue_reference_t<value_type>;
+        using pointer = ok::stdc::add_pointer_t<value_type>;
+
+        constexpr iterator_impl() = delete;
+
+        constexpr iterator_impl(decltype(m_parent) parent) : m_parent(parent) {}
+
+        constexpr reference operator*() const OKAYLIB_NOEXCEPT
+        {
+            if (m_iterated || !m_parent) [[unlikely]] {
+                __ok_abort("out of bounds dereference of opt iterator");
+            }
+            return m_parent.ref_unchecked();
+        }
+
+        constexpr iterator_impl& operator++() OKAYLIB_NOEXCEPT
+        {
+            m_iterated = true;
+            return *this;
+        }
+
+        constexpr iterator_impl operator++(int) const OKAYLIB_NOEXCEPT
+        {
+            iterator_impl tmp = *this;
+            ++(*this);
+            return tmp;
+        }
+
+        constexpr friend bool operator==(const iterator_impl& a,
+                                         const sentinel_t&) OKAYLIB_NOEXCEPT
+        {
+            return a.m_iterated || !a.m_parent;
+        }
+
+        constexpr friend bool operator!=(const iterator_impl& a,
+                                         const sentinel_t& b) OKAYLIB_NOEXCEPT
+        {
+            return !(a == b);
+        }
+    };
+
+  public:
+    using iterator = iterator_impl<false>;
+    using const_iterator = iterator_impl<true>;
+
+    [[nodiscard]] constexpr iterator begin() { return iterator(*this); }
+    [[nodiscard]] constexpr const_iterator begin() const
+    {
+        return const_iterator(*this);
+    }
+
+    [[nodiscard]] constexpr sentinel_t end() const { return {}; }
 
 #if defined(OKAYLIB_USE_FMT)
     friend struct fmt::formatter<opt>;

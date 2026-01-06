@@ -2,10 +2,7 @@
 // test header must be first
 #include "okay/containers/array.h"
 #include "okay/detail/traits/is_std_container.h"
-#include "okay/macros/foreach.h"
-#include "okay/ranges/algorithm.h"
-#include "okay/ranges/views/drop.h"
-#include "okay/ranges/views/enumerate.h"
+#include "okay/iterables/iterables.h"
 #include "okay/slice.h"
 #include "okay/stdmem.h"
 #include <array>

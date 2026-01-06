@@ -1,11 +1,9 @@
 #include "test_header.h"
 // test header must be first
 #include "okay/containers/array.h"
-#include "okay/macros/foreach.h"
+#include "okay/iterables/algorithm.h"
+#include "okay/iterables/iterables.h"
 #include "okay/opt.h"
-#include "okay/ranges/algorithm.h"
-#include "okay/ranges/views/enumerate.h"
-#include "okay/ranges/views/std_for.h"
 #include "okay/slice.h"
 #include "okay/stdmem.h"
 #include "testing_types.h"
@@ -66,10 +64,10 @@ TEST_SUITE("opt")
         {
             opt<int> has = 10;
             REQUIRE(has.has_value());
-            REQUIRE(has == 10);
+            REQUIRE((has == 10));
             REQUIRE(has.ref_or_panic() == 10);
             has = nullopt;
-            REQUIRE(has != 10);
+            REQUIRE((has != 10));
         }
 
         SUBCASE("converting assignment")
@@ -77,36 +75,36 @@ TEST_SUITE("opt")
             opt<int> i;
             REQUIRE(!i.has_value());
             i = 0;
-            REQUIRE(i == 0);
+            REQUIRE((i == 0));
             opt<int> other = 2;
-            REQUIRE(other == 2);
+            REQUIRE((other == 2));
             i = std::move(other);
-            REQUIRE(i == 2);
+            REQUIRE((i == 2));
         }
 
         SUBCASE("comparison")
         {
             opt<int> one = 100;
             opt<int> two;
-            REQUIRE(one != two);
-            REQUIRE(two != one);
+            REQUIRE((one != two));
+            REQUIRE((two != one));
             two = 200;
             {
                 bool both_has_value = one.has_value() && two.has_value();
                 REQUIRE(both_has_value);
             }
-            REQUIRE(one != two);
-            REQUIRE(two != one);
+            REQUIRE((one != two));
+            REQUIRE((two != one));
             one.reset();
             two.reset();
             {
                 bool both_dont_has_value = !one.has_value() && !two.has_value();
                 REQUIRE(both_dont_has_value);
             }
-            REQUIRE(one == two);
+            REQUIRE((one == two));
             one = 1;
             two = 1;
-            REQUIRE(one == two);
+            REQUIRE((one == two));
         }
 
         SUBCASE("convertible to bool")
@@ -125,11 +123,11 @@ TEST_SUITE("opt")
             if (auto result = bool_to_optional(true)) {
                 REQUIRE(result);
                 REQUIRE(result.ref_or_panic() == 3478);
-                REQUIRE(result == 3478);
+                REQUIRE((result == 3478));
 
-                REQUIRE(result != opt<int>(3477));
-                REQUIRE(result != 3477);
-                REQUIRE(result != opt<int>{});
+                REQUIRE((result != opt<int>(3477)));
+                REQUIRE((result != 3477));
+                REQUIRE((result != opt<int>{}));
             }
 
             if (auto result = bool_to_optional(false)) {
@@ -400,15 +398,14 @@ TEST_SUITE("opt")
         SUBCASE("emplace slice types")
         {
             std::array<uint8_t, 128> bytes{0};
-            for (auto [byte, index] : ok::enumerate(bytes) | std_for) {
+            for (auto [byte, index] : ok::enumerate(bytes)) {
                 byte = index;
             }
 
             opt<slice<uint8_t>> maybe_bytes;
             maybe_bytes.emplace(bytes);
 
-            for (auto [byte, index] :
-                 enumerate(maybe_bytes.ref_or_panic()) | std_for) {
+            for (auto [byte, index] : enumerate(maybe_bytes.ref_or_panic())) {
                 REQUIRE(byte == bytes[index]);
             }
         }
@@ -448,7 +445,7 @@ TEST_SUITE("opt")
             opt<slice<const uint8_t>> i = bytes;
 
             slice<const uint8_t> j = i.take().ref_or_panic();
-            REQUIRE(ranges_equal(bytes, j));
+            REQUIRE(iterators_equal(bytes, j));
             REQUIRE(!i);
             i.reset();
             // move out of empty thing returns another empty thing
@@ -580,54 +577,51 @@ TEST_SUITE("opt")
             REQUIRE(ok::size(optchar) == 1);
         }
 
-        SUBCASE("can ok_foreach over opt")
+        SUBCASE("can foreach loop over opt")
         {
             opt<char> maybechar;
 
-            ok_foreach(auto c, maybechar)
-            {
+            for (auto c : maybechar) {
                 static_assert(std::is_same_v<decltype(c), char>);
                 // unreachable here
                 REQUIRE(false);
             }
 
-            ok_foreach(auto& c, maybechar)
-            {
+            for (auto& c : maybechar) {
                 static_assert(std::is_same_v<decltype(c), char&>);
                 REQUIRE(false);
             }
 
-            ok_foreach(const auto& c, maybechar)
-            {
+            for (const auto& c : maybechar) {
                 static_assert(std::is_same_v<decltype(c), const char&>);
                 REQUIRE(false);
             }
 
             maybechar = 'c';
 
-            ok_foreach(const auto& c, maybechar) { REQUIRE(c == 'c'); }
+            for (const auto& c : maybechar) {
+                REQUIRE(c == 'c');
+            }
         }
 
-        SUBCASE("ok_foreach over optional reference has the same semantics as "
-                "optional value")
+        SUBCASE(
+            "foreach loop over optional reference has the same semantics as "
+            "optional value")
         {
             opt<char&> maybechar_ref;
 
-            ok_foreach(auto c, maybechar_ref)
-            {
+            for (auto c : maybechar_ref) {
                 static_assert(std::is_same_v<decltype(c), char>);
                 // unreachable here
                 REQUIRE(false);
             }
 
-            ok_foreach(auto& c, maybechar_ref)
-            {
+            for (auto& c : maybechar_ref) {
                 static_assert(std::is_same_v<decltype(c), char&>);
                 REQUIRE(false);
             }
 
-            ok_foreach(const auto& c, maybechar_ref)
-            {
+            for (const auto& c : maybechar_ref) {
                 static_assert(std::is_same_v<decltype(c), const char&>);
                 REQUIRE(false);
             }
@@ -635,44 +629,40 @@ TEST_SUITE("opt")
             static char char_c = 'c';
             maybechar_ref = char_c;
 
-            ok_foreach(const auto& c, maybechar_ref) { REQUIRE(c == 'c'); }
+            for (const auto& c : maybechar_ref) {
+                REQUIRE(c == 'c');
+            }
         }
 
-        SUBCASE("ok_foreach over const ref or value")
+        SUBCASE("foreach loop over const ref or value")
         {
             const opt<char> maybechar;
             opt<const char&> maybechar_ref;
             using namespace ok::detail;
 
-            ok_foreach(auto c, maybechar_ref)
-            {
+            for (auto c : maybechar_ref) {
                 static_assert(std::is_same_v<decltype(c), char>);
                 REQUIRE(false);
             }
-            ok_foreach(auto c, maybechar)
-            {
+            for (auto c : maybechar) {
                 static_assert(std::is_same_v<decltype(c), char>);
                 REQUIRE(false);
             }
 
-            ok_foreach(auto& c, maybechar_ref)
-            {
+            for (auto& c : maybechar_ref) {
                 static_assert(std::is_same_v<decltype(c), const char&>);
                 REQUIRE(false);
             }
-            ok_foreach(auto& c, maybechar)
-            {
+            for (auto& c : maybechar) {
                 static_assert(std::is_same_v<decltype(c), const char&>);
                 REQUIRE(false);
             }
 
-            ok_foreach(const auto& c, maybechar_ref)
-            {
+            for (const auto& c : maybechar_ref) {
                 static_assert(std::is_same_v<decltype(c), const char&>);
                 REQUIRE(false);
             }
-            ok_foreach(const auto& c, maybechar)
-            {
+            for (const auto& c : maybechar) {
                 static_assert(std::is_same_v<decltype(c), const char&>);
                 REQUIRE(false);
             }
@@ -680,18 +670,18 @@ TEST_SUITE("opt")
             static const char char_c = 'c';
             maybechar_ref = char_c;
 
-            ok_foreach(const auto& c, maybechar_ref) { REQUIRE(c == 'c'); }
+            for (const auto& c : maybechar_ref) {
+                REQUIRE(c == 'c');
+            }
         }
 
-        SUBCASE("nested ok_foreach for optional slice")
+        SUBCASE("nested foreach loop for optional slice")
         {
             std::array<uint8_t, 12> bytes;
             opt<slice<uint8_t>> opt_bytes = bytes;
             // fill with indices
-            ok_foreach(auto& slice, opt_bytes)
-            {
-                ok_foreach(ok_pair(byteref, index), slice | enumerate)
-                {
+            for (auto& slice : opt_bytes) {
+                for (auto [byteref, index] : enumerate(slice)) {
                     byteref = index;
                 }
             }

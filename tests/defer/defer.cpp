@@ -2,7 +2,6 @@
 // test header must be first
 #include "okay/defer.h"
 #include "okay/macros/defer.h"
-#include "okay/macros/foreach.h"
 #include "okay/opt.h"
 #include <array>
 #include <unordered_set>

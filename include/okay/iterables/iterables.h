@@ -467,26 +467,26 @@ struct make_into_iterator_fn_t
     }
 
     // retroactively make ok::opt iterable
-    template <is_instance_c<ok::opt> T>
+    template <typename T>
     [[nodiscard]] constexpr auto
-    operator()(const T& optional) const OKAYLIB_NOEXCEPT
+    operator()(const ok::opt<T>& optional) const OKAYLIB_NOEXCEPT
     {
-        return ref_iterator_t<T, opt_cursor_t<typename T::value_type, true>>{
-            optional, {}};
+        return ref_iterator_t<const opt<T>, opt_cursor_t<T, true>>{optional,
+                                                                   {}};
     }
 
-    template <is_instance_c<ok::opt> T>
-    [[nodiscard]] constexpr auto operator()(T& optional) const OKAYLIB_NOEXCEPT
+    template <typename T>
+    [[nodiscard]] constexpr auto
+    operator()(opt<T>& optional) const OKAYLIB_NOEXCEPT
     {
-        return ref_iterator_t<T, opt_cursor_t<typename T::value_type, false>>{
-            optional, {}};
+        return ref_iterator_t<opt<T>, opt_cursor_t<T, false>>{optional, {}};
     }
 
-    template <is_instance_c<ok::opt> T>
-    [[nodiscard]] constexpr auto operator()(T&& optional) const OKAYLIB_NOEXCEPT
+    template <typename T>
+    [[nodiscard]] constexpr auto
+    operator()(opt<T>&& optional) const OKAYLIB_NOEXCEPT
     {
-        return owning_iterator_t<T,
-                                 opt_cursor_t<typename T::value_type, false>>{
+        return owning_iterator_t<decltype(optional), opt_cursor_t<T, false>>{
             stdc::move(optional), {}};
     }
 };
@@ -1659,6 +1659,13 @@ struct size_fn_t
     [[nodiscard]] constexpr size_t operator()(const T& iterator) const noexcept
     {
         return iterator.size();
+    }
+
+    template <typename T>
+    [[nodiscard]] constexpr size_t
+    operator()(const opt<T>& optional) const noexcept
+    {
+        return optional.has_value() ? 1UL : 0UL;
     }
 };
 } // namespace detail
