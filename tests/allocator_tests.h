@@ -4,8 +4,7 @@
 #include "okay/allocators/allocator.h"
 #include "okay/containers/array.h"
 #include "okay/defer.h"
-#include "okay/ranges/algorithm.h"
-#include "okay/ranges/views/std_for.h"
+#include "okay/iterables/iterables.h"
 #include "okay/short_arithmetic_types.h"
 #include <doctest.h>
 #include <random>
@@ -298,7 +297,7 @@ template <ok::memory_resource_c allocator_t> struct allocator_tests
             allocator_test_mode::recreate_each_test_and_check_oom,
         };
 
-        for (auto mode : modes | ok::std_for) {
+        for (auto mode : ok::iter(modes)) {
             run_all_fuzzed(mode, factory);
         }
     }
@@ -316,7 +315,7 @@ template <ok::memory_resource_c allocator_t> struct allocator_tests
 
         ok::opt ally = factory();
 
-        while (!ok::all_of(visited)) {
+        while (!ok::iter(visited).is_all_true()) {
             u64 idx = distribution(engine);
             while (visited[idx]) {
                 idx = distribution(engine);
