@@ -106,27 +106,11 @@ const okaylib_headers = &[_][]const u8{
     "math/ordering.h",
     "math/rounding.h",
 
+    "iterables/algorithm.h",
+    "iterables/indices.h",
+    "iterables/iterables.h",
+
     "platform/memory_map.h",
-
-    "ranges/adaptors.h",
-    "ranges/algorithm.h",
-    "ranges/for_each.h",
-    "ranges/ranges.h",
-    "ranges/indices.h",
-
-    "ranges/views/all.h",
-    "ranges/views/any.h",
-    "ranges/views/drop.h",
-    "ranges/views/enumerate.h",
-    "ranges/views/join.h",
-    "ranges/views/keep_if.h",
-    "ranges/views/reverse.h",
-    // "ranges/views/sliding_window.h",
-    "ranges/views/std_for.h",
-    "ranges/views/take_at_most.h",
-    "ranges/views/transform.h",
-    "ranges/views/zip.h",
-
     "smart_pointers/arc.h",
 };
 
@@ -156,6 +140,8 @@ const test_source_files = &[_][]const u8{
     "reflection/reflection.cpp",
 
     "iterables/iterables.cpp",
+    "iterables/algorithm/iterators_copy.cpp",
+    "iterables/algorithm/iterators_equal.cpp",
     "iterables/all_satisfy/all_satisfy.cpp",
     "iterables/any_satisfy/any_satisfy.cpp",
     "iterables/drop/drop.cpp",
