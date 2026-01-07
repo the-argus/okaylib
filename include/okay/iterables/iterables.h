@@ -589,9 +589,6 @@ template <typename derived_t> struct iterator_common_impl_t
         mutable ok::opt<typename derived_t::value_type> m_last_output_value;
 
       public:
-        // TODO: make these two std:: things work without STL
-        using iterator_category = std::input_iterator_tag;
-        using difference_type = std::ptrdiff_t;
         using value_type = derived_t::value_type;
         using reference = ok::stdc::add_lvalue_reference_t<value_type>;
         using pointer = ok::stdc::add_pointer_t<value_type>;
