@@ -155,7 +155,8 @@ TEST_SUITE("slice")
 
             slice<int> ints = slice_from_one((int&)oneint[0]);
             REQUIRE(ints.size() == 1);
-            for(int i : ok::iter(ints)) REQUIRE(i == oneint[0]);
+            for (int i : ok::iter(ints))
+                REQUIRE(i == oneint[0]);
 
             slice<const int> ints_const = slice_from_one(oneint[0]);
             REQUIRE(ints.size() == 1);
@@ -203,7 +204,9 @@ TEST_SUITE("slice")
             REQUIRE(slice.size() == 0);
 
             size_t index = 0;
-            for (auto byte : iter(slice)) { ++index; }
+            for (auto byte : iter(slice)) {
+                ++index;
+            }
             REQUIRE(index == 0);
         }
 
@@ -214,8 +217,7 @@ TEST_SUITE("slice")
 
             memfill(slice, 0);
             uint8_t index = 0;
-            for(auto& byte : iter(slice))
-            {
+            for (auto& byte : iter(slice)) {
                 REQUIRE(byte == 0);
                 byte = index;
                 ++index;
@@ -236,8 +238,7 @@ TEST_SUITE("slice")
             const slice<uint8_t> slice(mem);
 
             uint8_t index = 0;
-            for(const auto& byte : iter(slice))
-            {
+            for (const auto& byte : iter(slice)) {
                 REQUIRE(byte == 0);
                 mem[index] = index;
                 ++index;
@@ -245,8 +246,7 @@ TEST_SUITE("slice")
 
             // make sure that also changed slice
             index = 0;
-            for(const auto& byte : iter(slice))
-            {
+            for (const auto& byte : iter(slice)) {
                 REQUIRE(byte == index);
                 ++index;
             }
@@ -269,8 +269,7 @@ TEST_SUITE("slice")
             REQUIRE(mslice.is_alias_for(bytes_t(mem)));
             memfill<uint8_t>(mem, 0);
 
-            for(auto [byte, index] : enumerate(mslice))
-            {
+            for (auto [byte, index] : enumerate(mslice)) {
                 static_assert(std::is_same_v<decltype(byte), uint8_t&>);
                 static_assert(std::is_same_v<decltype(index), const size_t>);
                 byte = index;
@@ -300,7 +299,7 @@ TEST_SUITE("slice")
             REQUIRE(sizeof(bytes) * 8 == bs.size());
 
             // require all bits are off
-            const bool eql = ok::all_of(bs, [](ok::bit b) { return !b; });
+            const bool eql = iter(bs).all_satisfy([](ok::bit b) { return !b; });
             REQUIRE(eql);
             REQUIRE(!bs.is_empty());
         }
@@ -316,7 +315,7 @@ TEST_SUITE("slice")
             REQUIRE(sizeof(bytes) * 8 == bs.size());
 
             // require all bits are off
-            const bool eql = ok::all_of(bs, [](ok::bit b) { return !b; });
+            const bool eql = iter(bs).all_satisfy([](ok::bit b) { return !b; });
             REQUIRE(eql);
             REQUIRE(!bs.is_empty());
         }
@@ -339,10 +338,8 @@ TEST_SUITE("slice")
                 all_bits.subslice({.length = all_bits.size() / 2});
 
             // set all the bits to on in the first half
-            for (auto c = ok::begin(first_half); ok::is_inbounds(first_half, c);
-                 ok::increment(first_half, c)) {
-                ok::range_set(first_half, c, bit::on());
-            }
+            for (auto item : first_half.write_iter())
+                item.value_type_set(bit::on());
 
             constexpr uint8_t all_ones = ~uint8_t(0);
 
@@ -374,7 +371,8 @@ TEST_SUITE("slice")
             // all bits have been set to 1
             REQUIRE(a.items().last() == 255);
 
-            bool all_set = drop(a, 1).all_satisfy([](uint8_t byte) { return byte == 255; });
+            bool all_set = drop(a, 1).all_satisfy(
+                [](uint8_t byte) { return byte == 255; });
             REQUIRE(all_set);
 
             // first five least significant bits are skipped

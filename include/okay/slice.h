@@ -453,6 +453,45 @@ class const_bit_slice_t
         return const_bit_slice_t(m.first_byte + first_byte_index,
                                  options.length, new_offset);
     }
+
+    struct cursor_t
+    {
+      private:
+        size_t m_index{};
+
+      public:
+        constexpr size_t index(const const_bit_slice_t&) const OKAYLIB_NOEXCEPT
+        {
+            return m_index;
+        }
+
+        constexpr size_t
+        size(const const_bit_slice_t& iterable) const OKAYLIB_NOEXCEPT
+        {
+            return iterable.size();
+        }
+
+        constexpr void offset(const const_bit_slice_t&,
+                              int64_t offset_amount) OKAYLIB_NOEXCEPT
+        {
+            m_index += offset_amount;
+        }
+
+        constexpr ok::bit access(const const_bit_slice_t& iterable)
+        {
+            __ok_assert(m_index < size(iterable),
+                        "out of bounds iteration into bit_slice_t");
+            return iterable.get_bit(m_index);
+        }
+
+        using value_type = ok::bit;
+    };
+
+    [[nodiscard]] constexpr auto iter() const
+    {
+        return ok::ref_arraylike_iterator_t<const const_bit_slice_t, cursor_t>{
+            *this, cursor_t{}};
+    }
 };
 
 class bit_slice_t : public const_bit_slice_t
@@ -496,7 +535,7 @@ class bit_slice_t : public const_bit_slice_t
         }
     }
 
-    constexpr void toggle_bit(const size_t idx) OKAYLIB_NOEXCEPT
+    constexpr void toggle_bit(const size_t idx) const OKAYLIB_NOEXCEPT
     {
         if (idx >= this->size()) [[unlikely]] {
             __ok_abort("Out of bounds access to bit_slice_t::toggle_bit.");
@@ -519,6 +558,61 @@ class bit_slice_t : public const_bit_slice_t
         const uint8_t new_offset = first_byte_index % 8UL;
         return bit_slice_t(m.first_byte + first_byte_index, options.length,
                            new_offset);
+    }
+
+    struct write_cursor_t
+    {
+      private:
+        size_t m_index{};
+
+      public:
+        constexpr size_t index(const bit_slice_t&) const OKAYLIB_NOEXCEPT
+        {
+            return m_index;
+        }
+
+        constexpr size_t
+        size(const bit_slice_t& iterable) const OKAYLIB_NOEXCEPT
+        {
+            return iterable.size();
+        }
+
+        constexpr void offset(const bit_slice_t&,
+                              int64_t offset_amount) OKAYLIB_NOEXCEPT
+        {
+            m_index += offset_amount;
+        }
+
+        struct writeback_bit_t
+        {
+            const bit_slice_t* source;
+            size_t index;
+
+            constexpr operator ok::bit() const OKAYLIB_NOEXCEPT
+            {
+                return source->get_bit(index);
+            }
+
+            constexpr void value_type_set(ok::bit input_bit) OKAYLIB_NOEXCEPT
+            {
+                source->set_bit(index, input_bit);
+            }
+        };
+
+        constexpr writeback_bit_t access(const bit_slice_t& iterable)
+        {
+            __ok_assert(m_index < size(iterable),
+                        "out of bounds iteration into bit_slice_t");
+            return writeback_bit_t(ok::addressof(iterable), m_index);
+        }
+
+        using value_type = writeback_bit_t;
+    };
+
+    [[nodiscard]] constexpr auto write_iter() const
+    {
+        return ok::ref_arraylike_iterator_t<const bit_slice_t, write_cursor_t>{
+            *this, write_cursor_t{}};
     }
 };
 
