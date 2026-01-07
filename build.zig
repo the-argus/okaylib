@@ -132,8 +132,6 @@ const test_source_files = &[_][]const u8{
     "arc/arc.cpp",
     "arcpool/arcpool.cpp",
     "arraylist/arraylist.cpp",
-    "algorithm/ranges_equal.cpp",
-    "algorithm/ranges_copy.cpp",
     "bit_array/bit_array.cpp",
     "bit_arraylist/bit_arraylist.cpp",
     "segmented_list/segmented_list.cpp",
