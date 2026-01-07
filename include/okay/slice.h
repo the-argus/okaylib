@@ -489,8 +489,8 @@ class const_bit_slice_t
 
     [[nodiscard]] constexpr auto iter() const
     {
-        return ok::ref_arraylike_iterator_t<const const_bit_slice_t, cursor_t>{
-            *this, cursor_t{}};
+        return ok::owning_arraylike_iterator_t<const_bit_slice_t, cursor_t>{
+            const_bit_slice_t(*this), cursor_t{}};
     }
 };
 
@@ -599,7 +599,8 @@ class bit_slice_t : public const_bit_slice_t
             }
         };
 
-        constexpr writeback_bit_t access(const bit_slice_t& iterable)
+        constexpr writeback_bit_t
+        access(const bit_slice_t& iterable) OKAYLIB_NOEXCEPT
         {
             __ok_assert(m_index < size(iterable),
                         "out of bounds iteration into bit_slice_t");
@@ -609,10 +610,10 @@ class bit_slice_t : public const_bit_slice_t
         using value_type = writeback_bit_t;
     };
 
-    [[nodiscard]] constexpr auto write_iter() const
+    [[nodiscard]] constexpr auto write_iter() const OKAYLIB_NOEXCEPT
     {
-        return ok::ref_arraylike_iterator_t<const bit_slice_t, write_cursor_t>{
-            *this, write_cursor_t{}};
+        return ok::owning_arraylike_iterator_t<bit_slice_t, write_cursor_t>{
+            bit_slice_t(*this), write_cursor_t{}};
     }
 };
 
