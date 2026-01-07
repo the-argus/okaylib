@@ -40,6 +40,7 @@
               kcov
             ])
             ++ pkgs.lib.optionals (system != flake-utils.lib.system.aarch64-darwin) (with pkgs; [
+              rr
               gdb
               valgrind
             ]);

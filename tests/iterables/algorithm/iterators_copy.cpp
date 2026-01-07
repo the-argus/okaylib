@@ -4,11 +4,20 @@
 #include "okay/iterables/algorithm.h"
 #include "okay/iterables/indices.h"
 
+#include <array>
+
 using namespace ok;
 
 TEST_SUITE("ok::ranges_copy and ok::ranges_copy_as_much_as_will_fit algorithms")
 {
     constexpr auto is_even = [](size_t i) { return i % 2 == 0; };
+
+    TEST_CASE("fill std::array withg indices")
+    {
+        std::array<int, 50> ints = {};
+        iterators_copy_assign(ints, indices());
+        REQUIRE(iterators_equal(ints, indices()));
+    }
 
     TEST_CASE("copy from one array to another")
     {

@@ -51,27 +51,39 @@ struct iterators_equal_fn_t
                 value_type_for<iterator_lhs_t>, value_type_for<iterator_rhs_t>>;
         }
     {
+        auto&& lhs_iterator = ok::iter(stdc::forward<iterator_lhs_t>(lhs));
+        auto&& rhs_iterator = ok::iter(stdc::forward<iterator_rhs_t>(rhs));
+
         constexpr bool both_ranges_have_known_size =
             sized_iterator_c<iterator_lhs_t> &&
             sized_iterator_c<iterator_rhs_t>;
 
         if constexpr (both_ranges_have_known_size) {
-            if (lhs.size() != rhs.size()) {
+            if (lhs_iterator.size() != rhs_iterator.size()) {
                 return false;
             }
         }
-
-        auto&& lhs_iterator = ok::iter(stdc::forward<iterator_lhs_t>(lhs));
-        auto&& rhs_iterator = ok::iter(stdc::forward<iterator_rhs_t>(rhs));
 
         while (true) {
             ok::opt lhs_value = lhs_iterator.next();
             ok::opt rhs_value = rhs_iterator.next();
 
-            if (!lhs_value.deep_compare_with(rhs_value))
-                return false;
+            // first, try to see if we've reached the end safely, in which case
+            // return true
+            if constexpr (infinite_iterator_c<iterator_lhs_t>) {
+                if (lhs_value && !rhs_value)
+                    return true; // allow reaching the end of infinite iterator
+            }
+            if constexpr (infinite_iterator_c<iterator_rhs_t>) {
+                if (rhs_value && !lhs_value)
+                    return true; // allow reaching the end of infinite iterator
+            }
             if (!lhs_value && !rhs_value)
                 return true;
+
+            // we haven't reached the end, so do a comparison and exit if false
+            if (!lhs_value.deep_compare_with(rhs_value))
+                return false;
         }
         // NOTE: unreachable
     }
