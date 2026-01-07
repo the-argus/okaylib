@@ -2,7 +2,7 @@
 #define __OKAYLIB_CONTAINERS_DYNAMIC_BITSET_H__
 
 #include "okay/allocators/allocator.h"
-#include "okay/ranges/ranges.h"
+#include "okay/iterables/iterables.h"
 #include "okay/stdmem.h"
 
 namespace ok {
@@ -11,7 +11,7 @@ struct upcast_tag
 {};
 namespace detail {
 struct preallocated_and_zeroed_t;
-struct copy_booleans_from_range_t;
+struct copy_booleans_from_iterable_t;
 struct bit_string_t;
 } // namespace detail
 } // namespace bit_arraylist
@@ -35,7 +35,7 @@ class bit_arraylist_t
 
   public:
     friend struct ok::bit_arraylist::detail::preallocated_and_zeroed_t;
-    friend struct ok::bit_arraylist::detail::copy_booleans_from_range_t;
+    friend struct ok::bit_arraylist::detail::copy_booleans_from_iterable_t;
     friend struct ok::bit_arraylist::detail::bit_string_t;
 
     template <allocator_c other_allocator_t> friend class ok::bit_arraylist_t;
@@ -270,10 +270,11 @@ class bit_arraylist_t
         return this->insert_at(this->size_bits(), value);
     }
 
-    constexpr ok::bit remove(size_t idx) OKAYLIB_NOEXCEPT
+    constexpr ok::bit remove_at(size_t idx) OKAYLIB_NOEXCEPT
     {
         if (idx >= this->size_bits()) [[unlikely]] {
-            __ok_abort("Out of bounds access to bit_arraylist_t in remove()");
+            __ok_abort(
+                "Out of bounds access to bit_arraylist_t in remove_at()");
         }
 
         constexpr uint8_t carry_check_mask = 0b001;
@@ -361,7 +362,7 @@ class bit_arraylist_t
     {
         if (this->is_empty())
             return {};
-        return this->remove(this->size_bits() - 1);
+        return this->remove_at(this->size_bits() - 1);
     }
 
     [[nodiscard]] constexpr const backing_allocator_t&
@@ -378,6 +379,80 @@ class bit_arraylist_t
     constexpr void clear() OKAYLIB_NOEXCEPT { m.num_bits = 0; }
 
     ~bit_arraylist_t() { destroy(); }
+
+    [[nodiscard]] constexpr auto iter() const& OKAYLIB_NOEXCEPT
+    {
+        return items().iter();
+    }
+
+    [[nodiscard]] constexpr auto write_iter() & OKAYLIB_NOEXCEPT
+    {
+        return items().write_iter();
+    }
+
+  private:
+    enum class cursor_mode
+    {
+        read,
+        write,
+    };
+    template <cursor_mode mode = cursor_mode::read>
+    struct cursor_for_owning_iterator_t
+    {
+        size_t m_index{};
+
+        constexpr size_t index(const bit_arraylist_t&) const OKAYLIB_NOEXCEPT
+        {
+            return m_index;
+        }
+
+        constexpr size_t
+        size(const bit_arraylist_t& iterable) const OKAYLIB_NOEXCEPT
+        {
+            return iterable.size_bits();
+        }
+
+        constexpr void offset(const bit_arraylist_t&,
+                              int64_t offset_amount) OKAYLIB_NOEXCEPT
+        {
+            m_index += offset_amount;
+        }
+
+        constexpr ok::bit access(const bit_arraylist_t& iterable)
+            requires(mode == cursor_mode::read)
+        {
+            __ok_assert(m_index < size(iterable),
+                        "out of bounds iteration into bit_slice_t");
+            return iterable.get_bit(m_index);
+        }
+
+        constexpr detail::writeback_bit_t access(bit_arraylist_t& iterable)
+            requires(mode == cursor_mode::write)
+        {
+            __ok_assert(m_index < size(iterable),
+                        "out of bounds iteration into bit_slice_t");
+            return detail::writeback_bit_t(iterable, m_index);
+        }
+
+        using value_type =
+            stdc::conditional_t<mode == cursor_mode::read, ok::bit,
+                                detail::writeback_bit_t>;
+    };
+
+  public:
+    [[nodiscard]] constexpr auto iter() && OKAYLIB_NOEXCEPT
+    {
+        return owning_arraylike_iterator_t<
+            bit_arraylist_t, cursor_for_owning_iterator_t<cursor_mode::read>>{
+            stdc::move(*this), {}};
+    }
+
+    [[nodiscard]] constexpr auto write_iter() && OKAYLIB_NOEXCEPT
+    {
+        return owning_arraylike_iterator_t<
+            bit_arraylist_t, cursor_for_owning_iterator_t<cursor_mode::write>>{
+            stdc::move(*this), {}};
+    }
 
   private:
     /// This function initializes m.allocation
@@ -426,34 +501,6 @@ class bit_arraylist_t
         m.allocation = res.unwrap();
 
         return alloc::error::success;
-    }
-};
-
-template <typename backing_allocator_t>
-struct range_definition<bit_arraylist_t<backing_allocator_t>>
-{
-    using bit_arraylist_t = bit_arraylist_t<backing_allocator_t>;
-
-    using value_type = ok::bit;
-
-    static constexpr range_flags flags =
-        range_flags::sized | range_flags::arraylike | range_flags::consuming |
-        range_flags::producing | range_flags::implements_set;
-
-    static constexpr size_t size(const bit_arraylist_t& bs) OKAYLIB_NOEXCEPT
-    {
-        return bs.size_bits();
-    }
-
-    static constexpr value_type get(const bit_arraylist_t& range, size_t cursor)
-    {
-        return range.get_bit(cursor);
-    }
-
-    static constexpr void set(bit_arraylist_t& range, size_t cursor,
-                              value_type value)
-    {
-        return range.set_bit(cursor, value);
     }
 };
 
@@ -546,38 +593,36 @@ struct preallocated_and_zeroed_t
     }
 };
 
-struct copy_booleans_from_range_t
+struct copy_booleans_from_iterable_t
 {
     template <typename backing_allocator_t, typename...>
     using associated_type =
         bit_arraylist_t<stdc::remove_reference_t<backing_allocator_t>>;
 
-    template <allocator_c backing_allocator_t,
-              ok::detail::producing_range_c input_range_t>
+    template <allocator_c backing_allocator_t, typename input_iterable_t>
     [[nodiscard]] constexpr auto
     operator()(backing_allocator_t& allocator,
-               const input_range_t& range) const OKAYLIB_NOEXCEPT
+               input_iterable_t&& iterable) const OKAYLIB_NOEXCEPT
+        requires(
+            iterable_c<decltype(iterable)> &&
+            is_std_constructible_c<bool, value_type_for<decltype(iterable)>>)
     {
-        return ok::make(*this, allocator, range);
+        return ok::make(*this, allocator,
+                        stdc::forward<input_iterable_t>(iterable));
     };
 
-    template <typename backing_allocator_t, range_c input_range_t>
+    template <typename backing_allocator_t, typename input_iterable_t>
     [[nodiscard]] constexpr alloc::error
     make_into_uninit(bit_arraylist_t<backing_allocator_t>& uninit,
                      backing_allocator_t& allocator,
-                     const input_range_t& range) const OKAYLIB_NOEXCEPT
+                     input_iterable_t&& iterable) const OKAYLIB_NOEXCEPT
+        requires(
+            iterable_c<decltype(iterable)> &&
+            is_std_constructible_c<bool, value_type_for<decltype(iterable)>>)
     {
-        static_assert(ok::detail::range_impls_size_c<input_range_t>,
-                      "Size of range unknown, refusing to use its items in "
-                      "bit_arraylist::copy_booleans_from_range constructor.");
-        static_assert(
-            is_std_constructible_c<bool, value_type_for<input_range_t>>,
-            "The range given to bit_arraylist::copy_booleans_from_range does "
-            "not return something which can be converted to a boolean.");
-
         constexpr preallocated_and_zeroed_t other{};
 
-        const size_t size = ok::size(range);
+        const size_t size = ok::size(iterable);
         auto result =
             other.make_into_uninit(uninit, allocator,
                                    preallocated_and_zeroed_t::options_t{
@@ -590,12 +635,9 @@ struct copy_booleans_from_range_t
 
         uninit.m.num_bits = size;
 
-        size_t count = 0;
-        for (auto c = ok::begin(range); ok::is_inbounds(range, c);
-             ok::increment(range, c)) {
-            uninit.items().set_bit(count,
-                                   ok::bit(bool(range_get_best(range, c))));
-            ++count;
+        for (const auto& [item, index] :
+             iter(stdc::forward<input_iterable_t>(iterable)).enumerate()) {
+            uninit.items().set_bit(index, ok::bit(bool(item)));
         }
 
         return alloc::error::success;
@@ -603,7 +645,8 @@ struct copy_booleans_from_range_t
 };
 } // namespace detail
 
-inline constexpr detail::copy_booleans_from_range_t copy_booleans_from_range;
+inline constexpr detail::copy_booleans_from_iterable_t
+    copy_booleans_from_iterable;
 inline constexpr detail::preallocated_and_zeroed_t preallocated_and_zeroed;
 inline constexpr detail::bit_string_t bit_string;
 

@@ -60,7 +60,7 @@ template <size_t num_bits> class bit_array_t
             return m_index;
         }
 
-        constexpr void offset(int64_t offset_amount)
+        constexpr void offset(const bit_array_t&, int64_t offset_amount)
         {
             m_index += offset_amount;
         }
@@ -205,17 +205,19 @@ template <size_t num_bits> class bit_array_t
 
     [[nodiscard]] constexpr auto iter() &
     {
-        return ref_iterator_t{*this, cursor_t{}};
+        return ref_arraylike_iterator_t<bit_array_t, cursor_t>{*this,
+                                                               cursor_t{}};
     }
 
     [[nodiscard]] constexpr auto iter() const&
     {
-        return ref_iterator_t{*this, cursor_t{}};
+        return ref_arraylike_iterator_t<const bit_array_t, cursor_t>{
+            *this, cursor_t{}};
     }
 
     [[nodiscard]] constexpr auto iter() &&
     {
-        return owning_iterator_t<bit_array_t, cursor_t>{
+        return owning_arraylike_iterator_t<bit_array_t, cursor_t>{
             stdc::move(*this),
             cursor_t{},
         };

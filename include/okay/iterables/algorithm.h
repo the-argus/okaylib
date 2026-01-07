@@ -44,6 +44,7 @@ struct iterators_equal_fn_t
     operator()(iterator_lhs_t&& lhs,
                iterator_rhs_t&& rhs) const OKAYLIB_NOEXCEPT
         requires requires {
+            requires iterable_c<decltype(lhs)> && iterable_c<decltype(rhs)>;
             requires(!is_iterable_infinite<decltype(lhs)> ||
                      !is_iterable_infinite<decltype(rhs)>);
             requires is_equality_comparable_to_c<

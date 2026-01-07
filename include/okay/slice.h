@@ -494,6 +494,10 @@ class const_bit_slice_t
     }
 };
 
+namespace detail {
+struct writeback_bit_t;
+}
+
 class bit_slice_t : public const_bit_slice_t
 {
   private:
@@ -583,39 +587,46 @@ class bit_slice_t : public const_bit_slice_t
             m_index += offset_amount;
         }
 
-        struct writeback_bit_t
-        {
-            const bit_slice_t* source;
-            size_t index;
+        constexpr detail::writeback_bit_t
+        access(const bit_slice_t& iterable) OKAYLIB_NOEXCEPT;
 
-            constexpr operator ok::bit() const OKAYLIB_NOEXCEPT
-            {
-                return source->get_bit(index);
-            }
-
-            constexpr void value_type_set(ok::bit input_bit) OKAYLIB_NOEXCEPT
-            {
-                source->set_bit(index, input_bit);
-            }
-        };
-
-        constexpr writeback_bit_t
-        access(const bit_slice_t& iterable) OKAYLIB_NOEXCEPT
-        {
-            __ok_assert(m_index < size(iterable),
-                        "out of bounds iteration into bit_slice_t");
-            return writeback_bit_t(ok::addressof(iterable), m_index);
-        }
-
-        using value_type = writeback_bit_t;
+        using value_type = detail::writeback_bit_t;
     };
 
-    [[nodiscard]] constexpr auto write_iter() const OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr auto write_iter() const OKAYLIB_NOEXCEPT;
+};
+
+namespace detail {
+struct writeback_bit_t
+{
+    bit_slice_t source;
+    size_t index;
+
+    constexpr operator ok::bit() const OKAYLIB_NOEXCEPT
     {
-        return ok::owning_arraylike_iterator_t<bit_slice_t, write_cursor_t>{
-            bit_slice_t(*this), write_cursor_t{}};
+        return source.get_bit(index);
+    }
+
+    constexpr void value_type_set(ok::bit input_bit) OKAYLIB_NOEXCEPT
+    {
+        source.set_bit(index, input_bit);
     }
 };
+} // namespace detail
+
+constexpr detail::writeback_bit_t bit_slice_t::write_cursor_t::access(
+    const bit_slice_t& iterable) OKAYLIB_NOEXCEPT
+{
+    __ok_assert(m_index < size(iterable),
+                "out of bounds iteration into bit_slice_t");
+    return detail::writeback_bit_t(iterable, m_index);
+}
+
+[[nodiscard]] constexpr auto bit_slice_t::write_iter() const OKAYLIB_NOEXCEPT
+{
+    return ok::owning_arraylike_iterator_t<bit_slice_t, write_cursor_t>{
+        bit_slice_t(*this), write_cursor_t{}};
+}
 
 constexpr bit_slice_t raw_bit_slice(bytes_t bytes, size_t num_bits,
                                     uint8_t offset) OKAYLIB_NOEXCEPT

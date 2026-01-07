@@ -4,10 +4,6 @@
 #include "okay/containers/array.h"
 #include "okay/containers/bit_array.h"
 #include "okay/containers/bit_arraylist.h"
-#include "okay/ranges/algorithm.h"
-#include "okay/ranges/for_each.h"
-#include "okay/ranges/views/take_at_most.h"
-#include "okay/ranges/views/transform.h"
 
 using namespace ok;
 
@@ -78,8 +74,8 @@ TEST_SUITE("bit_arraylist_t")
         SUBCASE("can implicitly convert dynamic bit_array into bit_slice_t")
         {
             constexpr auto gets_slice = [](const_bit_slice_t bs) {
-                bs | ok::for_each(
-                         [](ok::bit item) { printf("%s", item ? "0" : "1"); });
+                for (ok::bit item : bs.iter())
+                    printf("%s", item ? "0" : "1");
                 printf("\n");
             };
 
@@ -92,11 +88,11 @@ TEST_SUITE("bit_arraylist_t")
         {
             maybe_undefined_array_t bools = {true, false, true, true};
             bit_arraylist_t copied =
-                bit_arraylist::copy_booleans_from_range(c_allocator, bools)
+                bit_arraylist::copy_booleans_from_iterable(c_allocator, bools)
                     .unwrap();
 
             bit_arraylist_t copied2 =
-                bit_arraylist::copy_booleans_from_range(
+                bit_arraylist::copy_booleans_from_iterable(
                     c_allocator, bit_array::bit_string("010011011"))
                     .unwrap();
 
@@ -118,10 +114,12 @@ TEST_SUITE("bit_arraylist_t")
             REQUIRE(dbs.capacity_bits() >= 600);
 
             const auto all_zeroed = [](const auto& rng) {
-                return ok::all_of(rng, [](ok::bit a) { return a == false; });
+                return iter(rng).all_satisfy(
+                    [](ok::bit a) { return a == false; });
             };
             const auto all_ones = [](const auto& rng) {
-                return ok::all_of(rng, [](ok::bit a) { return a == true; });
+                return iter(rng).all_satisfy(
+                    [](ok::bit a) { return a == true; });
             };
             bool good = all_zeroed(dbs);
             REQUIRE(good);
@@ -172,9 +170,8 @@ TEST_SUITE("bit_arraylist_t")
             REQUIRE_RANGES_EQUAL(dbs2, bit_array::bit_string(literal));
             // take_at_most is here to skip null terminator
             REQUIRE_RANGES_EQUAL(
-                dbs2, literal |
-                          take_at_most(detail::c_array_length(literal) - 1) |
-                          transform([](char c) { return c == '1'; }));
+                dbs2, take_at_most(literal, detail::c_array_length(literal) - 1)
+                          .transform([](char c) { return c == '1'; }));
         }
 
         SUBCASE("insert_at on initially empty dbs")
@@ -186,7 +183,7 @@ TEST_SUITE("bit_arraylist_t")
             REQUIRE_RANGES_EQUAL(dbs, bs);
 
             REQUIRE(dbs.insert_at(1, bit::off()).is_success());
-            REQUIRE(ranges_equal(dbs, bit_array::bit_string("10")));
+            REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("10"));
             REQUIRE(dbs.insert_at(2, bit::on()).is_success());
             REQUIRE_RANGES_EQUAL(dbs, bit_array::bit_string("101"));
             REQUIRE(dbs.insert_at(3, bit::off()).is_success());
@@ -209,7 +206,7 @@ TEST_SUITE("bit_arraylist_t")
         {
             constexpr auto preinit = bit_array::bit_string("01010011");
             bit_arraylist_t dbs =
-                bit_arraylist::copy_booleans_from_range(c_allocator, preinit)
+                bit_arraylist::copy_booleans_from_iterable(c_allocator, preinit)
                     .unwrap();
 
             REQUIRE(dbs.size_bits() == preinit.size_bits());
@@ -227,7 +224,7 @@ TEST_SUITE("bit_arraylist_t")
             "insert_at which causes reallocation from the middle of the list")
         {
             bit_arraylist_t dbs =
-                bit_arraylist::copy_booleans_from_range(
+                bit_arraylist::copy_booleans_from_iterable(
                     c_allocator, bit_array::bit_string("01010001"))
                     .unwrap();
 
@@ -237,7 +234,7 @@ TEST_SUITE("bit_arraylist_t")
             constexpr auto bs =
                 bit_array::bit_string("0101010101010101010101010101010100"
                                       "101010101010010101010100101");
-            dbs = bit_arraylist::copy_booleans_from_range(c_allocator, bs)
+            dbs = bit_arraylist::copy_booleans_from_iterable(c_allocator, bs)
                       .unwrap();
 
             REQUIRE(bs.size_bits() == dbs.size_bits());
@@ -259,7 +256,7 @@ TEST_SUITE("bit_arraylist_t")
             auto ba =
                 bit_arraylist::bit_string(c_allocator, "001000101").unwrap();
 
-            REQUIRE(ba.remove(2));
+            REQUIRE(ba.remove_at(2));
 
             REQUIRE_RANGES_EQUAL(ba, bit_array::bit_string("00000101"));
         }
@@ -271,7 +268,7 @@ TEST_SUITE("bit_arraylist_t")
 
             ba.increase_capacity_by(400);
 
-            REQUIRE(ba.remove(2));
+            REQUIRE(ba.remove_at(2));
 
             REQUIRE_RANGES_EQUAL(ba, bit_array::bit_string("00000101"));
         }
@@ -281,13 +278,51 @@ TEST_SUITE("bit_arraylist_t")
             auto ba =
                 bit_arraylist::bit_string(c_allocator, "001000101").unwrap();
 
-            REQUIREABORTS(ba.remove(ba.size_bits()));
+            REQUIREABORTS(ba.remove_at(ba.size_bits()));
 
             ba.clear();
             REQUIRE(ba.is_empty());
             REQUIRE(ba.size_bits() == 0);
 
-            REQUIREABORTS(ba.remove(0));
+            REQUIREABORTS(ba.remove_at(0));
+        }
+    }
+
+    TEST_CASE("iterable")
+    {
+        SUBCASE("write_iter() lvalue reference")
+        {
+            auto ba =
+                bit_arraylist::bit_string(c_allocator, "001000101").unwrap();
+
+            for (auto i : ba.write_iter())
+                i.value_type_set(ok::bit::on());
+
+            const bool all_on = ba.iter().is_all_true();
+            REQUIRE(all_on);
+        }
+
+        SUBCASE("write_iter() rvalue reference")
+        {
+            for (auto i : bit_arraylist::bit_string(c_allocator, "001000101")
+                              .unwrap()
+                              .write_iter())
+                i.value_type_set(ok::bit::on());
+            // not really a way to test anything after the fact right now,
+            // because write iterators are currently write-only
+            // TODO: write a test inside the above loop once write iterators are
+            // read/write
+        }
+
+        SUBCASE("iter() rvalue reference")
+        {
+            size_t total_on = 0;
+            for (ok::bit i : bit_arraylist::bit_string(c_allocator, "001000101")
+                                 .unwrap()
+                                 .iter())
+                total_on += int(bool(i));
+
+            REQUIRE(total_on == 3);
         }
     }
 }

@@ -393,12 +393,8 @@ concept stdlib_arraylike_container_c =
     };
 
 template <typename T>
-concept has_iter_memfun_c = requires(stdc::remove_cv_t<T>& iterable_nonconst,
-                                     const stdc::remove_cv_t<T>& iterable_const,
-                                     stdc::remove_cv_t<T>&& iterable_rvalue) {
-    { iterable_nonconst.iter() } -> iterator_c;
-    { iterable_const.iter() } -> iterator_c;
-    { stdc::move(iterable_rvalue).iter() } -> iterator_c;
+concept has_iter_memfun_c = requires {
+    { stdc::declval<T>().iter() } -> iterator_c;
 };
 
 template <typename T, bool is_const> struct opt_cursor_t
@@ -428,10 +424,10 @@ struct make_into_iterator_fn_t
     }
 
     template <typename T>
-        requires(stdlib_arraylike_container_c<stdc::remove_cvref_t<T>> &&
-                 !has_iter_memfun_c<T>)
     [[nodiscard]] constexpr decltype(auto)
     operator()(T&& arraylike) const OKAYLIB_NOEXCEPT
+        requires(stdlib_arraylike_container_c<stdc::remove_cvref_t<T>> &&
+                 !has_iter_memfun_c<decltype(arraylike)>)
     {
         return stdlib_arraylike_container_iterable_compat_t<
                    decltype(arraylike)>(std::forward<T>(arraylike))
@@ -439,9 +435,9 @@ struct make_into_iterator_fn_t
     }
 
     template <typename T>
-        requires(has_iter_memfun_c<T>)
     [[nodiscard]] constexpr decltype(auto)
     operator()(T&& iterable) const OKAYLIB_NOEXCEPT
+        requires(has_iter_memfun_c<decltype(iterable)>)
     {
         return stdc::forward<T>(iterable).iter();
     }
@@ -452,7 +448,8 @@ struct make_into_iterator_fn_t
     [[nodiscard]] constexpr decltype(auto)
     operator()(T&& iterator) const OKAYLIB_NOEXCEPT
         requires(stdc::is_rvalue_reference_v<decltype(iterator)> &&
-                 !stdlib_arraylike_container_c<T> && !has_iter_memfun_c<T>)
+                 !stdlib_arraylike_container_c<T> &&
+                 !has_iter_memfun_c<decltype(iterator)>)
     {
         return stdc::forward<T>(iterator);
     }
@@ -462,7 +459,8 @@ struct make_into_iterator_fn_t
     [[nodiscard]] constexpr T
     operator()(const T& iterator) const OKAYLIB_NOEXCEPT
         requires(stdc::is_copy_constructible_v<decltype(iterator)> &&
-                 !stdlib_arraylike_container_c<T> && !has_iter_memfun_c<T>)
+                 !stdlib_arraylike_container_c<T> &&
+                 !has_iter_memfun_c<decltype(iterator)>)
     {
         return iterator;
     }
@@ -498,10 +496,10 @@ inline constexpr detail::make_into_iterator_fn_t iter{};
 
 namespace detail {
 template <typename T>
-concept iterable_impl_c = requires(T obj) {
+concept iterable_impl_c = requires {
     requires detail::is_moveable_c<stdc::remove_cvref_t<T>> ||
                  stdc::is_lvalue_reference_v<T>;
-    { ok::iter(stdc::forward<stdc::remove_cvref_t<T>>(obj)) } -> iterator_c;
+    { ok::iter(stdc::declval<T>()) } -> iterator_c;
 };
 template <typename T>
 concept iterable_const_ref_impl_c = requires(T obj) {
@@ -761,8 +759,8 @@ template <typename derived_t> struct iterator_common_impl_t
     }
 
     constexpr bool is_all_true() &&
-        requires ok::stdc::convertible_to_c<typename derived_t::value_type,
-                                            bool>
+        requires ok::stdc::is_constructible_v<bool,
+                                              typename derived_t::value_type>
     {
         for (auto&& item : *this) {
             if (!stdc::forward<

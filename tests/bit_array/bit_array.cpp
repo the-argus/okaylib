@@ -4,7 +4,6 @@
 #include "okay/containers/array.h"
 #include "okay/containers/bit_array.h"
 #include "okay/containers/bit_arraylist.h"
-#include "okay/ranges/algorithm.h"
 
 using namespace ok;
 
@@ -41,13 +40,13 @@ TEST_SUITE("bit_array containers")
             print_bit_array(bs);
 
             // clang-format off
-            REQUIRE(ok::ranges_equal(array_t{
+            REQUIRE(ok::iterators_equal(array_t{
                         bit::off(), bit::off(), bit::off(), bit::off(),
                         bit::off(), bit::off(), bit::off(), bit::off(),
                         bit::off(), bit::off(), bit::off(), bit::off(),
                         bit::off(), bit::off(), bit::off(), bit::off(),
                     }, bs));
-            REQUIRE(ok::ranges_equal(maybe_undefined_array_t{
+            REQUIRE(ok::iterators_equal(maybe_undefined_array_t{
                         false, false, false, false,
                         false, false, false, false,
                         false, false, false, false,
@@ -63,7 +62,7 @@ TEST_SUITE("bit_array containers")
             print_bit_array(bs);
 
             // clang-format off
-            REQUIRE(ok::ranges_equal(maybe_undefined_array_t{
+            REQUIRE(ok::iterators_equal(maybe_undefined_array_t{
                     true, true, true, true,
                     true, true, true, true,
                     true, true, true, true,
@@ -86,7 +85,7 @@ TEST_SUITE("bit_array containers")
             static_assert(bs.size_bits() == 4);
             printf("bit string: ");
             print_bit_array(bs);
-            REQUIRE(ranges_equal(
+            REQUIRE(iterators_equal(
                 bs, ok::maybe_undefined_array_t{false, true, false, true}));
         }
 
