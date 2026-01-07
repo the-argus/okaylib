@@ -15,6 +15,28 @@ struct identity_fn_t
     }
 };
 
+struct copy_assign_or_set_fn_t
+{
+    template <typename lhs_t, typename rhs_t>
+    constexpr auto operator()(lhs_t& lhs, rhs_t&& rhs) const noexcept
+        requires(!settable_value_type_c<lhs_t, decltype(rhs)> &&
+                 detail::assignable_reference_c<decltype(lhs), decltype(rhs)>)
+    {
+        return lhs = std::forward<rhs_t>(rhs);
+    }
+
+    template <typename lhs_t, typename rhs_t>
+    constexpr auto operator()(lhs_t lhs, rhs_t&& rhs) const noexcept
+        requires(!stdc::is_reference_c<lhs_t> &&
+                 settable_value_type_c<lhs_t, decltype(rhs)>)
+    {
+        return std::forward<lhs_t>(lhs).value_type_set(
+            std::forward<rhs_t>(rhs));
+    }
+};
+
+constexpr copy_assign_or_set_fn_t copy_assign_or_set{};
+
 struct iterators_equal_fn_t
 {
     template <typename iterator_lhs_t, typename iterator_rhs_t>
@@ -60,26 +82,13 @@ namespace detail {
 template <bool allow_small_destination = false>
 struct iterators_copy_assign_fn_t
 {
-    template <typename dest_iterator_t, typename source_iterator_t>
-    constexpr void operator()(dest_iterator_t&& dest,
-                              source_iterator_t&& source) const OKAYLIB_NOEXCEPT
-        requires iterable_c<decltype(dest)> && iterable_c<decltype(source)>
+    template <typename dest_iterable_t, typename source_iterable_t>
+    constexpr void operator()(dest_iterable_t&& dest,
+                              source_iterable_t&& source) const OKAYLIB_NOEXCEPT
+        requires iterable_c<decltype(dest)> && iterable_c<decltype(source)> &&
+                 settable_iterator_c<iterator_for<decltype(dest)>,
+                                     value_type_for<decltype(source)>>
     {
-        static_assert(
-            ok::stdc::is_lvalue_reference_v<value_type_for<dest_iterator_t>>,
-            "Attempt to copy assign into an iterator which does not "
-            "produce references.");
-        static_assert(
-            requires(value_type_for<dest_iterator_t> destitem,
-                     value_type_for<source_iterator_t> sourceitem) {
-                {
-                    destitem = sourceitem
-                } -> ok::same_as_c<stdc::add_lvalue_reference_t<
-                      value_type_for<dest_iterator_t>>>;
-            },
-            "Attempt to copy assign from an iterator which cannot assign into "
-            "the destination.");
-
         static_assert(
             !is_iterable_infinite<decltype(dest)> ||
                 !is_iterable_infinite<decltype(source)>,
@@ -104,7 +113,8 @@ struct iterators_copy_assign_fn_t
             if (!source_item || !dest_item) [[unlikely]]
                 break;
 
-            dest_item.ref_unchecked() = source_item.ref_unchecked();
+            detail::copy_assign_or_set(dest_item.ref_unchecked(),
+                                       source_item.ref_unchecked());
         }
     }
 };

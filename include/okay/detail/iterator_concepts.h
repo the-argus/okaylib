@@ -3,6 +3,7 @@
 
 #include "okay/detail/traits/special_member_traits.h"
 #include "okay/detail/type_traits.h"
+#include "okay/detail/utility.h"
 #include <cstdint>
 
 /*
@@ -140,6 +141,49 @@ concept index_providing_iterator_c =
         requires iterator_c<T> || arraylike_iterator_c<T>;
         { iterator.index() } -> ok::same_as_c<size_t>;
     };
+
+template <typename T, typename input_type_t>
+concept copy_settable_value_type_c = requires(T settable, input_type_t copied) {
+    stdc::is_lvalue_reference_c<input_type_t>;
+    stdc::is_const_c<stdc::remove_reference_t<input_type_t>>;
+    { settable.value_type_set(copied) } -> is_void_c;
+};
+
+template <typename T, typename input_type_t>
+concept move_settable_value_type_c = requires(T settable, input_type_t moved) {
+    stdc::is_rvalue_reference_v<input_type_t>;
+    { settable.value_type_set(stdc::move(moved)) } -> is_void_c;
+};
+
+template <typename T, typename input_type_t>
+concept settable_value_type_c = requires {
+    requires !stdc::is_reference_c<T>;
+    requires copy_settable_value_type_c<T, input_type_t> ||
+                 move_settable_value_type_c<T, input_type_t>;
+};
+
+namespace detail {
+template <typename T> using value_type = stdc::remove_cvref_t<T>::value_type;
+
+template <typename T, typename rhs_t>
+concept assignable_reference_c = requires {
+    requires stdc::is_lvalue_reference_c<T>;
+    requires !stdc::is_const_c<stdc::remove_reference_t<T>>;
+    { stdc::declval<T>() = stdc::declval<rhs_t>() } -> same_as_c<T>;
+};
+} // namespace detail
+
+// a settable iterator is an iterator which either accepts the input value
+// via .value_type_set(...) function or it is a reference and the type has a
+// compatible assignment operator.
+template <typename T, typename input_type_t>
+concept settable_iterator_c = requires {
+    requires iterator_c<T>;
+    requires settable_value_type_c<detail::value_type<T>, input_type_t> ||
+                 detail::assignable_reference_c<detail::value_type<T>,
+                                                input_type_t>;
+};
+
 } // namespace ok
 
 #endif
