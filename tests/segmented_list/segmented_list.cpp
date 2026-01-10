@@ -1,11 +1,12 @@
+#include "okay/iterables/indices.h"
 #include "test_header.h"
 // test header must be first
-#include "okay/iterables/iterables.h"
 #include "okay/allocators/arena.h"
 #include "okay/allocators/c_allocator.h"
 #include "okay/containers/array.h"
 #include "okay/containers/bit_array.h"
 #include "okay/containers/segmented_list.h"
+#include "okay/iterables/iterables.h"
 #include "testing_types.h"
 
 using namespace ok;
@@ -59,7 +60,7 @@ TEST_SUITE("segmented list")
             constexpr auto rng = bit_array::bit_string("10101");
 
             segmented_list_t bools =
-                segmented_list::copy_items_from_range(
+                segmented_list::copy_items_from_iterator(
                     c_allocator, transform(rng, &ok::bit::operator bool))
                     .unwrap();
 
@@ -94,11 +95,11 @@ TEST_SUITE("segmented list")
             REQUIRE(list_b.size() == 0);
         }
 
-        SUBCASE("move construct copy_items_from_range segmented lists")
+        SUBCASE("move construct copy_items_from_iterator segmented lists")
         {
             constexpr maybe_undefined_array_t initial = {0, 1, 2, 3};
-            auto res_a =
-                segmented_list::copy_items_from_range(c_allocator, initial);
+            auto res_a = segmented_list::copy_items_from_iterator(
+                c_allocator, iter(initial));
             auto& list_a = res_a.unwrap();
 
             size_t original_capacity = list_a.capacity();
@@ -180,7 +181,7 @@ TEST_SUITE("segmented list")
 
             REQUIRE(list_b.capacity() == original_capacity);
             REQUIRE(list_b.size() == 5);
-            for (auto [item, index] : list_b | ok::enumerate | ok::std_for)
+            for (auto [item, index] : enumerate(list_b))
                 printf("list_b[%zu]: %d\n", index, item);
             REQUIRE(list_b[0] == 0);
             REQUIRE(list_b[1] == 1);
@@ -208,13 +209,13 @@ TEST_SUITE("segmented list")
             REQUIRE(list_b.append(0).is_success());
         }
 
-        SUBCASE("move assign copy_items_from_range segmented lists")
+        SUBCASE("move assign copy_items_from_iterator segmented lists")
         {
             auto res_a = segmented_list::empty<int>(c_allocator, {});
             auto& list_a = res_a.unwrap();
             constexpr maybe_undefined_array_t initial = {0, 1, 2, 3, 4, 5};
-            auto res_b =
-                segmented_list::copy_items_from_range(c_allocator, initial);
+            auto res_b = segmented_list::copy_items_from_iterator(
+                c_allocator, iter(initial));
             auto& list_b = res_b.unwrap();
 
             // six items and possible capacities are 1, 3, 7, 15...
@@ -327,12 +328,12 @@ TEST_SUITE("segmented list")
             REQUIRE(list.capacity() >= 5);
         }
 
-        SUBCASE("insert into copy_items_from_range segmented lists")
+        SUBCASE("insert into copy_items_from_iterator segmented lists")
         {
             constexpr maybe_undefined_array_t initial = {0, 1, 2, 3};
-            segmented_list_t list =
-                segmented_list::copy_items_from_range(c_allocator, initial)
-                    .unwrap();
+            segmented_list_t list = segmented_list::copy_items_from_iterator(
+                                        c_allocator, iter(initial))
+                                        .unwrap();
 
             REQUIRE_RANGES_EQUAL(initial, list);
             REQUIREABORTS(auto&& _ = list.insert_at(initial.size() + 1, 0));
@@ -352,7 +353,7 @@ TEST_SUITE("segmented list")
                 REQUIRE(list.append(i).is_success());
             }
 
-            REQUIRE_RANGES_EQUAL(list, indices);
+            REQUIRE_RANGES_EQUAL(list, indices());
         }
     }
 
