@@ -734,10 +734,14 @@ template <typename derived_t> struct iterator_common_impl_t
             decltype(static_cast<derived_t*>(this) -> next().ref_unchecked())>
     {
         for (auto&& item : *this) {
-            ok::invoke(
-                callable,
-                stdc::forward<
-                    ok::remove_cvref_t<typename derived_t::value_type>>(item));
+            using value_type = typename derived_t::value_type;
+
+            if constexpr (stdc::is_lvalue_reference_v<value_type>) {
+                ok::invoke(callable, item);
+            } else {
+                // values and rvalue references we propagate with move
+                ok::invoke(callable, stdc::move(item));
+            }
         }
     }
 
@@ -1427,7 +1431,8 @@ struct transform_t<viewed_t, callable_t>
     viewed_t iterator;
     const callable_t* transformer;
 
-    using value_type = decltype((*transformer)(
+    using value_type = decltype(ok::invoke(
+        *transformer,
         stdc::declval<
             stdc::add_lvalue_reference_t<typename viewed_t::value_type>>()));
 
@@ -1455,7 +1460,10 @@ struct transform_t<viewed_t, callable_t>
         iterator.offset(offset_amount);
     }
 
-    constexpr value_type access() { return (*transformer)(iterator.access()); }
+    constexpr value_type access()
+    {
+        return ok::invoke(*transformer, iterator.access());
+    }
 };
 
 template <iterator_c viewed_t>

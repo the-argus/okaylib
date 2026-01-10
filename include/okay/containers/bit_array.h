@@ -228,9 +228,14 @@ namespace bit_array {
 namespace detail {
 struct bit_string_t
 {
-    template <typename c_array_ref, typename... args_t>
-    using associated_type = bit_array_t<ok::detail::c_array_length_t<
-        stdc::remove_reference_t<c_array_ref>>::value>;
+    static constexpr auto implemented_make_function =
+        ok::implemented_make_function::make;
+
+    template <typename c_array_ref>
+    using associated_type =
+        bit_array_t<ok::detail::c_array_length_t<
+                        stdc::remove_reference_t<c_array_ref>>::value -
+                    1>;
 
     template <size_t N>
     [[nodiscard]] constexpr auto
@@ -254,6 +259,9 @@ struct bit_string_t
 };
 template <size_t num_bits> struct zeroed_t
 {
+    static constexpr auto implemented_make_function =
+        ok::implemented_make_function::make;
+
     template <typename...> using associated_type = bit_array_t<num_bits>;
 
     [[nodiscard]] constexpr auto operator()() const OKAYLIB_NOEXCEPT
@@ -270,6 +278,9 @@ template <size_t num_bits> struct zeroed_t
 };
 template <size_t num_bits> struct undefined_t
 {
+    static constexpr auto implemented_make_function =
+        ok::implemented_make_function::make;
+
     template <typename...> using associated_type = bit_array_t<num_bits>;
 
     [[nodiscard]] constexpr auto operator()() const OKAYLIB_NOEXCEPT
@@ -284,6 +295,9 @@ template <size_t num_bits> struct undefined_t
 };
 template <size_t num_bits> struct all_bits_on_t
 {
+    static constexpr auto implemented_make_function =
+        ok::implemented_make_function::make;
+
     template <typename...> using associated_type = bit_array_t<num_bits>;
 
     [[nodiscard]] constexpr auto operator()() const OKAYLIB_NOEXCEPT

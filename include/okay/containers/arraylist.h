@@ -4,7 +4,7 @@
 #include "okay/allocators/allocator.h"
 #include "okay/defer.h"
 #include "okay/error.h"
-#include "okay/ranges/ranges.h"
+#include "okay/iterables/iterables.h"
 
 #if defined(OKAYLIB_USE_FMT)
 #include <fmt/core.h>
@@ -15,7 +15,7 @@ namespace ok {
 namespace arraylist {
 namespace detail {
 template <typename T> struct empty_t;
-struct copy_items_from_range_t;
+struct copy_items_from_iterator_t;
 template <typename T> struct spots_preallocated_t;
 } // namespace detail
 } // namespace arraylist
@@ -50,7 +50,7 @@ class arraylist_t
     }
 
     friend class arraylist::detail::spots_preallocated_t<T>;
-    friend class arraylist::detail::copy_items_from_range_t;
+    friend class arraylist::detail::copy_items_from_iterator_t;
     friend class arraylist::detail::empty_t<T>;
 #if defined(OKAYLIB_USE_FMT)
     friend struct fmt::formatter<arraylist_t>;
@@ -151,6 +151,7 @@ class arraylist_t
     template <typename... args_t>
     [[nodiscard]] constexpr auto insert_at(const size_t idx,
                                            args_t&&... args) OKAYLIB_NOEXCEPT
+        requires is_inplace_constructible_or_move_makeable_c<T, args_t...>
     {
         // bounds check out of the gate
         if (idx > this->size()) [[unlikely]] {
@@ -519,32 +520,33 @@ class arraylist_t
     }
 
     template <typename... args_t>
-        requires is_constructible_c<T, args_t...>
     constexpr auto append(args_t&&... args) OKAYLIB_NOEXCEPT
-        // append may return the error type from an erroring constructor
-        -> decltype(insert_at(this->size(), stdc::forward<args_t>(args)...))
+        requires is_inplace_constructible_or_move_makeable_c<T, args_t...>
     {
         return insert_at(this->size(), stdc::forward<args_t>(args)...);
     }
 
     /// Returns an error only if allocation to expand space for the new items
     /// errored.
-    template <typename other_range_t>
+    template <iterator_c iterator_t>
     [[nodiscard]] constexpr status<alloc::error>
-    append_range(const other_range_t& range) OKAYLIB_NOEXCEPT
+    append_iterator(iterator_t&& iterator) OKAYLIB_NOEXCEPT
     {
         static_assert(
-            is_infallible_constructible_c<T, value_type_for<other_range_t>>,
-            "Cannot append the given range: the contents of the arraylist "
-            "cannot be constructed from the contents of the given range (at "
-            "least not without a potential error at each construction).");
-        static_assert(!detail::range_marked_infinite_c<other_range_t>,
-                      "Cannot append an infinite range.");
+            is_infallible_constructible_c<T, value_type_for<iterator_t>>,
+            "Cannot append the given iterator: the contents of the arraylist "
+            "cannot be constructed from the contents of the given iterator (at "
+            "least not without a potential error).");
+        static_assert(!detail::infinite_iterator_c<iterator_t>,
+                      "Cannot append an infinite iterator.");
 
         __ok_internal_assert(this->capacity() >= this->size());
 
-        if constexpr (detail::range_impls_size_c<other_range_t>) {
-            const size_t size = ok::size(range);
+        if constexpr (detail::sized_iterator_c<iterator_t>) {
+            const size_t size = ok::size(iterator);
+
+            // TODO: make a new function like ensure_additional_capacity(size)
+            // and use it here
             const size_t extra_space = this->capacity() - this->size();
             if (size > extra_space) {
                 auto status =
@@ -555,13 +557,30 @@ class arraylist_t
             }
         }
 
-        for (auto cursor = ok::begin(range); ok::is_inbounds(range, cursor);
-             ok::increment(range, cursor)) {
-            auto status = this->append(ok::range_get_best(range, cursor));
-            if constexpr (!detail::range_impls_size_c<other_range_t>) {
-                if (!status.is_success()) [[unlikely]] {
-                    return status;
+        while (true) {
+            auto&& value = iterator.next();
+            if (!value)
+                break; // out of items in the iterator
+
+            auto status = [&] {
+                if constexpr (stdc::is_lvalue_reference_v<
+                                  value_type_for<iterator_t>>) {
+                    return this->append(value.ref_unchecked());
+                } else {
+                    return this->append(stdc::move(value.ref_unchecked()));
                 }
+            }();
+
+            // TODO: implement append_assume_capacity() and use it if we already
+            // did ensure_additional_capacity
+            if constexpr (!detail::sized_iterator_c<iterator_t>) {
+                if (!status.is_success()) [[unlikely]]
+                    return status;
+            } else {
+                // if you manage to make this happen, congrats honestly
+                __ok_assert(ok::is_success(status),
+                            "Attempt to append an iterator which incorrectly "
+                            "gave its size and then caused OOM");
             }
         }
         return alloc::error::success;
@@ -715,6 +734,13 @@ namespace arraylist {
 namespace detail {
 template <typename T> struct empty_t
 {
+    static constexpr auto implemented_make_function =
+        ok::implemented_make_function::make;
+
+    template <typename backing_allocator_arg_t>
+    using associated_type =
+        arraylist_t<T, stdc::remove_cvref_t<backing_allocator_arg_t>>;
+
     template <typename backing_allocator_t>
     [[nodiscard]] constexpr arraylist_t<T, backing_allocator_t>
     operator()(backing_allocator_t& allocator) const noexcept
@@ -730,6 +756,9 @@ template <typename T> struct empty_t
 
 template <typename T> struct spots_preallocated_t
 {
+    static constexpr auto implemented_make_function =
+        ok::implemented_make_function::make_into_uninit;
+
     template <typename backing_allocator_t, typename...>
     using associated_type =
         ok::arraylist_t<T, ok::remove_cvref_t<backing_allocator_t>>;
@@ -776,35 +805,44 @@ template <typename T> struct spots_preallocated_t
     }
 };
 
-struct copy_items_from_range_t
+struct copy_items_from_iterator_t
 {
-    template <typename backing_allocator_t, typename input_range_t>
+    static constexpr auto implemented_make_function =
+        ok::implemented_make_function::make_into_uninit;
+
+    template <typename backing_allocator_t, typename input_iterator_t>
     using associated_type =
-        ok::arraylist_t<value_type_for<input_range_t>,
+        ok::arraylist_t<stdc::remove_cvref_t<value_type_for<input_iterator_t>>,
                         ok::remove_cvref_t<backing_allocator_t>>;
 
-    template <typename backing_allocator_t, typename input_range_t>
+    template <allocator_c backing_allocator_t, iterator_c input_iterator_t>
     [[nodiscard]] constexpr auto
     operator()(backing_allocator_t& allocator,
-               const input_range_t& range) const OKAYLIB_NOEXCEPT
+               input_iterator_t&& iterator) const OKAYLIB_NOEXCEPT
+        requires(!stdc::is_reference_c<value_type_for<input_iterator_t>> ||
+                 stdc::is_copy_constructible_v<
+                     stdc::remove_cvref_t<value_type_for<input_iterator_t>>>)
     {
-        return ok::make(*this, allocator, range);
+        return ok::make(*this, allocator, stdc::move(iterator));
     }
 
-    template <typename backing_allocator_t, typename input_range_t>
-    [[nodiscard]] constexpr alloc::error
-    make_into_uninit(ok::arraylist_t<value_type_for<const input_range_t&>,
-                                     backing_allocator_t>& output,
-                     backing_allocator_t& allocator,
-                     const input_range_t& range) const OKAYLIB_NOEXCEPT
+    template <allocator_c backing_allocator_t, iterator_c input_iterator_t>
+    [[nodiscard]] constexpr alloc::error make_into_uninit(
+        ok::arraylist_t<stdc::remove_cvref_t<value_type_for<input_iterator_t>>,
+                        backing_allocator_t>& output,
+        backing_allocator_t& allocator,
+        input_iterator_t&& iterator) const OKAYLIB_NOEXCEPT
+        requires(!stdc::is_reference_c<value_type_for<input_iterator_t>> ||
+                 stdc::is_copy_constructible_v<
+                     stdc::remove_cvref_t<value_type_for<input_iterator_t>>>)
     {
-        static_assert(ok::detail::range_can_size_c<input_range_t>,
-                      "Size of range unknown, refusing to copy out its items "
-                      "using arraylist::copy_items_from_range constructor.");
-        using T = value_type_for<const input_range_t&>;
+        static_assert(
+            !ok::detail::infinite_iterator_c<input_iterator_t>,
+            "Cannot construct an arraylist from an infinite iterator.");
+        using T = stdc::remove_cvref_t<value_type_for<input_iterator_t>>;
         using output_t = arraylist_t<T, backing_allocator_t>;
 
-        const size_t num_items = ok::size(range);
+        const size_t num_items = ok::size(iterator);
 
         alloc::result_t<bytes_t> res = allocator.allocate(alloc::request_t{
             .num_bytes = num_items * sizeof(T),
@@ -812,21 +850,19 @@ struct copy_items_from_range_t
             .leave_nonzeroed = true,
         });
 
-        if (!res.is_success()) [[unlikely]] {
+        if (!res.is_success()) [[unlikely]]
             return res.status();
-        }
 
         auto& bytes = res.unwrap();
         T* const memory =
             reinterpret_cast<T*>(bytes.unchecked_address_of_first_item());
         const size_t bytes_allocated = bytes.size();
 
-        // TODO: if contiguous range and trivially copyable, do memcpy
+        // TODO: have concept of contiguous iterator, do memcpy if possible
         size_t i = 0;
-        for (auto cursor = ok::begin(range); ok::is_inbounds(range, cursor);
-             ok::increment(range, cursor)) {
+        while (auto&& maybe_item = iterator.next()) {
             ok::stdc::construct_at(memory + i,
-                                   ok::range_get_best(range, cursor));
+                                   stdc::move(maybe_item.ref_unchecked()));
             ++i;
         }
 
@@ -850,37 +886,8 @@ template <typename T> inline constexpr detail::empty_t<T> empty;
 template <typename T>
 inline constexpr detail::spots_preallocated_t<T> spots_preallocated;
 
-inline constexpr detail::copy_items_from_range_t copy_items_from_range;
+inline constexpr detail::copy_items_from_iterator_t copy_items_from_iterator;
 }; // namespace arraylist
-
-template <typename T, typename backing_allocator_t>
-struct range_definition<ok::arraylist_t<T, backing_allocator_t>>
-{
-    using range_t = ok::arraylist_t<T, backing_allocator_t>;
-
-    static constexpr auto flags =
-        ok::range_flags::arraylike | ok::range_flags::sized |
-        ok::range_flags::consuming | ok::range_flags::producing;
-
-    using value_type = T;
-
-    static constexpr value_type& get(range_t& r, size_t c) OKAYLIB_NOEXCEPT
-    {
-        return r[c];
-    }
-
-    static constexpr const value_type& get(const range_t& r,
-                                           size_t c) OKAYLIB_NOEXCEPT
-    {
-        return r[c];
-    }
-
-    static constexpr size_t size(const range_t& r) OKAYLIB_NOEXCEPT
-    {
-        return r.size();
-    }
-};
-
 } // namespace ok
 
 #if defined(OKAYLIB_USE_FMT)

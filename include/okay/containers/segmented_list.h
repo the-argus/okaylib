@@ -18,7 +18,7 @@ namespace ok {
 namespace segmented_list {
 namespace detail {
 template <typename T> struct empty_t;
-struct copy_items_from_range_t;
+struct copy_items_from_iterator_t;
 [[nodiscard]] constexpr size_t
 num_blocks_needed_for_spots(size_t num_spots) noexcept
 {
@@ -84,8 +84,10 @@ class segmented_list_t
         "which is not possible. Remove the const, and pass a const reference "
         "to the segmented list of mutable objects instead.");
 
+    using value_type = T;
+
     template <typename U> friend struct ok::segmented_list::detail::empty_t;
-    friend struct ok::segmented_list::detail::copy_items_from_range_t;
+    friend struct ok::segmented_list::detail::copy_items_from_iterator_t;
 
     [[nodiscard]] constexpr size_t capacity() const noexcept
     {
@@ -587,6 +589,8 @@ struct empty_options_t
 namespace detail {
 template <typename T> struct empty_t
 {
+    static constexpr auto implemented_make_function =
+        ok::implemented_make_function::make_into_uninit;
 
     template <typename backing_allocator_t, typename...>
     using associated_type =
@@ -639,31 +643,34 @@ template <typename T> struct empty_t
     };
 };
 
-struct copy_items_from_range_t
+struct copy_items_from_iterator_t
 {
-    template <typename backing_allocator_t, typename input_range_t, typename...>
-    using associated_type =
-        ok::segmented_list_t<value_type_for<const input_range_t&>,
-                             stdc::remove_reference_t<backing_allocator_t>>;
+    static constexpr auto implemented_make_function =
+        ok::implemented_make_function::make_into_uninit;
 
-    template <allocator_c backing_allocator_t, typename input_range_t>
+    template <typename backing_allocator_ref_t, typename input_iterator_ref_t>
+    using associated_type = ok::segmented_list_t<
+        stdc::remove_cvref_t<value_type_for<input_iterator_ref_t>>,
+        stdc::remove_reference_t<backing_allocator_ref_t>>;
+
+    template <allocator_c backing_allocator_t, iterator_c input_iterator_t>
     [[nodiscard]] constexpr auto
     operator()(backing_allocator_t& allocator,
-               const input_range_t& range) const OKAYLIB_NOEXCEPT
+               input_iterator_t&& iterator) const OKAYLIB_NOEXCEPT
     {
-        return ok::make(*this, allocator, range);
+        return ok::make(*this, allocator, iterator);
     }
 
-    template <allocator_c backing_allocator_t, typename input_iterable_t>
+    template <allocator_c backing_allocator_t, iterator_c input_iterator_t>
     [[nodiscard]] constexpr alloc::error make_into_uninit(
-        ok::segmented_list_t<value_type_for<const input_iterable_t&>,
-                             backing_allocator_t>& output,
+        ok::segmented_list_t<
+            stdc::remove_cvref_t<value_type_for<input_iterator_t&>>,
+            backing_allocator_t>& output,
         backing_allocator_t& allocator,
-        const input_iterable_t& iterable) const OKAYLIB_NOEXCEPT
-        requires iterable_c<decltype(iterable)> &&
-                 is_iterable_sized<decltype(iterable)>
+        input_iterator_t&& iterator) const OKAYLIB_NOEXCEPT
+        requires ok::detail::sized_iterator_c<input_iterator_t>
     {
-        using T = value_type_for<decltype(iterable)>;
+        using T = stdc::remove_cvref_t<value_type_for<input_iterator_t>>;
 
         using M =
             typename ok::segmented_list_t<T, backing_allocator_t>::members_t;
@@ -671,7 +678,7 @@ struct copy_items_from_range_t
         using blocklist_t =
             typename ok::segmented_list_t<T, backing_allocator_t>::blocklist_t;
 
-        const size_t num_initial_blocks = log2_uint_ceil(ok::size(iterable));
+        const size_t num_initial_blocks = log2_uint_ceil(ok::size(iterator));
         const size_t num_initial_spots =
             get_num_spots_for_blocks(num_initial_blocks);
 
@@ -733,7 +740,7 @@ struct copy_items_from_range_t
             .allocator = ok::addressof(allocator),
         };
 
-        for (auto item : ok::iter(iterable)) {
+        for (auto item : ok::iter(iterator)) {
             auto stat = output.insert_at(output.size(), stdc::move(item));
             __ok_internal_assert(ok::is_success(stat));
         }
@@ -746,8 +753,8 @@ struct copy_items_from_range_t
 
 template <typename T> inline constexpr segmented_list::detail::empty_t<T> empty;
 
-inline constexpr segmented_list::detail::copy_items_from_range_t
-    copy_items_from_range;
+inline constexpr segmented_list::detail::copy_items_from_iterator_t
+    copy_items_from_iterator;
 
 } // namespace segmented_list
 } // namespace ok

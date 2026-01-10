@@ -11,9 +11,7 @@
 #include "okay/detail/template_util/c_array_length.h"
 #include "okay/detail/template_util/c_array_value_type.h"
 #include "okay/detail/type_traits.h"
-#include "okay/math/ordering.h"
 #include "okay/slice.h"
-#include "okay/tuple.h"
 
 namespace ok {
 
@@ -429,7 +427,8 @@ class allocator_t : public memory_resource_t
 
     template <typename T = detail::deduced_t, typename... args_t>
     [[nodiscard]] constexpr decltype(auto)
-    make(args_t&&... args) OKAYLIB_NOEXCEPT;
+    make(args_t&&... args) OKAYLIB_NOEXCEPT
+        requires detail::is_deduced_constructible_c<T, args_t...>;
 
   protected:
     /// NOTE: the implementation of this is not required to check for nullptr,
@@ -584,26 +583,14 @@ constexpr void destroy_and_free(allocator_impl_t& ally,
 template <typename T, typename... args_t>
 [[nodiscard]] constexpr decltype(auto)
 ok::allocator_t::make(args_t&&... args) OKAYLIB_NOEXCEPT
+    requires detail::is_deduced_constructible_c<T, args_t...>
 {
-    using analysis = decltype(detail::analyze_construction<args_t...>());
+    using analysis = detail::analyze_construction_t<args_t...>;
     using deduced = typename analysis::associated_type;
     constexpr bool is_constructed_type_deduced =
         stdc::is_same_v<T, detail::deduced_t>;
-    static_assert(
-        // either analysis found an associated_type, or we were given one
-        // explicitly
-        !stdc::is_void_v<deduced> || !is_constructed_type_deduced,
-        "Type deduction failed for the given allocator.make() call. You may "
-        "need to provide the type explicitly, e.g. `allocator.make<int>(0)`");
     using actual_t =
         stdc::conditional_t<is_constructed_type_deduced, deduced, T>;
-
-    static_assert(!stdc::is_void_v<actual_t> &&
-                      !stdc::is_same_v<actual_t, detail::deduced_t>,
-                  "Unable to deduce the type you're trying to make with this "
-                  "allocator. The arguments to the constructor may be invalid, "
-                  "or you may just need to specify the returned type when "
-                  "calling: `allocator.make<MyType>(...)`.");
 
     auto allocation_result = allocate(alloc::request_t{
         .num_bytes = sizeof(actual_t),

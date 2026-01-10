@@ -306,6 +306,9 @@ namespace block_allocator {
 namespace detail {
 struct alloc_initial_buf_t
 {
+    static constexpr auto implemented_make_function =
+        ok::implemented_make_function::make_into_uninit;
+
     template <typename allocator_impl_t_cref, typename...>
     using associated_type =
         block_allocator_t<ok::remove_cvref_t<allocator_impl_t_cref>>;

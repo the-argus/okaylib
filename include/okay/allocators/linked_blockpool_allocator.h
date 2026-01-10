@@ -367,6 +367,9 @@ struct options_t
 
 struct start_with_one_pool_t
 {
+    static constexpr auto implemented_make_function =
+        ok::implemented_make_function::make_into_uninit;
+
     template <typename allocator_impl_t_ref, typename...>
     using associated_type = linked_blockpool_allocator_t<
         stdc::remove_reference_t<allocator_impl_t_ref>>;

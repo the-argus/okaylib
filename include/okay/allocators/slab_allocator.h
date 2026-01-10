@@ -191,11 +191,14 @@ slab_allocator_t<allocator_impl_t, num_blocksizes>::impl_reallocate(
 namespace slab_allocator {
 struct with_blocks_t
 {
-    template <typename allocator_impl_t_c_ref, typename options_ref,
-              typename...>
-    using associated_type =
-        slab_allocator_t<remove_cvref_t<allocator_impl_t_c_ref>,
-                         remove_cvref_t<options_ref>::num_blocksizes>;
+    static constexpr auto implemented_make_function =
+        ok::implemented_make_function::make_into_uninit;
+
+    template <typename allocator_impl_fully_qualified_t,
+              typename options_fully_qualified_t, typename...>
+    using associated_type = slab_allocator_t<
+        remove_cvref_t<allocator_impl_fully_qualified_t>,
+        remove_cvref_t<options_fully_qualified_t>::num_blocksizes>;
 
     template <allocator_c allocator_impl_t, size_t num_blocksizes>
     [[nodiscard]] constexpr auto

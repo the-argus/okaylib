@@ -33,25 +33,15 @@ template <typename T> struct make_into_uninitialized_fn_t
     constexpr auto operator()
         [[nodiscard]] (T& uninitialized,
                        args_t&&... args) const OKAYLIB_NOEXCEPT
+        requires is_inplace_constructible_or_move_makeable_c<T, args_t...>
     {
-        static_assert(is_constructible_c<T, args_t...>,
-                      "No matching constructor for make_into_uninitialized.");
-
         if constexpr (is_std_constructible_c<T, args_t...>) {
             stdc::construct_at(ok::addressof(uninitialized),
                                stdc::forward<args_t>(args)...);
             return;
         } else {
-            using analysis = decltype(analyze_construction<args_t...>());
-
-            static_assert(
-                analysis{},
-                "Unable to find a constructor call for the given arguments.");
-
-            static_assert(
-                analysis::has_inplace || stdc::is_move_constructible_v<T>,
-                "Attempt to call make_into_uninitialized but there is no known "
-                "way to construct a T into an uninitialized spot of memory.");
+            using analysis = detail::analyze_construction_t<args_t...>;
+            static_assert(analysis::value);
 
             constexpr auto call_constructor =
                 []<typename... inner_args_t>(
@@ -92,37 +82,61 @@ struct deduced_t
     // user code and make_fn_t must not be able to instantiate this
     deduced_t() = delete;
 };
+
+template <typename...>
+struct deduce_construction_with_constructor_arg : public std::false_type
+{
+    using type = void;
+};
+
+template <typename constructor_t, typename... args_t>
+struct deduce_construction_with_constructor_arg<constructor_t, args_t...>
+    : public stdc::true_type
+{
+    using type =
+        typename detail::analyze_construction_t<constructor_t,
+                                                args_t...>::associated_type;
+};
+
+template <typename T, typename... args_t>
+using deduce_construction_t = stdc::conditional_t<
+    stdc::is_same_v<T, deduced_t>,
+    typename deduce_construction_with_constructor_arg<args_t...>::type, T>;
+
+template <typename T, typename... args_t>
+concept is_deduced_constructible_c = requires {
+    requires is_constructible_c<detail::deduce_construction_t<T, args_t...>,
+                                args_t...>;
+    requires !stdc::is_void_v<deduce_construction_t<T, args_t...>>;
+    requires !stdc::is_same_v<deduce_construction_t<T, args_t...>, deduced_t>;
+};
+
 } // namespace detail
 
 /// ok::make() will automatically figure out what constructor to call and return
 /// the resulting value on the stack, effectively serving as a wrapper for
 /// situations where the constructor only provides a make_into_uninit()
 /// function.
-template <typename T = detail::deduced_t, typename... args_t>
-[[nodiscard]] constexpr decltype(auto) make(args_t&&... args) OKAYLIB_NOEXCEPT
+template <typename type_to_make_t = detail::deduced_t, typename... args_t>
+    requires detail::is_deduced_constructible_c<type_to_make_t, args_t...>
+[[nodiscard]] constexpr auto make(args_t&&... args) OKAYLIB_NOEXCEPT
 {
     constexpr bool is_constructed_type_deduced =
-        stdc::is_same_v<T, detail::deduced_t>;
+        stdc::is_same_v<type_to_make_t, detail::deduced_t>;
 
     if constexpr (!is_constructed_type_deduced &&
-                  is_std_constructible_c<T, args_t...>) {
+                  is_std_constructible_c<type_to_make_t, args_t...>) {
         return T(stdc::forward<args_t>(args)...);
     } else {
-        using analysis = decltype(detail::analyze_construction<args_t...>());
+        using analysis = detail::analyze_construction_t<args_t...>;
+        using T = detail::deduce_construction_t<type_to_make_t, args_t...>;
 
-        using actual_t =
-            stdc::conditional_t<is_constructed_type_deduced,
-                                typename analysis::associated_type, T>;
-
+        static_assert(analysis{});
         static_assert(
-            !is_constructed_type_deduced || !stdc::is_void_v<actual_t>,
+            !is_constructed_type_deduced || !stdc::is_void_v<T>,
             "Unable to deduce the type for given construction, "
             "you may need to pass the type like so: ok::make<MyType>(...), or "
             "the arguments may be incorrect.");
-        static_assert(analysis{},
-                      "No matching constructor for the given arguments.");
-        static_assert(analysis{},
-                      "No matching constructor for the given arguments.");
         static_assert(
             is_constructed_type_deduced ||
                 stdc::is_void_v<typename analysis::associated_type> ||
@@ -135,19 +149,16 @@ template <typename T = detail::deduced_t, typename... args_t>
                 const constructor_t& constructor,
                 inner_args_t&&... innerargs) -> decltype(auto) {
             if constexpr (analysis::has_rvo) {
-                static_assert(!analysis::can_fail,
-                              "bad template analysis? found that something has "
-                              ".make() but also it can fail");
+                static_assert(!analysis::can_fail);
                 return constructor.make(
                     stdc::forward<inner_args_t>(innerargs)...);
             } else {
                 if constexpr (analysis::can_fail) {
                     using status_type = decltype(constructor.make_into_uninit(
-                        stdc::declval<actual_t&>(),
+                        stdc::declval<T&>(),
                         stdc::forward<inner_args_t>(innerargs)...));
 
-                    using accessor =
-                        detail::res_accessor_t<actual_t, status_type>;
+                    using accessor = detail::res_accessor_t<T, status_type>;
                     auto out = accessor::construct_uninitialized_res();
 
                     auto& uninit =
@@ -157,7 +168,7 @@ template <typename T = detail::deduced_t, typename... args_t>
                     // can call make make_into_uninit and just move the
                     // result into the error of the output error. this
                     // initializes both the status and the payload in one
-                    // move
+                    // line
                     accessor::emplace_error_nodestroy(
                         out, stdc::move(constructor.make_into_uninit(
                                  uninit,
@@ -167,10 +178,18 @@ template <typename T = detail::deduced_t, typename... args_t>
                 } else {
                     // no rvo provided, so we have to make into something
                     // on this stack frame and then move it out
-                    detail::uninitialized_storage_t<actual_t> out;
+                    detail::uninitialized_storage_t<T> out;
 
                     constructor.make_into_uninit(
                         out.value, stdc::forward<inner_args_t>(innerargs)...);
+
+                    static_assert(
+                        stdc::is_void_v<decltype(constructor.make_into_uninit(
+                            out.value,
+                            stdc::forward<inner_args_t>(innerargs)...))>,
+                        "Constructor analysis determined that given "
+                        "constructor cannot fail, but its make_into_uninit "
+                        "function returns something other than void.");
 
                     return stdc::move(out.value);
                 }

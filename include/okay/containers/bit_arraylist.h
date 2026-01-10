@@ -508,6 +508,9 @@ namespace bit_arraylist {
 namespace detail {
 struct bit_string_t
 {
+    static constexpr auto implemented_make_function =
+        ok::implemented_make_function::make_into_uninit;
+
     template <typename allocator_t, typename...>
     using associated_type = bit_arraylist_t<::ok::remove_cvref_t<allocator_t>>;
 
@@ -552,6 +555,9 @@ struct preallocated_and_zeroed_t
         size_t additional_capacity_in_bits = 0;
     };
 
+    static constexpr auto implemented_make_function =
+        ok::implemented_make_function::make_into_uninit;
+
     template <typename allocator_t, typename...>
     using associated_type = bit_arraylist_t<::ok::remove_cvref_t<allocator_t>>;
 
@@ -595,6 +601,9 @@ struct preallocated_and_zeroed_t
 
 struct copy_booleans_from_iterable_t
 {
+    static constexpr auto implemented_make_function =
+        ok::implemented_make_function::make_into_uninit;
+
     template <typename backing_allocator_t, typename...>
     using associated_type =
         bit_arraylist_t<stdc::remove_reference_t<backing_allocator_t>>;
