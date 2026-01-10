@@ -1,8 +1,5 @@
-#include "okay/ascii_view.h"
 #include "test_header.h"
 // test header must be first
-#include "okay/containers/array.h"
-#include "okay/iterables/indices.h"
 #include "okay/iterables/iterables.h"
 #include "testing_types.h"
 
@@ -12,7 +9,7 @@ TEST_SUITE("iter")
 {
     TEST_CASE("forward iteration with standard for loop")
     {
-        SUBCASE("forward only iterable")
+        SUBCASE("forward only iterable hits all of the ")
         {
             forward_iterable_size_test_t<size_mode::known_sized> iterable;
             size_t num_items = 0;
@@ -21,9 +18,8 @@ TEST_SUITE("iter")
                 REQUIRE(i == num_items);
                 ++num_items;
             }
-            REQUIRE(num_items == ok::size(iterable));
+            REQUIRE(num_items == size(iterable));
 
-            // test enumerate too
             for (auto [i, idx] : iterable.iter().enumerate()) {
                 REQUIRE(i == idx);
             }

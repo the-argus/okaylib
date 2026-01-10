@@ -223,7 +223,7 @@ template <size_mode mode> class forward_iterable_size_test_t
         {
             if (idx >= 50)
                 return {};
-            ok::opt<value_type> out = idx * idx;
+            ok::opt<value_type> out = idx;
             ++idx;
             return out;
         }
