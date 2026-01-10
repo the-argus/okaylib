@@ -407,8 +407,9 @@ template <typename T, bool is_const> struct opt_cursor_t
     [[nodiscard]] constexpr opt<value_type>
     next(container_t container) OKAYLIB_NOEXCEPT
     {
+        const bool had_called = has_called;
         has_called = true;
-        if (!has_called && container)
+        if (!had_called && container)
             return opt<value_type>(container.ref_unchecked());
         return opt<value_type>{};
     }

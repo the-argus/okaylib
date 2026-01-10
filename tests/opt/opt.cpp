@@ -691,4 +691,36 @@ TEST_SUITE("opt")
             }
         }
     }
+
+    TEST_CASE("an opt is an iterable")
+    {
+        ok::opt<int> i = 1;
+        ok::opt<int> j = 1;
+        ok::opt<int> k = {};
+        ok::opt<int> l = 2;
+
+        constexpr auto test_value = [](auto& opt, int v) {
+            size_t count = 0;
+            for (int value : opt) {
+                REQUIRE(value == v);
+                ++count;
+            }
+            REQUIRE(count == 1);
+        };
+
+        test_value(i, 1);
+        test_value(j, 1);
+        test_value(l, 2);
+
+        for (auto _ : k)
+            REQUIRE(false); // should not enter this if no value is in k
+
+        for (auto _ : iter(k))
+            REQUIRE(false);
+
+        REQUIRE_RANGES_EQUAL(i, j);
+        REQUIRE(!iterators_equal(i, k));
+        REQUIRE(!iterators_equal(i, l));
+        REQUIRE(!iterators_equal(k, l));
+    }
 }

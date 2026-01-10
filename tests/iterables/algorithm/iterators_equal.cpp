@@ -47,6 +47,7 @@ TEST_SUITE("ok::iterators_equal algorithm")
             // empty ranges are the same
             REQUIRE(ok::iterators_equal(k, k));
 
+            bool test = ok::iterators_equal(i, j);
             REQUIRE(!ok::iterators_equal(i, j));
             REQUIRE(!ok::iterators_equal(j, i));
             REQUIRE(!ok::iterators_equal(j, k));
