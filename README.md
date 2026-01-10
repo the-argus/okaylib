@@ -30,12 +30,15 @@ int main(int argc, char* argv[])
     slice<const char*> arguments = raw_slice(*argv, size_t(argc));
 
     // print out arguments with their indices
-    for (auto& [ arg, index ] : arguments | enumerate | std_for) {
+    for (auto& [ arg, index ] : enumerate(arguments)) {
         fmt::println("Argument {}: {}", index, arg);
     }
 
-    // equivalent code, using some macros instead
-    ok_foreach(ok_pair(arg, index), arguments | enumerate) {
+    // skip arguments that start with "skip"
+    constexpr auto does_not_start_with_skip = [](const char* str){
+        return !ok::ascii_view{str}.startswith("skip");
+    };
+    for (auto& [ arg, index ] : iter(arguments).keep_if(does_not_start_with_skip).enumerate()) {
         fmt::println("Argument {}: {}", index, arg);
     }
 }
@@ -45,7 +48,8 @@ Demonstration of allocators (non-polymorphic usage, static dispatch), and
 `arraylist_t`.
 
 ```cpp
-int main() {
+int main()
+{
     using namespace ok;
     c_allocator_t working_allocator;
     ooming_allocator_t failing_allocator; // for testing purposes
@@ -81,7 +85,7 @@ Size of `alist`: 0
 - [x] arena allocator
 - [ ] linked arena allocator (arena but it uses a backward linked list of separate
       blocks)
-- [ ] interface for arena allocators which passes function pointers to
+- [x] interface for arena allocators which passes function pointers to
       destructors, allowing the arenas to keep a list of destructors to call
 - [x] block allocator
 - [x] slab allocator
