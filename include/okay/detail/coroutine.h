@@ -1,5 +1,14 @@
-#ifndef __OKAYLIB_COROUTINE_H__
-#define __OKAYLIB_COROUTINE_H__
+#ifndef __OKAYLIB_DETAIL_COROUTINE_H__
+#define __OKAYLIB_DETAIL_COROUTINE_H__
+
+/*
+ * The purpose of this file is to polyfill std::coroutine_handle in the case
+ * that we are using OKAYLIB_COMPAT_STRATEGY_NO_STD. Coroutines are hardcoded in
+ * the compiler to use std::coroutine_handle (which is why there is no
+ * ok::coroutine_handle). However, some concepts and utilities are necessary to
+ * perform this polyfill such as ok::coroutine_c. These are always present in
+ * this header regardless of OKAYLIB_COMPAT_STRATEGY.
+ */
 
 #if defined(OKAYLIB_COMPAT_STRATEGY_PURE_CPP)
 // TODO: probably fall back to STRATEGY_STD in this case
@@ -7,15 +16,18 @@
     "Attempt to include coroutine with OKAYLIB_COMPAT_STRATEGY_PURE_CPP, this is not supported"
 #endif
 
-#include "okay/detail/type_traits.h"
-#include "okay/math/ordering.h"
+#include "okay/detail/config.h"
 
 #if defined(OKAYLIB_COMPAT_STRATEGY_STD)
+// if we are COMPAT_STRATEGY_STD, then we will not define much ourselves in this
+// file
 #include <coroutine>
+#else
+#include "okay/detail/type_traits.h"
+#include "okay/math/ordering.h"
 #endif
 
 namespace ok {
-// always the same regardless of compat strategy
 template <typename result_t>
 concept coroutine_c = requires { typename result_t::promise_type; };
 
@@ -39,7 +51,10 @@ struct coroutine_promise_type
 template <typename result_t, typename... args_t>
 using coroutine_promise_type_t =
     typename coroutine_promise_type<result_t, args_t...>::type;
+} // namespace ok
 
+#if !defined(OKAYLIB_COMPAT_STRATEGY_STD)
+namespace std {
 template <typename promise_t = void> struct coroutine_handle;
 
 template <> struct coroutine_handle<void>
@@ -59,64 +74,28 @@ template <> struct coroutine_handle<void>
     }
 
   public:
-    constexpr void* address() const noexcept
-    {
-#if defined(OKAYLIB_COMPAT_STRATEGY_STD)
-        return m_handle.address();
-#else
-        return m_handle;
-#endif
-    }
+    constexpr void* address() const noexcept { return m_handle; }
 
     constexpr static coroutine_handle<void> from_address(void* address) noexcept
     {
         coroutine_handle<void> self;
-#if defined(OKAYLIB_COMPAT_STRATEGY_STD)
-        self.m_handle = std::coroutine_handle<void>::from_address(address);
-#else
         self.m_handle = address;
-#endif
         return self;
     }
 
   public:
     constexpr explicit operator bool() const noexcept { return bool(m_handle); }
 
-    bool done() const noexcept
-    {
-#if defined(OKAYLIB_COMPAT_STRATEGY_STD)
-        return m_handle.done();
-#else
-        return __builtin_coro_done(m_handle);
-#endif
-    }
+    bool done() const noexcept { return __builtin_coro_done(m_handle); }
 
     void operator()() const { resume(); }
 
-    void resume() const
-    {
-#if defined(OKAYLIB_COMPAT_STRATEGY_STD)
-        m_handle.resume();
-#else
-        __builtin_coro_resume(m_handle);
-#endif
-    }
+    void resume() const { __builtin_coro_resume(m_handle); }
 
-    void destroy() const
-    {
-#if defined(OKAYLIB_COMPAT_STRATEGY_STD)
-        m_handle.destroy();
-#else
-        __builtin_coro_destroy(m_handle);
-#endif
-    }
+    void destroy() const { __builtin_coro_destroy(m_handle); }
 
   protected:
-#if defined(OKAYLIB_COMPAT_STRATEGY_STD)
-    std::coroutine_handle<void> m_handle;
-#else
     void* m_handle;
-#endif
 };
 
 constexpr bool operator==(ok::coroutine_handle<> lhs,
@@ -141,11 +120,7 @@ template <typename promise_t> struct coroutine_handle
     {
         coroutine_handle<promise_t> self;
         self.m_handle =
-#if defined(OKAYLIB_COMPAT_STRATEGY_STD)
-            std::coroutine_handle<promise_t>::from_promise(promise);
-#else
             __builtin_coro_promise((char*)&promise, __alignof(promise_t), true);
-#endif
         return self;
     }
 
@@ -155,25 +130,13 @@ template <typename promise_t> struct coroutine_handle
         return *this;
     }
 
-    constexpr void* address() const noexcept
-    {
-#if defined(OKAYLIB_COMPAT_STRATEGY_STD)
-        return m_handle.address();
-#else
-        return m_handle;
-#endif
-    }
+    constexpr void* address() const noexcept { return m_handle; }
 
     constexpr static coroutine_handle<promise_t>
     from_address(void* address) noexcept
     {
         coroutine_handle<promise_t> self;
-        self.m_handle =
-#if defined(OKAYLIB_COMPAT_STRATEGY_STD)
-            std::coroutine_handle<promise_t>::from_address(address);
-#else
-            address;
-#endif
+        self.m_handle = address;
         return self;
     }
 
@@ -184,59 +147,26 @@ template <typename promise_t> struct coroutine_handle
 
     constexpr explicit operator bool() const noexcept { return bool(m_handle); }
 
-    bool done() const noexcept
-    {
-#if defined(OKAYLIB_COMPAT_STRATEGY_STD)
-        return m_handle.done();
-#else
-        return __builtin_coro_done(m_handle);
-#endif
-    }
+    bool done() const noexcept { return __builtin_coro_done(m_handle); }
 
     void operator()() const { resume(); }
 
-    void resume() const
-    {
-#if defined(OKAYLIB_COMPAT_STRATEGY_STD)
-        m_handle.resume();
-#else
-        __builtin_coro_resume(m_handle);
-#endif
-    }
+    void resume() const { __builtin_coro_resume(m_handle); }
 
-    void destroy() const
-    {
-#if defined(OKAYLIB_COMPAT_STRATEGY_STD)
-        m_handle.destroy();
-#else
-        __builtin_coro_destroy(m_handle);
-#endif
-    }
+    void destroy() const { __builtin_coro_destroy(m_handle); }
 
     promise_t& promise() const
     {
-#if defined(OKAYLIB_COMPAT_STRATEGY_STD)
-        return m_handle.promise();
-#else
         void* t = __builtin_coro_promise(m_handle, __alignof(promise_t), false);
         return *static_cast<promise_t*>(t);
-#endif
     }
 
   private:
-#if defined(OKAYLIB_COMPAT_STRATEGY_STD)
-    std::coroutine_handle<promise_t> m_handle;
-#else
     void* m_handle = nullptr;
-#endif
 };
 
-#if defined(OKAYLIB_COMPAT_STRATEGY_STD)
-using noop_coroutine_promise = std::noop_coroutine_promise;
-#else
 struct noop_coroutine_promise
 {};
-#endif
 
 template <> struct coroutine_handle<noop_coroutine_promise>
 {
@@ -257,31 +187,18 @@ template <> struct coroutine_handle<noop_coroutine_promise>
 
     noop_coroutine_promise& promise() const noexcept
     {
-#if defined(OKAYLIB_COMPAT_STRATEGY_STD)
-        return std::noop_coroutine().promise();
-#else
         return static_frame_instance.noop_promise;
-#endif
     }
 
     // NOTE: subtle difference between us and std is that this function is not
     // constexpr. shouldn't really ever matter since it doesn't make sense to
     // call it from a constexpr context anyways, it's getting the address of a
     // static variable.
-    void* address() const noexcept
-    {
-#if defined(OKAYLIB_COMPAT_STRATEGY_STD)
-        return std::noop_coroutine().address();
-#else
-        return m_handle;
-#endif
-    }
+    void* address() const noexcept { return m_handle; }
 
   private:
     friend ok::coroutine_handle<noop_coroutine_promise>
     noop_coroutine() noexcept;
-
-#if !defined(OKAYLIB_COMPAT_STRATEGY_STD)
 
     struct frame_t
     {
@@ -293,37 +210,30 @@ template <> struct coroutine_handle<noop_coroutine_promise>
     };
 
     static frame_t static_frame_instance;
-#endif
 
     explicit coroutine_handle() noexcept = default;
 
-    void* m_handle =
-#if defined(OKAYLIB_COMPAT_STRATEGY_STD)
-        // unused in this case, we just create a noop_coroutine every time a
-        // member function is called
-        nullptr;
-#else
-        &static_frame_instance;
-#endif
+    void* m_handle = &static_frame_instance;
 };
 
 using noop_coroutine_handle = coroutine_handle<noop_coroutine_promise>;
 
-#if !defined(OKAYLIB_COMPAT_STRATEGY_STD)
 inline noop_coroutine_handle::frame_t
     noop_coroutine_handle::static_frame_instance{};
-#endif
 
 inline noop_coroutine_handle noop_coroutine() noexcept
 {
     return noop_coroutine_handle();
 }
+} // namespace std
+#endif
 
+namespace ok {
 struct suspend_always
 {
     constexpr bool await_ready() const noexcept { return false; }
 
-    constexpr void await_suspend(coroutine_handle<>) const noexcept {}
+    constexpr void await_suspend(std::coroutine_handle<>) const noexcept {}
 
     constexpr void await_resume() const noexcept {}
 };
@@ -332,7 +242,7 @@ struct suspend_never
 {
     constexpr bool await_ready() const noexcept { return true; }
 
-    constexpr void await_suspend(coroutine_handle<>) const noexcept {}
+    constexpr void await_suspend(std::coroutine_handle<>) const noexcept {}
 
     constexpr void await_resume() const noexcept {}
 };

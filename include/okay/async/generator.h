@@ -1,7 +1,7 @@
 #ifndef __OKAYLIB_ASYNC_GENERATOR_H__
 #define __OKAYLIB_ASYNC_GENERATOR_H__
 
-#include "okay/coroutine.h"
+#include "okay/detail/coroutine.h"
 #include "okay/opt.h"
 
 namespace ok {
@@ -9,7 +9,7 @@ template <typename T> class generator_t
 {
   public:
     struct promise_type;
-    using handle_type = ok::coroutine_handle<promise_type>;
+    using handle_type = std::coroutine_handle<promise_type>;
 
     struct promise_type
     {

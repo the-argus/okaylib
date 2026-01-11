@@ -17,7 +17,7 @@ TEST_SUITE("generator")
         generator_t ints = mkcoro();
 
         for (int i = 0; i < 10; ++i) {
-            REQUIRE(ints.next() == i);
+            REQUIRE((ints.next() == i));
         }
 
         REQUIRE(!ints.next());
