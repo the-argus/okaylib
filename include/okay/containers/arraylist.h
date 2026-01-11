@@ -520,7 +520,7 @@ class arraylist_t
     }
 
     template <typename... args_t>
-    constexpr auto append(args_t&&... args) OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr auto append(args_t&&... args) OKAYLIB_NOEXCEPT
         requires is_inplace_constructible_or_move_makeable_c<T, args_t...>
     {
         return insert_at(this->size(), stdc::forward<args_t>(args)...);

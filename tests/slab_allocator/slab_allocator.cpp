@@ -34,7 +34,7 @@ TEST_SUITE("block allocator")
                     },
                 .num_initial_blocks_per_blocksize = 1024,
             };
-            return ok::opt<slab_allocator_t<c_allocator_t, 3>>(
+            return ok::opt<slab_allocator_t<3>>(
                 slab_allocator::with_blocks(backing, options).unwrap());
         });
     }

@@ -11,7 +11,6 @@ namespace linked_blockpool_allocator {
 struct start_with_one_pool_t;
 }
 
-template <allocator_c allocator_impl_t = ok::allocator_t>
 class linked_blockpool_allocator_t : public ok::allocator_t
 {
   public:
@@ -19,13 +18,14 @@ class linked_blockpool_allocator_t : public ok::allocator_t
         alloc::feature_flags::can_predictably_realloc_in_place |
         alloc::feature_flags::can_reclaim;
 
-    linked_blockpool_allocator_t&
+    constexpr linked_blockpool_allocator_t&
     operator=(const linked_blockpool_allocator_t&) = delete;
-    linked_blockpool_allocator_t(const linked_blockpool_allocator_t&) = delete;
+    constexpr linked_blockpool_allocator_t(
+        const linked_blockpool_allocator_t&) = delete;
 
     friend class linked_blockpool_allocator::start_with_one_pool_t;
 
-    linked_blockpool_allocator_t&
+    constexpr linked_blockpool_allocator_t&
     operator=(linked_blockpool_allocator_t&& other) OKAYLIB_NOEXCEPT
     {
         if (&other == this) [[unlikely]]
@@ -39,41 +39,45 @@ class linked_blockpool_allocator_t : public ok::allocator_t
         return *this;
     }
 
-    linked_blockpool_allocator_t(linked_blockpool_allocator_t&& other)
+    constexpr linked_blockpool_allocator_t(linked_blockpool_allocator_t&& other)
         OKAYLIB_NOEXCEPT : m(other.m)
     {
         other.m.backing = nullptr;
         other.m.last_pool = nullptr;
     }
 
-    [[nodiscard]] size_t block_size() const noexcept { return m.blocksize; }
-    [[nodiscard]] size_t block_align() const noexcept
+    [[nodiscard]] constexpr size_t block_size() const noexcept
+    {
+        return m.blocksize;
+    }
+    [[nodiscard]] constexpr size_t block_align() const noexcept
     {
         return m.minimum_alignment;
     }
 
-    inline ~linked_blockpool_allocator_t() { destroy(); }
+    constexpr ~linked_blockpool_allocator_t() { destroy(); }
 
   protected:
-    [[nodiscard]] inline alloc::result_t<bytes_t>
+    [[nodiscard]] constexpr alloc::result_t<bytes_t>
     impl_allocate(const alloc::request_t&) OKAYLIB_NOEXCEPT final;
 
-    [[nodiscard]] inline alloc::feature_flags
+    [[nodiscard]] constexpr alloc::feature_flags
     impl_features() const OKAYLIB_NOEXCEPT final
     {
         return type_features;
     }
 
-    inline void impl_deallocate(void* memory,
-                                size_t size_hint) OKAYLIB_NOEXCEPT final;
+    constexpr void impl_deallocate(void* memory,
+                                   size_t size_hint) OKAYLIB_NOEXCEPT final;
 
-    [[nodiscard]] inline alloc::result_t<bytes_t>
+    [[nodiscard]] constexpr alloc::result_t<bytes_t>
     impl_reallocate(const alloc::reallocate_request_t&) OKAYLIB_NOEXCEPT final;
 
   private:
-    inline status<alloc::error> alloc_new_blockpool() OKAYLIB_NOEXCEPT;
+    [[nodiscard]] constexpr status<alloc::error>
+    alloc_new_blockpool() OKAYLIB_NOEXCEPT;
 
-    void destroy() noexcept
+    constexpr void destroy() noexcept
     {
         if (!m.backing) {
             return;
@@ -161,7 +165,7 @@ class linked_blockpool_allocator_t : public ok::allocator_t
         size_t minimum_alignment;
         // backing allocator, used to create new blockpools
         // this being null indicates moved allocator
-        allocator_impl_t* backing;
+        allocator_t* backing;
         // first free block, returned when allocate is called
         free_block_t* free_head;
         // how much to increase each new blockpool's block count by, with each
@@ -169,25 +173,24 @@ class linked_blockpool_allocator_t : public ok::allocator_t
         float growth_factor;
     } m;
 
-    linked_blockpool_allocator_t(M&& members) noexcept : m(members) {}
+    constexpr linked_blockpool_allocator_t(M&& members) noexcept : m(members) {}
 
-    bool pool_contains(const pool_t& pool, slice<const uint8_t> bytes) const
+    constexpr bool pool_contains(const pool_t& pool,
+                                 slice<const uint8_t> bytes) const
     {
         return ok_memcontains(.outer = pool.as_slice(m.blocksize),
                               .inner = bytes);
     }
 
-    bool pool_contains(const pool_t& pool, const void* memory) const
+    constexpr bool pool_contains(const pool_t& pool, const void* memory) const
     {
         return ok_memcontains(.outer = pool.as_slice(m.blocksize),
                               .inner = slice_from_one(*(const uint8_t*)memory));
     }
 };
 
-template <allocator_c allocator_impl_t>
-inline status<alloc::error>
-linked_blockpool_allocator_t<allocator_impl_t>::alloc_new_blockpool()
-    OKAYLIB_NOEXCEPT
+[[nodiscard]] constexpr status<alloc::error>
+linked_blockpool_allocator_t::alloc_new_blockpool() OKAYLIB_NOEXCEPT
 {
     __ok_internal_assert(m.last_pool);
     const size_t next_size = (m.last_pool->byte_size) * m.growth_factor;
@@ -242,10 +245,9 @@ linked_blockpool_allocator_t<allocator_impl_t>::alloc_new_blockpool()
     return alloc::error::success;
 }
 
-template <allocator_c allocator_impl_t>
-[[nodiscard]] inline alloc::result_t<bytes_t>
-linked_blockpool_allocator_t<allocator_impl_t>::impl_allocate(
-    const alloc::request_t& request) OKAYLIB_NOEXCEPT
+[[nodiscard]] constexpr alloc::result_t<bytes_t>
+linked_blockpool_allocator_t::impl_allocate(const alloc::request_t& request)
+    OKAYLIB_NOEXCEPT
 {
     if (request.num_bytes > m.blocksize ||
         request.alignment > m.minimum_alignment) [[unlikely]] {
@@ -273,9 +275,9 @@ linked_blockpool_allocator_t<allocator_impl_t>::impl_allocate(
     return ok::raw_slice(*reinterpret_cast<uint8_t*>(free), m.blocksize);
 }
 
-template <allocator_c allocator_impl_t>
-inline void linked_blockpool_allocator_t<allocator_impl_t>::impl_deallocate(
-    void* memory, size_t size_hint) OKAYLIB_NOEXCEPT
+constexpr void
+linked_blockpool_allocator_t::impl_deallocate(void* memory,
+                                              size_t size_hint) OKAYLIB_NOEXCEPT
 {
     // do a linear search through all pools, looking for the one that contains
     // the freed memory
@@ -311,9 +313,8 @@ inline void linked_blockpool_allocator_t<allocator_impl_t>::impl_deallocate(
     m.free_head = new_free;
 }
 
-template <allocator_c allocator_impl_t>
-[[nodiscard]] inline alloc::result_t<bytes_t>
-linked_blockpool_allocator_t<allocator_impl_t>::impl_reallocate(
+[[nodiscard]] constexpr alloc::result_t<bytes_t>
+linked_blockpool_allocator_t::impl_reallocate(
     const alloc::reallocate_request_t& request) OKAYLIB_NOEXCEPT
 {
 #ifndef NDEBUG
@@ -370,28 +371,23 @@ struct start_with_one_pool_t
     static constexpr auto implemented_make_function =
         ok::implemented_make_function::make_into_uninit;
 
-    template <typename allocator_impl_t_ref, typename...>
-    using associated_type = linked_blockpool_allocator_t<
-        stdc::remove_reference_t<allocator_impl_t_ref>>;
+    using associated_type = linked_blockpool_allocator_t;
 
-    template <allocator_c allocator_impl_t>
     [[nodiscard]] constexpr auto
-    operator()(allocator_impl_t& allocator,
+    operator()(allocator_t& allocator,
                const options_t& options) const OKAYLIB_NOEXCEPT
     {
         return ok::make(*this, allocator, options);
     }
 
-    template <allocator_c allocator_impl_t>
     constexpr alloc::error
-    make_into_uninit(linked_blockpool_allocator_t<allocator_impl_t>& uninit,
-                     allocator_impl_t& allocator,
+    make_into_uninit(linked_blockpool_allocator_t& uninit,
+                     allocator_t& allocator,
                      const options_t& options) const OKAYLIB_NOEXCEPT
     {
-        using free_block_t = typename linked_blockpool_allocator_t<
-            allocator_impl_t>::free_block_t;
-        using pool_t =
-            typename linked_blockpool_allocator_t<allocator_impl_t>::pool_t;
+        using free_block_t =
+            typename linked_blockpool_allocator_t::free_block_t;
+        using pool_t = typename linked_blockpool_allocator_t::pool_t;
         const size_t actual_minimum_alignment =
             ok::max(options.minimum_alignment, alignof(free_block_t));
         const size_t actual_blocksize = runtime_round_up_to_multiple_of(
@@ -442,8 +438,8 @@ struct start_with_one_pool_t
         __ok_internal_assert(pool->num_blocks >=
                              options.num_blocks_in_first_pool);
 
-        using return_type = linked_blockpool_allocator_t<allocator_impl_t>;
-        using M = typename linked_blockpool_allocator_t<allocator_impl_t>::M;
+        using return_type = linked_blockpool_allocator_t;
+        using M = typename linked_blockpool_allocator_t::M;
         ok::stdc::construct_at(
             ok::addressof(uninit),
             return_type(M{

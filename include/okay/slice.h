@@ -47,7 +47,8 @@ constexpr const_bit_slice_t raw_bit_slice(slice<const uint8_t> bytes,
 /// Create a slice with no elements and no data, used for one (1) purpose which
 /// is to allow arraylist to always return a valid slice even when it has no
 /// items
-template <typename viewed_t> slice<viewed_t> make_null_slice() OKAYLIB_NOEXCEPT;
+template <typename viewed_t>
+constexpr slice<viewed_t> make_null_slice() OKAYLIB_NOEXCEPT;
 
 /// A non-owning reference to a section of a contiguously allocated array of
 /// type T. Intended to be passed around like a pointer.
@@ -108,7 +109,7 @@ template <typename viewed_t> class slice
     unchecked_address_of_first_item() const OKAYLIB_NOEXCEPT
     {
         __ok_assert(
-            m_elements,
+            m_data,
             "Attempted to call unchecked_address_of_first_item() but the "
             "slice points to no valid data.");
         return m_data;
@@ -281,7 +282,8 @@ template <typename viewed_t> class slice
 
     template <typename T>
     friend slice<T> ok::raw_slice(T& data, size_t size) OKAYLIB_NOEXCEPT;
-    template <typename T> friend slice<T> make_null_slice() OKAYLIB_NOEXCEPT;
+    template <typename T>
+    friend constexpr slice<T> make_null_slice() OKAYLIB_NOEXCEPT;
 
 #if defined(OKAYLIB_USE_FMT)
     friend struct fmt::formatter<slice>;
@@ -792,7 +794,7 @@ template <typename viewed_t>
 }
 
 template <typename viewed_t>
-[[nodiscard]] slice<viewed_t> make_null_slice() OKAYLIB_NOEXCEPT
+[[nodiscard]] constexpr slice<viewed_t> make_null_slice() OKAYLIB_NOEXCEPT
 {
     return slice<viewed_t>(typename slice<viewed_t>::null_slice_tag{});
 }

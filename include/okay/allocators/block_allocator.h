@@ -44,7 +44,6 @@ free_everything_in_block_allocator_buffer(bytes_t memory, size_t blocksize,
 } // namespace detail
 } // namespace block_allocator
 
-template <allocator_c allocator_impl_t>
 class block_allocator_t : public ok::allocator_t
 {
   private:
@@ -59,34 +58,27 @@ class block_allocator_t : public ok::allocator_t
         size_t blocksize;
         size_t minimum_alignment;
         free_block_t* free_head;
-        allocator_impl_t* backing;
+        allocator_t* backing;
     } m;
 
-    void destroy() OKAYLIB_NOEXCEPT
+    constexpr void destroy() OKAYLIB_NOEXCEPT
     {
         if (!m.backing)
             return;
 
-        m.backing->deallocate(m.memory.unchecked_address_of_first_item());
+        if (!m.memory.is_empty()) [[likely]]
+            m.backing->deallocate(m.memory.unchecked_address_of_first_item());
     }
 
-    block_allocator_t(members_t&& m) OKAYLIB_NOEXCEPT
+    constexpr block_allocator_t(members_t&& m) OKAYLIB_NOEXCEPT
         : m(stdc::forward<members_t>(m))
     {
     }
 
-    inline alloc::error grow() OKAYLIB_NOEXCEPT;
+    constexpr alloc::error grow() OKAYLIB_NOEXCEPT;
 
-  public:
-    static constexpr alloc::feature_flags type_features =
-        alloc::feature_flags::can_reclaim |
-        alloc::feature_flags::can_predictably_realloc_in_place;
-
-    friend class block_allocator::detail::alloc_initial_buf_t;
-
-    block_allocator_t() = delete;
-    block_allocator_t(const block_allocator::fixed_buffer_options_t& options)
-        OKAYLIB_NOEXCEPT
+    constexpr members_t members_from_fixed_buffer_options(
+        const block_allocator::fixed_buffer_options_t& options)
     {
         const size_t actual_minimum_alignment =
             ok::max(options.minimum_alignment, alignof(free_block_t));
@@ -99,7 +91,7 @@ class block_allocator_t : public ok::allocator_t
                          "Fixed buffer given to block allocator not large "
                          "enough to fit any blocks, it will OOM immediately.");
 
-        m = {
+        return members_t{
             .memory = options.fixed_buffer,
             .blocksize = actual_blocksize,
             .minimum_alignment = actual_minimum_alignment,
@@ -110,13 +102,29 @@ class block_allocator_t : public ok::allocator_t
         };
     }
 
-    block_allocator_t(block_allocator_t&& other) OKAYLIB_NOEXCEPT : m(other.m)
+  public:
+    static constexpr alloc::feature_flags type_features =
+        alloc::feature_flags::can_reclaim |
+        alloc::feature_flags::can_predictably_realloc_in_place;
+
+    friend class block_allocator::detail::alloc_initial_buf_t;
+
+    block_allocator_t() = delete;
+    constexpr block_allocator_t(
+        const block_allocator::fixed_buffer_options_t& options) OKAYLIB_NOEXCEPT
+        : m(members_from_fixed_buffer_options(options))
+    {
+    }
+
+    constexpr block_allocator_t(block_allocator_t&& other) OKAYLIB_NOEXCEPT
+        : m(other.m)
     {
         other.m.free_head = nullptr; // not really necessary
         other.m.backing = nullptr;
     }
 
-    block_allocator_t& operator=(block_allocator_t&& other) OKAYLIB_NOEXCEPT
+    constexpr block_allocator_t&
+    operator=(block_allocator_t&& other) OKAYLIB_NOEXCEPT
     {
         if (&other == this) [[unlikely]]
             return *this;
@@ -127,48 +135,48 @@ class block_allocator_t : public ok::allocator_t
         return *this;
     }
 
-    block_allocator_t& operator=(const block_allocator_t&) = delete;
-    block_allocator_t(const block_allocator_t&) = delete;
+    constexpr block_allocator_t& operator=(const block_allocator_t&) = delete;
+    constexpr block_allocator_t(const block_allocator_t&) = delete;
 
-    ~block_allocator_t() OKAYLIB_NOEXCEPT_FORCE { destroy(); }
+    constexpr ~block_allocator_t() OKAYLIB_NOEXCEPT_FORCE { destroy(); }
 
-    size_t block_size() const noexcept { return m.blocksize; }
-    size_t block_align() const noexcept { return m.minimum_alignment; }
+    constexpr size_t block_size() const noexcept { return m.blocksize; }
+    constexpr size_t block_align() const noexcept
+    {
+        return m.minimum_alignment;
+    }
 
-    bool contains(const bytes_t& bytes) const noexcept
+    constexpr bool contains(const bytes_t& bytes) const noexcept
     {
         return ok_memcontains(.outer = m.memory, .inner = bytes);
     }
 
-    bool contains(const void* memory) const noexcept
+    constexpr bool contains(const void* memory) const noexcept
     {
         return ok_memcontains(.outer = m.memory,
                               .inner = slice_from_one(*(uint8_t*)memory));
     }
 
-    inline void clear() OKAYLIB_NOEXCEPT;
+    constexpr void clear() OKAYLIB_NOEXCEPT;
 
   protected:
-    [[nodiscard]] inline alloc::result_t<bytes_t>
+    [[nodiscard]] constexpr alloc::result_t<bytes_t>
     impl_allocate(const alloc::request_t&) OKAYLIB_NOEXCEPT final;
 
-    [[nodiscard]] inline alloc::feature_flags
+    [[nodiscard]] constexpr alloc::feature_flags
     impl_features() const OKAYLIB_NOEXCEPT final
     {
         return type_features;
     }
 
-    inline void impl_deallocate(void*, size_t size_hint) OKAYLIB_NOEXCEPT final;
+    constexpr void impl_deallocate(void*,
+                                   size_t size_hint) OKAYLIB_NOEXCEPT final;
 
-    [[nodiscard]] inline alloc::result_t<bytes_t>
+    [[nodiscard]] constexpr alloc::result_t<bytes_t>
     impl_reallocate(const alloc::reallocate_request_t&) OKAYLIB_NOEXCEPT final;
 };
 
-block_allocator_t(const block_allocator::fixed_buffer_options_t& static_buffer)
-    -> block_allocator_t<ok::allocator_t>;
-
-template <allocator_c allocator_impl_t>
-inline alloc::error block_allocator_t<allocator_impl_t>::grow() OKAYLIB_NOEXCEPT
+constexpr alloc::error block_allocator_t::grow() OKAYLIB_NOEXCEPT
 {
     __ok_internal_assert(!m.free_head);
     if (!m.backing)
@@ -206,10 +214,9 @@ inline alloc::error block_allocator_t<allocator_impl_t>::grow() OKAYLIB_NOEXCEPT
     return ok::make_success<alloc::error>();
 }
 
-template <allocator_c allocator_impl_t>
-[[nodiscard]] inline alloc::result_t<bytes_t>
-block_allocator_t<allocator_impl_t>::impl_allocate(
-    const alloc::request_t& request) OKAYLIB_NOEXCEPT
+[[nodiscard]] constexpr alloc::result_t<bytes_t>
+block_allocator_t::impl_allocate(const alloc::request_t& request)
+    OKAYLIB_NOEXCEPT
 {
     if (!m.free_head) [[unlikely]]
         if (auto err = grow(); !ok::is_success(err)) [[unlikely]]
@@ -234,17 +241,16 @@ block_allocator_t<allocator_impl_t>::impl_allocate(
     return output_memory;
 }
 
-template <allocator_c allocator_impl_t>
-inline void block_allocator_t<allocator_impl_t>::clear() OKAYLIB_NOEXCEPT
+constexpr void block_allocator_t::clear() OKAYLIB_NOEXCEPT
 {
     m.free_head =
         block_allocator::detail::free_everything_in_block_allocator_buffer<
             free_block_t>(m.memory, m.blocksize);
 }
 
-template <allocator_c allocator_impl_t>
-inline void block_allocator_t<allocator_impl_t>::impl_deallocate(
-    void* memory, size_t /* size_hint */) OKAYLIB_NOEXCEPT
+constexpr void
+block_allocator_t::impl_deallocate(void* memory,
+                                   size_t /* size_hint */) OKAYLIB_NOEXCEPT
 {
     __ok_assert(this->contains(memory),
                 "Attempt to free bytes from block allocator which do not all "
@@ -263,10 +269,9 @@ inline void block_allocator_t<allocator_impl_t>::impl_deallocate(
     free_block->prev = stdc::exchange(m.free_head, free_block);
 }
 
-template <allocator_c allocator_impl_t>
-[[nodiscard]] inline alloc::result_t<bytes_t>
-block_allocator_t<allocator_impl_t>::impl_reallocate(
-    const alloc::reallocate_request_t& request) OKAYLIB_NOEXCEPT
+[[nodiscard]] constexpr alloc::result_t<bytes_t>
+block_allocator_t::impl_reallocate(const alloc::reallocate_request_t& request)
+    OKAYLIB_NOEXCEPT
 {
     __ok_assert(this->contains(request.memory),
                 "Attempt to realloc bytes from block allocator which do not "
@@ -309,25 +314,20 @@ struct alloc_initial_buf_t
     static constexpr auto implemented_make_function =
         ok::implemented_make_function::make_into_uninit;
 
-    template <typename allocator_impl_t_cref, typename...>
-    using associated_type =
-        block_allocator_t<ok::remove_cvref_t<allocator_impl_t_cref>>;
+    using associated_type = block_allocator_t;
 
-    template <allocator_c allocator_impl_t>
     [[nodiscard]] constexpr auto operator()(
-        allocator_impl_t& allocator,
+        allocator_t& allocator,
         const alloc_initial_buf_options_t& options) const OKAYLIB_NOEXCEPT
     {
         return ok::make(*this, allocator, options);
     }
 
-    template <allocator_c allocator_impl_t>
     [[nodiscard]] constexpr alloc::error make_into_uninit(
-        ok::block_allocator_t<allocator_impl_t>& uninit,
-        allocator_impl_t& allocator,
+        ok::block_allocator_t& uninit, allocator_t& allocator,
         const alloc_initial_buf_options_t& options) const OKAYLIB_NOEXCEPT
     {
-        using block_allocator_t = ok::block_allocator_t<allocator_impl_t>;
+        using block_allocator_t = ok::block_allocator_t;
         using free_block_t = typename block_allocator_t::free_block_t;
         const size_t actual_minimum_alignment =
             ok::max(options.minimum_alignment, alignof(free_block_t));

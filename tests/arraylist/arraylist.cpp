@@ -503,8 +503,8 @@ TEST_SUITE("arraylist")
             // around properly
             alist[0] = arraylist::empty<int>(failing);
             REQUIRE(alist[0].is_empty());
-            alist[0].append(0);
-            alist[0].append(1);
+            alist[0].append(0).or_panic();
+            alist[0].append(1).or_panic();
             REQUIRE(!alist[0].is_empty());
 
             REQUIRE(alist.size() == 31);
@@ -590,10 +590,10 @@ TEST_SUITE("arraylist")
 
             for (size_t i = 0; i < initial_size; ++i) {
                 REQUIRE(alist.size() == i);
-                alist.append(i);
+                alist.append(i).or_panic();
             }
             REQUIRE(alist.capacity() == initial_size);
-            alist.append(int(initial_size));
+            alist.append(int(initial_size)).or_panic();
             REQUIRE(alist.size() == initial_size + 1);
             REQUIRE(alist.capacity() == size_t(std::round(4 * grow_factor)));
         }
@@ -722,8 +722,10 @@ TEST_SUITE("arraylist")
 
             // append three arraylists, each a copy of `initial`
             for (size_t i = 0; i < 3; ++i) {
-                alist.append(arraylist::copy_items_from_iterator, backing,
-                             iter(maybe_undefined_array_t{1, 2, 3}));
+                alist
+                    .append(arraylist::copy_items_from_iterator, backing,
+                            iter(maybe_undefined_array_t{1, 2, 3}))
+                    .or_panic();
             }
             REQUIRE(alist.size() == 3);
 
@@ -816,7 +818,7 @@ TEST_SUITE("arraylist")
         REQUIRE(alist.is_empty());
 
         indices().take_at_most(100).for_each(
-            [&](size_t i) { alist.append(i); });
+            [&](size_t i) { alist.append(i).or_panic(); });
 
         backing.deallocate(items.unchecked_address_of_first_item());
 

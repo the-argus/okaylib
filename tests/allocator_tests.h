@@ -333,7 +333,6 @@ template <ok::allocator_c allocator_t> struct allocator_tests
             case allocator_test_mode::recreate_each_test:
                 [[fallthrough]];
             case allocator_test_mode::keep_allocator_throughout:
-                // only do dynamic dispatch if type seems like it supports it
                 if constexpr (ok::detail::is_derived_from_c<allocator_t,
                                                             ok::allocator_t>) {
                     auto status =

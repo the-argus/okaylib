@@ -14,7 +14,7 @@ TEST_SUITE("c_allocator")
     {
         ok::zeroed_array_t<u8, 1024 * 5100> bytes;
         arena_t arena(bytes);
-        static_assert(ok::allocator_c<arena_t<>>);
+        static_assert(ok::allocator_c<arena_t>);
         run_allocator_tests_static_and_dynamic_dispatch([&] {
             arena.clear();
             auto out = linked_blockpool_allocator::start_with_one_pool(
@@ -24,7 +24,7 @@ TEST_SUITE("c_allocator")
                            .num_blocks_in_first_pool = 5000,
                        });
             OKAYLIB_REQUIRE_RES_WITH_BACKTRACE(out);
-            return ok::opt<linked_blockpool_allocator_t<arena_t<>>>(
+            return ok::opt<linked_blockpool_allocator_t>(
                 std::move(out.unwrap()));
         });
     }

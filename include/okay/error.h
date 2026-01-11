@@ -435,12 +435,6 @@ __OK_RES_REQUIRES_CLAUSE class res<
         }
     }
 
-    constexpr void or_panic() const OKAYLIB_NOEXCEPT
-    {
-        if (!is_success()) [[unlikely]]
-            ::abort();
-    }
-
     [[nodiscard]] constexpr const status_t& status() const& OKAYLIB_NOEXCEPT
         requires status_object_c<status_t>
     {

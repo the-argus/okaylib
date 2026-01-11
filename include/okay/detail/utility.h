@@ -4,6 +4,12 @@
 #include "okay/detail/type_traits.h"
 #include <cstddef>
 
+#if defined(OKAYLIB_COMPAT_STRATEGY_STD)
+#include <bit> // this header defines stdc::bit_cast
+#elif defined(OKAYLIB_COMPAT_STRATEGY_PURE_CPP)
+#include <cstring> // uses memcpy to polyfill stdc::bit_cast
+#endif
+
 namespace ok::stdc {
 
 template <typename T>
@@ -77,6 +83,29 @@ template <typename T, typename U = T>
     return __builtin_is_constant_evaluated();
 #elif defined(OKAYLIB_COMPAT_STRATEGY_PURE_CPP)
     return false;
+#endif
+}
+
+template <typename to_t, typename from_t>
+[[nodiscard]]
+constexpr to_t bit_cast(const from_t& from) noexcept
+    requires(sizeof(to_t) == sizeof(from_t)) &&
+            stdc::is_trivially_copyable_v<to_t> &&
+            stdc::is_trivially_copyable_v<from_t>
+{
+#if defined(OKAYLIB_COMPAT_STRATEGY_STD)
+    return ::std::bit_cast<to_t>(from);
+#elif defined(OKAYLIB_COMPAT_STRATEGY_NO_STD)
+    return __builtin_bit_cast(to_t, from);
+#elif defined(OKAYLIB_COMPAT_STRATEGY_PURE_CPP)
+    static_assert(
+        stdc::is_trivially_constructible_v<to_t>,
+        "pure cpp implementation of bit_cast additionally requires that the "
+        "type being cast to is trivially default constructible.");
+
+    to_t dst;
+    ::memcpy(&dst, &from, sizeof(to_t));
+    return dst;
 #endif
 }
 

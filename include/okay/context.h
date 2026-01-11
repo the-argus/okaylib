@@ -2,68 +2,82 @@
 #define __OKAYLIB_CONTEXT_H__
 
 #include "okay/allocators/allocator.h"
+#include "okay/allocators/arena.h"
 #include "okay/allocators/c_allocator.h"
-#include "okay/allocators/wrappers.h"
 
 namespace ok {
 
 class context_switch_t;
-const char* context_error_message();
-void set_context_error_message(const char*);
+
+struct context_switch_options_t
+{
+    // if any of these fields are null, their values will be taken from the
+    // current context, before the switch
+    ok::opt<allocator_t&> new_allocator;
+    ok::opt<allocator_t&> new_task_allocator;
+    ok::opt<const char*> new_error_message;
+};
 
 class context_t
 {
   public:
     context_t() = delete;
-    inline constexpr context_t(allocator_t& allocator) : m_allocator(allocator)
+    constexpr context_t(allocator_t& allocator, allocator_t& task_allocator,
+                        const char* error_message)
+        : m_allocator(ok::addressof(allocator)),
+          m_task_allocator(ok::addressof(task_allocator)),
+          m_error_message(error_message)
     {
     }
 
-    inline allocator_t* allocator() const noexcept
-    {
-        return ok::addressof(m_allocator);
-    }
+    allocator_t& allocator() const noexcept { return *m_allocator; }
 
-    friend const char* ok::context_error_message();
-    friend void ok::set_context_error_message(const char*);
+    allocator_t& task_allocator() const noexcept { return *m_task_allocator; }
+
     friend context_switch_t;
 
+  protected:
+    /// This function is called by a context_switch_t when an inner context
+    /// gets destroyed, and we want to return to us
+    virtual void restore_from(context_t& inner_context) OKAYLIB_NOEXCEPT;
+
   private:
-    allocator_t& m_allocator;
-    const char* error_message = nullptr;
+    allocator_t* m_allocator;
+    allocator_t* m_task_allocator;
+    const char* m_error_message = nullptr;
 };
 
-inline alloc::emulate_expand_front<c_allocator_t> __default_global_allocator;
-inline context_t __default_global_context{__default_global_allocator};
-static_assert(decltype(__default_global_allocator)::type_features &
-                  alloc::feature_flags::is_threadsafe,
-              "every part of default context must be threadsafe because all "
-              "threads are initialized to use it.");
+namespace detail {
+inline c_allocator_t __default_global_allocator;
+inline arena_t __default_task_allocator{__default_global_allocator};
+inline context_t __default_global_context{
+    __default_global_allocator,
+    __default_task_allocator,
+    nullptr,
+};
 
 // name of this variable is implementation defined
 inline thread_local context_t* __context =
     ok::addressof(__default_global_context);
+} // namespace detail
 
-inline context_t& context() noexcept { return *__context; }
+inline context_t& context() noexcept { return *detail::__context; }
 
 class context_switch_t
 {
-    inline context_switch_t(context_t ctx) noexcept
+    context_switch_t(context_t ctx) noexcept
         : m_context(ctx), m_previous_context(context())
     {
-        __context = &m_context;
+        detail::__context = ok::addressof(m_context);
     }
 
-    constexpr ~context_switch_t() noexcept
+    ~context_switch_t() OKAYLIB_NOEXCEPT_FORCE
     {
-        // check if somebody set and forgot to restore the context
-        assert(ok::addressof(m_context) == ok::addressof(context()));
-        const char* msg = __context->error_message;
-        // only propagate error message upwards if one exists, dont overwrite
-        // parent with null
-        if (msg) [[unlikely]]
-            m_previous_context.error_message = msg;
-        __context = &m_previous_context;
+        __ok_assert(
+            ok::addressof(m_context) == ok::addressof(context()),
+            "unexpected context found when destroying a context_switch_t");
+        m_previous_context.restore_from(m_context);
+        detail::__context = ok::addressof(m_previous_context);
     }
 
   private:
@@ -71,12 +85,14 @@ class context_switch_t
     context_t& m_previous_context;
 };
 
-inline const char* context_error_message() { return context().error_message; }
-inline void set_context_error_message(const char* error)
+inline void context_t::restore_from(context_t& inner_context) OKAYLIB_NOEXCEPT
 {
-    context().error_message = error;
+    // propagate const char* error message upwards- if an inner scope
+    // experienced an error, we want to know about it
+    const char* inner_msg = detail::__context->m_error_message;
+    if (inner_msg) [[unlikely]]
+        this->m_error_message = inner_msg;
 }
-
 } // namespace ok
 
 #endif

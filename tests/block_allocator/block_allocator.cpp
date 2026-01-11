@@ -21,8 +21,7 @@ TEST_SUITE("block allocator")
                              .num_bytes_per_block = 1024,
                              .minimum_alignment = 16,
                          });
-            return ok::opt<block_allocator_t<ok::c_allocator_t>>(
-                std::move(block.unwrap()));
+            return ok::opt<block_allocator_t>(std::move(block.unwrap()));
         });
     }
 }

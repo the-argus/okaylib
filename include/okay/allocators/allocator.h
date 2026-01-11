@@ -282,8 +282,9 @@ class allocator_t
                     "Attempt to push destructor to a non-arena allocator, "
                     "indicates a possible resource leak.");
         if (features & alloc::feature_flags::keeps_destructor_list) {
+            constexpr auto destroy = [](void* v) { static_cast<T*>(v)->~T(); };
             return impl_arena_push_destructor({
-                .destructor = &T::~T,
+                .destructor = destroy,
                 .object = ok::addressof(allocated),
             });
         }
@@ -379,8 +380,20 @@ class allocator_t
                     "Misaligned memory produced by allocator");
 
         actual_t* made = reinterpret_cast<actual_t*>(object_start);
+
+        if constexpr (!stdc::is_trivially_destructible_v<actual_t>) {
+            if (features() & alloc::feature_flags::keeps_destructor_list) {
+                const auto err = arena_push_destructor(*made);
+                if (!ok::is_success(err)) {
+                    deallocate(object_start);
+                    return return_type(err);
+                }
+            }
+        }
+
         ok::make_into_uninitialized<actual_t>(*made,
                                               stdc::forward<args_t>(args)...);
+
         return return_type(*made);
     }
 
@@ -391,47 +404,64 @@ class allocator_t
         void* object;
     };
 
-    [[nodiscard]] virtual alloc::result_t<bytes_t>
+    [[nodiscard]] constexpr virtual alloc::result_t<bytes_t>
     impl_allocate(const alloc::request_t&) OKAYLIB_NOEXCEPT = 0;
 
-    [[nodiscard]] virtual alloc::feature_flags
+    [[nodiscard]] constexpr virtual alloc::feature_flags
     impl_features() const OKAYLIB_NOEXCEPT = 0;
 
-    virtual ok::status<alloc::error>
+    constexpr virtual ok::status<alloc::error>
     impl_arena_push_destructor(destructor_t) OKAYLIB_NOEXCEPT
     {
-        __ok_assert(false,
-                    "called an unimplemented impl_arena_push_destructor. "
-                    "probably indicates marking a type as being an arena with "
-                    "features(), but then not providing an override for the "
-                    "impl_arena_push_destructor function.");
+#ifndef NDEBUG
+        if (!stdc::is_constant_evaluated()) {
+            __ok_assert(
+                false,
+                "called an unimplemented impl_arena_push_destructor. "
+                "probably indicates marking a type as being an arena with "
+                "features(), but then not providing an override for the "
+                "impl_arena_push_destructor function.");
+        }
+#endif
         return alloc::error::unsupported;
     }
 
-    [[nodiscard]] virtual void* impl_arena_new_scope() OKAYLIB_NOEXCEPT
+    [[nodiscard]] constexpr virtual void*
+    impl_arena_new_scope() OKAYLIB_NOEXCEPT
     {
-        __ok_assert(false,
-                    "called unimplemented impl_arena_new_scope, indicates an "
-                    "allocator which is marked as being an arena but does not "
-                    "implement new_scope and restore_scope as it needs to.");
+#ifndef NDEBUG
+        if (!stdc::is_constant_evaluated()) {
+            __ok_assert(
+                false,
+                "called unimplemented impl_arena_new_scope, indicates an "
+                "allocator which is marked as being an arena but does not "
+                "implement new_scope and restore_scope as it needs to.");
+        }
+#endif
         return nullptr;
     }
 
-    virtual void impl_arena_restore_scope(void* handle) OKAYLIB_NOEXCEPT
+    constexpr virtual void
+    impl_arena_restore_scope(void* handle) OKAYLIB_NOEXCEPT
     {
-        __ok_assert(false,
-                    "called unimplemented impl_arena_new_scope, indicates an "
-                    "allocator which is marked as being an arena but does not "
-                    "implement new_scope and restore_scope as it needs to.");
+#ifndef NDEBUG
+        if (!stdc::is_constant_evaluated()) {
+            __ok_assert(
+                false,
+                "called unimplemented impl_arena_new_scope, indicates an "
+                "allocator which is marked as being an arena but does not "
+                "implement new_scope and restore_scope as it needs to.");
+        }
+#endif
     }
 
     /// NOTE: the implementation of this is not required to check for nullptr,
     /// that should be handled by the deallocate() wrapper that users actually
     /// call
-    virtual void impl_deallocate(void* memory,
-                                 size_t size_hint) OKAYLIB_NOEXCEPT = 0;
+    constexpr virtual void
+    impl_deallocate(void* memory, size_t size_hint) OKAYLIB_NOEXCEPT = 0;
 
-    [[nodiscard]] virtual alloc::result_t<bytes_t> impl_reallocate(
+    [[nodiscard]] constexpr virtual alloc::result_t<bytes_t> impl_reallocate(
         const alloc::reallocate_request_t& options) OKAYLIB_NOEXCEPT = 0;
 };
 
