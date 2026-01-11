@@ -251,6 +251,12 @@ class allocator_t
             __ok_assert(false, "invalid reallocate_request_t");
             return alloc::error::usage;
         }
+        if ((options.flags & alloc::realloc_flags::in_place_orelse_fail) &&
+            !(features() &
+              alloc::feature_flags::can_predictably_realloc_in_place))
+            [[unlikely]] {
+            return alloc::error::couldnt_expand_in_place;
+        }
         return impl_reallocate(options);
     }
 

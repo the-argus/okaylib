@@ -273,7 +273,10 @@ template <ok::allocator_c allocator_t> struct allocator_tests
                 .flags = alloc::realloc_flags::in_place_orelse_fail,
             });
 
-            REQUIRE(reallocation.status() == alloc::error::unsupported);
+            // NOTE: when an allocator doesn't support expanding in place, it
+            // just pretends that it can, but it failed.
+            REQUIRE(reallocation.status() ==
+                    alloc::error::couldnt_expand_in_place);
         }
         return ok::make_success<ok::alloc::error>();
     }

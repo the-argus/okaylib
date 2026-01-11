@@ -81,13 +81,6 @@ inline void c_allocator_t::impl_deallocate(void* memory, size_t /* size_hint */)
     const alloc::reallocate_request_t& options) OKAYLIB_NOEXCEPT
 {
     using namespace alloc;
-    __ok_usage_error(
-        options.is_valid(),
-        "invalid reallocate request. validation check bypassed. did "
-        "you call impl_reallocate() directly?");
-    if (options.flags & realloc_flags::in_place_orelse_fail) [[unlikely]] {
-        return error::unsupported;
-    }
 
     const bool zeroed = !(options.flags & realloc_flags::leave_nonzeroed);
 
