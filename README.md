@@ -21,10 +21,8 @@ support for build systems that people actually use, like CMake) are a ways off.
 
 ## examples
 
-A demonstration of `ok::enumerate`, `ok::for_each` and the `ok::slice`. All C++20.
-
 ```cpp
-int main(int argc, char* argv[])
+int main(int argc, const char* argv[])
 {
     using namespace ok;
     slice<const char*> arguments = raw_slice(*argv, size_t(argc));
@@ -34,9 +32,9 @@ int main(int argc, char* argv[])
         fmt::println("Argument {}: {}", index, arg);
     }
 
-    // skip arguments that start with "skip"
+    // skip arguments that start with the word "skip", to demonstrate .keep_if()
     constexpr auto does_not_start_with_skip = [](const char* str){
-        return !ok::ascii_view{str}.startswith("skip");
+        return !ascii_view::from_cstring(str).startswith("skip");
     };
     for (auto& [ arg, index ] : iter(arguments).keep_if(does_not_start_with_skip).enumerate()) {
         fmt::println("Argument {}: {}", index, arg);
@@ -52,21 +50,30 @@ int main()
 {
     using namespace ok;
     c_allocator_t working_allocator;
-    ooming_allocator_t failing_allocator; // for testing purposes
 
-    // no need to do error handling with `arraylist::empty` constructor, which does no allocation
-    arraylist_t alist = arraylist::empty<arraylist_t<int, ooming_allocator_t>>(working_allocator);
+    // we are going to allocate out this memory, but it's not enough, on
+    // purpose, to demonstrate OOM error handling
+    maybe_undefined_array_t<uint8_t, 2> raw_bytes;
+
+    // create an arena which allocates into the 2 byte stack buffer given above
+    arena_t arena(raw_bytes);
+
+    // create an arraylist of arraylists which contain ints
+    arraylist_t alist =
+        arraylist::empty<arraylist_t<int, arena_t<>>>(working_allocator);
 
     // to demonstrate that c_allocator_t works, just allocate some unused space
-    const auto status = alist.increase_capacity_by(10).or_panic();
+    alist.increase_capacity_by_at_least(10).or_panic();
 
-    // arraylist has a constructor, `arraylist::copy_items_from_range`. Pass in
-    // that constructor followed by its arguments (the allocator that the sub-arraylist
-    // should use, and the items to copy into it).
-    const auto append_status =
-        alist.append(arraylist::copy_items_from_range, failing_allocator, array_t{1, 2, 3, 4, 5, 6});
+    // arraylist has a constructor, `arraylist::copy_items_from_iterator`. Pass
+    // in that constructor followed by its arguments (the allocator that the
+    // sub-arraylist should use, and the items to copy into it).
+    constexpr auto initial_contents = maybe_undefined_array_t{1, 2, 3, 4, 5, 6};
+    const auto append_status = alist.append(arraylist::copy_items_from_iterator,
+                                            arena, iter(initial_contents));
 
-    // The above operation should fail because we gave the sub arraylist the failing allocator.
+    // The above operation should fail because we gave the sub arraylist the
+    // arena with not enough space to allocate
     fmt::println("Tried to create a new array inside of `alist`, got return code {}", append_status);
     fmt::println("Size of `alist`: {}", alist.size());
 }
