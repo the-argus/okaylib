@@ -89,6 +89,7 @@ Size of `alist`: 0
 ## todo
 
 - [x] polymorphic allocator interface
+- [ ] remove expand_front and co from allocator interface
 - [x] arena allocator
 - [ ] linked arena allocator (arena but it uses a backward linked list of separate
       blocks)
