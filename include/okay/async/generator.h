@@ -2,12 +2,17 @@
 #define __OKAYLIB_ASYNC_GENERATOR_H__
 
 #include "okay/detail/coroutine.h"
+#include "okay/iterables/iterables.h"
 #include "okay/opt.h"
 
 namespace ok {
 template <typename T> class generator_t
 {
   public:
+    // ok::opt does not support rvalue references, also doing this is probably a
+    // bad idea
+    static_assert(!stdc::is_rvalue_reference_v<T>);
+
     struct promise_type;
     using handle_type = std::coroutine_handle<promise_type>;
 
@@ -37,7 +42,7 @@ template <typename T> class generator_t
         }
     };
 
-    constexpr ok::opt<T> next()
+    constexpr ok::opt<T> next() OKAYLIB_NOEXCEPT
     {
         if (m_handle.done())
             return {};
@@ -49,12 +54,57 @@ template <typename T> class generator_t
 
     generator_t(handle_type handle) : m_handle(handle) {}
 
-    ~generator_t() { m_handle.destroy(); }
+    ~generator_t()
+    {
+        if (m_handle) {
+            m_handle.destroy();
+            m_handle = nullptr;
+        }
+    }
 
     generator_t(const generator_t&) = delete;
     generator_t& operator=(const generator_t&) = delete;
-    generator_t(generator_t&&) = delete;
-    generator_t& operator=(generator_t&&) = delete;
+
+    constexpr generator_t(generator_t&& other) noexcept
+        : m_handle(other.m_handle)
+    {
+        other.m_handle = nullptr;
+    }
+
+    constexpr generator_t& operator=(generator_t&& other)
+    {
+        this->~generator_t();
+        m_handle = other.m_handle;
+        other.m_handle = nullptr;
+        return *this;
+    }
+
+    // make generator iterable
+    struct cursor_t
+    {
+        using value_type = T;
+        constexpr auto next(generator_t& generator) const OKAYLIB_NOEXCEPT
+        {
+            return generator.next();
+        }
+    };
+
+    /// Iterating over a generator is a fundamentally modifying operation so we
+    /// don't do by-reference iteration, the iterator always has to take
+    /// ownership of the generator. This function is syntactic sugar to avoid
+    /// having to write stdc::move(generator).iter()
+    [[nodiscard]] constexpr auto move_and_iter() &
+    {
+        return stdc::move(*this).iter();
+    }
+
+    [[nodiscard]] constexpr auto iter() &&
+    {
+        return owning_iterator_t<generator_t, cursor_t>{
+            stdc::move(*this),
+            cursor_t{},
+        };
+    }
 
   private:
     handle_type m_handle;

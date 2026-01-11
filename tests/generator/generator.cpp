@@ -22,4 +22,15 @@ TEST_SUITE("generator")
 
         REQUIRE(!ints.next());
     }
+
+    TEST_CASE("generator is iterable")
+    {
+        generator_t ints = mkcoro();
+
+        for (auto [integer, index] : ints.move_and_iter().enumerate())
+            REQUIRE(integer == index);
+
+        for (auto [integer, index] : mkcoro().iter().enumerate())
+            REQUIRE(integer == index);
+    }
 }
