@@ -665,11 +665,11 @@ __OK_RES_REQUIRES_CLAUSE class res<
         }
     }
 
-    ~res()
+    constexpr ~res()
         requires(stdc::is_trivially_destructible_v<success_t>)
     = default;
 
-    ~res()
+    constexpr ~res()
         requires(!stdc::is_trivially_destructible_v<success_t>)
     {
         if (this->is_success()) {
