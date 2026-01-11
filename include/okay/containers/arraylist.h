@@ -20,7 +20,7 @@ template <typename T> struct spots_preallocated_t;
 } // namespace detail
 } // namespace arraylist
 
-template <typename T, typename backing_allocator_t = ok::allocator_t>
+template <typename T, allocator_c backing_allocator_t = ok::allocator_t>
 class arraylist_t
 {
     // arraylist is 32 bytes on the stack:
@@ -741,7 +741,7 @@ template <typename T> struct empty_t
     using associated_type =
         arraylist_t<T, stdc::remove_cvref_t<backing_allocator_arg_t>>;
 
-    template <typename backing_allocator_t>
+    template <allocator_c backing_allocator_t>
     [[nodiscard]] constexpr arraylist_t<T, backing_allocator_t>
     operator()(backing_allocator_t& allocator) const noexcept
     {

@@ -15,7 +15,6 @@
 
 namespace ok {
 
-class memory_resource_t;
 class allocator_t;
 
 namespace alloc {
@@ -213,13 +212,7 @@ template <typename T, typename allocator_impl_t = ok::allocator_t> struct owned
 
 } // namespace alloc
 
-/// A memory resource is anything that can allocate memory, but not necessarily
-/// free or reallocate it. If features() has the keeps_destructor_list flag set,
-/// it also supports arena_push_destructor(). If the can_restore_scope flag is
-/// set, it also supports creating "save points" in allocation, where memory
-/// allocated and destructors registered after save will be deleted/called when
-/// the save point is restored.
-class memory_resource_t
+class allocator_t
 {
   public:
     [[nodiscard]] constexpr alloc::feature_flags
@@ -239,6 +232,32 @@ class memory_resource_t
         }
         return impl_allocate(request);
     }
+
+    /// Deallocate memory, optionally providing size_hint to tell the allocator
+    /// how big you think the allocated memory is (only some allocators require
+    /// this, so if you don't want to support those then just leave that
+    /// parameter as 0)
+    constexpr void deallocate(void* memory,
+                              size_t size_hint = 0) OKAYLIB_NOEXCEPT
+    {
+        if (memory) [[likely]]
+            impl_deallocate(memory, size_hint);
+    }
+
+    [[nodiscard]] constexpr alloc::result_t<bytes_t>
+    reallocate(const alloc::reallocate_request_t& options) OKAYLIB_NOEXCEPT
+    {
+        if (!options.is_valid()) [[unlikely]] {
+            __ok_assert(false, "invalid reallocate_request_t");
+            return alloc::error::usage;
+        }
+        return impl_reallocate(options);
+    }
+
+    template <typename T = detail::deduced_t, typename... args_t>
+    [[nodiscard]] constexpr decltype(auto)
+    make(args_t&&... args) OKAYLIB_NOEXCEPT
+        requires detail::is_deduced_constructible_c<T, args_t...>;
 
     /// If the allocator has keeps_destructor_list, then this will push the
     /// object's destructor to the arena's list of destructors to call when
@@ -267,7 +286,7 @@ class memory_resource_t
 
     struct allocator_restore_point_t
     {
-        friend class ok::memory_resource_t;
+        friend class ok::allocator_t;
 
         allocator_restore_point_t(const allocator_restore_point_t&) = delete;
         allocator_restore_point_t&
@@ -284,13 +303,13 @@ class memory_resource_t
         allocator_restore_point_t() = delete;
 
       private:
-        constexpr allocator_restore_point_t(ok::memory_resource_t& allocator)
+        constexpr allocator_restore_point_t(ok::allocator_t& allocator)
             : m_allocator(allocator), m_handle(allocator.impl_arena_new_scope())
         {
         }
 
         void* m_handle;
-        ok::memory_resource_t& m_allocator;
+        ok::allocator_t& m_allocator;
     };
 
     [[nodiscard]] constexpr allocator_restore_point_t
@@ -399,38 +418,7 @@ class memory_resource_t
                     "allocator which is marked as being an arena but does not "
                     "implement new_scope and restore_scope as it needs to.");
     }
-};
 
-class allocator_t : public memory_resource_t
-{
-  public:
-    /// Deallocate memory, optionally providing size_hint to tell the allocator
-    /// how big you think the allocated memory is (only some allocators require
-    /// this, so if you don't want to support those then just leave that
-    /// parameter as 0)
-    constexpr void deallocate(void* memory,
-                              size_t size_hint = 0) OKAYLIB_NOEXCEPT
-    {
-        if (memory) [[likely]]
-            impl_deallocate(memory, size_hint);
-    }
-
-    [[nodiscard]] constexpr alloc::result_t<bytes_t>
-    reallocate(const alloc::reallocate_request_t& options) OKAYLIB_NOEXCEPT
-    {
-        if (!options.is_valid()) [[unlikely]] {
-            __ok_assert(false, "invalid reallocate_request_t");
-            return alloc::error::usage;
-        }
-        return impl_reallocate(options);
-    }
-
-    template <typename T = detail::deduced_t, typename... args_t>
-    [[nodiscard]] constexpr decltype(auto)
-    make(args_t&&... args) OKAYLIB_NOEXCEPT
-        requires detail::is_deduced_constructible_c<T, args_t...>;
-
-  protected:
     /// NOTE: the implementation of this is not required to check for nullptr,
     /// that should be handled by the deallocate() wrapper that users actually
     /// call
@@ -441,12 +429,10 @@ class allocator_t : public memory_resource_t
         const alloc::reallocate_request_t& options) OKAYLIB_NOEXCEPT = 0;
 };
 
-// A concept which requires that a type implements the functions allocate() and
-// make_non_owning(), which can be provided by inheriting from
-// alloc::memory_resource_t but do not have to be
 template <typename T>
-concept memory_resource_c = requires(const T& const_allocator, T& allocator,
-                                     const alloc::request_t& request) {
+concept allocator_c = requires(
+    const T& const_allocator, T& allocator, const alloc::request_t& request,
+    const alloc::reallocate_request_t& reallocate_request, void* voidptr) {
     { allocator.allocate(request) } -> ok::same_as_c<alloc::result_t<bytes_t>>;
 
     // incomplete test for make_non_owning
@@ -461,49 +447,41 @@ concept memory_resource_c = requires(const T& const_allocator, T& allocator,
     requires !(requires {
         { const_allocator.allocate(request) };
     });
+
+    { const_allocator.features() } -> ok::same_as_c<alloc::feature_flags>;
+
+    { allocator.deallocate(voidptr) } -> ok::is_void_c;
+
+    {
+        allocator.reallocate(reallocate_request)
+    } -> ok::same_as_c<alloc::result_t<bytes_t>>;
+
+    // make sure nonconst functions do not work on const version
+    requires !(requires {
+        { const_allocator.deallocate(voidptr) };
+        { const_allocator.reallocate(reallocate_request) };
+    });
+
+    // approximate make() function
+    // the owned value can optionally provide specialization for the
+    // allocator, or it can just return an owned pointing to a polymorphic
+    // allocator_t
+    requires(requires {
+                {
+                    allocator.template make<int>(1)
+                } -> ok::same_as_c<alloc::result_t<alloc::owned<int, T>>>;
+                {
+                    allocator.template make<int>()
+                } -> ok::same_as_c<alloc::result_t<alloc::owned<int, T>>>;
+            }) || (requires {
+                {
+                    allocator.template make<int>(1)
+                } -> ok::same_as_c<alloc::result_t<alloc::owned<int>>>;
+                {
+                    allocator.template make<int>()
+                } -> ok::same_as_c<alloc::result_t<alloc::owned<int>>>;
+            });
 };
-
-template <typename T>
-concept allocator_c =
-    requires(const T& const_allocator, T& allocator,
-             const alloc::reallocate_request_t& reallocate_request,
-             void* voidptr) {
-        requires memory_resource_c<T>;
-
-        { const_allocator.features() } -> ok::same_as_c<alloc::feature_flags>;
-
-        { allocator.deallocate(voidptr) } -> ok::is_void_c;
-
-        {
-            allocator.reallocate(reallocate_request)
-        } -> ok::same_as_c<alloc::result_t<bytes_t>>;
-
-        // make sure nonconst functions do not work on const version
-        requires !(requires {
-            { const_allocator.deallocate(voidptr) };
-            { const_allocator.reallocate(reallocate_request) };
-        });
-
-        // approximate make() function
-        // the owned value can optionally provide specialization for the
-        // allocator, or it can just return an owned pointing to a polymorphic
-        // allocator_t
-        requires(requires {
-                    {
-                        allocator.template make<int>(1)
-                    } -> ok::same_as_c<alloc::result_t<alloc::owned<int, T>>>;
-                    {
-                        allocator.template make<int>()
-                    } -> ok::same_as_c<alloc::result_t<alloc::owned<int, T>>>;
-                }) || (requires {
-                    {
-                        allocator.template make<int>(1)
-                    } -> ok::same_as_c<alloc::result_t<alloc::owned<int>>>;
-                    {
-                        allocator.template make<int>()
-                    } -> ok::same_as_c<alloc::result_t<alloc::owned<int>>>;
-                });
-    };
 
 namespace alloc {
 

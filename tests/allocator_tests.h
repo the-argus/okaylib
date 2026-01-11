@@ -10,7 +10,6 @@
 #include <random>
 #include <vector>
 
-static_assert(ok::memory_resource_c<ok::memory_resource_t>);
 static_assert(ok::allocator_c<ok::allocator_t>);
 
 enum class allocator_test_mode
@@ -20,7 +19,7 @@ enum class allocator_test_mode
     keep_allocator_throughout,
 };
 
-template <ok::memory_resource_c allocator_impl_t = ok::memory_resource_t>
+template <ok::allocator_c allocator_impl_t = ok::allocator_t>
 struct memory_resource_counter_wrapper_t : public ok::allocator_t
 {
   public:
@@ -80,7 +79,7 @@ struct memory_resource_counter_wrapper_t : public ok::allocator_t
     }
 };
 
-template <ok::memory_resource_c allocator_t> struct allocator_tests
+template <ok::allocator_c allocator_t> struct allocator_tests
 {
     constexpr static bool has_clear = requires(allocator_t& a) {
         { a.clear() } -> ok::same_as_c<void>;
@@ -332,13 +331,8 @@ template <ok::memory_resource_c allocator_t> struct allocator_tests
                 [[fallthrough]];
             case allocator_test_mode::keep_allocator_throughout:
                 // only do dynamic dispatch if type seems like it supports it
-                if constexpr (ok::detail::is_derived_from_c<
-                                  allocator_t, ok::memory_resource_t>) {
-                    auto status = allocator_tests<ok::memory_resource_t>::
-                        test_functions[idx](ally.ref_or_panic());
-                    OKAYLIB_REQUIRE_RES_WITH_BACKTRACE(status);
-                } else if constexpr (ok::detail::is_derived_from_c<
-                                         allocator_t, ok::allocator_t>) {
+                if constexpr (ok::detail::is_derived_from_c<allocator_t,
+                                                            ok::allocator_t>) {
                     auto status =
                         allocator_tests<ok::allocator_t>::test_functions[idx](
                             ally.ref_or_panic());

@@ -9,10 +9,8 @@
 
 namespace ok {
 
-// TODO: use atomics and conditionally allow arena to implement threadsafe
-// allocate_interface_t if its allocator_impl_t also does
 template <allocator_c allocator_impl_t = ok::allocator_t>
-class arena_t : public ok::memory_resource_t
+class arena_t : public ok::allocator_t
 {
   public:
     inline explicit arena_t(bytes_t static_buffer) OKAYLIB_NOEXCEPT;
@@ -43,6 +41,34 @@ class arena_t : public ok::memory_resource_t
     ok::status<alloc::error> impl_arena_push_destructor(destructor_t destructor)
         OKAYLIB_NOEXCEPT override;
 
+    void impl_deallocate(void* memory, size_t size_hint) OKAYLIB_NOEXCEPT final
+    {
+        // deallocating with an arena is a no-op
+        return;
+    }
+
+    alloc::result_t<bytes_t> impl_reallocate(
+        const alloc::reallocate_request_t& options) OKAYLIB_NOEXCEPT final
+    {
+        // just allocate a new block with the new size and do a copy
+        res allocation = this->allocate(alloc::request_t{
+            .num_bytes = options.preferred_size_bytes,
+            .alignment = options.alignment,
+            .leave_nonzeroed = true,
+        });
+
+        if (!allocation.is_success()) [[unlikely]]
+            return allocation;
+
+        bytes_t newmem = allocation.unwrap();
+
+        // ignore result of memcopy
+        auto&& _ = ok_memcopy(.to = newmem, .from = options.memory);
+
+        // freeing the old allocation is not possible with arena
+        return newmem;
+    }
+
   private:
     struct destructor_list_node_t
     {
@@ -63,67 +89,6 @@ class arena_t : public ok::memory_resource_t
     bytes_t m_available_memory;
     opt<allocator_impl_t&> m_backing;
     opt<destructor_list_node_t&> m_last_pushed_destructor;
-};
-
-template <typename arena_impl_t>
-class arena_compat_wrapper_t : public ok::allocator_t
-{
-  public:
-    arena_compat_wrapper_t() = delete;
-    arena_compat_wrapper_t(const arena_compat_wrapper_t&) = delete;
-    arena_compat_wrapper_t& operator=(const arena_compat_wrapper_t&) = delete;
-    arena_compat_wrapper_t(arena_compat_wrapper_t&&) = delete;
-    arena_compat_wrapper_t& operator=(arena_compat_wrapper_t&&) = delete;
-
-    explicit arena_compat_wrapper_t(arena_impl_t& arena)
-        : m_arena(ok::addressof(arena))
-    {
-    }
-
-  protected:
-    alloc::feature_flags impl_features() const noexcept override
-    {
-        if (m_arena)
-            return m_arena->features();
-        return {};
-    }
-
-    alloc::result_t<bytes_t>
-    impl_allocate(const alloc::request_t& request) OKAYLIB_NOEXCEPT final
-    {
-        return m_arena->allocate(request);
-    }
-
-    void impl_deallocate(void* memory, size_t size_hint) OKAYLIB_NOEXCEPT final
-    {
-        // deallocating with an arena is a no-op
-        return;
-    }
-
-    alloc::result_t<bytes_t> impl_reallocate(
-        const alloc::reallocate_request_t& options) OKAYLIB_NOEXCEPT final
-    {
-        // just allocate a new block with the new size and do a copy
-        res allocation = m_arena->allocate(alloc::request_t{
-            .num_bytes = options.preferred_size_bytes,
-            .alignment = options.alignment,
-            .leave_nonzeroed = true,
-        });
-
-        if (!allocation.is_success()) [[unlikely]]
-            return allocation;
-
-        bytes_t newmem = allocation.unwrap();
-
-        // ignore result of memcopy
-        auto&& _ = ok_memcopy(.to = newmem, .from = options.memory);
-
-        // freeing the old allocation is not possible with arena
-        return newmem;
-    }
-
-  private:
-    arena_impl_t* m_arena;
 };
 
 template <allocator_c allocator_impl_t>

@@ -121,10 +121,9 @@ TEST_SUITE("segmented list")
             // make an arena that is too small to fit anything
             uint8_t bytes[2];
             arena_t arena(bytes);
-            arena_compat_wrapper_t arena_wrapped(arena);
 
             OKAYLIB_REQUIRE_RES_WITH_BACKTRACE(segmented_list::empty<int>(
-                arena_wrapped, {.expected_max_capacity = 1000000000000000UL}));
+                arena, {.expected_max_capacity = 1000000000000000UL}));
         }
 
         SUBCASE("move construct first_allocation segmented lists")
